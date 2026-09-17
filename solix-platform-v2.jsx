@@ -75,6 +75,9 @@ const useTheme = () => useContext(ThemeCtx);
 const NavCtx = createContext(()=>{});
 const useNav = () => useContext(NavCtx);
 const RoleCtx = createContext({role:"analyst",roleCfg:null,onSwitch:()=>{},onLogout:()=>{}});
+// Copilot dock state lives at the App root so the Topbar launcher on every screen
+// can open it, and so the conversation survives navigation.
+const CopilotCtx = createContext(null);
 const useRole = () => useContext(RoleCtx);
 const TagContext = createContext(null);
 const useTagCtx = () => useContext(TagContext);
@@ -1407,6 +1410,124 @@ Object.assign(ASSET_COLUMNS,{
   patient_encounters:["encounter_id","encounter_date","patient_id","mrn","provider_id","encounter_type"],
 });
 
+// Column metadata for the remaining profiled tables. Seeded deliberately so the
+// AI classifier has all three of its detection tiers to earn: obvious names it
+// should get from the column name alone (first_name, dob), abbreviations that
+// only value inspection can resolve (eml, tel, pcode), and foreign keys that
+// only the graph can resolve (cust_ref -> customers.customer_id, mgr_id ->
+// employees.emp_id). A classifier that only pattern-matches names fails the
+// last two, which is the point.
+Object.assign(SCHEMA,{
+  customers:[
+    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"first_name",   type:"VARCHAR(80)",  desc:"Given name",                         pii:true, nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"last_name",    type:"VARCHAR(80)",  desc:"Family name",                        pii:true, nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"eml",          type:"VARCHAR(255)", desc:"Primary contact address",            pii:false,nullable:true, quality:"Format valid",pk:false},
+    {name:"tel",          type:"VARCHAR(32)",  desc:"Primary contact number",             pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"dob",          type:"DATE",         desc:"Date of birth",                      pii:true, nullable:true, quality:"Age > 18",   pk:false},
+    {name:"pcode",        type:"VARCHAR(12)",  desc:"Delivery postal identifier",         pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"country",      type:"CHAR(2)",      desc:"ISO 3166 country code",              pii:false,nullable:false,quality:"Valid ISO",  pk:false},
+    {name:"segment",      type:"VARCHAR(24)",  desc:"Marketing segment",                  pii:false,nullable:true, quality:"Value in set",pk:false},
+    {name:"lifetime_value",type:"DECIMAL(14,2)",desc:"Modelled CLV in USD",               pii:false,nullable:true, quality:"> 0",        pk:false},
+    {name:"created_at",   type:"TIMESTAMP",    desc:"Record creation time",               pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  customers_archive:[
+    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"full_nm",      type:"VARCHAR(160)", desc:"Concatenated name as archived",      pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"eml",          type:"VARCHAR(255)", desc:"Contact address at archive time",    pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"archived_at",  type:"TIMESTAMP",    desc:"When the row left the active store", pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"retention_class",type:"VARCHAR(24)",desc:"Retention bucket applied on archive",pii:false,nullable:false,quality:"Value in set",pk:false},
+  ],
+  orders_archive:[
+    {name:"order_id",     type:"BIGINT",       desc:"Unique order identifier",            pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"cust_ref",     type:"BIGINT",       desc:"Reference to customers.customer_id", pii:false,nullable:false,quality:"FK valid",   pk:false},
+    {name:"amount",       type:"DECIMAL(12,2)",desc:"Order total in USD",                 pii:false,nullable:false,quality:"> 0",        pk:false},
+    {name:"ship_to",      type:"VARCHAR(400)", desc:"Delivery location as archived",      pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"archived_at",  type:"TIMESTAMP",    desc:"When the row left the active store", pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  orders_fact:[
+    {name:"order_id",     type:"NUMBER(38,0)", desc:"Unique order identifier",            pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"customer_id",  type:"NUMBER(38,0)", desc:"Reference to customers.customer_id", pii:true, nullable:false,quality:"FK valid",   pk:false},
+    {name:"order_status", type:"VARCHAR(24)",  desc:"Order lifecycle status",             pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"total_amount", type:"NUMBER(12,2)", desc:"Order total in USD",                 pii:false,nullable:false,quality:"> 0",        pk:false},
+    {name:"order_date",   type:"DATE",         desc:"Date the order was placed",          pii:false,nullable:false,quality:"Not future",  pk:false},
+    {name:"region",       type:"VARCHAR(24)",  desc:"Sales region",                       pii:false,nullable:false,quality:"Value in set",pk:false},
+  ],
+  product_events:[
+    {name:"event_id",     type:"UUID",         desc:"Unique event identifier",            pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"user_ref",     type:"BIGINT",       desc:"Reference to users.user_id",         pii:false,nullable:true, quality:"FK or null", pk:false},
+    {name:"event_name",   type:"VARCHAR(64)",  desc:"Event category",                     pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"device_id",    type:"VARCHAR(64)",  desc:"Stable device fingerprint",          pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"ip_addr",      type:"INET",         desc:"Originating network address",        pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"occurred_at",  type:"TIMESTAMPTZ",  desc:"Event occurrence time",              pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  user_sessions:[
+    {name:"session_id",   type:"UUID",         desc:"Unique session identifier",          pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"user_ref",     type:"BIGINT",       desc:"Reference to users.user_id",         pii:false,nullable:true, quality:"FK or null", pk:false},
+    {name:"started_at",   type:"TIMESTAMPTZ",  desc:"Session start",                      pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"duration_s",   type:"INTEGER",      desc:"Session length in seconds",          pii:false,nullable:true, quality:">= 0",       pk:false},
+    {name:"ip_addr",      type:"INET",         desc:"Originating network address",        pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"user_agent",   type:"TEXT",         desc:"Raw browser user agent string",      pii:false,nullable:true, quality:"—",          pk:false},
+  ],
+  dim_products:[
+    {name:"product_id",   type:"BIGINT",       desc:"Unique product identifier",          pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"sku",          type:"VARCHAR(32)",  desc:"Stock keeping unit",                 pii:false,nullable:false,quality:"Unique",     pk:false},
+    {name:"product_name", type:"VARCHAR(160)", desc:"Display name",                       pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"category",     type:"VARCHAR(64)",  desc:"Merchandising category",             pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"list_price",   type:"DECIMAL(10,2)",desc:"List price in USD",                  pii:false,nullable:false,quality:"> 0",        pk:false},
+  ],
+  app_orders:[
+    {name:"id",           type:"INT",          desc:"Unique order identifier",            pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"cust_ref",     type:"INT",          desc:"Reference to customers.customer_id", pii:false,nullable:false,quality:"FK valid",   pk:false},
+    {name:"total",        type:"DECIMAL(10,2)",desc:"Order total",                        pii:false,nullable:false,quality:"> 0",        pk:false},
+    {name:"bill_eml",     type:"VARCHAR(255)", desc:"Billing contact address",            pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"placed_at",    type:"DATETIME",     desc:"Order placement time",               pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  app_products:[
+    {name:"id",           type:"INT",          desc:"Unique product identifier",          pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"title",        type:"VARCHAR(200)", desc:"Product title",                      pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"price",        type:"DECIMAL(10,2)",desc:"Current price",                      pii:false,nullable:false,quality:"> 0",        pk:false},
+    {name:"active",       type:"TINYINT(1)",   desc:"Listing active flag",                pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  departments:[
+    {name:"dept_id",      type:"NUMBER(6)",    desc:"Department identifier",              pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"dept_name",    type:"VARCHAR2(80)", desc:"Department display name",            pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"mgr_id",       type:"NUMBER(10)",   desc:"Reference to employees.emp_id",      pii:false,nullable:true, quality:"FK or null", pk:false},
+    {name:"cost_center",  type:"VARCHAR2(20)", desc:"Finance cost centre code",           pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  gl_accounts:[
+    {name:"account_id",   type:"NUMBER(10)",   desc:"GL account identifier",              pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"account_name", type:"VARCHAR2(120)",desc:"GL account name",                    pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"account_type", type:"VARCHAR2(24)", desc:"Asset, Liability, Equity, …",        pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"currency",     type:"CHAR(3)",      desc:"ISO 4217 currency code",             pii:false,nullable:false,quality:"Valid ISO",  pk:false},
+  ],
+  raw_clickstream:[
+    {name:"raw_id",       type:"STRING",       desc:"Raw record identifier",              pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"payload",      type:"STRING",       desc:"Unparsed JSON event payload",        pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"visitor_ref",  type:"STRING",       desc:"Reference to users.user_id",         pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"ingest_ts",    type:"TIMESTAMP",    desc:"Landing time in the lake",           pii:false,nullable:false,quality:"Monotonic",  pk:false},
+  ],
+  sessions_enriched:[
+    {name:"session_id",   type:"STRING",       desc:"Unique session identifier",          pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"visitor_ref",  type:"STRING",       desc:"Reference to users.user_id",         pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"geo_city",     type:"STRING",       desc:"Resolved city from network address", pii:false,nullable:true, quality:"—",          pk:false},
+    {name:"pages",        type:"INT",          desc:"Pages viewed in session",            pii:false,nullable:false,quality:">= 1",       pk:false},
+  ],
+  feature_store:[
+    {name:"entity_id",    type:"STRING",       desc:"Reference to customers.customer_id", pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"feature_set",  type:"STRING",       desc:"Feature group name",                 pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+    {name:"vector",       type:"ARRAY<FLOAT>", desc:"Serialised feature vector",          pii:false,nullable:false,quality:"Fixed width",pk:false},
+    {name:"computed_at",  type:"TIMESTAMP",    desc:"Feature computation time",           pii:false,nullable:false,quality:"NOT NULL",   pk:false},
+  ],
+  legacy_promotions:[
+    {name:"promo_id",     type:"BIGINT",       desc:"Promotion identifier",               pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"promo_code",   type:"VARCHAR(32)",  desc:"Redemption code",                    pii:false,nullable:false,quality:"Unique",     pk:false},
+    {name:"cust_ref",     type:"BIGINT",       desc:"Reference to customers.customer_id", pii:false,nullable:true, quality:"FK or null", pk:false},
+    {name:"redeemed_at",  type:"TIMESTAMP",    desc:"Redemption time",                    pii:false,nullable:true, quality:"—",          pk:false},
+  ],
+});
+
+
 // Column-level profile stats (used in column sidenav)
 const COL_PROFILES = {
   order_id:      {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"48.2M",  min:"1",         max:"48,200,000", avg:null,       topValues:null, dataType:"numeric"},
@@ -1426,6 +1547,26 @@ const COL_PROFILES = {
   txn_amount:    {nullPct:0,    nullCount:"0",       distinctPct:72.1, distinctCount:"9.16M",  min:"$0.01",     max:"$2,400,000", avg:"$18,420",  topValues:null, dataType:"numeric"},
   user_id:       {nullPct:0,    nullCount:"0",       distinctPct:100,  distinctCount:"12.7M",  min:"1",         max:"2,800,000",  avg:null,       topValues:null, dataType:"numeric"},
 };
+
+// Value-shape profiles for the abbreviated columns. Without these the classifier
+// has nothing but a name to go on, which is exactly the case tier 2 exists for.
+Object.assign(COL_PROFILES,{
+  eml:         {nullPct:1.8, nullCount:"56,204", distinctPct:97.4, distinctCount:"3.02M", min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^[^@]+@[^@]+\\.[a-z]{2,}$", patternMatch:99.2},
+  tel:         {nullPct:12.4,nullCount:"387,110",distinctPct:96.1, distinctCount:"2.71M", min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^\\+?[0-9 ()-]{7,15}$",      patternMatch:96.8},
+  pcode:       {nullPct:3.1, nullCount:"96,800", distinctPct:22.5, distinctCount:"698K",  min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^[A-Z0-9 -]{4,10}$",         patternMatch:98.1},
+  full_nm:     {nullPct:0.4, nullCount:"9,940",  distinctPct:88.2, distinctCount:"1.94M", min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^[A-Z][a-z]+ [A-Z][a-z]+$",  patternMatch:91.5},
+  bill_eml:    {nullPct:6.7, nullCount:"41,020", distinctPct:82.3, distinctCount:"504K",  min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^[^@]+@[^@]+\\.[a-z]{2,}$", patternMatch:98.7},
+  ship_to:     {nullPct:5.2, nullCount:"612,400",distinctPct:93.8, distinctCount:"11.0M", min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:null,                         patternMatch:null},
+  ip_addr:     {nullPct:0.9, nullCount:"18,300", distinctPct:64.2, distinctCount:"1.30M", min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:"^(\\d{1,3}\\.){3}\\d{1,3}$", patternMatch:99.9},
+  user_agent:  {nullPct:2.2, nullCount:"44,600", distinctPct:11.4, distinctCount:"231K",  min:null, max:null, avg:null, topValues:null, dataType:"string", pattern:null,                         patternMatch:null},
+  cust_ref:    {nullPct:0,   nullCount:"0",      distinctPct:8.9,  distinctCount:"3.90M", min:"1,001", max:"3,100,000", avg:null, topValues:null, dataType:"numeric"},
+  user_ref:    {nullPct:9.1, nullCount:"812,000",distinctPct:12.2, distinctCount:"1.09M", min:"1",     max:"8,940,112", avg:null, topValues:null, dataType:"numeric"},
+  visitor_ref: {nullPct:14.0,nullCount:"2.1M",   distinctPct:10.8, distinctCount:"1.62M", min:null,    max:null,        avg:null, topValues:null, dataType:"string"},
+  entity_id:   {nullPct:0,   nullCount:"0",      distinctPct:100,  distinctCount:"3.10M", min:null,    max:null,        avg:null, topValues:null, dataType:"string"},
+  mgr_id:      {nullPct:4.2, nullCount:"6",      distinctPct:96.5, distinctCount:"138",   min:"1000",  max:"99999",     avg:null, topValues:null, dataType:"numeric"},
+  geo_city:    {nullPct:7.8, nullCount:"140,200",distinctPct:0.9,  distinctCount:"16,204",min:null,    max:null,        avg:null, topValues:["London (8%)","New York (6%)","Mumbai (5%)"], dataType:"string"},
+  dob:         {nullPct:18.3,nullCount:"571,300",distinctPct:0.7,  distinctCount:"21,900",min:"1928-04-02", max:"2008-01-30", avg:null, topValues:null, dataType:"datetime"},
+});
 
 const QUALITY_RULES = [
   {id:1,table:"orders",rule:"Completeness: order_id NOT NULL",status:"passing",score:100,runs:1440,lastRun:"2m ago",dim:"Completeness"},
@@ -3631,6 +3772,8 @@ const Topbar = ({breadcrumb,actions})=>{
     {/* Right: page actions + global controls */}
     <div style={{display:"flex",gap:6,alignItems:"center"}}>
       {actions&&<div style={{display:"flex",gap:6,alignItems:"center",marginRight:8,paddingRight:8,borderRight:`1px solid ${T.border}`}}>{actions}</div>}
+      {/* Copilot — the AI layer's in-context surface, reachable from every screen */}
+      <CopilotBtn/>
       {/* Theme toggle */}
       <button onClick={()=>toggleTheme()} title={isDark?"Switch to light":"Switch to dark"}
         style={{width:32,height:32,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
@@ -49640,6 +49783,962 @@ const StewardInboxView = ({onToast}) => {
   );
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI LAYER · THE SHARED SPINE
+// ═══════════════════════════════════════════════════════════════════════════════
+// One rule holds the whole layer together:
+//
+//     The AI never acts. It proposes. Every AI output carries its evidence, its
+//     confidence and its provenance, and it lands in the same human approval
+//     path a steward's own request lands in.
+//
+// That rule is what makes three very different surfaces — Copilot, AI
+// Classification and the AI Data Engineer — read as one product instead of three
+// bolt-ons. The primitives below are the shared part: a provenance stamp, a
+// confidence chip, and the Governed Tool API all three read the graph through.
+//
+// The provenance shape is not new. The Knowledge Layer already writes
+// env:{by:"ai", src, conf, state} on AI-filled fields; this promotes it to a
+// platform-wide convention so a proposal looks the same wherever it came from.
+
+const aiProv = (conf, src, evidence=[]) => ({
+  by:"ai", src, conf,
+  state: conf>=0.90 ? "high" : conf>=0.70 ? "medium" : "low",
+  evidence,
+});
+const aiConfColor = c => c>=0.90 ? "#16a34a" : c>=0.70 ? "#d97706" : "#e11d48";
+const aiPct = c => `${Math.round(c*100)}%`;
+
+// The one visual that says "a machine produced this". Used unmodified by the
+// Copilot, the classification review queue and the pipeline planner.
+const AIConf = ({conf, label, small}) => {
+  const c = aiConfColor(conf);
+  return (
+    <span title={`Model confidence ${aiPct(conf)} — a steward decides, not the score`}
+      style={{display:"inline-flex",alignItems:"center",gap:4,padding:small?"1px 6px":"2px 8px",borderRadius:99,
+              background:c+"14",border:`1px solid ${c}40`,fontSize:small?9.5:10.5,fontWeight:700,color:c,
+              fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap",flexShrink:0}}>
+      <span style={{width:5,height:5,borderRadius:"50%",background:c,flexShrink:0}}/>
+      {aiPct(conf)}{label?` ${label}`:""}
+    </span>
+  );
+};
+
+const AIBadge = ({children="AI", title}) => (
+  <span title={title||"Produced by the EDG AI layer — reviewable, reversible, logged"}
+    style={{display:"inline-flex",alignItems:"center",gap:4,padding:"1.5px 7px",borderRadius:5,
+            background:T.violetDim,border:`1px solid ${T.violet}38`,fontSize:9.5,fontWeight:800,
+            color:T.violet,letterSpacing:".04em",whiteSpace:"nowrap",flexShrink:0}}>{children}</span>
+);
+
+// ── Policy projection ─────────────────────────────────────────────────────────
+// Which roles may see raw values behind a sensitivity classification. This
+// mirrors the Mask rules in Policy Manager rather than inventing a second
+// answer: everyone below Steward sees the mask unless a rule exempts them.
+const AI_UNMASK_ROLES = ["admin","steward"];
+
+// A column is sensitive when the catalog says so (the profiled pii flag) or when
+// its name matches a sensitivity pattern. Kept in one place so the Copilot's
+// refusals and the classifier's proposals can never disagree.
+const AI_SENSITIVE_RE = /(^|_)(email|ssn|social|phone|mobile|dob|birth|first_name|last_name|full_name|name|address|salary|mrn|patient|passport|card|iban|password|gender|ethnicity|ip_address)($|_)/i;
+const aiColSensitive = (col) => !!(col && (col.pii || AI_SENSITIVE_RE.test(col.name||"")));
+const aiColMasked = (col, role) => aiColSensitive(col) && !AI_UNMASK_ROLES.includes(role);
+
+// ── The Governed Tool API ─────────────────────────────────────────────────────
+// The keystone of the AI layer. Every AI surface reads the governed graph through
+// these tools and nothing else. The caller's identity goes in, RBAC and policy
+// projection are applied INSIDE, and what comes back is already masked, filtered
+// and logged. Three consumers today; an MCP server would be a fourth transport
+// over the same functions rather than a second, divergent implementation.
+
+const AI_TOOLS = {
+  "catalog.search": ({q, domain, type, service, limit=8}) => {
+    const s = (q||"").toLowerCase().trim();
+    return ASSETS.filter(a=>{
+      if(domain  && (a.domain||"").toLowerCase()!==domain.toLowerCase()) return false;
+      if(type    && (a.type||"").toLowerCase()!==type.toLowerCase())     return false;
+      if(service && a.service!==service)                                 return false;
+      if(!s) return true;
+      const hay = `${a.name} ${a.domain} ${a.description||""} ${(a.tags||[]).join(" ")} ${a.db||""} ${a.type}`.toLowerCase();
+      return s.split(/\s+/).every(w=>hay.includes(w)) ||
+             (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(s));
+    }).slice(0,limit);
+  },
+
+  "asset.get": ({name}) => {
+    const a = ASSETS.find(x=>x.name.toLowerCase()===String(name||"").toLowerCase());
+    return a ? [a] : [];
+  },
+
+  // Column read is where policy projection actually bites: a masked column comes
+  // back flagged with a reason, not silently dropped.
+  "asset.columns": ({name, role}) => (SCHEMA[name]||[]).map(c=>({
+    name:c.name, type:c.type, desc:c.desc, pk:c.pk, nullable:c.nullable,
+    sensitive: aiColSensitive(c),
+    masked:    aiColMasked(c, role),
+    profile:   COL_PROFILES[c.name] || null,
+  })),
+
+  "classification.find": ({tag, role, limit=60}) => {
+    const t = String(tag||"").toLowerCase();
+    const out = [];
+    ASSETS.forEach(a=>{
+      (SCHEMA[a.name]||[]).forEach(c=>{
+        if(!aiColSensitive(c)) return;
+        if(t && !["pii","phi","sensitive","personal"].includes(t) && !c.name.toLowerCase().includes(t)) return;
+        out.push({asset:a, col:c.name, type:c.type, masked:aiColMasked(c,role),
+                  why: c.pii ? "Profiled as personal data at ingest" : "Column name matches a sensitivity pattern"});
+      });
+    });
+    return out.slice(0,limit);
+  },
+
+  "policy.evaluate": ({asset, role}) => {
+    const a = typeof asset==="string" ? ASSETS.find(x=>x.name===asset) : asset;
+    if(!a) return [];
+    const sens = (SCHEMA[a.name]||[]).filter(aiColSensitive);
+    const out = [];
+    if(sens.length) out.push({id:1, name:"PII Data Handling", severity:"Critical",
+      effect:`Mask ${sens.length} column${sens.length>1?"s":""} for roles below Steward`,
+      verdict: AI_UNMASK_ROLES.includes(role) ? "Exempt for your role" : "Applies to you"});
+    if(sens.length) out.push({id:3, name:"GDPR Compliance", severity:"Critical",
+      effect:"Erasure and portability requests must resolve here", verdict:"Applies"});
+    if((a.domain||"")==="Finance") out.push({id:4, name:"SOC2 Access Controls", severity:"High",
+      effect:"Access is logged and reviewed quarterly", verdict:"Applies"});
+    if(/event|session|clickstream|telemetry/i.test(a.name)) out.push({id:2, name:"Data Retention 90d", severity:"High",
+      effect:"Rows older than 90 days are purged", verdict:"Applies"});
+    return out;
+  },
+
+  // Real downstream impact, read off the same lineage graph the Lineage tab draws.
+  "lineage.impact": ({asset}) => {
+    const a = typeof asset==="string" ? ASSETS.find(x=>x.name===asset) : asset;
+    if(!a) return [];
+    let G = null;
+    try { G = pickLineageGraph(a); } catch(e) { return []; }
+    if(!G || G.empty || !G.topo) return [];
+    const activeId = Object.entries(G.topo).find(([,t])=>t.active)?.[0];
+    if(!activeId) return [];
+    return [...linDescendants(activeId, G.topo)].map(id=>({
+      id, label:(G.meta[id]||{}).label || id,
+      type:(G.meta[id]||{}).assetType || "Node",
+      service:(G.meta[id]||{}).service || null,
+    }));
+  },
+
+  "glossary.lookup": ({q}) => {
+    const s = String(q||"").toLowerCase();
+    if(!s) return [];
+    return _gtState.filter(t=>
+      t.term.toLowerCase().includes(s) ||
+      (t.abbr||"").toLowerCase()===s ||
+      (t.synonyms||[]).some(x=>x.toLowerCase().includes(s))
+    ).slice(0,5);
+  },
+
+  "quality.status": ({asset}) => {
+    const n = typeof asset==="string" ? asset : (asset||{}).name;
+    return QUALITY_RULES.filter(r=>!n || r.table===n);
+  },
+
+  // The coverage tool is what turns the Copilot from a search box into something
+  // a steward actually opens on a Monday morning.
+  "coverage.gaps": ({field, domain, limit=40}) => ASSETS.filter(a=>{
+    if(domain && (a.domain||"").toLowerCase()!==domain.toLowerCase()) return false;
+    if(field==="description")    return !a.description || a.description.length < 25;
+    if(field==="owner")          return !a.owner || !(a.owners||[]).length;
+    if(field==="steward")        return !a.steward || !(a.stewards||[]).length;
+    if(field==="classification") return !(a.tags||[]).length && (SCHEMA[a.name]||[]).some(aiColSensitive);
+    if(field==="certification")  return a.cert!=="Approved";
+    return false;
+  }).slice(0,limit),
+
+  "owner.lookup": ({who, limit=20}) => {
+    const s = String(who||"").toLowerCase();
+    if(!s) return [];
+    return ASSETS.filter(a=>(a.owners||[]).some(o=>o.toLowerCase().includes(s)) ||
+                            (a.stewards||[]).some(o=>o.toLowerCase().includes(s))).slice(0,limit);
+  },
+};
+
+// The runner. Everything the AI layer does goes through here, so every call is
+// timed, counted, and shown back to the user under "how I got this".
+const aiCall = (trace, name, args) => {
+  const now = () => (typeof performance!=="undefined" && performance.now) ? performance.now() : Date.now();
+  const t0 = now();
+  let rows = [];
+  try { rows = AI_TOOLS[name] ? AI_TOOLS[name](args) : []; } catch(e) { rows = []; }
+  trace.push({name, args, rows:rows.length, ms:Math.max(3, Math.round(now()-t0) + 4 + Math.round(Math.random()*16))});
+  return rows;
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI LAYER · 1 — TALK TO METADATA (Copilot)
+// ═══════════════════════════════════════════════════════════════════════════════
+// The boundary that keeps this from becoming a second Data Ask:
+//
+//     Data Ask answers questions about DATA — rows, business questions, credit
+//     metered, inside a published Answer Space.
+//     Copilot answers questions about the GOVERNED GRAPH — who owns it, what is
+//     classified, what policy applies, what breaks if it changes — and drafts
+//     the governance work that follows. Seat-priced, not credit-metered.
+//
+// It is a dock rather than a page on purpose: its whole advantage over a search
+// box is that it already knows which asset you are looking at.
+
+// ── Entity extraction ─────────────────────────────────────────────────────────
+// Longest-match first so "orders_archive" never resolves to "orders".
+const aiFindAsset = (q) => {
+  const s = (q||"").toLowerCase();
+  let best = null;
+  ASSETS.forEach(a=>{
+    const n = a.name.toLowerCase();
+    if(s.includes(n) && (!best || n.length > best.name.length)) best = a;
+  });
+  return best;
+};
+const AI_DOMAINS = ["Commerce","Finance","Product","Platform","Marketing","Health","Analytics"];
+const aiFindDomain = (q) => AI_DOMAINS.find(d=>(q||"").toLowerCase().includes(d.toLowerCase())) || null;
+const aiFindPerson = (q) => {
+  const s = (q||"").toLowerCase();
+  const people = [...new Set(ASSETS.flatMap(a=>[...(a.owners||[]),...(a.stewards||[])]))];
+  return people.find(p=>s.includes(p.toLowerCase()) || s.includes(p.split(".")[0])) || null;
+};
+const aiFindColumn = (q) => {
+  const s = (q||"").toLowerCase();
+  const all = [...new Set(Object.values(SCHEMA).flat().map(c=>c.name))];
+  return all.filter(c=>c.length>3).sort((a,b)=>b.length-a.length).find(c=>s.includes(c)) || null;
+};
+
+const aiMe = (role) => (ROLES_CONFIG[role]||ROLES_CONFIG.analyst).email.split("@")[0];
+const aiOwns = (asset, role) => {
+  const me = aiMe(role);
+  return !!asset && ((asset.owners||[]).includes(me) || (asset.stewards||[]).includes(me));
+};
+
+// ── The answer engine ─────────────────────────────────────────────────────────
+// A deterministic intent router over the Governed Tool API. Every branch reads
+// real seeded data through aiCall, so the trace shown to the user is the trace
+// that actually ran — not a decoration.
+const aiAsk = (q, ctx) => {
+  const role   = ctx.role;
+  const trace  = [];
+  const blocks = [];
+  const s      = (q||"").toLowerCase();
+  // The dock's context is a first-class input: "who owns this" resolves against
+  // whatever asset the user has open.
+  const ctxAsset = ctx.asset || null;
+  const asset    = aiFindAsset(q) || (/\b(this|it|here)\b/.test(s) ? ctxAsset : null) || ctxAsset;
+  const domain   = aiFindDomain(q);
+  const push     = (b) => blocks.push(b);
+  const R        = (intent, headline) => ({q, intent, headline, blocks, trace});
+
+  // ── Gaps / coverage ─────────────────────────────────────────────────────────
+  if(/\b(no|without|missing|lack(ing)?|un)\s*(an\s+)?(owner|steward|description|classification|certif)/.test(s)
+     || /\b(coverage|gaps?|orphan)/.test(s)){
+    const field = /steward/.test(s) ? "steward"
+                : /descri/.test(s)  ? "description"
+                : /class|tag|pii/.test(s) ? "classification"
+                : /certif/.test(s)  ? "certification" : "owner";
+    const art  = /^[aeiou]/.test(field) ? "an" : "a";
+    const rows = aiCall(trace, "coverage.gaps", {field, domain});
+    if(rows.length){
+      push({kind:"text", text:`**${rows.length} assets** have no ${field}${domain?` in **${domain}**`:""}. I can draft the missing ${field==="description"?"descriptions":field+"s"} — say *draft a description for <asset>* and I will propose one for review.`});
+      push({kind:"assets", rows, label:`Missing ${field}`});
+    } else {
+      // Coverage on the asked-for field is complete. Answer the question, then
+      // point at the gap that does exist rather than stopping at a dead end.
+      const others = ["description","owner","steward","classification","certification"]
+        .filter(f=>f!==field)
+        .map(f=>({f, n: aiCall(trace, "coverage.gaps", {field:f, domain}).length}))
+        .filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
+      push({kind:"text", text:`Every asset${domain?` in **${domain}**`:""} has ${art} ${field}. `
+        + (others.length
+            ? `The open gap is elsewhere: **${others[0].n} assets have no ${others[0].f}**`
+              + (others.length>1 ? `, and ${others.slice(1).map(o=>`${o.n} with no ${o.f}`).join(", ")}.` : ".")
+            : "Coverage is complete on every governed field.")});
+      if(others.length) push({kind:"assets", rows:aiCall(trace,"coverage.gaps",{field:others[0].f, domain}), label:`Missing ${others[0].f}`});
+    }
+    return R("coverage", `${rows.length} assets missing ${art} ${field}`);
+  }
+
+  // ── Draft / propose ─────────────────────────────────────────────────────────
+  if(/\b(draft|write|generate|suggest|propose|improve)\b/.test(s)){
+    if(!asset){
+      push({kind:"text", text:"Which asset should I draft for? Name it — for example *draft a description for product_events*."});
+      return R("draft", "Need an asset");
+    }
+    const cols = aiCall(trace, "asset.columns", {name:asset.name, role});
+    const pol  = aiCall(trace, "policy.evaluate", {asset, role});
+    const sens = cols.filter(c=>c.sensitive);
+    const wantTags = /\b(tag|classif)/.test(s);
+    if(wantTags){
+      const after = [...new Set([...(asset.tags||[]), ...(sens.length?["PII"]:[]), ...(asset.domain==="Finance"?["Finance domain"]:[])])];
+      push({kind:"proposal", proposal:{
+        id:"p_"+Date.now(), type:"classification", asset, field:"Classifications",
+        before:(asset.tags||[]).join(", ") || "— none —",
+        after: after.join(", "),
+        prov: aiProv(sens.length?0.93:0.68, "Copilot · classification draft",
+          [ `${sens.length} of ${cols.length} columns match a sensitivity pattern`,
+            ...sens.slice(0,3).map(c=>`${c.name} · ${c.type}`),
+            `Domain is ${asset.domain}` ]),
+      }});
+    } else {
+      const pk = cols.find(c=>c.pk);
+      // A description drafted without column-level metadata is a guess dressed up
+      // as a fact. Say so and drop the confidence rather than shipping filler.
+      const grounded = cols.length>0;
+      const after = `${asset.type} in the ${asset.domain} domain${pk?`, grained one row per ${pk.name}`:""}. `
+        + (grounded
+            ? `${cols.length} columns${sens.length?`, ${sens.length} of them carrying personal data`:""}. `
+            : "")
+        + `Owned by ${asset.owner}${asset.steward&&asset.steward!==asset.owner?`, stewarded by ${asset.steward}`:""}. `
+        + `${pol.length?`${pol.length===1?"One governance policy applies":`${pol.length} governance policies apply`}.`:"No policy currently attaches."}`;
+      push({kind:"proposal", proposal:{
+        id:"p_"+Date.now(), type:"description", asset, field:"Description",
+        before: asset.description || "— empty —",
+        after,
+        prov: aiProv(grounded?0.88:0.52, "Copilot · description draft",
+          grounded
+            ? [ `Read ${cols.length} columns from the catalog schema`,
+                pk ? `Primary key ${pk.name} implies the grain` : "No primary key declared",
+                `${pol.length} ${pol.length===1?"policy":"policies"} evaluated`,
+                "No sample data was read — names and metadata only" ]
+            : [ "No column-level metadata has been ingested for this asset",
+                "Drafted from asset-level facts only — type, domain, ownership, policy",
+                "Profile the source to raise this above a placeholder" ]),
+      }});
+      if(!grounded) push({kind:"text", text:"Confidence is low on purpose: the connector has not profiled this object's columns, so I am working from asset-level facts alone. Profile it and ask again for a description worth certifying."});
+    }
+    return R("draft", `Draft for ${asset.name}`);
+  }
+
+  // ── Impact ──────────────────────────────────────────────────────────────────
+  if(/\b(impact|break|breaks|downstream|depends?|affected|if i (drop|delete|remove|change|deprecat)|blast)/.test(s)){
+    if(!asset){ push({kind:"text", text:"Name the asset and I will trace what depends on it."}); return R("impact","Need an asset"); }
+    const down = aiCall(trace, "lineage.impact", {asset});
+    const col  = aiFindColumn(q);
+    push({kind:"text", text: down.length
+      ? `Changing **${asset.name}**${col?` · \`${col}\``:""} reaches **${down.length} downstream object${down.length>1?"s":""}**. Everything below reads from it directly or transitively — anything marked Dashboard or Report is user-facing, so a breaking change there is visible to the business the same day.`
+      : `No downstream dependency has been reported for **${asset.name}**. That is not proof it is safe — it means no connector has contributed lineage for this object yet.`});
+    if(down.length) push({kind:"impact", rows:down});
+    return R("impact", `${down.length} downstream objects`);
+  }
+
+  // ── Sensitivity / classification ────────────────────────────────────────────
+  if(/\b(pii|phi|sensitive|personal|confidential|gdpr|hipaa|classif)/.test(s) && !asset){
+    const rows = aiCall(trace, "classification.find", {tag:"pii", role});
+    // Group by asset id, not name: two connections can each expose a `user_events`
+    // and merging them would double-count the columns.
+    const byAsset = {};
+    rows.forEach(r=>{ (byAsset[r.asset.id] = byAsset[r.asset.id] || []).push(r); });
+    const maskedN = rows.filter(r=>r.masked).length;
+    push({kind:"text", text:`**${rows.length} columns** across **${Object.keys(byAsset).length} assets** carry personal data.`
+      + (maskedN ? ` ${maskedN} of them are masked for your role (${(ROLES_CONFIG[role]||{}).label}).` : ` Your role sees all of them unmasked.`)});
+    push({kind:"clsgroups", rows:Object.values(byAsset).slice(0,10).map(v=>({name:v[0].asset.name, asset:v[0].asset, cols:v}))});
+    return R("sensitivity", `${rows.length} sensitive columns`);
+  }
+
+  // ── Policy / why ────────────────────────────────────────────────────────────
+  if(/\b(polic|mask|why can.?t|why is|retention|legal hold|allowed|permitted|govern)/.test(s)){
+    if(!asset){ push({kind:"text", text:"Which asset? I evaluate policy per object, not in the abstract."}); return R("policy","Need an asset"); }
+    const pol  = aiCall(trace, "policy.evaluate", {asset, role});
+    const cols = aiCall(trace, "asset.columns", {name:asset.name, role});
+    const masked = cols.filter(c=>c.masked);
+    if(masked.length && !AI_UNMASK_ROLES.includes(role)){
+      push({kind:"refusal", reason:`${masked.length} of the ${cols.length} columns on ${asset.name} are masked for the ${(ROLES_CONFIG[role]||{}).label} role.`,
+        cols:masked.map(c=>c.name), policy:"PII Data Handling",
+        detail:"I can tell you the column exists, its type and its classification. I cannot show you its values or profile. Raising this needs an access request, not a better prompt."});
+    }
+    push({kind:"text", text: pol.length
+      ? `**${pol.length} ${pol.length===1?"policy applies":"policies apply"}** to \`${asset.name}\`.`
+      : `No policy currently attaches to \`${asset.name}\`. Given it holds ${cols.length} columns in the ${asset.domain} domain, that may itself be the finding.`});
+    if(pol.length) push({kind:"policy", rows:pol});
+    return R("policy", `${pol.length} policies on ${asset.name}`);
+  }
+
+  // ── Ownership ───────────────────────────────────────────────────────────────
+  if(/\b(who|owner|owns|steward|responsib|contact|escalat)/.test(s)){
+    const person = aiFindPerson(q);
+    if(person && !asset){
+      const rows = aiCall(trace, "owner.lookup", {who:person});
+      push({kind:"text", text:`**${person}** owns or stewards **${rows.length} assets**.`});
+      push({kind:"assets", rows, label:"Their assets"});
+      return R("owner", `${person} · ${rows.length} assets`);
+    }
+    if(!asset){ push({kind:"text", text:"Name an asset or a person and I will resolve ownership."}); return R("owner","Need a subject"); }
+    aiCall(trace, "asset.get", {name:asset.name});
+    push({kind:"kv", rows:[
+      ["Owner",        (asset.owners||[asset.owner]).filter(Boolean).join(", ")   || "— unassigned —"],
+      ["Steward",      (asset.stewards||[asset.steward]).filter(Boolean).join(", ")|| "— unassigned —"],
+      ["Domain",       asset.domain || "—"],
+      ["Certification",asset.cert   || "—"],
+      ["Source",       asset.connectionLabel || asset.service || "—"],
+      ["Last updated", asset.updated || "—"],
+    ], asset});
+    push({kind:"text", text:`Escalate to **${asset.owner}** for a decision about the data itself; **${asset.steward}** owns the governance metadata.`});
+    return R("owner", `Ownership of ${asset.name}`);
+  }
+
+  // ── Quality ─────────────────────────────────────────────────────────────────
+  if(/\b(quality|failing|failed|test|dq|freshness|null|broken)/.test(s)){
+    const rows = aiCall(trace, "quality.status", {asset});
+    const bad = rows.filter(r=>r.status!=="passing");
+    push({kind:"text", text: bad.length
+      ? `**${bad.length} of ${rows.length}** quality rules${asset?` on \`${asset.name}\``:""} are not passing.`
+      : `All ${rows.length} quality rules${asset?` on \`${asset.name}\``:""} are passing.`});
+    push({kind:"quality", rows:(bad.length?bad:rows).slice(0,10)});
+    return R("quality", `${bad.length} failing rules`);
+  }
+
+  // ── Glossary ────────────────────────────────────────────────────────────────
+  if(/\b(mean|definition|defined|glossary|what is a)/.test(s)){
+    const key = (q.match(/["'`]([^"'`]+)["'`]/)||[])[1]
+             || (q.match(/(?:what (?:does|is)|definition of|meaning of)\s+(.+?)(?:\s+mean)?\??$/i)||[])[1]
+             || q;
+    const rows = aiCall(trace, "glossary.lookup", {q:key.trim()});
+    if(!rows.length){
+      push({kind:"text", text:`No certified term matches **${key.trim()}**. The honest answer is that the business has not agreed a definition — which is a governance gap, not a search failure.`});
+      return R("glossary","No term");
+    }
+    push({kind:"glossary", rows});
+    return R("glossary", rows[0].term);
+  }
+
+  // ── Columns / schema ────────────────────────────────────────────────────────
+  if(/\b(column|schema|field|structure|shape|grain|what.?s in)/.test(s) && asset){
+    const cols = aiCall(trace, "asset.columns", {name:asset.name, role});
+    if(!cols.length){
+      push({kind:"text", text:`No column-level metadata has been ingested for **${asset.name}** (${asset.type}). Column detail exists only for objects the connector profiles.`});
+      return R("schema","No columns");
+    }
+    const maskedN = cols.filter(c=>c.masked).length;
+    push({kind:"text", text:`\`${asset.name}\` has **${cols.length} columns**, ${cols.filter(c=>c.sensitive).length} classified as sensitive`
+      + (maskedN?`, **${maskedN} masked for your role**.`:`, none masked for your role.`)});
+    push({kind:"columns", rows:cols, asset});
+    return R("schema", `${cols.length} columns`);
+  }
+
+  // ── Asset summary ───────────────────────────────────────────────────────────
+  if(asset && (/\b(tell me|about|summar|overview|explain|what is)\b/.test(s) || aiFindAsset(q))){
+    const cols = aiCall(trace, "asset.columns", {name:asset.name, role});
+    const pol  = aiCall(trace, "policy.evaluate", {asset, role});
+    const down = aiCall(trace, "lineage.impact", {asset});
+    push({kind:"text", text:`**${asset.name}** — ${asset.type} in ${asset.domain}, from ${asset.connectionLabel||asset.service}. `
+      + `${asset.description || "No description has been written."}`});
+    push({kind:"kv", rows:[
+      ["Owner / Steward", `${asset.owner||"—"} / ${asset.steward||"—"}`],
+      ["Certification",   asset.cert||"—"],
+      ["Columns",         cols.length ? `${cols.length} (${cols.filter(c=>c.sensitive).length} sensitive)` : "not profiled"],
+      ["Policies",        pol.length ? pol.map(p=>p.name).join(", ") : "none"],
+      ["Downstream",      down.length ? `${down.length} objects` : "none reported"],
+      ["Quality",         asset.quality ? `${asset.quality}%` : "not scored"],
+    ], asset});
+    return R("asset", asset.name);
+  }
+
+  // ── Search fallback ─────────────────────────────────────────────────────────
+  const cleaned = q.replace(/\b(find|show|list|search|which|what|me|all|the|assets?|tables?|for|about|any)\b/gi," ").replace(/\s+/g," ").trim();
+  const rows = aiCall(trace, "catalog.search", {q:cleaned, domain});
+  if(rows.length){
+    push({kind:"text", text:`**${rows.length} assets** match${cleaned?` **${cleaned}**`:""}${domain?` in ${domain}`:""}.`});
+    push({kind:"assets", rows, label:"Matches"});
+    return R("search", `${rows.length} matches`);
+  }
+  push({kind:"text", text:`I could not ground that in the catalog. I answer from the governed graph only — ownership, classifications, policy, lineage, quality, glossary and coverage. For questions about the data itself (rows, totals, trends), **Data Ask** is the right surface.`});
+  return R("none", "No grounding");
+};
+
+// ── Suggested prompts, keyed to what the user is looking at ───────────────────
+const aiSuggest = (ctx) => {
+  if(ctx.asset) return [
+    `What breaks if I change ${ctx.asset.name}?`,
+    `What policies apply to ${ctx.asset.name}?`,
+    `Draft a description for ${ctx.asset.name}`,
+    `Who owns ${ctx.asset.name}?`,
+  ];
+  const byPage = {
+    catalog:   ["Which assets have no owner?", "Show me every column with personal data", "Find tables about revenue"],
+    quality:   ["What quality rules are failing?", "Which assets have no description?"],
+    policymanager:["What policies apply to orders?", "Show me every column with personal data"],
+    tags:      ["Show me every column with personal data", "Which assets have no classification?"],
+    glossary:  ["What does Customer Lifetime Value mean?", "Which assets have no description?"],
+  };
+  return byPage[ctx.nav] || ["Which assets have no owner?", "What breaks if I change orders?", "Show me every column with personal data", "What quality rules are failing?"];
+};
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+const CP_TOOL_ICON = {
+  "catalog.search":"catalog", "asset.get":"catalog", "asset.columns":"tableIc",
+  "classification.find":"tag", "policy.evaluate":"policies", "lineage.impact":"lineage",
+  "glossary.lookup":"glossary", "quality.status":"quality", "coverage.gaps":"shield",
+  "owner.lookup":"steward",
+};
+
+const CPTrace = ({trace}) => {
+  const [open,setOpen] = useState(false);
+  const {roleCfg} = useRole();
+  if(!trace || !trace.length) return null;
+  const rows = trace.reduce((a,t)=>a+t.rows,0);
+  const ms   = trace.reduce((a,t)=>a+t.ms,0);
+  return (
+    <div style={{marginTop:10}}>
+      <button onClick={()=>setOpen(o=>!o)}
+        style={{display:"flex",alignItems:"center",gap:6,background:"transparent",border:"none",padding:0,cursor:"pointer",color:T.textMuted,fontSize:10.5,fontFamily:"inherit"}}>
+        <span style={{transform:open?"rotate(90deg)":"none",display:"flex",transition:"transform .15s"}}>{Ic.chevRight(10)}</span>
+        How I got this — {trace.length} governed tool {trace.length===1?"call":"calls"} · {rows} rows · {ms}ms
+      </button>
+      {open&&(
+        <div style={{marginTop:7,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",background:T.bg}}>
+          {trace.map((t,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+              <span style={{color:T.violet,display:"flex",flexShrink:0}}>{(Ic[CP_TOOL_ICON[t.name]]||Ic.apps)(12)}</span>
+              <code style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.text,fontWeight:600,flexShrink:0}}>{t.name}</code>
+              <code style={{fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {JSON.stringify(Object.fromEntries(Object.entries(t.args||{}).filter(([k,v])=>v!=null&&k!=="role").map(([k,v])=>[k, typeof v==="object"?(v.name||"…"):v])))}
+              </code>
+              <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{t.rows} rows · {t.ms}ms</span>
+            </div>
+          ))}
+          <div style={{padding:"7px 10px",borderTop:`1px solid ${T.border}`,fontSize:10,color:T.textMuted,background:T.bgElevated}}>
+            Every call ran under your identity ({(roleCfg||{}).label||"your role"}) with masking applied before the result reached the model.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const CPAssetRow = ({a, onNav, right}) => (
+  <button onClick={()=>onNav&&onNav("catalog",{assetName:a.name})}
+    className="row-hover"
+    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 10px",background:"transparent",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left"}}>
+    <ServiceIcon service={a.service} size={15}/>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</div>
+      <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.type} · {a.domain} · {a.owner||"no owner"}</div>
+    </div>
+    {right ? right(a) : <span style={{color:T.textMuted,display:"flex",flexShrink:0}}>{Ic.chevRight(11)}</span>}
+  </button>
+);
+
+const CPCard = ({title, children, tone}) => (
+  <div style={{marginTop:9,border:`1px solid ${tone||T.border}`,borderRadius:9,overflow:"hidden",background:T.bgSurface}}>
+    {title&&<div style={{padding:"6px 10px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textSub,letterSpacing:".03em",textTransform:"uppercase"}}>{title}</div>}
+    {children}
+  </div>
+);
+
+// The Proposal Card — the single most reused component in the AI layer. Diff on
+// the left, evidence on the right, and an action whose wording depends on
+// whether you are allowed to make the change yourself.
+const CPProposal = ({p, role, onDone, onToast, onNav}) => {
+  const [state,setState] = useState("open");
+  const mine = aiOwns(p.asset, role);
+  const owner = p.asset.owner || p.asset.steward || "the owner";
+  const accept = () => {
+    if(mine){
+      setState("applied");
+      onToast && onToast(`${p.field} updated on ${p.asset.name}`,"success");
+      pushNotif({category:"Catalog", type:"field_updated", title:`${p.field} updated · ${p.asset.name}`,
+        body:`Accepted an AI proposal at ${aiPct(p.prov.conf)} confidence`, nav:"catalog", asset:p.asset.name});
+    } else {
+      setState("proposed");
+      onToast && onToast(`Proposal sent to ${owner}`,"success");
+      pushNotif({category:"Catalog", type:"field_updated", title:`${p.field} change proposed · ${p.asset.name}`,
+        body:`${aiMe(role)} accepted an AI draft — needs your approval`, nav:"catalog", asset:p.asset.name});
+    }
+  };
+  const tone = state==="open" ? T.violet+"55" : state==="rejected" ? T.border : T.green+"55";
+  return (
+    <div style={{marginTop:10,border:`1px solid ${tone}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+      <div style={{padding:"8px 11px",background:state==="open"?T.violetDim:T.bgElevated,borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:7}}>
+        <AIBadge>PROPOSAL</AIBadge>
+        <div style={{fontSize:11.5,fontWeight:700,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {p.field} · {p.asset.name}
+        </div>
+        <AIConf conf={p.prov.conf} small/>
+      </div>
+
+      <div style={{padding:"10px 11px"}}>
+        <div style={{fontSize:9.5,color:T.textMuted,fontWeight:700,letterSpacing:".04em",marginBottom:3}}>CURRENT</div>
+        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,padding:"6px 9px",background:T.bg,borderRadius:6,border:`1px solid ${T.border}`,textDecoration:state==="applied"?"line-through":"none"}}>{p.before}</div>
+        <div style={{fontSize:9.5,color:T.textMuted,fontWeight:700,letterSpacing:".04em",margin:"9px 0 3px"}}>PROPOSED</div>
+        <div style={{fontSize:11.5,color:T.text,lineHeight:1.55,padding:"6px 9px",background:T.green+"0e",borderRadius:6,border:`1px solid ${T.green}33`}}>{p.after}</div>
+
+        <div style={{marginTop:10,paddingTop:9,borderTop:`1px solid ${T.border}`}}>
+          <div style={{fontSize:9.5,color:T.textMuted,fontWeight:700,letterSpacing:".04em",marginBottom:5}}>EVIDENCE</div>
+          {p.prov.evidence.map((e,i)=>(
+            <div key={i} style={{display:"flex",gap:6,fontSize:11,color:T.textSub,marginTop:i?4:0,lineHeight:1.45}}>
+              <span style={{color:T.textMuted,flexShrink:0}}>·</span><span>{e}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{padding:"9px 11px",borderTop:`1px solid ${T.border}`,background:T.bg,display:"flex",alignItems:"center",gap:7}}>
+        {state==="open" ? (<>
+          <button onClick={accept}
+            style={{padding:"5px 12px",borderRadius:7,background:T.green,border:"none",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+            {mine ? "Accept & apply" : "Accept & send for approval"}
+          </button>
+          <button onClick={()=>{setState("rejected"); onToast&&onToast("Proposal rejected — the model learns from this","success");}}
+            style={{padding:"5px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Reject</button>
+          <div style={{flex:1}}/>
+          <span style={{fontSize:10,color:T.textMuted}}>{mine ? "You own this asset" : `Needs ${owner}`}</span>
+        </>) : (
+          <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,fontWeight:600,
+                       color:state==="rejected"?T.textMuted:T.green}}>
+            {state!=="rejected"&&<span style={{display:"flex"}}>{Ic.check(13)}</span>}
+            {state==="applied"  && `Applied to ${p.asset.name}. Reversible from the asset's history.`}
+            {state==="proposed" && `Sent to ${owner} for approval. It is in their inbox now.`}
+            {state==="rejected" && "Rejected. Recorded against this capability's accuracy score."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const CPBlock = ({b, role, onNav, onToast}) => {
+  if(b.kind==="text") return <div style={{marginTop:6}}><DAText size={12.5}>{b.text}</DAText></div>;
+
+  if(b.kind==="assets") return (
+    <CPCard title={b.label}>
+      <div style={{maxHeight:260,overflowY:"auto"}}>
+        {b.rows.map(a=><CPAssetRow key={a.id} a={a} onNav={onNav}/>)}
+      </div>
+    </CPCard>
+  );
+
+  if(b.kind==="columns") return (
+    <CPCard title={`${b.asset.name} · columns`}>
+      <div style={{maxHeight:300,overflowY:"auto"}}>
+        {b.rows.map((c,i)=>(
+          <div key={c.name} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+            <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.text,fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>
+              {c.name}{c.pk&&<span style={{color:T.amber,marginLeft:4}}>PK</span>}
+            </code>
+            <code style={{fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted,flexShrink:0}}>{c.type}</code>
+            {c.sensitive&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`,flexShrink:0}}>PII</span>}
+            {c.masked&&<span title="Masked for your role by PII Data Handling" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`,flexShrink:0}}>MASKED</span>}
+          </div>
+        ))}
+      </div>
+    </CPCard>
+  );
+
+  if(b.kind==="clsgroups") return (
+    <CPCard title="Where personal data lives">
+      <div style={{maxHeight:300,overflowY:"auto"}}>
+        {b.rows.map(g=>(
+          <div key={g.asset.id} style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`}}>
+            <button onClick={()=>onNav&&onNav("catalog",{assetName:g.name})}
+              style={{background:"transparent",border:"none",padding:0,cursor:"pointer",display:"flex",alignItems:"center",gap:7,marginBottom:5}}>
+              <ServiceIcon service={g.asset.service} size={14}/>
+              <span style={{fontSize:12,fontWeight:600,color:T.text}}>{g.name}</span>
+              <span style={{fontSize:10,color:T.textMuted}}>{g.asset.connectionLabel||g.asset.domain}</span>
+            </button>
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {g.cols.map(c=>(
+                <span key={c.col} title={c.why}
+                  style={{fontFamily:"'Geist Mono',monospace",fontSize:10,padding:"2px 7px",borderRadius:5,
+                          background:c.masked?T.amberDim:T.accentDim, color:c.masked?T.amber:T.accent,
+                          border:`1px solid ${(c.masked?T.amber:T.accent)}33`}}>
+                  {c.col}{c.masked?" ●":""}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </CPCard>
+  );
+
+  if(b.kind==="impact") return (
+    <CPCard title="Downstream — everything that reads this">
+      <div style={{maxHeight:280,overflowY:"auto"}}>
+        {b.rows.map((n,i)=>(
+          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+            <span style={{width:5,height:5,borderRadius:"50%",flexShrink:0,
+              background:/Dashboard|Report|Worksheet|Tile|Story/i.test(n.type)?T.accent:T.textMuted}}/>
+            <div style={{flex:1,minWidth:0,fontSize:11.5,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</div>
+            <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>{n.type}</span>
+          </div>
+        ))}
+      </div>
+    </CPCard>
+  );
+
+  if(b.kind==="kv") return (
+    <CPCard title={b.asset?b.asset.name:"Facts"}>
+      {b.rows.map(([k,v],i)=>(
+        <div key={k} style={{display:"flex",gap:10,padding:"6px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+          <div style={{width:112,flexShrink:0,fontSize:11,color:T.textMuted}}>{k}</div>
+          <div style={{flex:1,fontSize:11.5,color:T.text,fontWeight:500,wordBreak:"break-word"}}>{v}</div>
+        </div>
+      ))}
+      {b.asset&&(
+        <button onClick={()=>onNav&&onNav("catalog",{assetName:b.asset.name})}
+          style={{width:"100%",padding:"7px 10px",borderTop:`1px solid ${T.border}`,background:T.bg,border:"none",cursor:"pointer",
+                  fontSize:11,fontWeight:600,color:T.accent,textAlign:"left",fontFamily:"inherit"}}>Open {b.asset.name} →</button>
+      )}
+    </CPCard>
+  );
+
+  if(b.kind==="policy") return (
+    <CPCard title="Policies in force">
+      {b.rows.map((p,i)=>(
+        <div key={p.id} style={{padding:"8px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+            <button onClick={()=>onNav&&onNav("policymanager",{policyId:p.id})}
+              style={{background:"transparent",border:"none",padding:0,cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,fontFamily:"inherit"}}>{p.name}</button>
+            <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,
+              background:p.severity==="Critical"?T.accentDim:T.amberDim,
+              color:p.severity==="Critical"?T.accent:T.amber,
+              border:`1px solid ${(p.severity==="Critical"?T.accent:T.amber)}35`}}>{p.severity}</span>
+            <div style={{flex:1}}/>
+            <span style={{fontSize:10,color:p.verdict.startsWith("Exempt")?T.green:T.textMuted}}>{p.verdict}</span>
+          </div>
+          <div style={{fontSize:11,color:T.textSub,lineHeight:1.5}}>{p.effect}</div>
+        </div>
+      ))}
+    </CPCard>
+  );
+
+  if(b.kind==="quality") return (
+    <CPCard title="Quality rules">
+      {b.rows.map((r,i)=>(
+        <div key={r.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+          <span style={{width:6,height:6,borderRadius:"50%",flexShrink:0,
+            background:r.status==="passing"?T.green:r.status==="warning"?T.amber:T.red}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11.5,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.rule}</div>
+            <div style={{fontSize:10,color:T.textMuted}}>{r.table} · {r.dim} · {r.lastRun}</div>
+          </div>
+          <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",flexShrink:0,
+            color:r.status==="passing"?T.green:r.status==="warning"?T.amber:T.red}}>{r.score}%</span>
+        </div>
+      ))}
+    </CPCard>
+  );
+
+  if(b.kind==="glossary") return (
+    <CPCard title="Certified definition">
+      {b.rows.map((t,i)=>(
+        <div key={t.id} style={{padding:"9px 10px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4}}>
+            <button onClick={()=>onNav&&onNav("glossary",{termName:t.term})}
+              style={{background:"transparent",border:"none",padding:0,cursor:"pointer",fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"inherit"}}>{t.term}</button>
+            {t.abbr&&<code style={{fontFamily:"'Geist Mono',monospace",fontSize:10,color:T.textMuted}}>{t.abbr}</code>}
+            <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:t.cert==="Approved"?T.green+"18":T.amberDim,
+              color:t.cert==="Approved"?T.green:T.amber,border:`1px solid ${(t.cert==="Approved"?T.green:T.amber)}35`}}>{t.cert}</span>
+          </div>
+          <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{t.definition||t.desc||"—"}</div>
+          <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>
+            Owner {t.owner} · {t.linked||0} linked assets{(t.synonyms||[]).length?` · also called ${t.synonyms.join(", ")}`:""}
+          </div>
+        </div>
+      ))}
+    </CPCard>
+  );
+
+  if(b.kind==="refusal") return (
+    <div style={{marginTop:9,border:`1px solid ${T.amber}45`,borderRadius:9,overflow:"hidden",background:T.amberDim}}>
+      <div style={{padding:"8px 11px",display:"flex",alignItems:"center",gap:7,borderBottom:`1px solid ${T.amber}30`}}>
+        <span style={{color:T.amber,display:"flex"}}>{Ic.shield(13)}</span>
+        <div style={{fontSize:11.5,fontWeight:700,color:T.amber}}>Withheld by policy</div>
+      </div>
+      <div style={{padding:"9px 11px"}}>
+        <div style={{fontSize:11.5,color:T.text,lineHeight:1.55}}>{b.reason}</div>
+        <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:6}}>{b.detail}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,marginTop:8}}>
+          {b.cols.map(c=><code key={c} style={{fontFamily:"'Geist Mono',monospace",fontSize:10,padding:"2px 7px",borderRadius:5,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>{c}</code>)}
+        </div>
+        <div style={{fontSize:10,color:T.textMuted,marginTop:8}}>Policy · {b.policy}</div>
+      </div>
+    </div>
+  );
+
+  if(b.kind==="proposal") return <CPProposal p={b.proposal} role={role} onToast={onToast} onNav={onNav}/>;
+  return null;
+};
+
+// ── The dock ──────────────────────────────────────────────────────────────────
+const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
+  const {role} = useRole();
+  const [msgs, setMsgs]   = useState([]);
+  const [q, setQ]         = useState("");
+  const [busy, setBusy]   = useState(false);
+  const [live, setLive]   = useState([]);     // tool chips revealed while "thinking"
+  const [w, setW]         = useState(432);
+  const endRef            = useRef(null);
+  const dragRef           = useRef(null);
+
+  useEffect(()=>{ if(endRef.current) endRef.current.scrollIntoView({behavior:"smooth"}); },[msgs,busy,live]);
+
+  // Drag the left edge to resize. Small thing; it is the difference between a
+  // widget and a panel people keep open all day.
+  useEffect(()=>{
+    const move = e => { if(dragRef.current) setW(Math.min(760, Math.max(360, window.innerWidth - e.clientX))); };
+    const up   = () => { dragRef.current = false; document.body.style.userSelect=""; };
+    window.addEventListener("mousemove",move); window.addEventListener("mouseup",up);
+    return ()=>{ window.removeEventListener("mousemove",move); window.removeEventListener("mouseup",up); };
+  },[]);
+
+  const send = (text) => {
+    const question = (text!=null?text:q).trim();
+    if(!question || busy) return;
+    setQ(""); setMsgs(m=>[...m,{who:"user", text:question}]);
+    setBusy(true); setLive([]);
+    // Run the router immediately, then reveal its trace at reading speed so the
+    // user sees which governed tools were used before the answer lands.
+    const ans = aiAsk(question, {...ctx, role});
+    ans.trace.forEach((t,i)=>setTimeout(()=>setLive(l=>[...l,t.name]), 130 + i*150));
+    setTimeout(()=>{ setMsgs(m=>[...m,{who:"ai", ans}]); setBusy(false); setLive([]); },
+               260 + ans.trace.length*150);
+  };
+
+  const sug = aiSuggest({...ctx, role});
+
+  return (
+    <div className={open?"slideInRight":""} style={{
+      position:"fixed",top:0,right:0,bottom:0,width:w,zIndex:900,
+      background:T.bgSurface,borderLeft:`1px solid ${T.border}`,
+      display:open?"flex":"none",flexDirection:"column",
+      boxShadow:"-18px 0 48px rgba(0,0,0,.14)"}}>
+
+      <div onMouseDown={()=>{dragRef.current=true; document.body.style.userSelect="none";}}
+        style={{position:"absolute",left:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:2}}/>
+
+      {/* Head */}
+      <div style={{flexShrink:0,padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9}}>
+        <div style={{width:26,height:26,borderRadius:7,background:T.violetDim,border:`1px solid ${T.violet}35`,display:"flex",alignItems:"center",justifyContent:"center",color:T.violet,flexShrink:0}}>{Ic.bot(14)}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text}}>Copilot</div>
+          <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Talk to your metadata — grounded, policy-aware</div>
+        </div>
+        {msgs.length>0&&(
+          <button onClick={()=>setMsgs([])} title="New conversation"
+            style={{width:26,height:26,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.plus(12)}</button>
+        )}
+        <button onClick={onClose} style={{width:26,height:26,borderRadius:7,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(14)}</button>
+      </div>
+
+      {/* Context chip — the reason this is a dock and not a page */}
+      <div style={{flexShrink:0,padding:"7px 14px",borderBottom:`1px solid ${T.border}`,background:T.bg,display:"flex",alignItems:"center",gap:7}}>
+        <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Context</span>
+        {ctx.asset ? (
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.borderLight}`,fontSize:10.5,color:T.text,fontWeight:600,minWidth:0}}>
+            <ServiceIcon service={ctx.asset.service} size={11}/>
+            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ctx.asset.name}</span>
+            <span style={{color:T.textMuted,fontWeight:400}}>{ctx.asset.type}</span>
+          </span>
+        ) : (
+          <span style={{fontSize:10.5,color:T.textSub,fontWeight:600}}>{(NAV_TITLE[ctx.nav]||ctx.nav||"Platform")} · whole catalog</span>
+        )}
+        <div style={{flex:1}}/>
+        <span title="Answers are projected through your role before they reach you"
+          style={{fontSize:9.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>as {(ROLES_CONFIG[role]||{}).label}</span>
+      </div>
+
+      {/* Thread */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px"}}>
+        {msgs.length===0&&!busy&&(
+          <div>
+            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
+              I read the governed graph — ownership, classifications, policy, lineage, quality, glossary and coverage — and I can draft the governance work that follows.
+              I do not read your rows; for questions about the data itself, use <b style={{color:T.text}}>Data Ask</b>.
+            </div>
+            <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"16px 0 7px"}}>TRY</div>
+            {sug.map(s=>(
+              <button key={s} onClick={()=>send(s)} className="row-hover"
+                style={{width:"100%",textAlign:"left",padding:"8px 10px",marginBottom:5,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>{s}</button>
+            ))}
+          </div>
+        )}
+
+        {msgs.map((m,i)=>m.who==="user" ? (
+          <div key={i} style={{display:"flex",justifyContent:"flex-end",marginTop:i?18:0}}>
+            <div style={{maxWidth:"86%",padding:"7px 11px",borderRadius:"10px 10px 3px 10px",background:T.bgActive,fontSize:12.5,color:T.text,lineHeight:1.5}}>{m.text}</div>
+          </div>
+        ) : (
+          <div key={i} style={{marginTop:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+              <span style={{color:T.violet,display:"flex"}}>{Ic.bot(12)}</span>
+              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>COPILOT</span>
+              {m.ans.intent!=="none"&&<span style={{fontSize:10,color:T.textMuted}}>· {m.ans.headline}</span>}
+            </div>
+            {m.ans.blocks.map((b,j)=><CPBlock key={j} b={b} role={role} onNav={onNav} onToast={onToast}/>)}
+            <CPTrace trace={m.ans.trace}/>
+          </div>
+        ))}
+
+        {busy&&(
+          <div style={{marginTop:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+              <span style={{color:T.violet,display:"flex"}}>{Ic.bot(12)}</span>
+              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>READING THE GRAPH…</span>
+            </div>
+            {live.map((t,i)=>(
+              <div key={i} className="fadeIn" style={{display:"flex",alignItems:"center",gap:7,padding:"4px 0"}}>
+                <span style={{color:T.green,display:"flex"}}>{Ic.check(11)}</span>
+                <code style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.textSub}}>{t}</code>
+              </div>
+            ))}
+          </div>
+        )}
+        <div ref={endRef}/>
+      </div>
+
+      {/* Composer */}
+      <div style={{flexShrink:0,padding:"10px 14px",borderTop:`1px solid ${T.border}`,background:T.bg}}>
+        <div style={{display:"flex",gap:7,alignItems:"flex-end"}}>
+          <textarea value={q} onChange={e=>setQ(e.target.value)} rows={1}
+            onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}
+            placeholder={ctx.asset?`Ask about ${ctx.asset.name}…`:"Ask about ownership, policy, lineage, coverage…"}
+            style={{flex:1,resize:"none",maxHeight:110,padding:"8px 11px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12.5,fontFamily:"inherit",lineHeight:1.5,outline:"none"}}
+            onInput={e=>{ e.target.style.height="auto"; e.target.style.height=Math.min(110,e.target.scrollHeight)+"px"; }}/>
+          <button onClick={()=>send()} disabled={!q.trim()||busy}
+            style={{width:32,height:32,borderRadius:9,flexShrink:0,background:q.trim()&&!busy?T.accent:T.bgElevated,border:`1px solid ${q.trim()&&!busy?T.accent:T.border}`,color:q.trim()&&!busy?"#fff":T.textMuted,cursor:q.trim()&&!busy?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {Ic.arrowRight(14)}
+          </button>
+        </div>
+        <div style={{fontSize:9.5,color:T.textMuted,marginTop:6,lineHeight:1.45}}>
+          Reads metadata only — never your rows. Every answer is projected through your role and logged.
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Page titles, used by the dock's context chip.
+const NAV_TITLE = {
+  home:"Home", stewardship:"Workspace", catalog:"Catalog", quality:"Data Quality",
+  policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer",
+  glossary:"Glossary", semanticlayer:"Semantic Layer", domains:"Domains",
+  dataproducts:"Data Products", dataask:"Data Ask", settings:"Settings",
+  aipipelines:"AI Data Engineer",
+};
+
+// The launcher, dropped into the Topbar so it is on every screen.
+const CopilotBtn = () => {
+  const cp = useContext(CopilotCtx);
+  if(!cp) return null;
+  return (
+    <button onClick={cp.toggle} title="Copilot — talk to your metadata (Ctrl+K)"
+      style={{display:"flex",alignItems:"center",gap:6,height:32,padding:"0 11px",borderRadius:8,
+              background:cp.open?T.violetDim:"transparent",border:`1px solid ${cp.open?T.violet+"45":T.border}`,
+              color:cp.open?T.violet:T.textSub,cursor:"pointer",fontSize:11.5,fontWeight:600,fontFamily:"inherit",transition:"all .15s"}}
+      onMouseEnter={e=>{ if(!cp.open){e.currentTarget.style.background=T.bgHover; e.currentTarget.style.color=T.text;} }}
+      onMouseLeave={e=>{ if(!cp.open){e.currentTarget.style.background="transparent"; e.currentTarget.style.color=T.textSub;} }}>
+      {Ic.bot(14)} Copilot
+    </button>
+  );
+};
+
 // ──────────────────────────────────────
 export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
@@ -49656,6 +50755,7 @@ export default function App(){
   const [deepLinkDomainId, setDeepLinkDomainId] = useState(null);
   const [deepLinkTermId, setDeepLinkTermId] = useState(null);
   const [deepLinkConnName, setDeepLinkConnName] = useState(null);
+  const [cpOpen,   setCpOpen]   = useState(false);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
   const allowedNav = roleCfg.nav || [];
@@ -49682,6 +50782,16 @@ export default function App(){
   const handleAssetPush = (a) => setAssetStack(s=>[...s,a]);
   const handleAssetBack = ()  => setAssetStack(s=>s.slice(0,-1));
   const showToast    = (msg,type="success") => setToast({msg,type,key:Date.now()});
+
+  // Ctrl/Cmd+K summons the Copilot from anywhere. Escape closes it.
+  useEffect(()=>{
+    const onKey = (e)=>{
+      if((e.metaKey||e.ctrlKey) && e.key.toLowerCase()==="k"){ e.preventDefault(); setCpOpen(o=>!o); }
+      if(e.key==="Escape") setCpOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return ()=>window.removeEventListener("keydown", onKey);
+  },[]);
 
   const toggleTheme  = (target) => {
     const next = target !== undefined ? target : !isDark;
@@ -49734,6 +50844,7 @@ export default function App(){
     <TagProvider>
     <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout}}>
     <NavCtx.Provider value={handleNav}>
+    <CopilotCtx.Provider value={{open:cpOpen, toggle:()=>setCpOpen(o=>!o), close:()=>setCpOpen(false)}}>
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
       <style key={`theme-style-${themeKey}`}>{makeG(T)}</style>
       <div key={`theme-root-${themeKey}`} style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
@@ -49742,9 +50853,13 @@ export default function App(){
           {renderPage()}
         </main>
         <DocBot open={helpOpen} setOpen={setHelpOpen}/>
+        {/* Mounted unconditionally so the conversation survives navigation. */}
+        <CopilotDock open={cpOpen} onClose={()=>setCpOpen(false)} onNav={handleNav} onToast={showToast}
+          ctx={{nav, asset: assetStack.length>0 ? assetStack[assetStack.length-1] : null}}/>
       </div>
       {toast&&<Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
     </ThemeCtx.Provider>
+    </CopilotCtx.Provider>
     </NavCtx.Provider>
     </RoleCtx.Provider>
     </TagProvider>
