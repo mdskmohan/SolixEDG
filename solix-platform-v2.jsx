@@ -50807,11 +50807,6 @@ const AIC_DETECTORS = [
    name:/(^|_)(card|card_no|pan|cc_num|credit_card|iban|account_no)($|_)/i,
    value:()=>null},
 
-  {k:"mrn",     label:"Medical record number", tag:"PHI",  risk:"Critical",
-   why:"A clinical identifier. HIPAA-regulated and never maskable by default.",
-   name:/(^|_)(mrn|patient_id|patient|npi|provider_id)($|_)/i,
-   value:()=>null},
-
   {k:"secret",  label:"Credential material",tag:"PII",     risk:"Critical",
    why:"A secret. Should not be readable by anyone, including a steward.",
    name:/(^|_)(password|password_hash|passwd|secret|api_key|token|private_key)($|_)/i,
@@ -50895,7 +50890,13 @@ const aicScan = (opts) => {
 
       const det = nameDet || (valDet && valDet.d) || (graphHit && aicDet(graphHit.detector)) || null;
       if(!det){
-        findings.push({kind:"clear", assetId:a.id, asset:a, col:col.name, type:col.type});
+        findings.push(col.pii
+          ? {id:`f_${a.id}_${col.name}`, kind:"confirmed", uncovered:true,
+             assetId:a.id, asset:a, col:col.name, type:col.type, desc:col.desc,
+             det:null, detLabel:"No detector covers this", tag:"PII", risk:"High",
+             why:"The catalog classifies this column, but no detector in the catalogue recognises it. The classification stands; the classifier simply cannot confirm or challenge it.",
+             conf:0, tiers:[], valueRead:false}
+          : {kind:"clear", assetId:a.id, asset:a, col:col.name, type:col.type});
         return;
       }
       const conf = aicBlend(nameDet && det.k===nameDet.k ? 1 : 0,
@@ -50938,7 +50939,6 @@ const AIC_SEED_STATS = {
   address: {accepted:96,  rejected:29},
   natid:   {accepted:38,  rejected:0},
   card:    {accepted:22,  rejected:1},
-  mrn:     {accepted:63,  rejected:2},
   netaddr: {accepted:88,  rejected:34},
   secret:  {accepted:19,  rejected:0},
   comp:    {accepted:27,  rejected:1},
@@ -51381,7 +51381,11 @@ const AICProposalsPanel = ({onToast, onNav}) => {
         {/* Run summary — "we looked and found nothing" is an answer; "we did not look" is not */}
         <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
           <AICStat label="Awaiting review"   value={pending.length}   sub={`of ${proposals.length} proposed`} color={pending.length?T.amber:T.green}/>
-          <AICStat label="Already classified" value={confirmed.length} sub="signals agree with the catalog"/>
+          <AICStat label="Already classified" value={confirmed.length}
+            sub={confirmed.filter(f=>f.uncovered).length
+              ? `${confirmed.filter(f=>f.uncovered).length} of them by no detector — a coverage hole`
+              : "signals agree with the catalog"}
+            color={confirmed.filter(f=>f.uncovered).length ? T.amber : undefined}/>
           <AICStat label="Scanned, no signal" value={clear.length}     sub="looked, found nothing"/>
           <AICStat label="Columns in scope"  value={findings.length}  sub={`${new Set(findings.map(f=>f.assetId)).size} assets profiled`}/>
           <AICStat label="Detectors on"      value={`${AIC_DETECTORS.length}`} sub={`${Object.keys(st.settings.autoApply).filter(k=>st.settings.autoApply[k]).length} auto-applying`}/>
@@ -51685,6 +51689,11 @@ const AIDE_ENGINES = [
   {k:"cdp",        label:"Solix CDP",        sub:"Archive job with retention class",              svc:"cdp"},
 ];
 
+// What makes a source clinical, for the boundary check. Deliberately independent
+// of the classifier's detector catalogue: whether a join is lawful is a policy
+// question, and it must not change because someone added or removed a detector.
+const AIDE_CLINICAL_RE = /(^|_)(mrn|patient|patient_id|encounter|diagnosis|icd|npi|provider_id|prescription)($|_)/i;
+
 // Sources under legal hold. In a real deployment this reads from the enforcement
 // rules; seeded here so the pre-flight has a genuine hard stop to find.
 const AIDE_LEGAL_HOLDS = {
@@ -51914,9 +51923,8 @@ const aidePreflight = (plan, applied) => {
 
   // 4. Domain crossing
   const doms = [...new Set(plan.sources.map(a=>a.domain))];
-  const phiDet = AIC_DETECTORS.find(d=>d.k==="mrn");
   const isClinical = a => a.domain==="Health" ||
-    (SCHEMA[a.name]||[]).some(c=>phiDet.name.test(c.name));
+    (SCHEMA[a.name]||[]).some(c=>AIDE_CLINICAL_RE.test(c.name));
   const clinicalSrc = plan.sources.filter(isClinical);
   const clinical = clinicalSrc.length>0 && clinicalSrc.length<plan.sources.length;
   checks.push({
