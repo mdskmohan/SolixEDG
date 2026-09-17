@@ -51422,27 +51422,6 @@ const AICProposalsPanel = ({onToast, onNav}) => {
             </div>
           </div>
         ) : (<>
-          {/* Bulk lane — column-by-column review at enterprise scale is theatre */}
-          <div style={{padding:"11px 13px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`,marginBottom:12}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>Accept a whole pattern at once</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-              {Object.entries(byDet).sort((a,b)=>b[1].length-a[1].length).map(([k,list])=>{
-                const d = aicDet(k); const strong = list.filter(f=>f.conf>=0.90);
-                return (
-                  <button key={k} onClick={()=>decideMany(strong.length?strong:list, "accepted")} disabled={!canDecide}
-                    title={strong.length?`Accept the ${strong.length} at 90% or above, and leave the rest for individual review`:"All of these are below 90% — review them individually"}
-                    style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,
-                            background:T.bg,border:`1px solid ${T.border}`,cursor:canDecide?"pointer":"default",
-                            fontSize:11.5,color:T.textSub,fontFamily:"inherit",opacity:canDecide?1:.5}}>
-                    <span style={{fontWeight:600,color:T.text}}>{d.label}</span>
-                    <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.textMuted}}>{list.length}</span>
-                    {strong.length>0&&<span style={{fontSize:10,color:T.green,fontWeight:700}}>accept {strong.length} ≥90%</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Filters */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
             <select value={fDet} onChange={e=>setFDet(e.target.value)}
