@@ -4688,10 +4688,9 @@ const GROUPS = [
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
     {key:"tags",           icon:"tag",           label:"Classifications"},
-    {key:"aiclassify",     icon:"bot",           label:"AI Classification"},
   ]},
   {section:"Build",items:[
-    {key:"aipipelines",    icon:"workflow",      label:"AI Data Engineer"},
+    {key:"aipipelines",    icon:"workflow",      label:"Pipelines"},
   ]},
   {section:"Knowledge",items:[
     {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
@@ -4705,7 +4704,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify","aipipelines"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -35013,7 +35012,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -35026,7 +35025,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aiclassify","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -35038,7 +35037,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aiclassify","aipipelines"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aipipelines"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -35050,7 +35049,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aiclassify","aipipelines","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aipipelines","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -37738,16 +37737,17 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
 /* application config modal */
 const AppConfigModal = ({app, onClose, onToast}) => {
-  const [activeTab, setActiveTab] = useState(app.config.tabs[0].key);
+  const tabs = (app.config && app.config.tabs && app.config.tabs.length) ? app.config.tabs : [{key:"_",label:"",fields:[]}];
+  const [activeTab, setActiveTab] = useState(tabs[0].key);
   const [vals, setVals] = useState(()=>{
     const v={};
-    app.config.tabs.forEach(t=>t.fields.forEach(f=>{v[f.key]=f.val;}));
+    tabs.forEach(t=>t.fields.forEach(f=>{v[f.key]=f.val;}));
     return v;
   });
-  const curTab = app.config.tabs.find(t=>t.key===activeTab);
+  const curTab = tabs.find(t=>t.key===activeTab) || tabs[0];
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-      <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:520,maxWidth:"90vw",maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.5)"}}>
+      <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:app.custom?940:520,maxWidth:"94vw",maxHeight:app.custom?"88vh":"80vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,.5)"}}>
         {/* modal header */}
         <div style={{padding:"18px 20px 0",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
@@ -37763,7 +37763,7 @@ const AppConfigModal = ({app, onClose, onToast}) => {
             </button>
           </div>
           <div style={{display:"flex",gap:0}}>
-            {app.config.tabs.map(t=>(
+            {(app.custom?[]:tabs).map(t=>(
               <button key={t.key} onClick={()=>setActiveTab(t.key)} style={{padding:"6px 14px",background:"transparent",border:"none",marginBottom:-1,cursor:"pointer",transition:"all .12s",
                 borderBottom:`2px solid ${activeTab===t.key?T.accent:"transparent"}`,
                 color:activeTab===t.key?T.text:T.textSub,fontSize:12,fontWeight:activeTab===t.key?600:400}}>{t.label}</button>
@@ -37771,6 +37771,7 @@ const AppConfigModal = ({app, onClose, onToast}) => {
           </div>
         </div>
         {/* fields */}
+        {app.custom==="aiclassify" ? <AICControlPanel onToast={onToast}/> : (
         <div style={{flex:1,overflowY:"auto",padding:20,display:"flex",flexDirection:"column",gap:14}}>
           {curTab.fields.map(f=>(
             <div key={f.key} style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
@@ -37786,6 +37787,7 @@ const AppConfigModal = ({app, onClose, onToast}) => {
             </div>
           ))}
         </div>
+        )}
         {/* footer */}
         <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",flexShrink:0}}>
           <Btn ghost onClick={onClose}>Cancel</Btn>
@@ -46350,26 +46352,14 @@ const SettingsView = ({onToast})=>{
       },
     },
     {
-      id:"app4", name:"PII Detector", icon:"compliance", status:"active", ver:"1.0.4", category:"Compliance",
-      desc:"Scans every ingested schema for columns that may contain PII (names, emails, SSNs, etc.) and automatically suggests data classifications.",
+      id:"app4", name:"AI Classification", icon:"bot", status:"active", ver:"2.0.0", category:"Compliance",
+      desc:"Proposes classifications for every profiled column from three signals — column name, profiled value shape, and inheritance from an already-classified column it references. Proposals are reviewed in Classifications; this is where the detectors, the data boundary and the auto-apply gate are set.",
       lastRun:"2 min ago", nextRun:"On every ingest", runsToday:842,
-      config:{
-        tabs:[
-          {key:"general",label:"General",fields:[
-            {type:"toggle",label:"Auto-classify detected PII columns",key:"autoClassify",val:false,hint:"Applies 'PII' tag automatically — off means suggest only"},
-            {type:"toggle",label:"Alert data steward on detection",key:"alertSteward",val:true},
-            {type:"toggle",label:"Scan sample data (not just column names)",key:"scanSamples",val:true,hint:"More accurate but slower — requires row-level access"},
-          ]},
-          {key:"rules",label:"Detection Rules",fields:[
-            {type:"toggle",label:"Email addresses",key:"email",val:true},
-            {type:"toggle",label:"Phone numbers",key:"phone",val:true},
-            {type:"toggle",label:"Social Security Numbers",key:"ssn",val:true},
-            {type:"toggle",label:"Credit card numbers",key:"cc",val:true},
-            {type:"toggle",label:"IP addresses",key:"ip",val:false},
-            {type:"toggle",label:"Date of birth",key:"dob",val:true},
-          ]},
-        ],
-      },
+      // Rendered by AICControlPanel instead of the generic field list: the
+      // accuracy table and the per-detector auto-apply gate do not reduce to
+      // toggles and selects.
+      custom:"aiclassify",
+      config:{tabs:[]},
     },
     {
       id:"app5", name:"Lineage Scanner", icon:"lineage", status:"inactive", ver:"1.2.0", category:"Lineage",
@@ -48455,7 +48445,7 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
   );
 };
 
-const TagManagementView = ({onToast, deepLinkTagId}) => {
+const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig, logReverseSync, pushSummaryForTag } = useTagCtx();
   const relTime = (iso)=>{ if(!iso) return null; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const navigate = useNav();
@@ -48628,6 +48618,7 @@ const TagManagementView = ({onToast, deepLinkTagId}) => {
   return (
     <div className="fadeUp" style={{height:'100%',display:'flex',flexDirection:'column'}}>
       <Topbar breadcrumb={[{label:'Classifications'}]}/>
+      {tabBar}
 
       <div style={{flex:1,display:'flex',overflow:'hidden',position:'relative'}}>
 
@@ -50724,7 +50715,7 @@ const NAV_TITLE = {
   policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer",
   glossary:"Glossary", semanticlayer:"Semantic Layer", domains:"Domains",
   dataproducts:"Data Products", dataask:"Data Ask", settings:"Settings",
-  aipipelines:"AI Data Engineer",
+  aipipelines:"Pipelines",
 };
 
 // The launcher, dropped into the Topbar so it is on every screen.
@@ -50963,10 +50954,11 @@ const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS &
 let _aicState = {
   settings:{
     tiers:{name:true, value:true, graph:true},
-    // Value inspection reads sample data. Health forbids it outright — that is a
-    // legal boundary, not a preference, so it lives in settings and not a toggle
-    // someone can flip during a run.
-    valueAllowed: AIC_ALL_DOMAINS.filter(d=>d!=="Health"),
+    // Value inspection reads sample data, and some domains cannot permit that.
+    // Platform holds the HR tables, where sampling salary and name columns is
+    // barred by agreement rather than by preference — so it is off by default and
+    // the run honours it whether it was started by a person or a schedule.
+    valueAllowed: AIC_ALL_DOMAINS.filter(d=>d!=="Platform"),
     autoApply:{},          // detector -> true, only settable when earned
     minConfidence:0.70,
   },
@@ -51131,7 +51123,158 @@ const AICEvidence = ({f, onClose, onNav}) => {
 };
 
 // ── The screen ────────────────────────────────────────────────────────────────
-const AIClassificationView = ({onToast, onNav}) => {
+
+// The admin surface: what the classifier looks for, where it is allowed to look,
+// and which detectors have earned the right to apply without a human. It lives in
+// Settings › Applications — the home this product already had for post-ingestion
+// automation — rather than in the steward's daily surface. Different person,
+// different frequency, different question.
+const AICControlPanel = ({onToast}) => {
+  const st = useAic();
+  const [tab, setTab] = useState("settings");
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:"100%",minHeight:0}}>
+      <div style={{flexShrink:0,padding:"0 20px"}}>
+        <Tabs2 tabs={[{key:"settings",label:"Signals & boundaries"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
+          active={tab} onChange={setTab}/>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
+        {tab==="accuracy"&&(
+          <div>
+            <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,maxWidth:760}}>
+              Auto-apply is a privilege a detector earns, not a switch someone flips. It unlocks at
+              <b style={{color:T.text}}> {Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over at least {AIC_AUTO_MIN_DECISIONS} decisions</b>,
+              measured against what stewards actually did with its proposals. Every accept and every override in the queue moves these numbers.
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+                <div style={{flex:1}}>DETECTOR</div>
+                <div style={{width:90}}>CLASSIFIES</div>
+                <div style={{width:160}}>PRECISION</div>
+                <div style={{width:110,textAlign:"right"}}>DECISIONS</div>
+                <div style={{width:170,textAlign:"right"}}>AUTO-APPLY</div>
+              </div>
+              {AIC_DETECTORS.map((d,i)=>{
+                const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
+                const earned = aicAutoEarned(s); const on = !!st.settings.autoApply[d.k];
+                return (
+                  <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.label}</div>
+                      <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.why}</div>
+                    </div>
+                    <div style={{width:90,flexShrink:0}}>
+                      <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
+                    </div>
+                    <div style={{width:160,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
+                      </div>
+                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
+                    </div>
+                    <div style={{width:110,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                      {s.accepted}✓ / {s.rejected}✗
+                    </div>
+                    <div style={{width:170,flexShrink:0,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:7}}>
+                      {earned ? (
+                        <button onClick={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!on}}}));
+                                               onToast(on?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label} — above 95% over ${n} decisions`,"success"); }}
+                          style={{display:"flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+                                  background:on?T.green+"18":T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`,color:on?T.green:T.textSub,fontSize:11,fontWeight:700}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:on?T.green:T.textMuted}}/>
+                          {on?"On":"Earned — off"}
+                        </button>
+                      ) : (
+                        <span title={n<AIC_AUTO_MIN_DECISIONS
+                          ? `Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions before it can qualify`
+                          : `Precision is ${Math.round(p*100)}%, below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
+                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
+                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "below the gate"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {tab==="settings"&&(
+          <div style={{maxWidth:820}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:9}}>SIGNAL TIERS</div>
+            {["name","value","graph"].map(t=>{
+              const m = AIC_TIER_META[t]; const on = st.settings.tiers[t];
+              return (
+                <div key={t} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",marginBottom:8,borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                  <div style={{paddingTop:1}}><AICTier t={t}/></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>
+                      {t==="name"&&"Column-name patterns"}
+                      {t==="value"&&"Profiled value shapes"}
+                      {t==="graph"&&"Reference inheritance"}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{m.title}</div>
+                    {t==="value"&&(
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
+                        Permitted in: {st.settings.valueAllowed.join(", ")} ·
+                        <b style={{color:T.amber}}> blocked in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"nowhere"}</b>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={()=>aicSet(s=>({...s, settings:{...s.settings, tiers:{...s.settings.tiers,[t]:!on}}, findings:null}))}
+                    style={{flexShrink:0,width:38,height:21,borderRadius:99,border:"none",cursor:"pointer",padding:2,
+                            background:on?T.green:T.bgActive,display:"flex",justifyContent:on?"flex-end":"flex-start"}}>
+                    <span style={{width:17,height:17,borderRadius:"50%",background:"#fff",display:"block"}}/>
+                  </button>
+                </div>
+              );
+            })}
+
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>DATA BOUNDARY</div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>
+                Value inspection reads sampled data. Some domains cannot permit that for legal reasons, and that is a
+                boundary rather than a preference — a domain turned off here is off for every run, scheduled or manual.
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {AIC_ALL_DOMAINS.map(d=>{
+                  const on = st.settings.valueAllowed.includes(d);
+                  return (
+                    <button key={d} onClick={()=>aicSet(s=>({...s, settings:{...s.settings,
+                        valueAllowed: on ? s.settings.valueAllowed.filter(x=>x!==d) : [...s.settings.valueAllowed, d]}, findings:null}))}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+                              background:on?T.blueDim:T.bgElevated,border:`1px solid ${on?T.blue+"45":T.border}`,color:on?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:on?T.blue:T.textMuted}}/>{d}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>CONFIDENCE FLOOR</div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
+                  onChange={e=>aicSet(s=>({...s, settings:{...s.settings, minConfidence:Number(e.target.value)/100}}))}
+                  style={{flex:1,accentColor:T.accent}}/>
+                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
+              </div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.55}}>
+                Proposals below the floor are not shown to a steward. They are still recorded on the run, so lowering the
+                floor later surfaces them without a rescan. A name-only match tops out at 72% by design.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// The steward's surface: what the classifier is proposing, and what it has run.
+// It is a tab inside Classifications rather than a screen of its own — proposals
+// belong where the objects they are about already live.
+const AICProposalsPanel = ({onToast, onNav}) => {
   const st = useAic();
   const {role, roleCfg} = useRole();
   const me = (roleCfg?.email||"you@jnj").split("@")[0];
@@ -51207,16 +51350,17 @@ const AIClassificationView = ({onToast, onNav}) => {
   pending.forEach(f=>{ (byDet[f.det] = byDet[f.det]||[]).push(f); });
 
   return (
-    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"AI Classification"}]} actions={
-        <button onClick={()=>setScopeOpen(true)} disabled={!!running}
-          style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,
-                  background:running?T.bgElevated:T.accent,border:"none",color:running?T.textMuted:"#fff",
-                  fontSize:12,fontWeight:700,cursor:running?"default":"pointer",fontFamily:"inherit"}}>
-          {Ic.refresh(12)} {running?"Scanning…":"Run a scan"}
-        </button>}/>
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 24px 40px"}}>
 
-      <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px"}}>
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+          <button onClick={()=>setScopeOpen(true)} disabled={!!running}
+            style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,
+                    background:running?T.bgElevated:T.accent,border:"none",color:running?T.textMuted:"#fff",
+                    fontSize:12,fontWeight:700,cursor:running?"default":"pointer",fontFamily:"inherit"}}>
+            {Ic.refresh(12)} {running?"Scanning…":"Run a scan"}
+          </button>
+        </div>
 
         {/* What this is — stated once, at the top, because the blast radius matters */}
         <div style={{display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:10,
@@ -51259,10 +51403,8 @@ const AIClassificationView = ({onToast, onNav}) => {
         )}
 
         <Tabs2 tabs={[
-          {key:"queue",    label:`Review queue (${pending.length})`},
-          {key:"accuracy", label:"Accuracy & auto-apply"},
-          {key:"runs",     label:"Runs"},
-          {key:"settings", label:"Signals & boundaries"},
+          {key:"queue", label:`Review queue (${pending.length})`},
+          {key:"runs",  label:"Runs"},
         ]} active={tab} onChange={setTab}/>
 
         {/* ── REVIEW QUEUE ─────────────────────────────────────────────────── */}
@@ -51371,68 +51513,6 @@ const AIClassificationView = ({onToast, onNav}) => {
           )}
         </>))}
 
-        {/* ── ACCURACY ─────────────────────────────────────────────────────── */}
-        {tab==="accuracy"&&(
-          <div>
-            <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,maxWidth:760}}>
-              Auto-apply is a privilege a detector earns, not a switch someone flips. It unlocks at
-              <b style={{color:T.text}}> {Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over at least {AIC_AUTO_MIN_DECISIONS} decisions</b>,
-              measured against what stewards actually did with its proposals. Every accept and every override in the queue moves these numbers.
-            </div>
-            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-                <div style={{flex:1}}>DETECTOR</div>
-                <div style={{width:90}}>CLASSIFIES</div>
-                <div style={{width:160}}>PRECISION</div>
-                <div style={{width:110,textAlign:"right"}}>DECISIONS</div>
-                <div style={{width:170,textAlign:"right"}}>AUTO-APPLY</div>
-              </div>
-              {AIC_DETECTORS.map((d,i)=>{
-                const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
-                const earned = aicAutoEarned(s); const on = !!st.settings.autoApply[d.k];
-                return (
-                  <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.label}</div>
-                      <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.why}</div>
-                    </div>
-                    <div style={{width:90,flexShrink:0}}>
-                      <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
-                    </div>
-                    <div style={{width:160,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
-                      </div>
-                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
-                    </div>
-                    <div style={{width:110,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
-                      {s.accepted}✓ / {s.rejected}✗
-                    </div>
-                    <div style={{width:170,flexShrink:0,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:7}}>
-                      {earned ? (
-                        <button onClick={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!on}}}));
-                                               onToast(on?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label} — above 95% over ${n} decisions`,"success"); }}
-                          style={{display:"flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
-                                  background:on?T.green+"18":T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`,color:on?T.green:T.textSub,fontSize:11,fontWeight:700}}>
-                          <span style={{width:6,height:6,borderRadius:"50%",background:on?T.green:T.textMuted}}/>
-                          {on?"On":"Earned — off"}
-                        </button>
-                      ) : (
-                        <span title={n<AIC_AUTO_MIN_DECISIONS
-                          ? `Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions before it can qualify`
-                          : `Precision is ${Math.round(p*100)}%, below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
-                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
-                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "below the gate"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* ── RUNS ─────────────────────────────────────────────────────────── */}
         {tab==="runs"&&(
           <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
@@ -51462,74 +51542,6 @@ const AIClassificationView = ({onToast, onNav}) => {
           </div>
         )}
 
-        {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
-        {tab==="settings"&&(
-          <div style={{maxWidth:820}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:9}}>SIGNAL TIERS</div>
-            {["name","value","graph"].map(t=>{
-              const m = AIC_TIER_META[t]; const on = st.settings.tiers[t];
-              return (
-                <div key={t} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",marginBottom:8,borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                  <div style={{paddingTop:1}}><AICTier t={t}/></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>
-                      {t==="name"&&"Column-name patterns"}
-                      {t==="value"&&"Profiled value shapes"}
-                      {t==="graph"&&"Reference inheritance"}
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{m.title}</div>
-                    {t==="value"&&(
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
-                        Permitted in: {st.settings.valueAllowed.join(", ")} ·
-                        <b style={{color:T.amber}}> blocked in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"nowhere"}</b>
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={()=>aicSet(s=>({...s, settings:{...s.settings, tiers:{...s.settings.tiers,[t]:!on}}, findings:null}))}
-                    style={{flexShrink:0,width:38,height:21,borderRadius:99,border:"none",cursor:"pointer",padding:2,
-                            background:on?T.green:T.bgActive,display:"flex",justifyContent:on?"flex-end":"flex-start"}}>
-                    <span style={{width:17,height:17,borderRadius:"50%",background:"#fff",display:"block"}}/>
-                  </button>
-                </div>
-              );
-            })}
-
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>DATA BOUNDARY</div>
-            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>
-                Value inspection reads sampled data. Some domains cannot permit that for legal reasons, and that is a
-                boundary rather than a preference — a domain turned off here is off for every run, scheduled or manual.
-              </div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                {AIC_ALL_DOMAINS.map(d=>{
-                  const on = st.settings.valueAllowed.includes(d);
-                  return (
-                    <button key={d} onClick={()=>aicSet(s=>({...s, settings:{...s.settings,
-                        valueAllowed: on ? s.settings.valueAllowed.filter(x=>x!==d) : [...s.settings.valueAllowed, d]}, findings:null}))}
-                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
-                              background:on?T.blueDim:T.bgElevated,border:`1px solid ${on?T.blue+"45":T.border}`,color:on?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
-                      <span style={{width:6,height:6,borderRadius:"50%",background:on?T.blue:T.textMuted}}/>{d}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>CONFIDENCE FLOOR</div>
-            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
-                  onChange={e=>aicSet(s=>({...s, settings:{...s.settings, minConfidence:Number(e.target.value)/100}}))}
-                  style={{flex:1,accentColor:T.accent}}/>
-                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
-              </div>
-              <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.55}}>
-                Proposals below the floor are not shown to a steward. They are still recorded on the run, so lowering the
-                floor later surfaces them without a rescan. A name-only match tops out at 72% by design.
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Scope picker */}
@@ -51567,6 +51579,54 @@ const AIClassificationView = ({onToast, onNav}) => {
       <AICEvidence f={evid} onClose={()=>setEvid(null)} onNav={onNav}/>
     </div>
   );
+};
+
+
+
+// Classifications has two faces of one concept: the taxonomy people maintain by
+// hand, and what the classifier is proposing against it. They are tabs on the
+// same screen rather than two places in the sidebar, because a steward sorting
+// out classifications on a source should not have to know which half of the job
+// a machine happened to do.
+//
+// This is the rule for the whole AI layer, not a one-off: AI never takes nav
+// real estate. It adds a tab to the object it acts on, puts its controls in
+// Settings, and routes what it produces into that object's existing review path.
+// The only global AI surface is the Copilot, and it is a dock precisely because
+// it belongs to no single module.
+const ClassificationsView = ({onToast, onNav, deepLinkTagId}) => {
+  const [face, setFace] = useState("taxonomy");
+  const st = useAic();
+  // Seed the scan here, not only inside the panel: the badge has to be right
+  // before anyone opens the tab, or it is not a badge.
+  useEffect(()=>{
+    if(st.findings) return;
+    aicSet(x=>({...x, findings: aicScan({tiers:x.settings.tiers, domains:null, valueAllowed:x.settings.valueAllowed})}));
+  },[st.findings]);
+  useEffect(()=>{ if(deepLinkTagId) setFace("taxonomy"); },[deepLinkTagId]);
+
+  const pending = (st.findings||[])
+    .filter(f=>f.kind==="proposed" && f.conf >= st.settings.minConfidence && !st.decisions[f.id]).length;
+
+  const bar = (
+    <div style={{flexShrink:0,padding:"10px 24px 0",borderBottom:`1px solid ${T.border}`,background:T.bgSurface}}>
+      <div style={{marginBottom:10}}>
+        <SegTabs active={face} onChange={setFace} tabs={[
+          {key:"taxonomy", label:"Taxonomy"},
+          {key:"ai",       label:"AI proposals", count:pending||undefined},
+        ]}/>
+      </div>
+    </div>
+  );
+
+  if(face==="ai") return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Classifications"},{label:"AI proposals"}]}/>
+      {bar}
+      <AICProposalsPanel onToast={onToast} onNav={onNav}/>
+    </div>
+  );
+  return <TagManagementView onToast={onToast} deepLinkTagId={deepLinkTagId} tabBar={bar}/>;
 };
 
 
@@ -52431,7 +52491,7 @@ const AIDEDetail = ({pl, onBack, onNav, onToast}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"AI Data Engineer", onClick:onBack},{label:pl.name}]}/>
+      <Topbar breadcrumb={[{label:"Pipelines", onClick:onBack},{label:pl.name}]}/>
       <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px"}}>
         <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:6}}>
           <ServiceIcon service={eng.svc} size={22}/>
@@ -52578,7 +52638,7 @@ const AIPipelinesView = ({onToast, onNav}) => {
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"AI Data Engineer"}]} actions={
+      <Topbar breadcrumb={[{label:"Pipelines"}]} actions={
         <button onClick={()=>canBuild?setOpen(true):onToast("Building a pipeline is a Steward, Engineer or Admin action","error")}
           style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
           {Ic.plus(12)} New pipeline
@@ -52725,8 +52785,7 @@ export default function App(){
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
-      case "tags":          return <TagManagementView onToast={showToast} deepLinkTagId={deepLinkTagId}/>;
-      case "aiclassify":    return <AIClassificationView onToast={showToast} onNav={handleNav}/>;
+      case "tags":          return <ClassificationsView onToast={showToast} onNav={handleNav} deepLinkTagId={deepLinkTagId}/>;
       case "aipipelines":   return <AIPipelinesView onToast={showToast} onNav={handleNav}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
