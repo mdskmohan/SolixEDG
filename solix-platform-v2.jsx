@@ -1282,7 +1282,7 @@ Object.assign(SCHEMA,{
     {name:"created_at",  type:"TIMESTAMP",     desc:"Record creation time",             pii:false,nullable:false,quality:"< 2h lag",  pk:false},
   ],
   employees:[
-    {name:"emp_id",      type:"NUMBER(10)",    desc:"Employee unique identifier",       pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"emp_id",      type:"NUMBER(10)",    desc:"Employee unique identifier",       pii:true, nullable:false,quality:"NOT NULL",pk:true},
     {name:"first_name",  type:"VARCHAR2(50)",  desc:"Legal first name",                 pii:true, nullable:false,quality:"NOT NULL",pk:false},
     {name:"last_name",   type:"VARCHAR2(50)",  desc:"Legal last name",                  pii:true, nullable:false,quality:"NOT NULL",pk:false},
     {name:"email",       type:"VARCHAR2(100)", desc:"Corporate email address",          pii:true, nullable:false,quality:"Format valid",pk:false},
@@ -1292,7 +1292,7 @@ Object.assign(SCHEMA,{
     {name:"status",      type:"VARCHAR2(20)",  desc:"ACTIVE / TERMINATED / ON_LEAVE",  pii:false,nullable:false,quality:"Value in set",pk:false},
   ],
   users:[
-    {name:"user_id",     type:"BIGSERIAL",     desc:"Auto-increment user identifier",   pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"user_id",     type:"BIGSERIAL",     desc:"Auto-increment user identifier",   pii:true, nullable:false,quality:"NOT NULL",pk:true},
     {name:"email",       type:"VARCHAR(255)",  desc:"User login email",                 pii:true, nullable:false,quality:"Unique, format",pk:false},
     {name:"username",    type:"VARCHAR(50)",   desc:"Public display username",          pii:true, nullable:false,quality:"Unique",     pk:false},
     {name:"password_hash",type:"CHAR(60)",     desc:"bcrypt password hash",             pii:true, nullable:false,quality:"NOT NULL",   pk:false},
@@ -1419,7 +1419,7 @@ Object.assign(ASSET_COLUMNS,{
 // last two, which is the point.
 Object.assign(SCHEMA,{
   customers:[
-    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:true, nullable:false,quality:"NOT NULL",   pk:true},
     {name:"first_name",   type:"VARCHAR(80)",  desc:"Given name",                         pii:true, nullable:false,quality:"NOT NULL",   pk:false},
     {name:"last_name",    type:"VARCHAR(80)",  desc:"Family name",                        pii:true, nullable:false,quality:"NOT NULL",   pk:false},
     {name:"eml",          type:"VARCHAR(255)", desc:"Primary contact address",            pii:false,nullable:true, quality:"Format valid",pk:false},
@@ -1432,7 +1432,7 @@ Object.assign(SCHEMA,{
     {name:"created_at",   type:"TIMESTAMP",    desc:"Record creation time",               pii:false,nullable:false,quality:"NOT NULL",   pk:false},
   ],
   customers_archive:[
-    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:false,nullable:false,quality:"NOT NULL",   pk:true},
+    {name:"customer_id",  type:"BIGINT",       desc:"Unique customer identifier",         pii:true, nullable:false,quality:"NOT NULL",   pk:true},
     {name:"full_nm",      type:"VARCHAR(160)", desc:"Concatenated name as archived",      pii:false,nullable:true, quality:"—",          pk:false},
     {name:"eml",          type:"VARCHAR(255)", desc:"Contact address at archive time",    pii:false,nullable:true, quality:"—",          pk:false},
     {name:"archived_at",  type:"TIMESTAMP",    desc:"When the row left the active store", pii:false,nullable:false,quality:"NOT NULL",   pk:false},
@@ -4688,6 +4688,7 @@ const GROUPS = [
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
     {key:"tags",           icon:"tag",           label:"Classifications"},
+    {key:"aiclassify",     icon:"bot",           label:"AI Classification"},
   ]},
   {section:"Knowledge",items:[
     {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
@@ -4701,7 +4702,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -35009,7 +35010,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -35022,7 +35023,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aiclassify"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -35034,7 +35035,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aiclassify"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -35046,7 +35047,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aiclassify","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -50739,6 +50740,832 @@ const CopilotBtn = () => {
   );
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI LAYER · 2 — AI CLASSIFICATION
+// ═══════════════════════════════════════════════════════════════════════════════
+// The highest-blast-radius thing in the AI layer, and the reason the review gate
+// is not negotiable. In EDG a classification is not a label: it drives retention
+// rules, legal holds, masking and match-key eligibility. A wrong auto-applied
+// classification silently changes who can see what.
+//
+// So the product is the review, not the detection. Three things follow:
+//
+//   1. THREE SIGNAL TIERS, reported separately, because they carry different
+//      trust and different privacy cost:
+//        · Name    — free, reads no data. A hint, never proof. Capped at 0.72.
+//        · Value   — reads profiled value shapes. Strong, but needs data access,
+//                    which some domains forbid outright.
+//        · Graph   — "this column references a column that is already classified".
+//                    EDG's own signal; no scanner has the lineage to compute it.
+//      A classifier that only matches names misses `eml`, `tel` and `cust_ref`.
+//      Those are seeded on purpose.
+//
+//   2. EVIDENCE YOU CAN CLICK. Every proposal shows which tiers fired and why.
+//
+//   3. AUTO-APPLY IS EARNED, NEVER DEFAULTED. A detector unlocks auto-apply only
+//      after it has been right often enough, over enough decisions, to prove it.
+//      Until then it proposes and a steward decides.
+
+// ── Detector catalogue ────────────────────────────────────────────────────────
+// Each detector resolves to a real classification in the tag register, so an
+// accepted proposal lands on a governed tag rather than inventing a new word.
+const AIC_DETECTORS = [
+  {k:"email",   label:"Email address",      tag:"PII",     risk:"High",
+   why:"Directly identifies a person and is the usual key for a subject-access request.",
+   name:/(^|_)(email|eml|e_mail|mail_addr)($|_)/i,
+   value:p => (p && p.pattern && p.pattern.indexOf("@")>-1) ? {s:(p.patternMatch||95)/100, note:`${p.patternMatch}% of sampled values match an address shape`} : null},
+
+  {k:"person",  label:"Person name",        tag:"PII",     risk:"High",
+   why:"A natural-person name. Identifying on its own and in combination.",
+   name:/(^|_)(first_name|last_name|full_name|full_nm|given_name|surname|fname|lname)($|_)/i,
+   value:p => (p && p.pattern && /\[A-Z\]\[a-z\]\+ \[A-Z\]\[a-z\]\+/.test(p.pattern)) ? {s:(p.patternMatch||90)/100, note:`${p.patternMatch}% of sampled values are two capitalised words`} : null},
+
+  {k:"phone",   label:"Phone number",       tag:"PII",     risk:"Medium",
+   why:"A direct contact channel for an identified person.",
+   name:/(^|_)(phone|tel|mobile|msisdn|phone_no)($|_)/i,
+   value:p => (p && p.pattern && /0-9 \(\)/.test(p.pattern)) ? {s:(p.patternMatch||94)/100, note:`${p.patternMatch}% of sampled values match a dialable number`} : null},
+
+  {k:"dob",     label:"Date of birth",      tag:"PII",     risk:"High",
+   why:"Special-category adjacent: combined with a postcode it re-identifies most people.",
+   name:/(^|_)(dob|birth_date|date_of_birth|birthdate)($|_)/i,
+   value:p => (p && p.dataType==="datetime" && p.min && p.min < "1960-01-01") ? {s:0.93, note:`Value range ${p.min} … ${p.max} spans a human lifetime, not an event window`} : null},
+
+  {k:"netaddr", label:"Network address",    tag:"PII",     risk:"Medium",
+   why:"An online identifier — personal data under GDPR even without a name attached.",
+   name:/(^|_)(ip|ip_addr|ip_address|client_ip|device_id|user_agent)($|_)/i,
+   value:p => (p && p.pattern && /d\{1,3\}/.test(p.pattern)) ? {s:(p.patternMatch||99)/100, note:`${p.patternMatch}% of sampled values are dotted quads`} : null},
+
+  {k:"address", label:"Postal address",     tag:"PII",     risk:"Medium", valWeight:0.6,
+   why:"Locates a person. A postcode alone narrows to a household.",
+   // Deliberately not a bare `addr`: that matched ip_addr and classified a
+   // network address as a home address.
+   name:/(^|_)(address|addr_line|street|street_addr|home_addr|postcode|postal_code|postal|zip|zipcode|pcode|ship_to|bill_to)($|_)/i,
+   value:p => (p && p.pattern && /A-Z0-9/.test(p.pattern) && p.distinctPct && p.distinctPct < 40) ? {s:(p.patternMatch||96)/100, note:`${p.patternMatch}% match a postal-code shape at ${p.distinctPct}% cardinality`} : null},
+
+  {k:"natid",   label:"National identifier",tag:"PII",     risk:"Critical",
+   why:"A government identifier. Breach-notifiable in every regime EDG tracks.",
+   name:/(^|_)(ssn|social_security|nin|aadhaar|passport|tax_id|national_id)($|_)/i,
+   value:()=>null},
+
+  {k:"card",    label:"Payment card",       tag:"PCI-DSS", risk:"Critical",
+   why:"Cardholder data. In PCI-DSS scope wherever it is stored.",
+   name:/(^|_)(card|card_no|pan|cc_num|credit_card|iban|account_no)($|_)/i,
+   value:()=>null},
+
+  {k:"mrn",     label:"Medical record number", tag:"PHI",  risk:"Critical",
+   why:"A clinical identifier. HIPAA-regulated and never maskable by default.",
+   name:/(^|_)(mrn|patient_id|patient|npi|provider_id)($|_)/i,
+   value:()=>null},
+
+  {k:"secret",  label:"Credential material",tag:"PII",     risk:"Critical",
+   why:"A secret. Should not be readable by anyone, including a steward.",
+   name:/(^|_)(password|password_hash|passwd|secret|api_key|token|private_key)($|_)/i,
+   value:()=>null},
+
+  {k:"comp",    label:"Compensation",       tag:"PII",     risk:"High",
+   why:"Pay data. Restricted to HR by policy in most organisations.",
+   name:/(^|_)(salary|compensation|pay_rate|bonus|wage)($|_)/i,
+   value:()=>null},
+
+  // The graph tier's own detector. It has no name pattern on purpose - it fires
+  // only on inheritance, which is why it is also the most accurate one in the
+  // catalogue: a reference either resolves to a classified column or it does not.
+  {k:"identifier", label:"Person identifier", tag:"PII", risk:"High",
+   why:"A pseudonymous identifier for a natural person. Personal data under GDPR even though it carries no name.",
+   name:/$^/, value:()=>null},
+
+  {k:"geo",     label:"Precise location",   tag:"PII",     risk:"Medium",
+   why:"Resolved location derived from a network address inherits its personal character.",
+   name:/(^|_)(geo|geo_city|lat|lon|latitude|longitude|location)($|_)/i,
+   value:()=>null},
+];
+const aicDet = k => AIC_DETECTORS.find(d=>d.k===k);
+
+// ── Graph tier ────────────────────────────────────────────────────────────────
+// The signal nobody else has. A column that references an already-classified
+// column carries the same personal character even when its own name says nothing
+// — `cust_ref`, `user_ref`, `mgr_id`, `entity_id` all pass the name test cleanly
+// and are all customer or employee identifiers.
+const AIC_REF_RE = /Reference to ([a-zA-Z_0-9]+)\.([a-zA-Z_0-9]+)/;
+const aicGraphSignal = (col) => {
+  const m = AIC_REF_RE.exec(col.desc||"");
+  if(!m) return null;
+  const [, refTable, refCol] = m;
+  const target = (SCHEMA[refTable]||[]).find(c=>c.name===refCol);
+  if(!target) return null;
+  // The referenced column is personal either because the catalog says so, or
+  // because a name detector fires on it.
+  const viaFlag = !!target.pii;
+  const viaName = AIC_DETECTORS.find(d=>d.name.test(target.name));
+  if(!viaFlag && !viaName) return null;
+  return {
+    s: viaFlag ? 0.80 : 0.72,
+    note:`References ${refTable}.${refCol}, which is classified ${viaFlag?"personal data in the catalog":`as ${viaName.label}`}`,
+    detector: viaName ? viaName.k : "identifier",
+  };
+};
+
+// ── Confidence ────────────────────────────────────────────────────────────────
+// A name is a hint. A value shape is evidence. The two together are close to
+// proof. The ceiling on name-only is the whole reason this stays a proposal.
+const aicBlend = (nameHit, valHit, graphHit, w=1) => {
+  if(nameHit && valHit)  return Math.min(0.99, 0.90 + 0.09*valHit.s*w);
+  if(valHit)             return Math.min(0.94, 0.80 + 0.14*valHit.s*w);
+  if(nameHit)            return 0.72;                       // ceiling: a name alone
+  if(graphHit)           return Math.min(0.80, graphHit.s);
+  return 0;
+};
+
+// ── The scan ──────────────────────────────────────────────────────────────────
+// Runs over every profiled column in scope and returns one finding per column.
+// Findings are typed so the run summary can be honest about what it did:
+// `confirmed` (already classified and the signals agree), `proposed` (new), and
+// `clear` (scanned, nothing fired) — the last one matters, because "we looked and
+// found nothing" is a compliance answer and "we did not look" is not.
+const aicScan = (opts) => {
+  const {tiers, domains, valueAllowed} = opts;
+  const findings = [];
+  ASSETS.forEach(a=>{
+    const cols = SCHEMA[a.name] || [];
+    if(!cols.length) return;
+    if(domains && domains.length && !domains.includes(a.domain)) return;
+    const canReadValues = tiers.value && valueAllowed.includes(a.domain);
+    cols.forEach(col=>{
+      const nameDet  = tiers.name ? AIC_DETECTORS.find(d=>d.name.test(col.name)) : null;
+      const profile  = COL_PROFILES[col.name] || null;
+      const valDet   = canReadValues
+        ? AIC_DETECTORS.map(d=>({d, r:d.value(profile)})).filter(x=>x.r).sort((x,y)=>y.r.s-x.r.s)[0]
+        : null;
+      const graphHit = tiers.graph ? aicGraphSignal(col) : null;
+
+      const det = nameDet || (valDet && valDet.d) || (graphHit && aicDet(graphHit.detector)) || null;
+      if(!det){
+        findings.push({kind:"clear", assetId:a.id, asset:a, col:col.name, type:col.type});
+        return;
+      }
+      const conf = aicBlend(nameDet && det.k===nameDet.k ? 1 : 0,
+                            valDet && valDet.d.k===det.k ? valDet.r : null,
+                            graphHit && graphHit.detector===det.k ? graphHit : null,
+                            det.valWeight==null ? 1 : det.valWeight);
+      const tiersFired = [
+        nameDet && nameDet.k===det.k ? {t:"name",  note:`Column name matches the ${det.label.toLowerCase()} pattern`} : null,
+        valDet  && valDet.d.k===det.k ? {t:"value", note:valDet.r.note} : null,
+        graphHit&& graphHit.detector===det.k ? {t:"graph", note:graphHit.note} : null,
+      ].filter(Boolean);
+
+      findings.push({
+        id:`f_${a.id}_${col.name}`,
+        kind: col.pii ? "confirmed" : "proposed",
+        assetId:a.id, asset:a, col:col.name, type:col.type, desc:col.desc,
+        det:det.k, detLabel:det.label, tag:det.tag, risk:det.risk, why:det.why,
+        conf, tiers:tiersFired,
+        valueRead: !!(valDet && valDet.d.k===det.k),
+      });
+    });
+  });
+  return findings;
+};
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+// Module-level so a run survives navigation, following the same pattern the
+// Knowledge Layer and Data Ask already use.
+const AIC_ALL_DOMAINS = [...new Set(ASSETS.map(a=>a.domain))].filter(Boolean).sort();
+
+// Seeded accuracy history. This is what auto-apply is earned against: a detector
+// unlocks only at >= 95% precision over >= 50 decisions. The two weakest ones are
+// weak for the right reasons — `address` over-fires on shipping blobs, `netaddr`
+// on device identifiers that are not always personal.
+const AIC_SEED_STATS = {
+  email:   {accepted:412, rejected:6},
+  person:  {accepted:288, rejected:11},
+  phone:   {accepted:151, rejected:4},
+  dob:     {accepted:74,  rejected:2},
+  address: {accepted:96,  rejected:29},
+  natid:   {accepted:38,  rejected:0},
+  card:    {accepted:22,  rejected:1},
+  mrn:     {accepted:63,  rejected:2},
+  netaddr: {accepted:88,  rejected:34},
+  secret:  {accepted:19,  rejected:0},
+  comp:    {accepted:27,  rejected:1},
+  geo:     {accepted:12,  rejected:9},
+  identifier:{accepted:57, rejected:2},
+};
+
+const AIC_AUTO_MIN_PRECISION = 0.95;
+const AIC_AUTO_MIN_DECISIONS = 50;
+const aicPrecision = (s) => { const n=s.accepted+s.rejected; return n ? s.accepted/n : 0; };
+const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS && aicPrecision(s) >= AIC_AUTO_MIN_PRECISION;
+
+let _aicState = {
+  settings:{
+    tiers:{name:true, value:true, graph:true},
+    // Value inspection reads sample data. Health forbids it outright — that is a
+    // legal boundary, not a preference, so it lives in settings and not a toggle
+    // someone can flip during a run.
+    valueAllowed: AIC_ALL_DOMAINS.filter(d=>d!=="Health"),
+    autoApply:{},          // detector -> true, only settable when earned
+    minConfidence:0.70,
+  },
+  stats: JSON.parse(JSON.stringify(AIC_SEED_STATS)),
+  decisions:{},            // findingId -> {verdict, by, at}
+  runs:[
+    {id:"run_3", at:"2026-09-14 02:00", by:"scheduler", scope:"All connections",
+     assets:31, cols:187, proposed:24, confirmed:41, clear:122, autoApplied:0, ms:41200, status:"complete"},
+    {id:"run_2", at:"2026-09-07 02:00", by:"scheduler", scope:"All connections",
+     assets:29, cols:174, proposed:31, confirmed:38, clear:105, autoApplied:0, ms:38900, status:"complete"},
+    {id:"run_1", at:"2026-08-31 11:24", by:"priya.nair", scope:"Snowflake Production",
+     assets:12, cols:74,  proposed:18, confirmed:22, clear:34,  autoApplied:0, ms:16400, status:"complete"},
+  ],
+  findings:null,           // populated by the first scan
+};
+const _aicSubs = new Set();
+const aicSet = (fn) => { _aicState = fn(_aicState); _aicSubs.forEach(f=>f()); };
+const useAic = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const f=()=>force(n=>n+1); _aicSubs.add(f); return ()=>_aicSubs.delete(f); },[]);
+  return _aicState;
+};
+
+// Columns whose classification a steward has accepted in this session. This is
+// what "applied" means in the prototype: the decision is recorded and visible,
+// and it feeds the accuracy score the auto-apply gate reads.
+const aicApplied = () => Object.entries(_aicState.decisions).filter(([,d])=>d.verdict==="accepted");
+
+const aicDecide = (finding, verdict, by) => aicSet(st=>{
+  const prev = st.decisions[finding.id];
+  const stats = {...st.stats};
+  const bump = (k, field, n) => { stats[k] = {...stats[k], [field]: Math.max(0, stats[k][field] + n)}; };
+  if(prev && prev.verdict!==verdict){                       // a changed mind corrects both counters
+    bump(finding.det, prev.verdict==="accepted"?"accepted":"rejected", -1);
+  }
+  if(!prev || prev.verdict!==verdict){
+    bump(finding.det, verdict==="accepted"?"accepted":"rejected", +1);
+  }
+  return {...st, stats, decisions:{...st.decisions, [finding.id]:{verdict, by, at:"just now"}}};
+});
+
+// ── Small pieces ──────────────────────────────────────────────────────────────
+const AIC_TIER_META = {
+  name: {label:"Name",  color:"#9090a8", title:"Column name matched a pattern. Reads no data — and proves nothing on its own."},
+  value:{label:"Value", color:"#0284c7", title:"Profiled value shapes were inspected. Requires data access."},
+  graph:{label:"Graph", color:"#7c3aed", title:"Inherited from a referenced column that is already classified. EDG's own signal."},
+};
+const AICTier = ({t, title}) => {
+  const m = AIC_TIER_META[t];
+  return <span title={title||m.title}
+    style={{fontSize:9,fontWeight:800,letterSpacing:".04em",padding:"1px 6px",borderRadius:4,
+            background:m.color+"18",color:m.color,border:`1px solid ${m.color}38`,whiteSpace:"nowrap",flexShrink:0}}>{m.label}</span>;
+};
+const AIC_RISK_COLOR = r => ({Critical:"#dc2626", High:"#e11d48", Medium:"#d97706", Low:"#9090a8"}[r]||"#9090a8");
+
+const AICStat = ({label, value, sub, color}) => (
+  <div style={{flex:1,minWidth:120,padding:"11px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>{label}</div>
+    <div style={{fontSize:20,fontWeight:700,color:color||T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
+    {sub&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{sub}</div>}
+  </div>
+);
+
+// ── Evidence drawer ───────────────────────────────────────────────────────────
+const AICEvidence = ({f, onClose, onNav}) => {
+  if(!f) return null;
+  const st = _aicState;
+  const stats = st.stats[f.det] || {accepted:0,rejected:0};
+  const prof = COL_PROFILES[f.col];
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{f.asset.name}.{f.col}</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{f.asset.connectionLabel||f.asset.service} · {f.type}</div>
+          </div>
+          <AIConf conf={f.conf}/>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
+          <div style={{padding:"11px 13px",borderRadius:9,background:T.bg,border:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{f.detLabel}</span>
+              <span style={{fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:4,background:AIC_RISK_COLOR(f.risk)+"18",color:AIC_RISK_COLOR(f.risk),border:`1px solid ${AIC_RISK_COLOR(f.risk)}38`}}>{f.risk}</span>
+              <div style={{flex:1}}/>
+              <span style={{fontSize:10,color:T.textMuted}}>proposes</span>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 8px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>
+            </div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{f.why}</div>
+          </div>
+
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>SIGNALS THAT FIRED</div>
+          {["name","value","graph"].map(t=>{
+            const hit = f.tiers.find(x=>x.t===t);
+            const m = AIC_TIER_META[t];
+            return (
+              <div key={t} style={{display:"flex",gap:10,padding:"9px 0",borderTop:`1px solid ${T.border}`,opacity:hit?1:.45}}>
+                <div style={{width:54,flexShrink:0,paddingTop:1}}><AICTier t={t}/></div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11.5,color:hit?T.text:T.textMuted,lineHeight:1.55}}>{hit ? hit.note : "Did not fire"}</div>
+                  {!hit&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{m.title}</div>}
+                </div>
+                <span style={{flexShrink:0,color:hit?T.green:T.textMuted,display:"flex",paddingTop:1}}>{hit?Ic.check(13):Ic.x(11)}</span>
+              </div>
+            );
+          })}
+
+          {prof&&(
+            <>
+              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>
+                PROFILE READ {f.valueRead ? "" : "· not used for this proposal"}
+              </div>
+              <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+                {[["Null rate", prof.nullPct!=null?`${prof.nullPct}% (${prof.nullCount})`:"—"],
+                  ["Distinct",  prof.distinctPct!=null?`${prof.distinctPct}% (${prof.distinctCount})`:"—"],
+                  ["Data type", prof.dataType||"—"],
+                  ["Shape",     prof.pattern ? `${prof.pattern}` : "no consistent shape"],
+                  ["Shape match",prof.patternMatch!=null?`${prof.patternMatch}% of sampled values`:"—"],
+                ].map(([k,v],i)=>(
+                  <div key={k} style={{display:"flex",gap:10,padding:"6px 11px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                    <div style={{width:96,flexShrink:0,fontSize:11,color:T.textMuted}}>{k}</div>
+                    <code style={{flex:1,fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.text,wordBreak:"break-all"}}>{v}</code>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:10,color:T.textMuted,marginTop:6,lineHeight:1.5}}>
+                Shapes are computed by the profiler at ingest. No raw values were sent to a model, and none are shown here.
+              </div>
+            </>
+          )}
+
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>THIS DETECTOR'S RECORD</div>
+          <div style={{display:"flex",gap:8}}>
+            <AICStat label="Precision" value={`${Math.round(aicPrecision(stats)*100)}%`} sub={`${stats.accepted+stats.rejected} decisions`}
+              color={aicPrecision(stats)>=AIC_AUTO_MIN_PRECISION?T.green:T.amber}/>
+            <AICStat label="Accepted"  value={stats.accepted}/>
+            <AICStat label="Overridden" value={stats.rejected} color={stats.rejected?T.amber:T.text}/>
+          </div>
+
+          <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.amberDim,border:`1px solid ${T.amber}35`}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.amber,marginBottom:4}}>What accepting this does</div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+              Applies <b style={{color:T.text}}>{f.tag}</b> to <code style={{fontFamily:"'Geist Mono',monospace"}}>{f.col}</code>.
+              That makes the column maskable for roles below Steward, brings it into scope for retention and legal-hold rules
+              targeting {f.tag}, and makes it eligible as a match key. It is reversible, and the reversal is recorded.
+            </div>
+          </div>
+        </div>
+
+        <div style={{flexShrink:0,padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bg}}>
+          <button onClick={()=>onNav&&onNav("catalog",{assetName:f.asset.name})}
+            style={{width:"100%",padding:"8px 0",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            Open {f.asset.name} in the catalog →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── The screen ────────────────────────────────────────────────────────────────
+const AIClassificationView = ({onToast, onNav}) => {
+  const st = useAic();
+  const {role, roleCfg} = useRole();
+  const me = (roleCfg?.email||"you@jnj").split("@")[0];
+  const canDecide = role==="admin" || role==="steward";
+
+  const [tab, setTab]       = useState("queue");
+  const [running, setRunning] = useState(null);   // {phase, pct, asset}
+  const [evid, setEvid]     = useState(null);
+  const [fDet, setFDet]     = useState("all");
+  const [fTier, setFTier]   = useState("all");
+  const [sel, setSel]       = useState(new Set());
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [scopeDomains, setScopeDomains] = useState([]);
+
+  // The findings the UI works from. Computed once, then kept on the store so a
+  // decision does not re-run the scan underneath the user.
+  const findings = st.findings || [];
+  useEffect(()=>{
+    if(st.findings) return;
+    aicSet(s=>({...s, findings: aicScan({tiers:s.settings.tiers, domains:null, valueAllowed:s.settings.valueAllowed})}));
+  },[st.findings]);
+
+  const proposals = findings.filter(f=>f.kind==="proposed" && f.conf >= st.settings.minConfidence);
+  const confirmed = findings.filter(f=>f.kind==="confirmed");
+  const clear     = findings.filter(f=>f.kind==="clear");
+  const pending   = proposals.filter(f=>!st.decisions[f.id]);
+
+  const shown = pending.filter(f =>
+    (fDet==="all"  || f.det===fDet) &&
+    (fTier==="all" || f.tiers.some(t=>t.t===fTier)));
+
+  const runScan = () => {
+    const targets = ASSETS.filter(a=>(SCHEMA[a.name]||[]).length &&
+      (!scopeDomains.length || scopeDomains.includes(a.domain)));
+    setRunning({phase:"Connecting", pct:0, asset:""});
+    const steps = targets.slice(0,14);
+    steps.forEach((a,i)=>setTimeout(()=>setRunning({
+      phase: i<2?"Reading schemas":i<9?"Matching patterns":"Resolving references",
+      pct: Math.round(((i+1)/steps.length)*100), asset:a.name,
+    }), 180 + i*190));
+    setTimeout(()=>{
+      const next = aicScan({tiers:st.settings.tiers, domains:scopeDomains.length?scopeDomains:null, valueAllowed:st.settings.valueAllowed});
+      const p = next.filter(f=>f.kind==="proposed").length;
+      const c = next.filter(f=>f.kind==="confirmed").length;
+      const cl= next.filter(f=>f.kind==="clear").length;
+      aicSet(s=>({...s, findings: next, runs:[{
+        id:"run_"+Date.now(), at:"just now", by:me,
+        scope: scopeDomains.length ? scopeDomains.join(", ") : "All connections",
+        assets:new Set(next.map(f=>f.assetId)).size, cols:next.length,
+        proposed:p, confirmed:c, clear:cl, autoApplied:0,
+        ms: 1400 + steps.length*190, status:"complete",
+      }, ...s.runs]}));
+      setRunning(null); setSel(new Set()); setTab("queue");
+      onToast(`Scan complete — ${p} proposals from ${next.length} columns`,"success");
+    }, 400 + steps.length*190);
+  };
+
+  const decide = (f, verdict) => {
+    if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
+    aicDecide(f, verdict, me);
+    if(verdict==="accepted")
+      pushNotif({category:"Classifications", type:"tag", title:`${f.tag} applied · ${f.asset.name}.${f.col}`,
+        body:`${me} accepted an AI classification at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
+  };
+  const decideMany = (list, verdict) => {
+    if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
+    list.forEach(f=>aicDecide(f, verdict, me));
+    onToast(`${list.length} classification${list.length>1?"s":""} ${verdict}`,"success");
+    setSel(new Set());
+  };
+
+  const byDet = {};
+  pending.forEach(f=>{ (byDet[f.det] = byDet[f.det]||[]).push(f); });
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"AI Classification"}]} actions={
+        <button onClick={()=>setScopeOpen(true)} disabled={!!running}
+          style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,
+                  background:running?T.bgElevated:T.accent,border:"none",color:running?T.textMuted:"#fff",
+                  fontSize:12,fontWeight:700,cursor:running?"default":"pointer",fontFamily:"inherit"}}>
+          {Ic.refresh(12)} {running?"Scanning…":"Run a scan"}
+        </button>}/>
+
+      <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px"}}>
+
+        {/* What this is — stated once, at the top, because the blast radius matters */}
+        <div style={{display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:10,
+                     background:T.violetDim,border:`1px solid ${T.violet}30`,marginBottom:16}}>
+          <span style={{color:T.violet,display:"flex",flexShrink:0,paddingTop:1}}>{Ic.bot(15)}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,color:T.text,lineHeight:1.6}}>
+              Three signals, reported separately: <b>Name</b> reads no data and proves nothing alone.
+              <b> Value</b> reads profiled shapes, and is off for domains where inspection is not permitted.
+              <b> Graph</b> inherits from a referenced column that is already classified — the signal only EDG can compute.
+            </div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginTop:5}}>
+              Nothing is applied without a steward. Auto-apply is unlocked per detector by measured precision, never by a toggle.
+            </div>
+          </div>
+        </div>
+
+        {/* Run summary — "we looked and found nothing" is an answer; "we did not look" is not */}
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          <AICStat label="Awaiting review"   value={pending.length}   sub={`of ${proposals.length} proposed`} color={pending.length?T.amber:T.green}/>
+          <AICStat label="Already classified" value={confirmed.length} sub="signals agree with the catalog"/>
+          <AICStat label="Scanned, no signal" value={clear.length}     sub="looked, found nothing"/>
+          <AICStat label="Columns in scope"  value={findings.length}  sub={`${new Set(findings.map(f=>f.assetId)).size} assets profiled`}/>
+          <AICStat label="Detectors on"      value={`${AIC_DETECTORS.length}`} sub={`${Object.keys(st.settings.autoApply).filter(k=>st.settings.autoApply[k]).length} auto-applying`}/>
+        </div>
+
+        {running&&(
+          <div style={{marginBottom:16,padding:"13px 15px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.accent}35`}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+              <div style={{width:13,height:13,borderRadius:"50%",border:`2px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin .7s linear infinite"}}/>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{running.phase}</div>
+              <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11,color:T.textMuted}}>{running.asset}</code>
+              <div style={{flex:1}}/>
+              <span style={{fontSize:11,fontWeight:700,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>{running.pct}%</span>
+            </div>
+            <div style={{height:4,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+              <div style={{height:"100%",width:`${running.pct}%`,background:T.accent,transition:"width .18s"}}/>
+            </div>
+          </div>
+        )}
+
+        <Tabs2 tabs={[
+          {key:"queue",    label:`Review queue (${pending.length})`},
+          {key:"accuracy", label:"Accuracy & auto-apply"},
+          {key:"runs",     label:"Runs"},
+          {key:"settings", label:"Signals & boundaries"},
+        ]} active={tab} onChange={setTab}/>
+
+        {/* ── REVIEW QUEUE ─────────────────────────────────────────────────── */}
+        {tab==="queue"&&(pending.length===0 ? (
+          <div style={{padding:"60px 20px",textAlign:"center"}}>
+            <div style={{color:T.green,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.check(28)}</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>Nothing waiting on a steward</div>
+            <div style={{fontSize:12,color:T.textMuted,marginTop:5,maxWidth:420,margin:"5px auto 0",lineHeight:1.6}}>
+              Every proposal above the {Math.round(st.settings.minConfidence*100)}% confidence floor has been decided.
+              {clear.length>0&&` ${clear.length} columns were scanned and produced no signal — that is recorded too.`}
+            </div>
+          </div>
+        ) : (<>
+          {/* Bulk lane — column-by-column review at enterprise scale is theatre */}
+          <div style={{padding:"11px 13px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`,marginBottom:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textSub,marginBottom:8}}>Accept a whole pattern at once</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+              {Object.entries(byDet).sort((a,b)=>b[1].length-a[1].length).map(([k,list])=>{
+                const d = aicDet(k); const strong = list.filter(f=>f.conf>=0.90);
+                return (
+                  <button key={k} onClick={()=>decideMany(strong.length?strong:list, "accepted")} disabled={!canDecide}
+                    title={strong.length?`Accept the ${strong.length} at 90% or above, and leave the rest for individual review`:"All of these are below 90% — review them individually"}
+                    style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",borderRadius:7,
+                            background:T.bg,border:`1px solid ${T.border}`,cursor:canDecide?"pointer":"default",
+                            fontSize:11.5,color:T.textSub,fontFamily:"inherit",opacity:canDecide?1:.5}}>
+                    <span style={{fontWeight:600,color:T.text}}>{d.label}</span>
+                    <span style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.textMuted}}>{list.length}</span>
+                    {strong.length>0&&<span style={{fontSize:10,color:T.green,fontWeight:700}}>accept {strong.length} ≥90%</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+            <select value={fDet} onChange={e=>setFDet(e.target.value)}
+              style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"}}>
+              <option value="all">All detectors</option>
+              {Object.keys(byDet).map(k=><option key={k} value={k}>{aicDet(k).label} ({byDet[k].length})</option>)}
+            </select>
+            <select value={fTier} onChange={e=>setFTier(e.target.value)}
+              style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"}}>
+              <option value="all">Any signal</option>
+              <option value="name">Name fired</option>
+              <option value="value">Value fired</option>
+              <option value="graph">Graph fired</option>
+            </select>
+            <div style={{flex:1}}/>
+            {sel.size>0&&(<>
+              <span style={{fontSize:11.5,color:T.textSub}}>{sel.size} selected</span>
+              <button onClick={()=>decideMany(shown.filter(f=>sel.has(f.id)),"accepted")}
+                style={{padding:"5px 12px",borderRadius:7,background:T.green,border:"none",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Accept</button>
+              <button onClick={()=>decideMany(shown.filter(f=>sel.has(f.id)),"rejected")}
+                style={{padding:"5px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Reject</button>
+            </>)}
+          </div>
+
+          <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+              <input type="checkbox" checked={shown.length>0&&sel.size===shown.length}
+                onChange={e=>setSel(e.target.checked?new Set(shown.map(f=>f.id)):new Set())} style={{cursor:"pointer"}}/>
+              <div style={{flex:1}}>COLUMN</div>
+              <div style={{width:130}}>PROPOSES</div>
+              <div style={{width:150}}>SIGNALS</div>
+              <div style={{width:60,textAlign:"right"}}>CONF</div>
+              <div style={{width:130}}/>
+            </div>
+            {shown.map((f,i)=>(
+              <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <input type="checkbox" checked={sel.has(f.id)}
+                  onChange={e=>setSel(s=>{const n=new Set(s); e.target.checked?n.add(f.id):n.delete(f.id); return n;})} style={{cursor:"pointer"}}/>
+                <button onClick={()=>setEvid(f)} style={{flex:1,minWidth:0,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <ServiceIcon service={f.asset.service} size={13}/>
+                    <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>{f.asset.name}.{f.col}</code>
+                  </div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {f.type} · {f.asset.domain} · {f.desc||"no description"}
+                  </div>
+                </button>
+                <div style={{width:130,flexShrink:0,display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>
+                  <span style={{fontSize:9.5,color:AIC_RISK_COLOR(f.risk),fontWeight:700}}>{f.risk}</span>
+                </div>
+                <div style={{width:150,flexShrink:0,display:"flex",gap:3,flexWrap:"wrap"}}>
+                  {f.tiers.map(t=><AICTier key={t.t} t={t.t} title={t.note}/>)}
+                </div>
+                <div style={{width:60,flexShrink:0,textAlign:"right"}}><AIConf conf={f.conf} small/></div>
+                <div style={{width:130,flexShrink:0,display:"flex",gap:5,justifyContent:"flex-end"}}>
+                  <button onClick={()=>decide(f,"accepted")} disabled={!canDecide}
+                    style={{padding:"4px 10px",borderRadius:6,background:canDecide?T.green:T.bgElevated,border:"none",color:canDecide?"#fff":T.textMuted,fontSize:11,fontWeight:700,cursor:canDecide?"pointer":"default"}}>Accept</button>
+                  <button onClick={()=>decide(f,"rejected")} disabled={!canDecide}
+                    style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,fontWeight:600,cursor:canDecide?"pointer":"default",opacity:canDecide?1:.5}}>Reject</button>
+                </div>
+              </div>
+            ))}
+            {shown.length===0&&(
+              <div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No proposals match these filters.</div>
+            )}
+          </div>
+          {!canDecide&&(
+            <div style={{marginTop:10,fontSize:11.5,color:T.amber}}>
+              You are signed in as {roleCfg.label}. Deciding a classification is a Steward or Admin action — the queue is readable, not actionable, for your role.
+            </div>
+          )}
+        </>))}
+
+        {/* ── ACCURACY ─────────────────────────────────────────────────────── */}
+        {tab==="accuracy"&&(
+          <div>
+            <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,maxWidth:760}}>
+              Auto-apply is a privilege a detector earns, not a switch someone flips. It unlocks at
+              <b style={{color:T.text}}> {Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over at least {AIC_AUTO_MIN_DECISIONS} decisions</b>,
+              measured against what stewards actually did with its proposals. Every accept and every override in the queue moves these numbers.
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+                <div style={{flex:1}}>DETECTOR</div>
+                <div style={{width:90}}>CLASSIFIES</div>
+                <div style={{width:160}}>PRECISION</div>
+                <div style={{width:110,textAlign:"right"}}>DECISIONS</div>
+                <div style={{width:170,textAlign:"right"}}>AUTO-APPLY</div>
+              </div>
+              {AIC_DETECTORS.map((d,i)=>{
+                const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
+                const earned = aicAutoEarned(s); const on = !!st.settings.autoApply[d.k];
+                return (
+                  <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.label}</div>
+                      <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.why}</div>
+                    </div>
+                    <div style={{width:90,flexShrink:0}}>
+                      <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
+                    </div>
+                    <div style={{width:160,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
+                      </div>
+                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
+                    </div>
+                    <div style={{width:110,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
+                      {s.accepted}✓ / {s.rejected}✗
+                    </div>
+                    <div style={{width:170,flexShrink:0,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:7}}>
+                      {earned ? (
+                        <button onClick={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!on}}}));
+                                               onToast(on?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label} — above 95% over ${n} decisions`,"success"); }}
+                          style={{display:"flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+                                  background:on?T.green+"18":T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`,color:on?T.green:T.textSub,fontSize:11,fontWeight:700}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:on?T.green:T.textMuted}}/>
+                          {on?"On":"Earned — off"}
+                        </button>
+                      ) : (
+                        <span title={n<AIC_AUTO_MIN_DECISIONS
+                          ? `Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions before it can qualify`
+                          : `Precision is ${Math.round(p*100)}%, below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
+                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
+                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "below the gate"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── RUNS ─────────────────────────────────────────────────────────── */}
+        {tab==="runs"&&(
+          <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+              <div style={{width:130}}>WHEN</div>
+              <div style={{flex:1}}>SCOPE</div>
+              <div style={{width:90,textAlign:"right"}}>COLUMNS</div>
+              <div style={{width:90,textAlign:"right"}}>PROPOSED</div>
+              <div style={{width:90,textAlign:"right"}}>CONFIRMED</div>
+              <div style={{width:90,textAlign:"right"}}>NO SIGNAL</div>
+              <div style={{width:70,textAlign:"right"}}>TOOK</div>
+            </div>
+            {st.runs.map((r,i)=>(
+              <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <div style={{width:130,flexShrink:0,fontSize:11.5,color:T.text}}>{r.at}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11.5,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.scope}</div>
+                  <div style={{fontSize:10,color:T.textMuted}}>{r.by==="scheduler"?"Scheduled":`Started by ${r.by}`} · {r.assets} assets</div>
+                </div>
+                <div style={{width:90,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.cols}</div>
+                <div style={{width:90,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:r.proposed?T.amber:T.textMuted,fontWeight:700}}>{r.proposed}</div>
+                <div style={{width:90,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.confirmed}</div>
+                <div style={{width:90,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{r.clear}</div>
+                <div style={{width:70,textAlign:"right",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{(r.ms/1000).toFixed(1)}s</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── SETTINGS ─────────────────────────────────────────────────────── */}
+        {tab==="settings"&&(
+          <div style={{maxWidth:820}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:9}}>SIGNAL TIERS</div>
+            {["name","value","graph"].map(t=>{
+              const m = AIC_TIER_META[t]; const on = st.settings.tiers[t];
+              return (
+                <div key={t} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",marginBottom:8,borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                  <div style={{paddingTop:1}}><AICTier t={t}/></div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>
+                      {t==="name"&&"Column-name patterns"}
+                      {t==="value"&&"Profiled value shapes"}
+                      {t==="graph"&&"Reference inheritance"}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{m.title}</div>
+                    {t==="value"&&(
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
+                        Permitted in: {st.settings.valueAllowed.join(", ")} ·
+                        <b style={{color:T.amber}}> blocked in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"nowhere"}</b>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={()=>aicSet(s=>({...s, settings:{...s.settings, tiers:{...s.settings.tiers,[t]:!on}}, findings:null}))}
+                    style={{flexShrink:0,width:38,height:21,borderRadius:99,border:"none",cursor:"pointer",padding:2,
+                            background:on?T.green:T.bgActive,display:"flex",justifyContent:on?"flex-end":"flex-start"}}>
+                    <span style={{width:17,height:17,borderRadius:"50%",background:"#fff",display:"block"}}/>
+                  </button>
+                </div>
+              );
+            })}
+
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>DATA BOUNDARY</div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>
+                Value inspection reads sampled data. Some domains cannot permit that for legal reasons, and that is a
+                boundary rather than a preference — a domain turned off here is off for every run, scheduled or manual.
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {AIC_ALL_DOMAINS.map(d=>{
+                  const on = st.settings.valueAllowed.includes(d);
+                  return (
+                    <button key={d} onClick={()=>aicSet(s=>({...s, settings:{...s.settings,
+                        valueAllowed: on ? s.settings.valueAllowed.filter(x=>x!==d) : [...s.settings.valueAllowed, d]}, findings:null}))}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+                              background:on?T.blueDim:T.bgElevated,border:`1px solid ${on?T.blue+"45":T.border}`,color:on?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:on?T.blue:T.textMuted}}/>{d}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>CONFIDENCE FLOOR</div>
+            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:14}}>
+                <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
+                  onChange={e=>aicSet(s=>({...s, settings:{...s.settings, minConfidence:Number(e.target.value)/100}}))}
+                  style={{flex:1,accentColor:T.accent}}/>
+                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
+              </div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.55}}>
+                Proposals below the floor are not shown to a steward. They are still recorded on the run, so lowering the
+                floor later surfaces them without a rescan. A name-only match tops out at 72% by design.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Scope picker */}
+      {scopeOpen&&(
+        <Modal open onClose={()=>setScopeOpen(false)} title="Run a classification scan" width={520}>
+          <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>
+            The scan reads column metadata for every profiled asset in scope, and sampled value shapes only where the
+            data boundary permits it. It proposes; it does not apply.
+          </div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>DOMAINS</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
+            {AIC_ALL_DOMAINS.map(d=>{
+              const on = scopeDomains.includes(d);
+              return (
+                <button key={d} onClick={()=>setScopeDomains(s=>on?s.filter(x=>x!==d):[...s,d])}
+                  style={{padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
+                          background:on?T.accentDim:T.bgElevated,border:`1px solid ${on?T.accent+"45":T.border}`,
+                          color:on?T.accent:T.textSub,fontSize:11.5,fontWeight:600}}>{d}</button>
+              );
+            })}
+          </div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginBottom:16}}>
+            {scopeDomains.length ? `${scopeDomains.length} domains selected.` : "No domain selected — the scan covers everything profiled."}
+            {" "}Value inspection will be skipped in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"no domain"}.
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button onClick={()=>setScopeOpen(false)}
+              style={{padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={()=>{setScopeOpen(false); runScan();}}
+              style={{padding:"7px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Start scan</button>
+          </div>
+        </Modal>
+      )}
+
+      <AICEvidence f={evid} onClose={()=>setEvid(null)} onNav={onNav}/>
+    </div>
+  );
+};
+
 // ──────────────────────────────────────
 export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
@@ -50814,6 +51641,7 @@ export default function App(){
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
       case "tags":          return <TagManagementView onToast={showToast} deepLinkTagId={deepLinkTagId}/>;
+      case "aiclassify":    return <AIClassificationView onToast={showToast} onNav={handleNav}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
