@@ -4690,6 +4690,9 @@ const GROUPS = [
     {key:"tags",           icon:"tag",           label:"Classifications"},
     {key:"aiclassify",     icon:"bot",           label:"AI Classification"},
   ]},
+  {section:"Build",items:[
+    {key:"aipipelines",    icon:"workflow",      label:"AI Data Engineer"},
+  ]},
   {section:"Knowledge",items:[
     {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
@@ -4702,7 +4705,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -35010,7 +35013,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aiclassify","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -35023,7 +35026,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aiclassify"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aiclassify","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -35035,7 +35038,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aiclassify"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aiclassify","aipipelines"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -35047,7 +35050,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aiclassify","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aiclassify","aipipelines","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -51566,6 +51569,1088 @@ const AIClassificationView = ({onToast, onNav}) => {
   );
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI LAYER · 3 — AI DATA ENGINEER
+// ═══════════════════════════════════════════════════════════════════════════════
+// The load-bearing call, carried over from the Semantic Layer: EDG is the
+// definition and control plane, never the runtime.
+//
+// So this does NOT execute pipelines. It COMPILES and DISPATCHES them:
+//
+//   intent → plan → POLICY PRE-FLIGHT → compile to the customer's own engine
+//          → dispatch → the output lands back in the catalog, pre-governed
+//
+// Every step except one is table stakes — dbt, Databricks, Fivetran and Snowflake
+// all generate SQL from a prompt now, and they own execution, scheduling, retries
+// and cost. Competing there is the losing fight the Semantic Layer already taught
+// us not to pick.
+//
+// The pre-flight is the part they cannot copy, because it needs the classification
+// graph, the lineage graph and the policy register in one place:
+//
+//   · which classifications flow into the output, and what the output therefore
+//     inherits
+//   · whether the target can carry the masking its sources require
+//   · whether any source is under legal hold
+//   · whether joining a 90-day table into a 7-year table breaks retention
+//   · whether the join crosses a domain boundary that policy does not permit
+//
+// A pipeline that fails pre-flight does not get compiled. That is the product.
+
+// ── Concepts the planner understands ──────────────────────────────────────────
+// Deliberately a small, honest vocabulary mapped to real seeded assets rather
+// than a pretence at open-ended language understanding.
+const AIDE_CONCEPTS = [
+  {k:"customer", words:["customer","client","account","360","crm","subscriber"],
+   assets:["customers","app_users","customers_archive"]},
+  {k:"order",    words:["order","purchase","sale","sales","basket","checkout"],
+   assets:["orders","app_orders","orders_archive"]},
+  {k:"session",  words:["session","clickstream","engagement","behaviour","behavior","web","visit"],
+   assets:["web_sessions","clickstream_events","user_sessions"]},
+  {k:"patient",  words:["patient","encounter","clinical","health","outcome","treatment"],
+   assets:["patient_encounters"]},
+  {k:"employee", words:["employee","headcount","hr","staff","workforce","payroll"],
+   assets:["employees","departments"]},
+  {k:"product",  words:["product","sku","merchandis","catalogue","catalog item"],
+   assets:["dim_products","app_products"]},
+  {k:"finance",  words:["revenue","ledger","gl","finance","transaction","accounting"],
+   assets:["transactions","gl_accounts","sales_transactions"]},
+];
+
+const AIDE_ENGINES = [
+  {k:"dbt",        label:"dbt Cloud",        sub:"Compiles to a model + schema.yml in your repo", svc:"dbt"},
+  {k:"snowflake",  label:"Snowflake",        sub:"Dynamic table + masking policy DDL",            svc:"snowflake"},
+  {k:"databricks", label:"Databricks",       sub:"Notebook with Unity Catalog tags",              svc:"databricks"},
+  {k:"cdp",        label:"Solix CDP",        sub:"Archive job with retention class",              svc:"cdp"},
+];
+
+// Sources under legal hold. In a real deployment this reads from the enforcement
+// rules; seeded here so the pre-flight has a genuine hard stop to find.
+const AIDE_LEGAL_HOLDS = {
+  patient_encounters: {matter:"LIT-2026-0418 · Hartwell v. Janssen", by:"legal.ops", since:"2026-04-18"},
+};
+// Retention classes that must not be widened by a join.
+const AIDE_RETENTION = {
+  clickstream_events:{days:90,  rule:"Data Retention 90d"},
+  web_sessions:      {days:90,  rule:"Data Retention 90d"},
+  user_sessions:     {days:90,  rule:"Data Retention 90d"},
+  product_events:    {days:90,  rule:"Data Retention 90d"},
+  customers_archive: {days:2555,rule:"Archive retention 7y"},
+  orders_archive:    {days:2555,rule:"Archive retention 7y"},
+};
+
+// ── Planning ──────────────────────────────────────────────────────────────────
+const aideAsset = n => ASSETS.find(a=>a.name===n && (SCHEMA[a.name]||[]).length);
+
+const aideFindSources = (intent) => {
+  const s = (intent||"").toLowerCase();
+  // Longest match wins, and an asset written with spaces still counts. "the MySQL
+  // app users" has to resolve to `app_users` and NOT also to `users`, which a
+  // plain word-boundary test gets wrong because the sentence really does contain
+  // the word "users". So: find every candidate's position, then drop any match
+  // that sits inside a longer one.
+  const spans = [];
+  ASSETS.forEach(a=>{
+    if(!(SCHEMA[a.name]||[]).length) return;
+    const forms = [a.name.toLowerCase(), a.name.toLowerCase().replace(/_/g," ")];
+    forms.forEach(f=>{
+      const re = new RegExp("(^|[^a-z0-9_])" + f.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "([^a-z0-9_]|$)","g");
+      let m;
+      while((m = re.exec(s))){
+        const at = m.index + m[1].length;
+        spans.push({a, at, end: at + f.length});
+        re.lastIndex = at + 1;
+      }
+    });
+  });
+  const named = spans
+    .filter(x=>!spans.some(y=>y!==x && y.at<=x.at && y.end>=x.end && (y.end-y.at)>(x.end-x.at)))
+    .map(x=>x.a);
+  const hit = AIDE_CONCEPTS.filter(c=>c.words.some(w=>s.includes(w)));
+  const fromConcepts = hit.flatMap(c=>c.assets.map(aideAsset)).filter(Boolean);
+  const all = [...named, ...fromConcepts];
+  const seen = new Set();
+  return all.filter(a=>{ if(seen.has(a.id)) return false; seen.add(a.id); return true; });
+};
+
+// Join derivation — three ways, weakest last, each carrying its own evidence.
+// This is the part that needs a catalog: a generator with only the SQL in front
+// of it has to guess the keys.
+const aideDeriveJoins = (sources) => {
+  const joins = [];
+  const pair = (a,b) => `${a.id}:${b.id}`;
+  const done = new Set();
+  sources.forEach(A=>sources.forEach(B=>{
+    if(A.id>=B.id || done.has(pair(A,B))) return;
+    const ca = SCHEMA[A.name]||[], cb = SCHEMA[B.name]||[];
+
+    // 1. A declared foreign key between the two.
+    for(const c of ca){
+      const m = AIC_REF_RE.exec(c.desc||"");
+      if(m && m[1]===B.name){
+        joins.push({left:A, right:B, on:[c.name, m[2]], how:"fk", conf:0.98,
+          why:`\`${A.name}.${c.name}\` declares a foreign key to \`${B.name}.${m[2]}\``});
+        done.add(pair(A,B)); return;
+      }
+    }
+    for(const c of cb){
+      const m = AIC_REF_RE.exec(c.desc||"");
+      if(m && m[1]===A.name){
+        joins.push({left:A, right:B, on:[m[2], c.name], how:"fk", conf:0.98,
+          why:`\`${B.name}.${c.name}\` declares a foreign key to \`${A.name}.${m[2]}\``});
+        done.add(pair(A,B)); return;
+      }
+    }
+
+    // 2. The same identifier column name on both sides.
+    const shared = ca.find(c=>cb.some(d=>d.name===c.name) && (c.pk || aiColSensitive(c) || /_id$/.test(c.name)));
+    if(shared){
+      joins.push({left:A, right:B, on:[shared.name, shared.name], how:"name", conf:0.86,
+        why:`Both carry \`${shared.name}\`, and it is an identifier on at least one side`});
+      done.add(pair(A,B)); return;
+    }
+
+    // 3. A governed match key — two columns in different systems that classify
+    //    as the same identifier. This is the cross-source case, and it is the
+    //    only one that needs the knowledge layer to be trustworthy.
+    for(const c of ca){
+      const dA = AIC_DETECTORS.find(d=>d.name.test(c.name) && ["email","phone","natid"].includes(d.k));
+      if(!dA) continue;
+      const match = cb.find(d=>dA.name.test(d.name));
+      if(match){
+        joins.push({left:A, right:B, on:[c.name, match.name], how:"matchkey", conf:0.79, detector:dA.label,
+          why:`\`${c.name}\` and \`${match.name}\` both classify as ${dA.label} — a cross-source match key, not a declared join`,
+          caution:"Resolve this through the Customer cross-source graph rather than a raw equality join, or duplicates will survive."});
+        done.add(pair(A,B)); return;
+      }
+    }
+  }));
+  return joins;
+};
+
+// A FROM clause attaches each source exactly once. aideDeriveJoins returns every
+// relationship it can find, which is the right thing for the plan view and the
+// wrong thing for SQL, so the compiler walks them into a spanning tree rooted at
+// the primary source. Sources the tree cannot reach are reported, never
+// cross-joined in silence.
+const aideJoinTree = (plan) => {
+  if(!plan.sources.length) return {steps:[], unreachable:[]};
+  const inTree = new Set([plan.sources[0].id]);
+  const steps = [];
+  let grew = true;
+  while(grew){
+    grew = false;
+    for(const j of plan.joins){
+      const l = inTree.has(j.left.id), r = inTree.has(j.right.id);
+      if(l && !r){ steps.push({add:j.right, from:j.left, on:j.on, how:j.how});          inTree.add(j.right.id); grew = true; }
+      else if(r && !l){ steps.push({add:j.left, from:j.right, on:[j.on[1],j.on[0]], how:j.how}); inTree.add(j.left.id);  grew = true; }
+    }
+  }
+  return {steps, unreachable: plan.sources.filter(a=>!inTree.has(a.id))};
+};
+
+const aideTargetName = (sources, intent) => {
+  const s=(intent||"").toLowerCase();
+  const c = AIDE_CONCEPTS.find(x=>x.words.some(w=>s.includes(w)));
+  const base = c ? c.k : (sources[0]?.name || "pipeline");
+  if(/360|unified|golden|master/.test(s)) return `${base}_360`;
+  if(/fact|metric|aggregate/.test(s))     return `fct_${base}`;
+  return `${base}_unified`;
+};
+
+const aidePlan = (intent, engine) => {
+  const sources = aideFindSources(intent).slice(0,4);
+  const joins   = aideDeriveJoins(sources);
+  const cadence = /hourly/.test(intent) ? "Hourly" : /weekly/.test(intent) ? "Weekly"
+                : /real.?time|stream/.test(intent) ? "Streaming" : "Daily";
+  // Output columns: the primary source's business columns plus one identifying
+  // column from each joined source. Sensitive columns are carried but flagged.
+  const cols = [];
+  sources.forEach((a,i)=>{
+    (SCHEMA[a.name]||[]).forEach(c=>{
+      if(cols.some(x=>x.name===c.name)) return;
+      if(i>0 && cols.length>14) return;
+      cols.push({name:c.name, type:c.type, from:a.name, sensitive:aiColSensitive(c), desc:c.desc});
+    });
+  });
+  return {
+    intent, engine,
+    name: aideTargetName(sources, intent),
+    sources, joins, cols,
+    cadence,
+    domain: sources[0]?.domain || "Commerce",
+    owner: sources[0]?.owner || "",
+    materialization: cadence==="Streaming" ? "incremental" : "table",
+  };
+};
+
+// ── Policy pre-flight ─────────────────────────────────────────────────────────
+// The moat. Each check returns pass / warn / block with the evidence that
+// produced it, and where it can be resolved, a mitigation that actually edits
+// the plan rather than just acknowledging the problem.
+const aidePreflight = (plan, applied) => {
+  const ap = applied || {};
+  const checks = [];
+  const sens = plan.cols.filter(c=>c.sensitive && !ap["drop:"+c.name]);
+  const masked = sens.filter(c=>ap["mask:"+c.name]);
+  // A column a join runs on cannot be masked or dropped without breaking the
+  // join. Those are carried by necessity, and the check says so rather than
+  // offering a mitigation that quietly destroys the pipeline.
+  const keyCols = new Set(plan.joins.flatMap(j=>j.on));
+
+  // 1. Classification flow
+  checks.push({
+    k:"flow", label:"Classification flow",
+    status: sens.filter(c=>!keyCols.has(c.name)).length
+              ? (masked.length===sens.filter(c=>!keyCols.has(c.name)).length ? "pass" : "warn")
+              : "pass",
+    detail: sens.length
+      ? `${sens.length} classified column${sens.length>1?"s":""} flow into \`${plan.name}\`. The output inherits PII and everything that attaches to it — masking, erasure, retention, access review.`
+      : "No classified columns reach the output. It inherits nothing.",
+    rows: sens.map(c=>({l:`${c.from}.${c.name}`,
+      r: ap["mask:"+c.name] ? "masked in target"
+       : keyCols.has(c.name) ? "carried through — it is a join key"
+       : "carried through",
+      ok: !!ap["mask:"+c.name] || keyCols.has(c.name)})),
+    mitigations: sens.filter(c=>!ap["mask:"+c.name] && !keyCols.has(c.name)).flatMap(c=>[
+      {k:"mask:"+c.name, label:`Mask ${c.name} in the target`},
+      {k:"drop:"+c.name, label:`Drop ${c.name} from the output`},
+    ]).slice(0,6),
+  });
+
+  // 2. Legal hold — a hard stop, and not one a mitigation can clear
+  const held = plan.sources.filter(a=>AIDE_LEGAL_HOLDS[a.name]);
+  checks.push({
+    k:"hold", label:"Legal hold",
+    status: held.length ? "block" : "pass",
+    detail: held.length
+      ? `${held[0].name} is under legal hold for ${AIDE_LEGAL_HOLDS[held[0].name].matter}. Copying held data into a new object puts the copy in scope of the hold and outside its custody chain.`
+      : "No source is under legal hold.",
+    rows: held.map(a=>({l:a.name, r:`held since ${AIDE_LEGAL_HOLDS[a.name].since} · ${AIDE_LEGAL_HOLDS[a.name].by}`, ok:false})),
+    mitigations: [],
+    hard: true,
+  });
+
+  // 3. Retention — the join that silently widens a 90-day window to seven years
+  const rets = plan.sources.map(a=>({a, r:AIDE_RETENTION[a.name]})).filter(x=>x.r);
+  const shortest = rets.length ? rets.reduce((m,x)=>x.r.days<m.r.days?x:m) : null;
+  const longest  = rets.length ? rets.reduce((m,x)=>x.r.days>m.r.days?x:m) : null;
+  const conflict = shortest && longest && shortest.r.days !== longest.r.days;
+  checks.push({
+    k:"retention", label:"Retention",
+    status: !rets.length ? "pass" : (conflict && !ap["ret:inherit"]) ? "warn" : "pass",
+    detail: !rets.length
+      ? "No source carries a retention rule."
+      : conflict
+        ? `\`${shortest.a.name}\` is purged at ${shortest.r.days} days; \`${longest.a.name}\` is kept for ${Math.round(longest.r.days/365)} years. Joining them writes the short-lived rows into a long-lived object, which quietly defeats the purge.`
+        : rets.length===plan.sources.length
+          ? `Every source retains for ${rets[0].r.days} days. The target inherits that.`
+          : `${rets.map(x=>x.a.name).join(", ")} retain${rets.length>1?"":"s"} for ${rets[0].r.days} days; the other sources carry no rule. The target inherits the rule that exists.`,
+    rows: rets.map(x=>({l:x.a.name, r:`${x.r.days} days · ${x.r.rule}`, ok:true})),
+    mitigations: conflict && !ap["ret:inherit"]
+      ? [{k:"ret:inherit", label:`Apply the strictest rule (${shortest.r.days} days) to the target`}] : [],
+  });
+
+  // 4. Domain crossing
+  const doms = [...new Set(plan.sources.map(a=>a.domain))];
+  const phiDet = AIC_DETECTORS.find(d=>d.k==="mrn");
+  const isClinical = a => a.domain==="Health" ||
+    (SCHEMA[a.name]||[]).some(c=>phiDet.name.test(c.name));
+  const clinicalSrc = plan.sources.filter(isClinical);
+  const clinical = clinicalSrc.length>0 && clinicalSrc.length<plan.sources.length;
+  checks.push({
+    k:"domain", label:"Domain boundary",
+    status: clinical ? "block" : (doms.length>2 && !ap["own:assign"]) ? "warn" : "pass",
+    detail: clinical
+      ? `\`${clinicalSrc[0].name}\` carries clinical identifiers, and this joins it to commercial data. HIPAA treats the whole output as PHI, and no commercial consumer of it has a lawful basis to read it.`
+      : doms.length>2
+        ? (ap["own:assign"]
+            ? `The output spans ${doms.length} domains (${doms.join(", ")}), and ${plan.sources[0].owner} has accepted ownership of the result.`
+            : `The output spans ${doms.length} domains (${doms.join(", ")}). Ownership of the result is ambiguous until someone accepts it.`)
+        : `Stays within ${doms.join(" and ")}.`,
+    rows: plan.sources.map(a=>({l:a.name, r: isClinical(a) ? `${a.domain} · clinical identifiers` : a.domain,
+      ok: !(clinical && isClinical(a))})),
+    mitigations: (!clinical && doms.length>2 && !ap["own:assign"])
+      ? [{k:"own:assign", label:`Assign ${plan.sources[0].owner} as owner of the output`}] : [],
+    hard: clinical,
+  });
+
+  // 5. Join integrity — a match-key join that is not resolved produces duplicates
+  const weak = plan.joins.filter(j=>j.how==="matchkey" && !ap["join:"+j.left.id+"_"+j.right.id]);
+  checks.push({
+    k:"join", label:"Join integrity",
+    status: (!plan.joins.length || weak.length || aideJoinTree(plan).unreachable.length) ? "warn" : "pass",
+    detail: !plan.joins.length
+      ? "No join could be derived between these sources. Without a key this is a cross product, not a pipeline."
+      : aideJoinTree(plan).unreachable.length
+      ? `${aideJoinTree(plan).unreachable.map(a=>a.name).join(", ")} cannot be reached from the primary source by any derived key, so nothing it contributes reaches the output. Remove it, or declare the relationship in the catalog first.`
+      : weak.length
+        ? `${weak.length} join${weak.length>1?"s are":" is"} on a match key rather than a declared foreign key. An equality join on an email will duplicate every customer whose address differs by case or whitespace.`
+        : "Every join is on a declared foreign key or a shared identifier.",
+    rows: plan.joins.map(j=>({l:`${j.left.name} ⋈ ${j.right.name}`,
+      r: j.how==="fk" ? `FK on ${j.on[0]}` : j.how==="name" ? `shared ${j.on[0]}` : `match key on ${j.on[0]}`,
+      ok: j.how!=="matchkey" || !!ap["join:"+j.left.id+"_"+j.right.id]})),
+    mitigations: weak.map(j=>({k:"join:"+j.left.id+"_"+j.right.id,
+      label:`Resolve ${j.left.name} ⋈ ${j.right.name} through the Customer cross-source graph`})),
+  });
+
+  // 6. Ownership of the output
+  checks.push({
+    k:"owner", label:"Output ownership",
+    status: (plan.owner || ap["own:assign"]) ? "pass" : "warn",
+    detail: (plan.owner || ap["own:assign"])
+      ? `\`${plan.name}\` will be owned by ${plan.owner||plan.sources[0].owner}, inherited from its primary source.`
+      : "Nothing owns the output. An unowned governed asset is how orphans are made.",
+    rows: [], mitigations: [],
+  });
+
+  const blocked = checks.some(c=>c.status==="block");
+  const warned  = checks.some(c=>c.status==="warn");
+  return {checks, verdict: blocked ? "blocked" : warned ? "conditional" : "clear"};
+};
+
+// ── Compile ───────────────────────────────────────────────────────────────────
+// The emitted artifact carries the governance with it. That is the whole trick:
+// EDG does not police the pipeline at runtime, it generates a pipeline that
+// polices itself in the engine the customer already runs.
+const aideCompile = (plan, pf, engine) => {
+  const sens = plan.cols.filter(c=>c.sensitive);
+  const L = [];
+  const src0 = plan.sources[0];
+  const tree = aideJoinTree(plan);
+  const reach = new Set([plan.sources[0].id, ...tree.steps.map(st=>st.add.id)]);
+  // Only columns from sources the join tree actually reaches can be selected.
+  const outCols = plan.cols.filter(c=>{
+    const owner = plan.sources.find(a=>a.name===c.from);
+    return owner && reach.has(owner.id);
+  }).slice(0,14);
+  const alias = n => "s" + Math.max(0, plan.sources.findIndex(a=>a.name===n));
+  const selectList = outCols.map((c,i)=>{
+    const masked = (pf.applied||{})["mask:"+c.name];
+    const expr = masked
+      ? `${/eml|email|tel|phone/.test(c.name)?"sha2":"mask"}(${alias(c.from)}.${c.name}) as ${c.name}`
+      : `${alias(c.from)}.${c.name}`;
+    return `    ${expr}${i<outCols.length-1?",":""}`;
+  });
+
+  if(engine==="dbt"){
+    L.push(`-- models/marts/${plan.name}.sql`,
+           `-- GENERATED BY EDG · AI Data Engineer`,
+           `-- Pre-flight: ${pf.verdict.toUpperCase()} · ${pf.checks.filter(c=>c.status==="pass").length}/${pf.checks.length} checks clear`,
+           ``,
+           `{{ config(`,
+           `    materialized='${plan.materialization}',`,
+           `    tags=['edg-governed'${sens.length?", 'pii'":""}],`,
+           `) }}`,
+           ``);
+    const used = plan.sources.filter(a=>reach.has(a.id));
+    used.forEach((a,i)=>L.push(`${i?"     ":"with "}${alias(a.name)} as (select * from {{ source('${a.service}', '${a.name}') }})${i<used.length-1?",":","}`));
+    L.push(``,`joined as (`,`  select`,...selectList,`  from ${alias(plan.sources[0].name)}`);
+    tree.steps.forEach(st=>{
+      if(st.how==="matchkey") L.push(`  -- match key, not a declared FK — resolve upstream in the cross-source graph`);
+      L.push(`  left join ${alias(st.add.name)} on ${alias(st.from.name)}.${st.on[0]} = ${alias(st.add.name)}.${st.on[1]}`);
+    });
+    L.push(`)`,``,`select * from joined`);
+    tree.unreachable.forEach(a=>L.push(``,`-- NOT JOINED: ${a.name} — no key relates it to the others, so it is left out`));
+    L.push(``,`-- models/marts/${plan.name}.yml`,`version: 2`,`models:`,`  - name: ${plan.name}`,
+           `    description: "${plan.intent.replace(/"/g,"'")}"`,
+           `    meta:`,`      owner: ${plan.owner||src0.owner}`,`      domain: ${plan.domain}`,
+           `      edg_governed: true`,`    columns:`);
+    outCols.forEach(c=>{
+      L.push(`      - name: ${c.name}`);
+      if(c.sensitive) L.push(`        meta: {classification: PII, masked: ${!!(pf.applied||{})["mask:"+c.name]}}`);
+    });
+    return L.join("\n");
+  }
+
+  if(engine==="snowflake"){
+    L.push(`-- GENERATED BY EDG · AI Data Engineer`,
+           `-- Pre-flight: ${pf.verdict.toUpperCase()}`,``,
+           `create or replace dynamic table ${plan.domain.toUpperCase()}.${plan.name}`,
+           `  target_lag = '${plan.cadence==="Hourly"?"1 hour":plan.cadence==="Weekly"?"7 days":"24 hours"}'`,
+           `  warehouse = TRANSFORM_WH`,`as`,`  select`,...selectList,`  from ${plan.sources[0].name} ${alias(plan.sources[0].name)}`);
+    tree.steps.forEach(st=>L.push(
+      `  left join ${st.add.name} ${alias(st.add.name)} on ${alias(st.from.name)}.${st.on[0]} = ${alias(st.add.name)}.${st.on[1]}`));
+    L.push(`;`,``,`-- Masking travels with the data, applied at the target`);
+    sens.forEach(c=>L.push(
+      `alter table ${plan.domain.toUpperCase()}.${plan.name} modify column ${c.name}`,
+      `  set masking policy GOVERNANCE.MASK_PII;`));
+    if((pf.applied||{})["ret:inherit"])
+      L.push(``,`-- Strictest inherited retention`,
+             `alter table ${plan.domain.toUpperCase()}.${plan.name} set data_retention_time_in_days = 90;`);
+    return L.join("\n");
+  }
+
+  if(engine==="databricks"){
+    L.push(`# Databricks notebook — GENERATED BY EDG · AI Data Engineer`,
+           `# Pre-flight: ${pf.verdict.toUpperCase()}`,``,
+           `from pyspark.sql import functions as F`,``);
+    plan.sources.filter(a=>reach.has(a.id)).forEach(a=>L.push(`${alias(a.name)} = spark.table("${a.domain.toLowerCase()}.${a.name}")`));
+    L.push(``,`df = ${alias(plan.sources[0].name)}`);
+    tree.steps.forEach(st=>L.push(
+      `df = df.join(${alias(st.add.name)}, ${alias(st.from.name)}["${st.on[0]}"] == ${alias(st.add.name)}["${st.on[1]}"], "left")`));
+    sens.filter(c=>(pf.applied||{})["mask:"+c.name]).forEach(c=>
+      L.push(`df = df.withColumn("${c.name}", F.sha2(F.col("${c.name}"), 256))`));
+    L.push(``,`df.write.mode("overwrite").saveAsTable("${plan.domain.toLowerCase()}.${plan.name}")`,``,
+           `# Unity Catalog tags carry the inherited classification`);
+    sens.forEach(c=>L.push(`spark.sql("ALTER TABLE ${plan.domain.toLowerCase()}.${plan.name} ALTER COLUMN ${c.name} SET TAGS ('classification' = 'PII')")`));
+    return L.join("\n");
+  }
+
+  // Solix CDP
+  L.push(`{`,`  "_generated_by": "EDG · AI Data Engineer",`,
+         `  "_preflight": "${pf.verdict}",`,
+         `  "job": "${plan.name}",`,`  "type": "composite_archive",`,
+         `  "cadence": "${plan.cadence}",`,
+         `  "sources": [`,
+         ...plan.sources.filter(a=>reach.has(a.id)).map((a,i,arr)=>`    {"connection": "${a.connectionLabel||a.service}", "object": "${a.name}"}${i<arr.length-1?",":""}`),
+         `  ],`,`  "joins": [`,
+         ...tree.steps.map((st,i)=>`    {"left": "${st.from.name}.${st.on[0]}", "right": "${st.add.name}.${st.on[1]}", "kind": "${st.how}"}${i<tree.steps.length-1?",":""}`),
+         `  ],`,
+         `  "governance": {`,
+         `    "classifications": ${JSON.stringify([...new Set(sens.map(()=> "PII"))])},`,
+         `    "masked_columns": ${JSON.stringify(sens.filter(c=>(pf.applied||{})["mask:"+c.name]).map(c=>c.name))},`,
+         `    "retention_days": ${(pf.applied||{})["ret:inherit"] ? 90 : null},`,
+         `    "owner": "${plan.owner||plan.sources[0].owner}"`,
+         `  }`,`}`);
+  return L.join("\n");
+};
+
+// ── Store ─────────────────────────────────────────────────────────────────────
+const AIDE_PRESETS = [
+  "Build a unified customer 360 from the Snowflake customers table, the MySQL app users and the CDP customer archive, refreshed daily",
+  "Combine orders across Snowflake, MySQL and the CDP archive into one order fact, hourly",
+  "Join clickstream sessions to customers so marketing can see engagement per account",
+  "Bring patient encounters together with customer records for outcome analysis",
+];
+
+let _aideState = {
+  pipelines:[
+    {id:"pl_1", name:"customer_360", status:"Running", engine:"dbt", cadence:"Daily",
+     intent:AIDE_PRESETS[0], domain:"Commerce", owner:"dev.patel", verdict:"conditional",
+     createdBy:"maya.chen", createdAt:"2026-09-11",
+     runs:[{id:"r3", at:"today 02:04", status:"success", rows:"3.10M", ms:184000},
+           {id:"r2", at:"yesterday 02:04", status:"success", rows:"3.09M", ms:179000},
+           {id:"r1", at:"2026-09-11 16:20", status:"success", rows:"3.08M", ms:203000}]},
+    {id:"pl_2", name:"order_unified", status:"Draft", engine:"snowflake", cadence:"Hourly",
+     intent:AIDE_PRESETS[1], domain:"Commerce", owner:"maya.chen", verdict:"conditional",
+     createdBy:"james.oh", createdAt:"2026-09-13", runs:[]},
+  ],
+};
+const _aideSubs = new Set();
+const aideSet = (fn) => { _aideState = fn(_aideState); _aideSubs.forEach(f=>f()); };
+const useAide = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const f=()=>force(n=>n+1); _aideSubs.add(f); return ()=>_aideSubs.delete(f); },[]);
+  return _aideState;
+};
+
+const AIDE_VERDICT = {
+  clear:      {label:"Clear",       color:"#16a34a", note:"Nothing blocks this."},
+  conditional:{label:"Conditional", color:"#d97706", note:"It can ship once the flagged items are resolved."},
+  blocked:    {label:"Blocked",     color:"#dc2626", note:"This cannot be compiled."},
+};
+const AIDE_STATUS_COLOR = {pass:"#16a34a", warn:"#d97706", block:"#dc2626"};
+
+// ── Builder ───────────────────────────────────────────────────────────────────
+const AIDEBuilder = ({open, onClose, onCreate, onToast, onNav}) => {
+  const {roleCfg} = useRole();
+  const me = (roleCfg?.email||"you@jnj").split("@")[0];
+  const SECTIONS = [
+    {k:"intent",  l:"Intent",       d:"Say what you want in a sentence"},
+    {k:"plan",    l:"Plan",         d:"Sources, joins, output — all editable"},
+    {k:"policy",  l:"Policy pre-flight", d:"What the governed graph says"},
+    {k:"code",    l:"Compiled code", d:"For the engine you already run"},
+    {k:"ship",    l:"Dispatch",     d:"Hand it over and register the output"},
+  ];
+  const [sec, setSec]       = useState("intent");
+  const [intent, setIntent] = useState("");
+  const [engine, setEngine] = useState("dbt");
+  const [plan, setPlan]     = useState(null);
+  const [thinking, setThinking] = useState(false);
+  const [applied, setApplied]   = useState({});
+  const [codeTab, setCodeTab]   = useState("dbt");
+  const [shipping, setShipping] = useState(null);
+
+  useEffect(()=>{ if(open){ setSec("intent"); setIntent(""); setPlan(null); setApplied({}); setShipping(null); } },[open]);
+  if(!open) return null;
+
+  const pf = plan ? {...aidePreflight(plan, applied), applied} : null;
+
+  const doPlan = () => {
+    if(!intent.trim()){ onToast("Describe what you want built","error"); return; }
+    setThinking(true);
+    setTimeout(()=>{
+      const p = aidePlan(intent, engine);
+      setThinking(false);
+      if(!p.sources.length){ onToast("I could not ground that in the catalog — name the data you mean","error"); return; }
+      setPlan(p); setApplied({}); setSec("plan");
+    }, 700);
+  };
+
+  const dispatch = () => {
+    setShipping({step:0});
+    const steps = ["Writing the model to your repo","Opening a pull request","Engine validates the plan",
+                   "Applying masking policy at the target","Registering the output in the catalog","Linking lineage back to sources"];
+    steps.forEach((s,i)=>setTimeout(()=>setShipping({step:i+1, label:s}), 400 + i*520));
+    setTimeout(()=>{
+      onCreate({
+        id:"pl_"+Date.now(), name:plan.name, status:"Scheduled", engine, cadence:plan.cadence,
+        intent, domain:plan.domain, owner:plan.owner||plan.sources[0].owner, verdict:pf.verdict,
+        createdBy:me, createdAt:"just now", plan, applied, runs:[],
+      });
+      pushNotif({category:"Catalog", type:"assigned", title:`Pipeline registered · ${plan.name}`,
+        body:`Compiled to ${AIDE_ENGINES.find(e=>e.k===engine).label} and dispatched by ${me}`, nav:"aipipelines"});
+      onToast(`${plan.name} dispatched to ${AIDE_ENGINES.find(e=>e.k===engine).label}`,"success");
+      onClose();
+    }, 400 + steps.length*520 + 400);
+  };
+
+  const blocked = pf && pf.verdict==="blocked";
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:1060,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Build a cross-source pipeline</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              You describe the outcome. EDG plans it, checks it against policy, and compiles it for the engine you already run.
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bg,padding:"12px 0",overflowY:"auto"}}>
+            {SECTIONS.map((s,i)=>{
+              const on = sec===s.k;
+              const reachable = s.k==="intent" || (!!plan && (s.k!=="code" && s.k!=="ship" || !blocked));
+              return (
+                <button key={s.k} onClick={()=>reachable&&setSec(s.k)} disabled={!reachable}
+                  style={{width:"100%",textAlign:"left",padding:"10px 16px",background:on?T.bgActive:"transparent",border:"none",
+                          borderLeft:`2px solid ${on?T.accent:"transparent"}`,cursor:reachable?"pointer":"default",display:"block",opacity:reachable?1:.4}}>
+                  <div style={{fontSize:12,fontWeight:on?700:600,color:on?T.text:T.textSub}}>{i+1}. {s.l}</div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,lineHeight:1.4}}>{s.d}</div>
+                  {s.k==="policy"&&pf&&(
+                    <span style={{display:"inline-block",marginTop:5,fontSize:9.5,fontWeight:800,padding:"1px 7px",borderRadius:4,
+                      background:AIDE_VERDICT[pf.verdict].color+"18",color:AIDE_VERDICT[pf.verdict].color,
+                      border:`1px solid ${AIDE_VERDICT[pf.verdict].color}40`}}>{AIDE_VERDICT[pf.verdict].label.toUpperCase()}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+
+            {/* ── INTENT ── */}
+            {sec==="intent"&&(
+              <div style={{maxWidth:720}}>
+                <div style={{fontSize:13,color:T.textSub,lineHeight:1.65,marginBottom:14}}>
+                  Describe the outcome, not the SQL. The planner resolves it against the catalog — it will only use data
+                  it can actually find, and it will say so if it cannot ground your sentence.
+                </div>
+                <textarea value={intent} onChange={e=>setIntent(e.target.value)} rows={3}
+                  placeholder="e.g. Build a unified customer 360 from the Snowflake customers table, the MySQL app users and the CDP archive, refreshed daily"
+                  style={{width:"100%",resize:"vertical",padding:"11px 13px",borderRadius:10,border:`1px solid ${T.border}`,
+                          background:T.bg,color:T.text,fontSize:13,fontFamily:"inherit",lineHeight:1.6,outline:"none"}}/>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"16px 0 8px"}}>OR START FROM ONE OF THESE</div>
+                {AIDE_PRESETS.map(p=>(
+                  <button key={p} onClick={()=>setIntent(p)} className="row-hover"
+                    style={{width:"100%",textAlign:"left",padding:"9px 12px",marginBottom:6,borderRadius:9,background:T.bg,
+                            border:`1px solid ${intent===p?T.accent:T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit",lineHeight:1.5}}>{p}</button>
+                ))}
+
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 8px"}}>COMPILE FOR</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {AIDE_ENGINES.map(e=>(
+                    <button key={e.k} onClick={()=>{setEngine(e.k); setCodeTab(e.k);}}
+                      style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px",borderRadius:9,cursor:"pointer",textAlign:"left",fontFamily:"inherit",
+                              background:engine===e.k?T.accentDim:T.bg, border:`1px solid ${engine===e.k?T.accent+"55":T.border}`}}>
+                      <ServiceIcon service={e.svc} size={20}/>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{e.label}</div>
+                        <div style={{fontSize:10,color:T.textMuted}}>{e.sub}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.6}}>
+                  EDG does not run the pipeline. It compiles one your engine runs, with the governance written into the artifact.
+                </div>
+
+                <button onClick={doPlan} disabled={thinking}
+                  style={{marginTop:18,padding:"9px 18px",borderRadius:9,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  {thinking ? "Resolving against the catalog…" : "Plan it →"}
+                </button>
+              </div>
+            )}
+
+            {/* ── PLAN ── */}
+            {sec==="plan"&&plan&&(
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{plan.name}</div>
+                    <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+                      {plan.sources.length} sources across {new Set(plan.sources.map(a=>a.service)).size} systems · {plan.cadence} · {plan.materialization}
+                    </div>
+                  </div>
+                  <AIBadge>PLANNED</AIBadge>
+                </div>
+
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>SOURCES</div>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:18}}>
+                  {plan.sources.map((a,i)=>(
+                    <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                      <ServiceIcon service={a.service} size={16}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
+                        <div style={{fontSize:10,color:T.textMuted}}>{a.connectionLabel||a.service} · {a.domain} · {(SCHEMA[a.name]||[]).length} columns</div>
+                      </div>
+                      {AIDE_LEGAL_HOLDS[a.name]&&<span style={{fontSize:9,fontWeight:800,padding:"1px 7px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}40`}}>LEGAL HOLD</span>}
+                      {i===0&&<span style={{fontSize:9.5,color:T.textMuted}}>primary</span>}
+                      <button onClick={()=>setPlan(p=>({...p, sources:p.sources.filter(x=>x.id!==a.id), joins:p.joins.filter(j=>j.left.id!==a.id&&j.right.id!==a.id), cols:p.cols.filter(c=>c.from!==a.name)}))}
+                        title="Remove this source"
+                        style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",flexShrink:0}}>{Ic.x(12)}</button>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>JOINS THE CATALOG COULD DERIVE</div>
+                {plan.joins.length===0 ? (
+                  <div style={{padding:"14px",borderRadius:10,border:`1px solid ${T.amber}40`,background:T.amberDim,fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:18}}>
+                    No join could be derived. Without a key these sources produce a cross product — pick sources that share an
+                    identifier, or declare the relationship in the catalog first.
+                  </div>
+                ) : (
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:18}}>
+                    {plan.joins.map((j,i)=>(
+                      <div key={i} style={{padding:"10px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                          <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>
+                            {j.left.name}.{j.on[0]} = {j.right.name}.{j.on[1]}
+                          </code>
+                          <span style={{fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:4,letterSpacing:".03em",
+                            background:(j.how==="fk"?T.green:j.how==="name"?T.blue:T.violet)+"18",
+                            color:j.how==="fk"?T.green:j.how==="name"?T.blue:T.violet,
+                            border:`1px solid ${(j.how==="fk"?T.green:j.how==="name"?T.blue:T.violet)}38`}}>
+                            {j.how==="fk"?"DECLARED FK":j.how==="name"?"SHARED KEY":"MATCH KEY"}
+                          </span>
+                          <div style={{flex:1}}/>
+                          <AIConf conf={j.conf} small/>
+                        </div>
+                        <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{j.why}</div>
+                        {j.caution&&<div style={{fontSize:11.5,color:T.amber,lineHeight:1.55,marginTop:4}}>{j.caution}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>
+                  OUTPUT · {plan.cols.slice(0,14).length} columns
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:18}}>
+                  {plan.cols.slice(0,14).map(c=>(
+                    <span key={c.name} title={`${c.from}.${c.name} · ${c.type}`}
+                      style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,padding:"2px 8px",borderRadius:5,
+                              background:c.sensitive?T.accentDim:T.bgElevated, color:c.sensitive?T.accent:T.textSub,
+                              border:`1px solid ${c.sensitive?T.accent+"33":T.border}`}}>{c.name}</span>
+                  ))}
+                </div>
+
+                <button onClick={()=>setSec("policy")}
+                  style={{padding:"9px 18px",borderRadius:9,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  Run the policy pre-flight →
+                </button>
+              </div>
+            )}
+
+            {/* ── POLICY PRE-FLIGHT ── */}
+            {sec==="policy"&&pf&&(
+              <div>
+                <div style={{padding:"13px 15px",borderRadius:10,marginBottom:16,
+                             background:AIDE_VERDICT[pf.verdict].color+"12",border:`1px solid ${AIDE_VERDICT[pf.verdict].color}40`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:5}}>
+                    <span style={{color:AIDE_VERDICT[pf.verdict].color,display:"flex"}}>
+                      {pf.verdict==="clear"?Ic.check(16):Ic.shield(16)}
+                    </span>
+                    <div style={{fontSize:14,fontWeight:700,color:AIDE_VERDICT[pf.verdict].color}}>{AIDE_VERDICT[pf.verdict].label}</div>
+                    <div style={{flex:1}}/>
+                    <span style={{fontSize:11,color:T.textMuted}}>
+                      {pf.checks.filter(c=>c.status==="pass").length} of {pf.checks.length} checks clear
+                    </span>
+                  </div>
+                  <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>
+                    {AIDE_VERDICT[pf.verdict].note} This is computed from the classification graph, the lineage graph and the
+                    policy register together — no generator that only sees the SQL can produce it.
+                  </div>
+                </div>
+
+                {pf.checks.map(c=>(
+                  <div key={c.k} style={{border:`1px solid ${c.status==="pass"?T.border:AIDE_STATUS_COLOR[c.status]+"40"}`,
+                                         borderRadius:10,marginBottom:10,overflow:"hidden",background:T.bgSurface}}>
+                    <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 13px",
+                                 background:c.status==="pass"?T.bg:AIDE_STATUS_COLOR[c.status]+"0e",borderBottom:`1px solid ${T.border}`}}>
+                      <span style={{width:7,height:7,borderRadius:"50%",background:AIDE_STATUS_COLOR[c.status],flexShrink:0}}/>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>{c.label}</div>
+                      <span style={{fontSize:9.5,fontWeight:800,letterSpacing:".04em",color:AIDE_STATUS_COLOR[c.status]}}>
+                        {c.status==="pass"?"CLEAR":c.status==="warn"?"NEEDS A DECISION":"BLOCKS"}
+                      </span>
+                    </div>
+                    <div style={{padding:"11px 13px"}}>
+                      <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>{c.detail}</div>
+                      {c.rows.length>0&&(
+                        <div style={{marginTop:9,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                          {c.rows.map((r,i)=>(
+                            <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"5px 10px",borderTop:i?`1px solid ${T.border}`:"none",background:T.bg}}>
+                              <span style={{color:r.ok?T.green:T.amber,display:"flex",flexShrink:0}}>{r.ok?Ic.check(11):Ic.alert(11)}</span>
+                              <code style={{flex:1,fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.text}}>{r.l}</code>
+                              <span style={{fontSize:10.5,color:T.textMuted}}>{r.r}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {c.mitigations.length>0&&(
+                        <div style={{marginTop:10,display:"flex",flexWrap:"wrap",gap:6}}>
+                          {c.mitigations.map(m=>(
+                            <button key={m.k} onClick={()=>{setApplied(a=>({...a,[m.k]:true})); onToast("Plan updated — pre-flight re-run","success");}}
+                              style={{padding:"4px 11px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.borderLight}`,
+                                      color:T.text,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{m.label}</button>
+                          ))}
+                        </div>
+                      )}
+                      {c.hard&&c.status==="block"&&(
+                        <div style={{marginTop:10,fontSize:11.5,color:T.red,lineHeight:1.55}}>
+                          No mitigation is offered for this on purpose. It is not a setting to override — it needs a decision
+                          from someone who can take responsibility for it.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {Object.keys(applied).length>0&&(
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:4,marginBottom:12}}>
+                    {Object.keys(applied).length} mitigation{Object.keys(applied).length>1?"s":""} applied — they are written into the compiled artifact, not just recorded here.
+                  </div>
+                )}
+
+                {blocked ? (
+                  <div style={{padding:"13px 15px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,lineHeight:1.6}}>
+                    Compilation is not available while a check blocks. Remove the offending source from the plan, or take the
+                    decision outside EDG and come back.
+                  </div>
+                ) : (
+                  <button onClick={()=>setSec("code")}
+                    style={{padding:"9px 18px",borderRadius:9,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    Compile it →
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* ── CODE ── */}
+            {sec==="code"&&plan&&pf&&(
+              <div>
+                <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:12,maxWidth:760}}>
+                  The governance is written into the artifact rather than enforced from outside it. The classifications that
+                  flowed in become tags on the target, and the mitigations you applied become masking and retention in the
+                  generated DDL. Nothing here depends on EDG being in the request path at runtime.
+                </div>
+                <Tabs2 pill tabs={AIDE_ENGINES.map(e=>({key:e.k,label:e.label}))} active={codeTab} onChange={setCodeTab}/>
+                <pre style={{marginTop:12,padding:"14px 16px",borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,
+                             fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.65,color:T.text,
+                             overflowX:"auto",whiteSpace:"pre",maxHeight:470}}>{aideCompile(plan, pf, codeTab)}</pre>
+                <button onClick={()=>setSec("ship")}
+                  style={{marginTop:14,padding:"9px 18px",borderRadius:9,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                  Dispatch to {AIDE_ENGINES.find(e=>e.k===engine).label} →
+                </button>
+              </div>
+            )}
+
+            {/* ── SHIP ── */}
+            {sec==="ship"&&plan&&pf&&(
+              <div style={{maxWidth:680}}>
+                <div style={{fontSize:13,color:T.textSub,lineHeight:1.65,marginBottom:16}}>
+                  Dispatch hands the compiled artifact to {AIDE_ENGINES.find(e=>e.k===engine).label} and registers the output
+                  as a governed asset here — owner, domain, inherited classifications and lineage back to every source.
+                  The engine owns the run. EDG owns what it means.
+                </div>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
+                  {[["Target", plan.name],["Engine", AIDE_ENGINES.find(e=>e.k===engine).label],
+                    ["Cadence", plan.cadence],["Domain", plan.domain],
+                    ["Owner", plan.owner||plan.sources[0].owner],
+                    ["Inherits", plan.cols.filter(c=>c.sensitive).length ? `PII on ${plan.cols.filter(c=>c.sensitive).length} columns` : "no classifications"],
+                    ["Pre-flight", AIDE_VERDICT[pf.verdict].label],
+                    ["Mitigations", Object.keys(applied).length || "none"],
+                  ].map(([k,v],i)=>(
+                    <div key={k} style={{display:"flex",gap:12,padding:"7px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{width:110,flexShrink:0,fontSize:11.5,color:T.textMuted}}>{k}</div>
+                      <div style={{flex:1,fontSize:12,color:T.text,fontWeight:500}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {shipping ? (
+                  <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 15px"}}>
+                    {["Writing the model to your repo","Opening a pull request","Engine validates the plan",
+                      "Applying masking policy at the target","Registering the output in the catalog","Linking lineage back to sources"].map((s,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:9,padding:"5px 0",opacity:shipping.step>i?1:.35}}>
+                        <span style={{color:shipping.step>i?T.green:T.textMuted,display:"flex"}}>{shipping.step>i?Ic.check(12):Ic.chevRight(11)}</span>
+                        <span style={{fontSize:12,color:shipping.step>i?T.text:T.textMuted}}>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <button onClick={dispatch}
+                    style={{padding:"10px 20px",borderRadius:9,background:T.green,border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                    Dispatch and register
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Pipeline detail ───────────────────────────────────────────────────────────
+const AIDEDetail = ({pl, onBack, onNav, onToast}) => {
+  const [tab, setTab] = useState("plan");
+  const plan = pl.plan || aidePlan(pl.intent, pl.engine);
+  const pf   = {...aidePreflight(plan, pl.applied||{}), applied:pl.applied||{}};
+  const eng  = AIDE_ENGINES.find(e=>e.k===pl.engine) || AIDE_ENGINES[0];
+  const [codeTab, setCodeTab] = useState(pl.engine);
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"AI Data Engineer", onClick:onBack},{label:pl.name}]}/>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:11,marginBottom:6}}>
+          <ServiceIcon service={eng.svc} size={22}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:17,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{pl.name}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              {eng.label} · {pl.cadence} · {pl.domain} · owned by {pl.owner} · created by {pl.createdBy} {pl.createdAt}
+            </div>
+          </div>
+          <span style={{fontSize:10,fontWeight:800,padding:"2px 9px",borderRadius:5,letterSpacing:".04em",
+            background:AIDE_VERDICT[pl.verdict].color+"18",color:AIDE_VERDICT[pl.verdict].color,
+            border:`1px solid ${AIDE_VERDICT[pl.verdict].color}40`}}>{AIDE_VERDICT[pl.verdict].label.toUpperCase()}</span>
+        </div>
+        <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginBottom:16,maxWidth:820}}>{pl.intent}</div>
+
+        <Tabs2 tabs={[{key:"plan",label:"Plan"},{key:"policy",label:"Policy pre-flight"},
+                      {key:"code",label:"Compiled code"},{key:"runs",label:`Runs (${(pl.runs||[]).length})`},
+                      {key:"output",label:"Governed output"}]} active={tab} onChange={setTab}/>
+
+        {tab==="plan"&&(
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>SOURCES</div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:18}}>
+              {plan.sources.map((a,i)=>(
+                <button key={a.id} onClick={()=>onNav("catalog",{assetName:a.name})} className="row-hover"
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <ServiceIcon service={a.service} size={16}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text}}>{a.name}</div>
+                    <div style={{fontSize:10,color:T.textMuted}}>{a.connectionLabel||a.service} · {a.domain}</div>
+                  </div>
+                  <span style={{color:T.textMuted,display:"flex"}}>{Ic.chevRight(11)}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>JOINS</div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              {plan.joins.map((j,i)=>(
+                <div key={i} style={{padding:"10px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>
+                    {j.left.name}.{j.on[0]} = {j.right.name}.{j.on[1]}
+                  </code>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>{j.why}</div>
+                </div>
+              ))}
+              {!plan.joins.length&&<div style={{padding:"16px",fontSize:12,color:T.textMuted}}>No joins derived.</div>}
+            </div>
+          </div>
+        )}
+
+        {tab==="policy"&&(
+          <div>
+            {pf.checks.map(c=>(
+              <div key={c.k} style={{border:`1px solid ${c.status==="pass"?T.border:AIDE_STATUS_COLOR[c.status]+"40"}`,borderRadius:10,marginBottom:9,overflow:"hidden",background:T.bgSurface}}>
+                <div style={{display:"flex",alignItems:"center",gap:9,padding:"9px 13px",background:c.status==="pass"?T.bg:AIDE_STATUS_COLOR[c.status]+"0e"}}>
+                  <span style={{width:7,height:7,borderRadius:"50%",background:AIDE_STATUS_COLOR[c.status],flexShrink:0}}/>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>{c.label}</div>
+                  <span style={{fontSize:9.5,fontWeight:800,letterSpacing:".04em",color:AIDE_STATUS_COLOR[c.status]}}>
+                    {c.status==="pass"?"CLEAR":c.status==="warn"?"NEEDS A DECISION":"BLOCKS"}</span>
+                </div>
+                <div style={{padding:"10px 13px",fontSize:12,color:T.textSub,lineHeight:1.6}}>{c.detail}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab==="code"&&(
+          <div>
+            <Tabs2 pill tabs={AIDE_ENGINES.map(e=>({key:e.k,label:e.label}))} active={codeTab} onChange={setCodeTab}/>
+            <pre style={{marginTop:12,padding:"14px 16px",borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,
+                         fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.65,color:T.text,overflowX:"auto",whiteSpace:"pre"}}>{aideCompile(plan, pf, codeTab)}</pre>
+          </div>
+        )}
+
+        {tab==="runs"&&(
+          (pl.runs||[]).length ? (
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{display:"flex",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+                <div style={{width:160}}>WHEN</div><div style={{flex:1}}>STATUS</div>
+                <div style={{width:100,textAlign:"right"}}>ROWS</div><div style={{width:80,textAlign:"right"}}>TOOK</div>
+              </div>
+              {pl.runs.map((r,i)=>(
+                <div key={r.id} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <div style={{width:160,fontSize:11.5,color:T.text}}>{r.at}</div>
+                  <div style={{flex:1,display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{width:6,height:6,borderRadius:"50%",background:r.status==="success"?T.green:T.red}}/>
+                    <span style={{fontSize:11.5,color:T.textSub}}>{r.status} · in {eng.label}</span>
+                  </div>
+                  <div style={{width:100,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{r.rows}</div>
+                  <div style={{width:80,textAlign:"right",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{Math.round(r.ms/1000)}s</div>
+                </div>
+              ))}
+              <div style={{padding:"9px 12px",borderTop:`1px solid ${T.border}`,background:T.bg,fontSize:11,color:T.textMuted,lineHeight:1.55}}>
+                Runs execute in {eng.label}. EDG reads their outcome; it does not schedule, retry or bill for them.
+              </div>
+            </div>
+          ) : (
+            <div style={{padding:"40px 20px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>
+              Not run yet. The next {pl.cadence.toLowerCase()} trigger in {eng.label} will pick it up.
+            </div>
+          )
+        )}
+
+        {tab==="output"&&(
+          <div style={{maxWidth:720}}>
+            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:14}}>
+              The output is not a loose table. It is registered here with everything it inherited, which is the difference
+              between a pipeline that produced data and a pipeline that produced governed data.
+            </div>
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              {[["Asset", plan.name],["Type", plan.materialization==="table"?"Table":"Incremental table"],
+                ["Domain", plan.domain],["Owner", pl.owner],
+                ["Classifications", plan.cols.filter(c=>c.sensitive).length ? `PII · ${plan.cols.filter(c=>c.sensitive).length} columns` : "none"],
+                ["Masked in target", Object.keys(pl.applied||{}).filter(k=>k.startsWith("mask:")).map(k=>k.slice(5)).join(", ")||"none"],
+                ["Retention", (pl.applied||{})["ret:inherit"] ? "90 days — strictest inherited from a source" : "inherited from the primary source"],
+                ["Upstream lineage", plan.sources.map(a=>a.name).join(" · ")],
+                ["Certification", "Draft — a steward certifies it after the first successful run"],
+              ].map(([k,v],i)=>(
+                <div key={k} style={{display:"flex",gap:12,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <div style={{width:150,flexShrink:0,fontSize:11.5,color:T.textMuted}}>{k}</div>
+                  <div style={{flex:1,fontSize:12,color:T.text,fontWeight:500}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ── The screen ────────────────────────────────────────────────────────────────
+const AIPipelinesView = ({onToast, onNav}) => {
+  const st = useAide();
+  const {role} = useRole();
+  const [open, setOpen] = useState(false);
+  const [sel, setSel]   = useState(null);
+  const canBuild = role==="admin" || role==="steward" || role==="engineer";
+
+  if(sel){
+    const pl = st.pipelines.find(p=>p.id===sel);
+    if(pl) return <AIDEDetail pl={pl} onBack={()=>setSel(null)} onNav={onNav} onToast={onToast}/>;
+  }
+
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"AI Data Engineer"}]} actions={
+        <button onClick={()=>canBuild?setOpen(true):onToast("Building a pipeline is a Steward, Engineer or Admin action","error")}
+          style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+          {Ic.plus(12)} New pipeline
+        </button>}/>
+
+      <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:11,padding:"12px 14px",borderRadius:10,
+                     background:T.violetDim,border:`1px solid ${T.violet}30`,marginBottom:18}}>
+          <span style={{color:T.violet,display:"flex",flexShrink:0,paddingTop:1}}>{Ic.bot(15)}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,color:T.text,lineHeight:1.6}}>
+              Describe a cross-source pipeline in a sentence. EDG resolves it against the catalog, derives the joins from
+              declared keys and governed match keys, <b>checks it against policy before a line of code exists</b>, then
+              compiles it for dbt, Snowflake, Databricks or Solix CDP.
+            </div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6,marginTop:5}}>
+              EDG does not run pipelines. Your engine does — and the artifact EDG hands it carries the masking, the
+              retention and the classifications with it.
+            </div>
+          </div>
+        </div>
+
+        {st.pipelines.length===0 ? (
+          <div style={{padding:"60px 20px",textAlign:"center"}}>
+            <div style={{color:T.textMuted,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.workflow(28)}</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>No pipelines yet</div>
+            <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Describe one in a sentence and EDG will plan it.</div>
+          </div>
+        ) : (
+          <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+              <div style={{flex:1}}>PIPELINE</div>
+              <div style={{width:130}}>ENGINE</div>
+              <div style={{width:90}}>CADENCE</div>
+              <div style={{width:120}}>PRE-FLIGHT</div>
+              <div style={{width:90}}>STATUS</div>
+              <div style={{width:90,textAlign:"right"}}>RUNS</div>
+            </div>
+            {st.pipelines.map((p,i)=>{
+              const eng = AIDE_ENGINES.find(e=>e.k===p.engine)||AIDE_ENGINES[0];
+              return (
+                <button key={p.id} onClick={()=>setSel(p.id)} className="row-hover"
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderTop:i?`1px solid ${T.border}`:"none",background:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{p.name}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.intent}</div>
+                  </div>
+                  <div style={{width:130,flexShrink:0,display:"flex",alignItems:"center",gap:7}}>
+                    <ServiceIcon service={eng.svc} size={14}/>
+                    <span style={{fontSize:11.5,color:T.textSub}}>{eng.label}</span>
+                  </div>
+                  <div style={{width:90,flexShrink:0,fontSize:11.5,color:T.textSub}}>{p.cadence}</div>
+                  <div style={{width:120,flexShrink:0}}>
+                    <span style={{fontSize:9.5,fontWeight:800,padding:"1.5px 8px",borderRadius:5,letterSpacing:".03em",
+                      background:AIDE_VERDICT[p.verdict].color+"18",color:AIDE_VERDICT[p.verdict].color,
+                      border:`1px solid ${AIDE_VERDICT[p.verdict].color}40`}}>{AIDE_VERDICT[p.verdict].label.toUpperCase()}</span>
+                  </div>
+                  <div style={{width:90,flexShrink:0,fontSize:11.5,color:p.status==="Running"?T.green:T.textMuted}}>{p.status}</div>
+                  <div style={{width:90,flexShrink:0,textAlign:"right",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{(p.runs||[]).length}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <AIDEBuilder open={open} onClose={()=>setOpen(false)} onToast={onToast} onNav={onNav}
+        onCreate={p=>aideSet(s=>({...s, pipelines:[p, ...s.pipelines]}))}/>
+    </div>
+  );
+};
+
 // ──────────────────────────────────────
 export default function App(){
   const [loggedIn, setLoggedIn] = useState(false);
@@ -51642,6 +52727,7 @@ export default function App(){
       case "stewardship":   return <InboxView onToast={showToast}/>;
       case "tags":          return <TagManagementView onToast={showToast} deepLinkTagId={deepLinkTagId}/>;
       case "aiclassify":    return <AIClassificationView onToast={showToast} onNav={handleNav}/>;
+      case "aipipelines":   return <AIPipelinesView onToast={showToast} onNav={handleNav}/>;
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
