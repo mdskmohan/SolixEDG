@@ -2134,6 +2134,75 @@ const GLOSSARY_TERMS = [
    linkedAssets:[],activity:[{user:"sarah.kim",avatar:"SK",action:"Deprecated — use NRR successor GRR",time:"2mo ago"}],readme:""},
 ];
 
+// ─────────────────────────────────────────────
+// TERM TYPES — the Glossary is the ONE register for business vocabulary
+// ─────────────────────────────────────────────
+// A business user names four kinds of thing, and argues about all four. Giving each
+// its own register would reintroduce the exact fracture this product exists to remove:
+// the same word owned twice, approved twice, and disagreeing with itself. So they are
+// one object with a type, sharing one lifecycle, one approval and one conflict check.
+//
+// Note what is NOT here: a "measure" in the dbt sense — SUM(amount). In Power BI and
+// Tableau a measure IS the business number, so exposing both words would only teach
+// users a distinction they do not need. The raw aggregation stays a compiler internal
+// in the Semantic Layer; the Glossary calls the business-facing number a Metric.
+const GLOSSARY_TERM_TYPES = {
+  Term:      {l:"Term",      c:"#0284c7", icon:"A", d:"A word with an agreed definition."},
+  Concept:   {l:"Concept",   c:"#7c3aed", icon:"◆", d:"A business thing — Customer, Order. Carries synonyms, taxonomy and relationships."},
+  Metric:    {l:"Metric",    c:"#16a34a", icon:"∑", d:"A number you can compute. Implemented by the Semantic Layer."},
+  Dimension: {l:"Dimension", c:"#d97706", icon:"⊞", d:"A way to slice a number."},
+};
+
+// Existing terms are typed rather than rewritten — several were already metrics in all
+// but name, and saying so is more honest than leaving them as generic words.
+const _GT_TYPES = {t1:"Metric", t2:"Metric", t3:"Metric", t4:"Metric", t5:"Metric",
+                   t6:"Metric", t7:"Metric", t8:"Metric", t9:"Metric", t11:"Metric"};
+GLOSSARY_TERMS.forEach(t => { t.termType = _GT_TYPES[t.id] || "Term"; });
+
+// Concepts are business vocabulary, so they live in the register like everything else.
+// The Semantic Layer holds their taxonomy, relationships and realisation — the same
+// two-faces-one-object split used for metrics.
+const _GT_CONCEPTS = [
+  ["tc1","Customer","c_customer","Commerce","maya.chen","A person or organisation that has placed at least one order with the group.",["Client","Account","Buyer","Purchaser"]],
+  ["tc2","Party","c_party","Commerce","maya.chen","Any legal person the group deals with — a customer, a supplier, or both.",["Legal entity","Counterparty"]],
+  ["tc3","Order","c_order","Commerce","maya.chen","A commitment by a customer to buy goods or services at an agreed price.",["Sales order","Purchase","Booking"]],
+  ["tc4","Transaction","c_transaction","Finance","sarah.kim","A single posted movement of value in the general ledger.",["Ledger entry","Posting","Journal line"]],
+  ["tc5","Product","c_product","Commerce","dev.patel","A sellable item or service in the group catalogue.",["SKU","Item","Article"]],
+  ["tc6","Supplier","c_supplier","Procurement","sarah.kim","A legal entity from which the group purchases goods or services.",["Vendor","Provider"]],
+];
+_GT_CONCEPTS.forEach(([id,name,cid,dom,owner,def,syn]) => {
+  GLOSSARY_TERMS.push({
+    id, term:name, abbr:"—", glossary:"g1", category:"c2", domain:dom, owner, steward:owner,
+    linked:0, cert:"Approved", status:"Approved", termType:"Concept", conceptId:cid,
+    synonyms:syn, conflictWith:null, deprecationReason:null, successorId:null,
+    reviewedAt:"2026-09-18", proposedVersion:null,
+    auditLog:[{action:"Created",by:owner,at:"2026-09-18",note:"Declared as a business concept"}],
+    definition:def, relatedTerms:[], tags:["concept"], refs:[], linkedAssets:[],
+    activity:[{user:owner,avatar:owner.slice(0,2).toUpperCase(),action:"Declared the concept",time:"today"}],
+    readme:"",
+  });
+});
+
+// Dimensions — named by the business, bound by the Semantic Layer.
+const _GT_DIMS = [
+  ["td1","Region","Commerce","maya.chen","The sales territory an order is attributed to, as recorded at order time.",["Territory","Sales region"]],
+  ["td2","Order Status","Commerce","dev.patel","The lifecycle state of an order: completed, pending, cancelled or refunded.",["Status","Order state"]],
+  ["td3","Currency","Finance","sarah.kim","The ISO 4217 currency a transaction was posted in.",["Ccy","Transaction currency"]],
+];
+_GT_DIMS.forEach(([id,name,dom,owner,def,syn]) => {
+  GLOSSARY_TERMS.push({
+    id, term:name, abbr:"—", glossary:"g1", category:"c2", domain:dom, owner, steward:owner,
+    linked:0, cert:"Approved", status:"Approved", termType:"Dimension",
+    synonyms:syn, conflictWith:null, deprecationReason:null, successorId:null,
+    reviewedAt:"2026-09-18", proposedVersion:null,
+    auditLog:[{action:"Created",by:owner,at:"2026-09-18",note:"Declared as a dimension"}],
+    definition:def, relatedTerms:[], tags:["dimension"], refs:[], linkedAssets:[],
+    activity:[{user:owner,avatar:owner.slice(0,2).toUpperCase(),action:"Declared the dimension",time:"today"}],
+    readme:"",
+  });
+});
+
+
 const CERT_META = {
   Draft:       {color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},
   "In Review": {color:"#d97706",bg:"rgba(217,119,6,.1)",  border:"rgba(217,119,6,.25)",  icon:"⏳"},
@@ -2174,6 +2243,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
   const [glossaries, setGlossaries] = useState(GLOSSARY_DATA);
   const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
+  const [slStore]                   = useSemanticLayer();  // concepts, entities and metrics live there
   const [selG,       setSelG]       = useState("g1");
   const [selCat,     setSelCat]     = useState(null);
   const [selTerm,    setSelTerm]    = useState(null);
@@ -2186,6 +2256,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const [expCat,     setExpCat]     = useState({"c1":true,"c2":true});
   const [q,          setQ]          = useState("");
   const [termTab,    setTermTab]    = useState("overview");
+  const [typeF,      setTypeF]      = useState("all");   // Term / Concept / Metric / Dimension
+  const [mapCon,     setMapCon]     = useState(null);   // concept opened from the map
   const [commentText,setCommentText]= useState("");
   const [aiLoading,  setAiLoading]  = useState(false);
   const [hovered,    setHovered]    = useState(null);
@@ -2221,7 +2293,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const category  = glossary?.categories.find(c=>c.id===selCat);
   const term      = selTerm ? terms.find(t=>t.id===selTerm) : null;
   const catTerms  = selCat ? terms.filter(t=>t.glossary===selG&&t.category===selCat) : [];
-  const allTermsInGlossary = terms.filter(t=>t.glossary===selG);
+  const _allInGloss        = terms.filter(t=>t.glossary===selG);
+  const allTermsInGlossary = typeF==="all" ? _allInGloss : _allInGloss.filter(t=>(t.termType||"Term")===typeF);
   const searchResults = q.trim().length>1
     ? terms.filter(t=>t.term.toLowerCase().includes(q.toLowerCase())||t.definition?.toLowerCase().includes(q.toLowerCase()))
     : [];
@@ -2458,7 +2531,12 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
         onMouseLeave={e=>{if(selTerm!==t.id){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform="none";}}}>
         <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:5}}>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.text}}>{t.term}</div>
+            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.text}}>{t.term}</div>
+              {(()=>{ const tt=GLOSSARY_TERM_TYPES[t.termType||"Term"]; return (
+                <span title={tt.d} style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${tt.c}18`,color:tt.c,border:`1px solid ${tt.c}35`,whiteSpace:"nowrap"}}>{tt.icon} {tt.l}</span>
+              );})()}
+            </div>
             {t.abbr&&t.abbr!=="—"&&<div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginTop:1}}>{t.abbr}</div>}
           </div>
           <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:99,background:cm.bg,color:cm.color,border:`1px solid ${cm.border}`,flexShrink:0}}>{cm.icon} {t.cert}</span>
@@ -2788,6 +2866,43 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             );
           })()}
+          <div style={{padding:"0 28px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:4}}>
+              {[{k:"all",l:"All"},...Object.entries(GLOSSARY_TERM_TYPES).map(([k,v])=>({k,l:v.l,c:v.c,icon:v.icon}))].map(ft=>{
+                const on = typeF===ft.k;
+                const n  = ft.k==="all" ? _allInGloss.length : _allInGloss.filter(t=>(t.termType||"Term")===ft.k).length;
+                return (
+                  <button key={ft.k} onClick={()=>setTypeF(ft.k)}
+                    style={{padding:"5px 11px",borderRadius:7,cursor:"pointer",fontSize:11.5,fontWeight:600,
+                      border:`1px solid ${on?(ft.c||T.accent):T.border}`,
+                      background:on?`${(ft.c||T.accent)}18`:T.bgSurface,
+                      color:on?(ft.c||T.accent):T.textSub}}>
+                    {ft.icon?ft.icon+" ":""}{ft.l} <span style={{color:T.textMuted,fontWeight:500}}>{n}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,maxWidth:820}}>
+              One register for everything the business names. A <b style={{color:T.textSub}}>Concept</b> is a thing, a <b style={{color:T.textSub}}>Metric</b> is a number, a <b style={{color:T.textSub}}>Dimension</b> is a way to slice one — all sharing one owner, one approval and one conflict check.
+            </div>
+          </div>
+
+          {typeF==="Concept" && (()=>{
+            const {concepts, crels, entities, metrics} = slStore;
+            const unrealised = concepts.filter(c=>slConceptCoverage(c, entities, metrics).state==="unrealised").length;
+            return (
+              <div style={{padding:"0 28px 20px"}}>
+                <SH title="Concept map"
+                    sub={`How the business fits together, independent of any table. Solid lines are taxonomy — what is a kind of what. Dashed lines are business relationships, which stay true however a given system joins them.${unrealised?` ${unrealised} concept${unrealised===1?" is":"s are"} agreed but implemented by nothing.`:""}`}/>
+                <SLConceptCanvas concepts={concepts} crels={crels} entities={entities} metrics={metrics}
+                  selected={mapCon} onSelect={setMapCon}/>
+                <SLConceptDrawer concept={concepts.find(c=>c.id===mapCon)} concepts={concepts} crels={crels}
+                  entities={entities} metrics={metrics} models={slStore.models} gTerms={terms}
+                  onClose={()=>setMapCon(null)} onNav={()=>{}}/>
+              </div>
+            );
+          })()}
+
           {allTermsInGlossary.length===0?(
             <div style={{textAlign:"center",padding:"32px 20px",color:T.textMuted}}><div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:8}}>No terms yet</div><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
           ):(
@@ -32990,6 +33105,103 @@ const SL_GRAINS = ["day","week","month","quarter","year"];
 const SL_WINDOWS= ["quarter to date","year to date","month to date","trailing 12 months","all time"];
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ASSETS IN, ENTITIES OUT
+// ───────────────────────────────────────────────────────────────────────────
+// A user opening this screen does not have entities. They have tables. So a model is
+// built by picking real catalogue assets, and EDG derives the entity — what one row
+// means — from what it already knows about that table.
+//
+// Joins are NOT derived. EDG could guess them from lineage and foreign keys, and that
+// is exactly the problem: a wrongly inferred join silently fans out revenue across
+// every metric in the model, and nobody notices until an audit. The user declares the
+// join; we give them the tool and check it for them.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Grain detection, in order of how much we trust the evidence.
+const slDetectKey = (table) => {
+  const cols = SCHEMA[table] || [];
+  const pk = cols.find(c => c.pk);
+  if (pk) return {col: pk.name, why: "declared primary key", strong: true};
+  const cand = cols
+    .map(c => ({c, p: COL_PROFILES[c.name] || {}}))
+    .find(x => x.p.distinctPct === 100 && x.p.nullPct === 0);
+  if (cand) return {col: cand.c.name, why: `100% distinct · 0% null over ${cand.p.distinctCount||"—"} rows`, strong: true};
+  const idish = cols.find(c => /(^|_)id$/i.test(c.name));
+  if (idish) return {col: idish.name, why: "named like an identifier — unverified", strong: false};
+  return null;
+};
+const slDetectTimeDims = (table) =>
+  (SCHEMA[table] || []).filter(c => /DATE|TIMESTAMP|TIMESTAMPTZ/i.test(c.type)).map(c => c.name);
+
+// An asset is catalogued in exactly one system, so that is the only physical name we
+// actually know. The rest are proposed by convention and flagged as such rather than
+// asserted — a wrong physical name fails at publish, loudly, which is the right time.
+const slDeriveBindings = (asset, table) => {
+  const native = (asset.db || "").split(" / ").filter(Boolean);
+  const path = native.length >= 2 ? native.join(".") : table;
+  const dom = String(asset.domain || "main").toLowerCase();
+  const b = {};
+  if (asset.service === "snowflake") b.snowflake = path.toUpperCase();
+  else b.snowflake = `SNOWFLAKE_PROD.${dom.toUpperCase()}.${table.toUpperCase()}`;
+  if (asset.service === "databricks") b.databricks = path.toLowerCase();
+  else b.databricks = `main.${dom}.${table}`;
+  b.dbt = `ref('${table}')`;
+  b.powerbi = table.split("_").map(s => s.charAt(0).toUpperCase() + s.slice(1)).join("");
+  b.tableau = "—";
+  return {bindings: b, nativeKey: asset.service};
+};
+
+// One entity per asset, SHARED across every model that picks it. Two models that both
+// select `orders` must mean the same Order — otherwise the product has rebuilt the
+// disagreement it exists to remove.
+const slEntityForAsset = (asset, existing) => {
+  const found = (existing || []).find(e => e.assetId === asset.id);
+  if (found) return {entity: found, created: false};
+  const table = asset.name;
+  const key = slDetectKey(table);
+  const times = slDetectTimeDims(table);
+  const {bindings, nativeKey} = slDeriveBindings(asset, table);
+  const pretty = table.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()).replace(/s$/, "");
+  return {
+    created: true,
+    entity: {
+      id: "e_a" + asset.id, assetId: asset.id, concept: null,
+      name: pretty, table, key: key ? key.col : null,
+      domain: asset.domain, owner: asset.owner,
+      timeDims: times.length ? times : [],
+      desc: asset.description || `Derived from ${asset.db || table}.`,
+      evidence: key ? `${key.col} · ${key.why}` : "No key could be detected — grain is undeclared.",
+      keyStrong: key ? key.strong : false,
+      bindings, nativeKey,
+    },
+  };
+};
+
+// Assets that can carry a grain at all. An Object, Folder or Dashboard has no rows to
+// count, so offering them in the picker would only produce a model that cannot compile.
+const slModellableAssets = () =>
+  ASSETS.filter(a => (a.type === "Table" || a.type === "View") && (SCHEMA[a.name] || []).length > 0);
+
+// A join the user declared, checked against what we know. We do not invent the join,
+// but we do say when the one they drew is going to misbehave.
+const slCheckJoin = (fromEnt, fromCol, toEnt, toCol) => {
+  const issues = [];
+  if (!fromEnt || !toEnt) return {ok: false, issues: ["Pick both sides."], fanOut: false};
+  if (fromEnt.id === toEnt.id) issues.push("Both sides are the same entity.");
+  const fp = COL_PROFILES[fromCol] || {}, tp = COL_PROFILES[toCol] || {};
+  const toIsKey = toEnt.key === toCol;
+  if (!toIsKey && tp.distinctPct !== 100)
+    issues.push(`${toCol} is not the key of ${toEnt.name} and is not unique — this join will fan out and double-count every measure on ${fromEnt.name}.`);
+  if (fp.nullPct > 0)
+    issues.push(`${fromCol} is ${fp.nullPct}% null — those rows drop out of the join.`);
+  const ft = (SCHEMA[fromEnt.table] || []).find(c => c.name === fromCol);
+  const tt = (SCHEMA[toEnt.table] || []).find(c => c.name === toCol);
+  if (ft && tt && ft.type.replace(/\(.*/, "") !== tt.type.replace(/\(.*/, ""))
+    issues.push(`Types differ — ${ft.type} vs ${tt.type}.`);
+  return {ok: issues.length === 0, issues, fanOut: !toIsKey && tp.distinctPct !== 100};
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
 // THE CONCEPT LAYER — the ontology, and the thing that beats the incumbents.
 // ───────────────────────────────────────────────────────────────────────────
 // Collibra ships a real ontology: a configurable operating model of asset types and
@@ -33129,17 +33341,17 @@ const slConceptLayout = (concepts, crels) => {
 //    distinctPct 100 with no nulls is a candidate key. Without a declared grain a metric
 //    cannot be certified, because a number with no grain is what makes BI disagree.
 const SL_ENTITIES = [
-  {id:"e_order", concept:"c_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_order", assetId:1, concept:"c_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","updated_at"], desc:"One row per placed order. The grain every revenue metric resolves to.",
    evidence:"order_id · 100% distinct · 0% null over 48.2M rows",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.ORDERS", databricks:"main.commerce.orders",
              dbt:"ref('fct_orders')", powerbi:"Orders", tableau:"Orders_Certified"}},
-  {id:"e_customer", concept:"c_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_customer", assetId:133, concept:"c_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","last_login"], desc:"One row per registered user account.",
    evidence:"user_id · unique constraint · 0% null",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.USERS", databricks:"main.commerce.users",
              dbt:"ref('dim_customers')", powerbi:"Customers", tableau:"Customers"}},
-  {id:"e_txn", concept:"c_transaction", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
+  {id:"e_txn", assetId:105, concept:"c_transaction", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
    timeDims:["txn_date","created_at"], desc:"One row per general-ledger transaction.",
    evidence:"txn_id · primary key · 0% null",
    bindings:{snowflake:"ORACLE_FIN.GL.TRANSACTIONS", databricks:"main.finance.transactions",
@@ -33149,15 +33361,15 @@ const SL_ENTITIES = [
 const SL_MODELS = [
   {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
    status:"Approved", entityIds:["e_order","e_customer"], targets:["dbt","snowflake","powerbi"],
-   lastPublished:"2026-09-02", created:"2026-06-11",
+   lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item"},
    desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
   {id:"mdl_product", name:"Product Engagement", domain:"Product", owner:"alex.wu", steward:"alex.wu",
    status:"Approved", entityIds:["e_customer"], targets:["dbt","databricks"],
-   lastPublished:"2026-08-19", created:"2026-07-02",
+   lastPublished:"2026-08-19", created:"2026-07-02", sync:{enabled:true, targets:["dbt","databricks"], frequency:"weekly", onDrift:"notify"},
    desc:"Active-user and engagement measures at customer grain."},
   {id:"mdl_finance", name:"Finance Ledger", domain:"Finance", owner:"sarah.kim", steward:"alex.wu",
    status:"Draft", entityIds:["e_txn","e_customer"], targets:["snowflake"],
-   lastPublished:null, created:"2026-09-08",
+   lastPublished:null, created:"2026-09-08", sync:{enabled:false, targets:["snowflake"], frequency:"daily", onDrift:"flag"},
    desc:"General-ledger transaction grain for recurring revenue. Not yet published anywhere."},
 ];
 
@@ -34090,73 +34302,312 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
   );
 };
 
-// ── Create a semantic model. A model is the publishable bundle, so creating one is
-//    choosing a grain to work at and where it will eventually go — not a form to fill.
-const SLNewModelDrawer = ({open, onClose, onCreate, entities, onToast}) => {
-  const [d, setD] = useState(null);
-  useEffect(()=>{ if(open) setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",entityIds:[],targets:["dbt"]}); },[open]);
+// ── Create a semantic model. You pick assets; EDG derives the entity. You declare the
+//    joins; EDG checks them. Nothing about the model is invented on your behalf.
+const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) => {
+  const SECTIONS = [
+    {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
+    {k:"assets",   l:"Assets",    d:"The tables this model is built from"},
+    {k:"joins",    l:"Joins",     d:"How those tables connect"},
+    {k:"targets",  l:"Publish to",d:"Where it gets compiled"},
+    {k:"review",   l:"Review",    d:"What will be created"},
+  ];
+  const [sec, setSec] = useState("identity");
+  const [d, setD]     = useState(null);
+  const [q, setQ]     = useState("");
+  const [srcF, setSrcF] = useState("all");
+  const [domF, setDomF] = useState("all");
+  const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:""});
+
+  useEffect(()=>{ if(open){ setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
+    setNj({from:"",fromCol:"",to:"",toCol:""});
+    setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",assetIds:[],joins:[],targets:["dbt"]}); } },[open]);
   if(!open || !d) return null;
-  const ready = d.name.trim() && d.owner && d.entityIds.length>0;
+
+  const pool = slModellableAssets();
+  const sources = [...new Set(pool.map(a=>a.service))].sort();
+  const domains = [...new Set(pool.map(a=>a.domain))].sort();
+  const shown = pool.filter(a =>
+    (srcF==="all" || a.service===srcF) &&
+    (domF==="all" || a.domain===domF) &&
+    (!q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase())));
+
+  // Entities are derived here so the review, the join builder and the created model all
+  // see exactly the same objects the user will get.
+  const derived = d.assetIds.map(id=>{
+    const a = pool.find(x=>x.id===id); if(!a) return null;
+    return {asset:a, ...slEntityForAsset(a, existingEntities)};
+  }).filter(Boolean);
+  const entOf = (eid) => (derived.find(x=>x.entity.id===eid)||{}).entity;
+
+  const toggleAsset = (id) => setD(p=>({...p,
+    assetIds: p.assetIds.includes(id) ? p.assetIds.filter(x=>x!==id) : [...p.assetIds, id],
+    joins: p.assetIds.includes(id) ? p.joins.filter(j=>{
+      const e = slEntityForAsset(pool.find(x=>x.id===id), existingEntities).entity;
+      return j.from!==e.id && j.to!==e.id;
+    }) : p.joins,
+  }));
+
+  const jCheck = nj.from && nj.to ? slCheckJoin(entOf(nj.from), nj.fromCol, entOf(nj.to), nj.toCol) : null;
+  const addJoin = () => {
+    if(!nj.from||!nj.to||!nj.fromCol||!nj.toCol){ onToast&&onToast("Pick both sides of the join.","error"); return; }
+    setD(p=>({...p, joins:[...p.joins, {id:"r_"+Date.now(), from:nj.from, to:nj.to, fromKey:nj.fromCol, toKey:nj.toCol,
+      cardinality:"many_to_one", filterDirection:"single", fanOutSafe:!(jCheck&&jCheck.fanOut),
+      note:`Declared by hand. ${jCheck&&jCheck.fanOut?"Flagged: the right-hand column is not unique.":"Checked against column profiles."}`}]}));
+    setNj({from:"",fromCol:"",to:"",toCol:""});
+    onToast&&onToast("Join added","success");
+  };
+
+  const noKey = derived.filter(x=>!x.entity.key);
+  const ready = d.name.trim() && d.owner && d.assetIds.length>0 && noKey.length===0;
+
+  const Field = ({label,hint,children}) => (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>{label}</div>
+      {children}
+      {hint&&<div style={{fontSize:11,color:T.textMuted,marginTop:4,lineHeight:1.5}}>{hint}</div>}
+    </div>
+  );
+
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
       <div className="slideInRight" onClick={e=>e.stopPropagation()}
-        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        style={{position:"absolute",top:0,right:0,bottom:0,width:900,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>New semantic model</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>A set of agreed numbers over a shared grain.</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Pick the tables. EDG works out what one row means. You declare how they join.</div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
-          <SLField label="Name" hint="Name it after the business area, not the tables underneath."><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Commerce Revenue"/></SLField>
-          <SLField label="What it is for"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="Order-grain revenue for the commerce domain."/></SLField>
-          <div style={{display:"flex",gap:12}}>
-            <div style={{flex:1}}><SLField label="Domain"><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} options={["Finance","Commerce","Product","Marketing"]}/></SLField></div>
-            <div style={{flex:1}}><SLField label="Owner"><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField></div>
+
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bg,padding:"12px 0",overflowY:"auto"}}>
+            {SECTIONS.map((s,i)=>{
+              const on = sec===s.k;
+              const count = s.k==="assets" ? d.assetIds.length : s.k==="joins" ? d.joins.length : null;
+              return (
+                <button key={s.k} onClick={()=>setSec(s.k)}
+                  style={{width:"100%",textAlign:"left",padding:"10px 16px",background:on?T.bgActive:"transparent",border:"none",borderLeft:`2px solid ${on?T.accent:"transparent"}`,cursor:"pointer",display:"block"}}>
+                  <div style={{fontSize:12,fontWeight:on?700:600,color:on?T.text:T.textSub}}>
+                    {i+1}. {s.l}{count!==null&&count>0?` · ${count}`:""}
+                  </div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,lineHeight:1.4}}>{s.d}</div>
+                </button>
+              );
+            })}
           </div>
-          <SLField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Select a steward" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField>
-          <SLField label="Entities" hint="What this model counts and joins across. You can add more later.">
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {entities.map(e=>{
-                const on=d.entityIds.includes(e.id);
-                return <button key={e.id} onClick={()=>setD({...d, entityIds: on?d.entityIds.filter(x=>x!==e.id):[...d.entityIds,e.id]})}
-                  style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                  <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{e.name}</span>
-                  <span style={{fontSize:11,color:T.textMuted}}>one row per {e.key}</span>
-                </button>;
-              })}
-            </div>
-          </SLField>
-          <SLField label="Publishes to" hint="Where it is compiled and sent. Always a reviewed change set, never a live write.">
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
-                const on=d.targets.includes(p.k);
-                return <button key={p.k} onClick={()=>setD({...d, targets: on?d.targets.filter(x=>x!==p.k):[...d.targets,p.k]})}
-                  style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                  <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
-                  <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
-                </button>;
-              })}
-            </div>
-          </SLField>
+
+          <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
+
+            {sec==="identity" && <>
+              <Field label="Name" hint="Name it after the business area, not the tables underneath.">
+                <Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Commerce Revenue"/></Field>
+              <Field label="What it is for">
+                <Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="Order-grain revenue for the commerce domain."/></Field>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}><Field label="Domain"><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} options={["Finance","Commerce","Product","Marketing","Platform","ML"]}/></Field></div>
+                <div style={{flex:1}}><Field label="Owner"><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></Field></div>
+              </div>
+              <Field label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Select a steward" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></Field>
+            </>}
+
+            {sec==="assets" && <>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12,lineHeight:1.6,maxWidth:740}}>
+                Pick the tables this model is built from. For each one EDG reads the schema and the column profiles to work out the grain — what one row means — and shows you the evidence. Only tables and views with a known schema are listed; an object or a folder has no rows to count.
+              </div>
+
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:200}}><Input2 placeholder="Search assets…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+                <div style={{width:150}}><SLSelect value={srcF} onChange={e=>setSrcF(e.target.value)}
+                  options={[{v:"all",l:"All sources"},...sources.map(s=>({v:s,l:(SL_PLATFORMS[s]||{}).label||s}))]}/></div>
+                <div style={{width:150}}><SLSelect value={domF} onChange={e=>setDomF(e.target.value)}
+                  options={[{v:"all",l:"All domains"},...domains.map(s=>({v:s,l:s}))]}/></div>
+              </div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:10}}>{shown.length} asset{shown.length===1?"":"s"} · {d.assetIds.length} selected</div>
+
+              <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:380,overflowY:"auto"}}>
+                {shown.map(a=>{
+                  const on = d.assetIds.includes(a.id);
+                  const k  = slDetectKey(a.name);
+                  const reused = (existingEntities||[]).find(e=>e.assetId===a.id);
+                  return (
+                    <button key={a.id} onClick={()=>toggleAsset(a.id)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                      <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{a.name}</span>
+                          <TypeBadge type={a.type}/>
+                          {reused && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}33`}}>already an entity</span>}
+                        </div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{a.db}</div>
+                      </div>
+                      <div style={{width:180,flexShrink:0,fontSize:10.5,color:k?T.green:T.amber,lineHeight:1.4}}>
+                        {k ? `grain: ${k.col}` : "no key detected"}
+                        <div style={{color:T.textMuted}}>{k?k.why:"cannot carry a grain"}</div>
+                      </div>
+                      <span style={{fontSize:10.5,color:T.textMuted,width:70,flexShrink:0}}>{a.domain}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {derived.length>0 && <div style={{marginTop:16}}>
+                <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:8}}>ENTITIES EDG WILL CREATE</div>
+                {derived.map(({asset,entity,created})=>(
+                  <div key={entity.id} style={{background:T.bgSurface,border:`1px solid ${entity.key?T.border:T.amber+"55"}`,borderRadius:9,padding:"11px 13px",marginBottom:7}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
+                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{entity.name}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>from {asset.name}</span>
+                      {!created && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}33`}}>reused — shared with other models</span>}
+                    </div>
+                    <div style={{fontSize:11.5,color:entity.key?T.textSub:T.amber}}>
+                      {entity.key ? `one row per ${entity.key}` : "No key detected — this model cannot be certified until a grain is declared."}
+                    </div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{entity.evidence}</div>
+                  </div>
+                ))}
+              </div>}
+            </>}
+
+            {sec==="joins" && <>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
+                You declare the joins. EDG deliberately does not guess them from lineage or foreign keys — a wrongly inferred join silently fans out every measure in the model and nobody notices until an audit. What EDG does do is check the join you drew against the column profiles and tell you when it will misbehave.
+              </div>
+
+              {derived.length<2
+                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                    Pick at least two assets before declaring a join.
+                  </div>
+                : <>
+                  <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:10}}>ADD A JOIN</div>
+                    <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+                      <div style={{flex:1,minWidth:130}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Many side</div>
+                        <SLSelect value={nj.from} onChange={e=>setNj({...nj,from:e.target.value,fromCol:""})} placeholder="entity"
+                          options={derived.map(x=>({v:x.entity.id,l:x.entity.name}))}/>
+                      </div>
+                      <div style={{flex:1,minWidth:130}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Column</div>
+                        <SLSelect value={nj.fromCol} onChange={e=>setNj({...nj,fromCol:e.target.value})} placeholder="column"
+                          options={(SCHEMA[(entOf(nj.from)||{}).table]||[]).map(c=>c.name)}/>
+                      </div>
+                      <div style={{paddingBottom:8,color:T.textMuted,fontSize:14}}>→</div>
+                      <div style={{flex:1,minWidth:130}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>One side</div>
+                        <SLSelect value={nj.to} onChange={e=>setNj({...nj,to:e.target.value,toCol:""})} placeholder="entity"
+                          options={derived.filter(x=>x.entity.id!==nj.from).map(x=>({v:x.entity.id,l:x.entity.name}))}/>
+                      </div>
+                      <div style={{flex:1,minWidth:130}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Column</div>
+                        <SLSelect value={nj.toCol} onChange={e=>setNj({...nj,toCol:e.target.value})} placeholder="column"
+                          options={(SCHEMA[(entOf(nj.to)||{}).table]||[]).map(c=>c.name)}/>
+                      </div>
+                    </div>
+
+                    {jCheck && nj.fromCol && nj.toCol && <div style={{marginTop:12,padding:"10px 12px",borderRadius:8,
+                      background:jCheck.ok?"rgba(22,163,74,.07)":T.amberDim, border:`1px solid ${jCheck.ok?T.green+"35":T.amber+"35"}`}}>
+                      {jCheck.ok
+                        ? <div style={{fontSize:11.5,color:T.green,fontWeight:600}}>✓ Checked — {entOf(nj.toCol?nj.to:"")&&""}the right-hand column is the key, so this join cannot fan out.</div>
+                        : jCheck.issues.map((s,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:2}}>· {s}</div>)}
+                    </div>}
+
+                    <div style={{marginTop:12}}><Btn small variant="primary" icon={Ic.plus(11)} onClick={addJoin}>Add join</Btn></div>
+                  </div>
+
+                  {d.joins.length===0
+                    ? <div style={{fontSize:12,color:T.textMuted}}>No joins yet. A model can have none — every metric then sits on a single table.</div>
+                    : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                        {d.joins.map((j,i)=>{
+                          const f=entOf(j.from), t=entOf(j.to);
+                          return (
+                            <div key={j.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<d.joins.length-1?`1px solid ${T.border}`:"none"}}>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12,fontWeight:600,color:T.text}}>
+                                  {f&&f.name} → {t&&t.name} <span style={{color:T.textMuted,fontWeight:400,fontFamily:"ui-monospace,monospace"}}>{j.fromKey} = {j.toKey}</span>
+                                </div>
+                                <div style={{fontSize:11,color:j.fanOutSafe?T.textMuted:T.amber,marginTop:2}}>
+                                  {j.fanOutSafe?"many to one · cannot fan out":"many to one · flagged: may fan out"}
+                                </div>
+                              </div>
+                              <button onClick={()=>setD(p=>({...p,joins:p.joins.filter(x=>x.id!==j.id)}))}
+                                style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:4}}>{Ic.x(13)}</button>
+                            </div>
+                          );
+                        })}
+                      </div>}
+                </>}
+            </>}
+
+            {sec==="targets" && <>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:720}}>
+                Where this model gets compiled and sent. Publishing always opens a reviewed change set — EDG never writes into a platform directly.
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
+                  const on=d.targets.includes(p.k);
+                  return <button key={p.k} onClick={()=>setD({...d, targets: on?d.targets.filter(x=>x!==p.k):[...d.targets,p.k]})}
+                    style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                    <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                    <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
+                    <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
+                  </button>;
+                })}
+              </div>
+            </>}
+
+            {sec==="review" && <>
+              <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:9}}>WHAT WILL BE CREATED</div>
+              <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
+                {[["Model", d.name||"—"],
+                  ["Owner", `${d.owner||"—"} · steward ${d.steward||d.owner||"—"}`],
+                  ["Assets", d.assetIds.length ? derived.map(x=>x.asset.name).join(", ") : "none"],
+                  ["Entities", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
+                  ["Joins", d.joins.length ? `${d.joins.length} declared` : "none — every metric sits on one table"],
+                  ["Publishes to", d.targets.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")||"—"],
+                ].map(([k,v],i,a)=>(
+                  <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                    <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
+                    <span style={{fontSize:11.5,color:T.text,fontWeight:500}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+              {noKey.length>0 && <div style={{padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,marginBottom:12}}>
+                <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>{noKey.length} asset{noKey.length===1?"":"s"} without a detectable grain</div>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{noKey.map(x=>x.entity.table).join(", ")} — remove them, or declare a key before this model can be certified.</div>
+              </div>}
+              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+                The model is created as a draft. Metrics are added afterwards, against the grain of the entities above.
+              </div>
+            </>}
+          </div>
         </div>
+
         <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
-          <span style={{fontSize:11.5,color:T.textMuted}}>{ready?"Ready to create.":"Name, owner and at least one entity are required."}</span>
+          <span style={{fontSize:11.5,color:ready?T.green:T.textMuted}}>
+            {ready ? "Ready to create." : !d.name.trim() ? "Give the model a name." : !d.owner ? "Pick an owner."
+              : d.assetIds.length===0 ? "Pick at least one asset." : "Every asset needs a detectable grain."}
+          </span>
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
             <Btn variant="primary" disabled={!ready} onClick={()=>onCreate({
-              id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
-              steward:d.steward||d.owner, status:"Draft", entityIds:d.entityIds, targets:d.targets,
-              lastPublished:null, created:new Date().toISOString().slice(0,10)})}>Create model</Btn>
+              model:{id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
+                     steward:d.steward||d.owner, status:"Draft", entityIds:derived.map(x=>x.entity.id),
+                     targets:d.targets, lastPublished:null, created:new Date().toISOString().slice(0,10),
+                     sync:{enabled:true, targets:d.targets, frequency:"daily", onDrift:"flag"}},
+              newEntities: derived.filter(x=>x.created).map(x=>x.entity),
+              joins: d.joins,
+            })}>Create model</Btn>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
 // ═══════════════════════════════════════════════════════════════════════════
 // THE ADAPTERS — layer 3 of the format. These actually compile.
 // Each takes the neutral model and emits real files for one platform. Nothing here
@@ -34820,9 +35271,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [gTerms] = useGlossaryTerms();
   const {models, metrics, vendor, entities, rels, concepts, crels} = store;
 
-  const [rootTab, setRootTab] = useState("models");
-  const [selCon,  setSelCon]  = useState(null);
-  const [conFocus,setConFocus]= useState(null);
   const [selMdl,  setSelMdl]  = useState(null);
   const [tab,     setTab]     = useState("overview");
   const [selId,   setSelId]   = useState(null);
@@ -34860,8 +35308,17 @@ const SemanticLayerView = ({onToast, onNav}) => {
     setStore(prev=>({...prev, vendor:prev.vendor.map(v=>v.id===vId?{...v, mappedTo:metricId, conformance:"drifted",
       note:"Newly claimed. Differences against the certified definition have not been reviewed yet."}:v)}));
     setMapFor(null); onToast && onToast("Claimed. It stays flagged until someone compares the two definitions.","success"); };
-  const createModel = (m) => { setStore(prev=>({...prev, models:[...prev.models, m]})); setNewMdlOpen(false); setSelMdl(m.id); setTab("overview");
-    onToast && onToast(`${m.name} created`,"success"); };
+  const createModel = ({model, newEntities, joins}) => {
+    setStore(prev=>({...prev,
+      models:   [...prev.models, model],
+      entities: [...prev.entities, ...newEntities],
+      rels:     [...prev.rels, ...joins],
+    }));
+    setNewMdlOpen(false); setSelMdl(model.id); setTab("overview");
+    const bits = [`${newEntities.length} entit${newEntities.length===1?"y":"ies"} derived`];
+    if(joins.length) bits.push(`${joins.length} join${joins.length===1?"":"s"}`);
+    onToast && onToast(`${model.name} created · ${bits.join(" · ")}`,"success");
+  };
 
   const runSync = () => {
     setSyncing(true); setFindings(null);
@@ -34885,8 +35342,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
   // ─────────────────────────────────────────────────────────────
   if(mdl){
     const st = statsFor(mdl);
-    const TABS = [{k:"overview",l:"Overview"},{k:"relationships",l:"Relationships"},
-                  {k:"metrics",l:`Metrics · ${mMetrics.length}`},{k:"alignment",l:`Alignment · ${mVendor.length}`}];
+    const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
+    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"ER Diagram"},
+                  {k:"metrics",l:`Metrics · ${mMetrics.length}`},{k:"alignment",l:`Alignment · ${mVendor.length}`},
+                  {k:"sync",l:sync.enabled?"Sync":"Sync · off"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
     const startEdit = () => { setDraft({...mdl}); setEditing(true); };
@@ -34967,7 +35426,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                         </div>
                       );
                       return (
-                        <div key={e.id} onClick={()=>{setRootTab("concepts");setSelMdl(null);setSelCon(c.id);}}
+                        <div key={e.id} onClick={()=>onNav&&onNav("glossary")}
                           style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",flexWrap:"wrap"}}>
                           <span style={{fontSize:12.5,fontWeight:700,color:T.text,minWidth:96}}>{c.name}</span>
                           <span style={{fontSize:11,color:T.textMuted}}>realised by <b style={{color:T.textSub}}>{e.name}</b></span>
@@ -35072,7 +35531,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
               </div>
             )}
 
-            {tab==="relationships" && <>
+            {tab==="erd" && <>
               <SH title="Entity relationship diagram"
                   sub="Entities are what you count; the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
               <SLModelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} selected={selEnt} onSelect={setSelEnt}/>
@@ -35177,6 +35636,94 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     })}
                   </div>}
             </>}
+
+            {tab==="sync" && (()=>{
+              const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
+              const FREQ = [{v:"hourly",l:"Every hour"},{v:"daily",l:"Daily"},{v:"weekly",l:"Weekly"},{v:"manual",l:"Manual only"}];
+              const DRIFT = [
+                {v:"flag",      l:"Flag it here",        d:"The definition is marked out of step in Alignment. Nobody is told."},
+                {v:"notify",    l:"Notify the owner",    d:"The model owner gets a notification when a definition drifts."},
+                {v:"work_item", l:"Open a work item",    d:"A task lands in the steward's Inbox and stays open until someone resolves it."},
+              ];
+              return (
+                <div style={{maxWidth:760}}>
+                  <SH title="Reverse sync"
+                      sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
+                    <button onClick={()=>setSync({enabled:!sync.enabled})}
+                      style={{display:"flex",alignItems:"center",gap:12,background:"transparent",border:"none",cursor:"pointer",padding:0,width:"100%",textAlign:"left"}}>
+                      <span style={{width:38,height:22,borderRadius:11,background:sync.enabled?T.accent:T.bgActive,border:`1px solid ${sync.enabled?T.accent:T.border}`,position:"relative",flexShrink:0,transition:"all .15s"}}>
+                        <span style={{position:"absolute",top:2,left:sync.enabled?18:2,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
+                      </span>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{sync.enabled?"Reverse sync is on":"Reverse sync is off"}</div>
+                        <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+                          {sync.enabled?`Reads ${(sync.targets||[]).length} platform${(sync.targets||[]).length===1?"":"s"} ${String(FREQ.find(x=>x.v===sync.frequency)?.l||"").toLowerCase()}.`
+                                       :"No definitions are read back. Drift will go unnoticed."}
+                        </div>
+                      </div>
+                      <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>{mdl.lastSynced?`last run ${mdl.lastSynced}`:"never run"}</span>
+                    </button>
+                  </div>
+
+                  <SH title="What to read" sub="Tableau is read-only everywhere — it is the one platform EDG never publishes into, so reading it back is the only way to know what it says."/>
+                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
+                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none").map(p=>{
+                      const on=(sync.targets||[]).includes(p.k);
+                      return (
+                        <button key={p.k} onClick={()=>setSync({targets: on?(sync.targets||[]).filter(x=>x!==p.k):[...(sync.targets||[]),p.k]})}
+                          style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
+                          <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                          <SLSysChip system={p.k}/>
+                          <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{p.artifact}</span>
+                          {p.adapter==="harvest_only" && <span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>read only</span>}
+                          {!(mdl.targets||[]).includes(p.k) && p.adapter==="ready" &&
+                            <span style={{fontSize:10.5,color:T.textMuted}}>not a publish target</span>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{display:"flex",gap:24,marginBottom:24,flexWrap:"wrap",opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
+                    <div style={{flex:1,minWidth:220}}>
+                      <SH title="How often"/>
+                      <SLSelect value={sync.frequency} onChange={e=>setSync({frequency:e.target.value})} options={FREQ.map(x=>({v:x.v,l:x.l}))}/>
+                    </div>
+                  </div>
+
+                  <div style={{opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
+                    <SH title="When something has drifted" sub="Finding drift and doing nothing about it is how a governance tool becomes a dashboard nobody opens."/>
+                    <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:24}}>
+                      {DRIFT.map(o=>{
+                        const on = sync.onDrift===o.v;
+                        return (
+                          <button key={o.v} onClick={()=>setSync({onDrift:o.v})}
+                            style={{display:"flex",gap:11,alignItems:"flex-start",padding:"11px 13px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
+                            <span style={{width:15,height:15,borderRadius:"50%",border:`1.5px solid ${on?T.accent:T.borderLight}`,flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              {on&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}
+                            </span>
+                            <div>
+                              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{o.l}</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.5}}>{o.d}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <SH title="Run it now" sub="A manual run does not change the schedule."/>
+                  <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    <Btn icon={Ic.refresh(12)} onClick={()=>{setTab("overview");runSync();}} disabled={!sync.enabled||syncing}>
+                      {syncing?"Reading…":"Run reverse sync"}
+                    </Btn>
+                    <span style={{fontSize:11.5,color:T.textMuted}}>
+                      {sync.enabled?"Results appear on Overview.":"Turn reverse sync on first."}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             {tab==="alignment" && <>
               <SH title="Where the tools disagree" sub="Every number in this model that more than one tool defines, and how many copies are out of step."/>
@@ -35316,71 +35863,18 @@ const SemanticLayerView = ({onToast, onNav}) => {
   // ─────────────────────────────────────────────────────────────
   const shown = models.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.desc||"").toLowerCase().includes(q.toLowerCase()));
   const allDisagree = vendor.filter(v=>v.conformance==="drifted").length;
-  const unrealised  = concepts.filter(c=>slConceptCoverage(c, entities, metrics).state==="unrealised").length;
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Semantic Layer"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}}>
-          <Metric label="Concepts"          value={String(concepts.length)} sub={`${unrealised} not implemented`} color={unrealised?T.amber:T.violet}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
           <Metric label="Semantic Models"   value={String(models.length)}   sub="registered"        color={T.accent}/>
           <Metric label="Metrics"           value={String(metrics.length)}  sub="across all models" color={T.blue}/>
           <Metric label="Definitions Found" value={String(vendor.length)}   sub="in your tools"/>
           <Metric label="Disagreeing"       value={String(allDisagree)}     sub="out of step"       color={allDisagree?T.amber:T.green}/>
         </div>
 
-        <Tabs2 tabs={[{key:"models",label:`Models · ${models.length}`},{key:"concepts",label:`Concepts · ${concepts.length}`}]}
-          active={rootTab} onChange={k=>{setRootTab(k);setQ("");}}/>
-
-        {rootTab==="concepts" && <>
-          <SH title="Concept map"
-              sub="The business model, independent of any table. Solid lines are taxonomy — what is a kind of what. Dashed lines are business relationships, which stay true however a given system happens to join them."/>
-          <SLConceptCanvas concepts={concepts} crels={crels} entities={entities} metrics={metrics}
-            selected={conFocus} onSelect={setConFocus}/>
-
-          <div style={{marginTop:24}}>
-            <SH title="Concepts" sub="A concept nobody implements is a gap you can act on — the number a glossary alone cannot give you."/>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-            <div style={{flex:1}}><Input2 placeholder="Search concepts, synonyms, definitions…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
-          </div>
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-            {concepts.filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase())
-                              ||(c.definition||"").toLowerCase().includes(q.toLowerCase())
-                              ||(c.synonyms||[]).some(s=>s.toLowerCase().includes(q.toLowerCase())))
-              .map((c,i,a)=>{
-              const cov = slConceptCoverage(c, entities, metrics);
-              const cfg = SL_COV[cov.state];
-              const parent = concepts.find(x=>x.id===c.broader);
-              return (
-                <div key={c.id} className="row-hover" onClick={()=>setSelCon(c.id)}
-                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
-                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{c.name}</span>
-                      <SLStatusChip status={c.status}/>
-                      <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:cfg.bg,color:cfg.c,border:`1px solid ${cfg.c}33`}}>{cfg.l}</span>
-                      {parent && <span style={{fontSize:10.5,color:T.violet}}>▲ {parent.name}</span>}
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.definition}</div>
-                  </div>
-                  <div style={{width:190,flexShrink:0,display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {(c.synonyms||[]).slice(0,3).map(s=>(
-                      <span key={s} style={{fontSize:10,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 6px"}}>{s}</span>
-                    ))}
-                  </div>
-                  <div style={{width:120,flexShrink:0,fontSize:11,color:T.textMuted}}>
-                    {cov.realised.length ? `${cov.realised.length} entity · ${cov.metrics.length} metric${cov.metrics.length===1?"":"s"}` : "—"}
-                  </div>
-                  <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
-                </div>
-              );
-            })}
-          </div>
-        </>}
-
-        {rootTab==="models" && <>
 
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
           <div style={{flex:1}}>
@@ -35441,13 +35935,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
             );
           })}
         </div>
-        </>}
       </div>
 
-      <SLNewModelDrawer open={newMdlOpen} onClose={()=>setNewMdlOpen(false)} onCreate={createModel} entities={entities} onToast={onToast}/>
-      <SLConceptDrawer concept={concepts.find(c=>c.id===selCon)} concepts={concepts} crels={crels}
-        entities={entities} metrics={metrics} models={models} gTerms={gTerms}
-        onClose={()=>setSelCon(null)} onNav={onNav}/>
+      <SLNewModelDrawer open={newMdlOpen} onClose={()=>setNewMdlOpen(false)} onCreate={createModel} existingEntities={entities} onToast={onToast}/>
     </div>
   );
 };
