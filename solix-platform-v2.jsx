@@ -32989,21 +32989,157 @@ const SL_AGGS   = ["sum","count","count distinct","average","min","max"];
 const SL_GRAINS = ["day","week","month","quarter","year"];
 const SL_WINDOWS= ["quarter to date","year to date","month to date","trailing 12 months","all time"];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// THE CONCEPT LAYER — the ontology, and the thing that beats the incumbents.
+// ───────────────────────────────────────────────────────────────────────────
+// Collibra ships a real ontology: a configurable operating model of asset types and
+// relation types, bridged to physical data by "Business Asset represents / represented
+// by Data Asset". Alation positions its glossary and lineage as the raw material an
+// ontology is built FROM. Both produce a model that DESCRIBES. Neither compiles.
+//
+// So the differentiator is not having an ontology — it is that ours is LOAD-BEARING:
+//
+//   Concept  ──realised by──▶  Entity  ──bound to──▶  physical column  ──▶  artifact
+//
+// A concept's synonyms are not documentation. They compile into Snowflake's
+// WITH SYNONYMS, dbt meta and Power BI descriptions, which is exactly what lets a
+// natural-language question resolve to the right certified metric. An ontology that
+// changes the generated SQL is worth maintaining; one that sits in a wiki is not.
+//
+// Deliberately LIGHT. Collibra's operating model is admin-configured and heavy — that
+// is their moat and it is also the reason it stalls. Ours is four things a business
+// user can hold: a concept, its other names, what it is part of, and how it relates
+// to other concepts.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Relation types are DATA, not code — the same extensibility principle the platform
+// profiles use. A customer adds a relation type without anyone shipping a release.
+const SL_REL_TYPES = {
+  placed_by:   {l:"is placed by",     inv:"places",          card:"many_to_one"},
+  belongs_to:  {l:"belongs to",       inv:"has",             card:"many_to_one"},
+  part_of:     {l:"is part of",       inv:"contains",        card:"many_to_one"},
+  paid_by:     {l:"is paid by",       inv:"pays for",        card:"many_to_one"},
+  classifies:  {l:"classifies",       inv:"is classified by",card:"one_to_many"},
+  supplied_by: {l:"is supplied by",   inv:"supplies",        card:"many_to_one"},
+};
+
+// A concept is a business thing. It has no table, no key and no SQL — that is the
+// point. Entities realise it; several entities in different systems may realise the
+// same concept, which is precisely what a physical-only model cannot express.
+const SL_CONCEPTS = [
+  {id:"c_customer", name:"Customer", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:"t1",
+   definition:"A person or organisation that has placed at least one order with the group.",
+   synonyms:["Client","Account","Buyer","Purchaser"], broader:"c_party",
+   note:"The most overloaded word in the business. Marketing means a lead, Finance means a payer, Support means a contact."},
+
+  {id:"c_party", name:"Party", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:null,
+   definition:"Any legal person the group deals with — a customer, a supplier, or both.",
+   synonyms:["Legal entity","Counterparty"], broader:null,
+   note:"The root of the party hierarchy. Nothing is measured at this grain; it exists so Customer and Supplier share a parent."},
+
+  {id:"c_order", name:"Order", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:null,
+   definition:"A commitment by a customer to buy goods or services at an agreed price.",
+   synonyms:["Sales order","Purchase","Booking"], broader:null,
+   note:"An order is not revenue. Revenue is recognised from an order, which is why they are separate concepts."},
+
+  {id:"c_transaction", name:"Transaction", domain:"Finance", owner:"sarah.kim", status:"Approved", termId:null,
+   definition:"A single posted movement of value in the general ledger.",
+   synonyms:["Ledger entry","Posting","Journal line"], broader:null,
+   note:"Posted, not committed. A cancelled order never becomes a transaction."},
+
+  {id:"c_product", name:"Product", domain:"Commerce", owner:"dev.patel", status:"Draft", termId:null,
+   definition:"A sellable item or service in the group catalogue.",
+   synonyms:["SKU","Item","Article"], broader:null,
+   note:"Declared but not yet realised by any entity — no table in the model carries product grain."},
+
+  {id:"c_supplier", name:"Supplier", domain:"Procurement", owner:"sarah.kim", status:"Draft", termId:null,
+   definition:"A legal entity from which the group purchases goods or services.",
+   synonyms:["Vendor","Provider"], broader:"c_party",
+   note:"Shares the Party parent with Customer. The same legal entity is often both."},
+];
+
+// Business relationships, in business language. These are NOT joins. A join is how a
+// relationship happens to be implemented once you pick a table; the relationship is
+// true whether or not anyone has modelled it physically.
+const SL_CONCEPT_RELS = [
+  {id:"cr1", from:"c_order",       to:"c_customer", type:"placed_by",
+   note:"Every order is placed by exactly one customer. Holds in every system, however it is joined."},
+  {id:"cr2", from:"c_transaction", to:"c_customer", type:"paid_by",
+   note:"A ledger posting settles against the account holder."},
+  {id:"cr3", from:"c_order",       to:"c_product",  type:"part_of",
+   note:"Order lines reference products. Not yet realised — Product has no entity."},
+  {id:"cr4", from:"c_customer",    to:"c_party",    type:"part_of",
+   note:"Taxonomy: Customer is a kind of Party."},
+  {id:"cr5", from:"c_supplier",    to:"c_party",    type:"part_of",
+   note:"Taxonomy: Supplier is a kind of Party."},
+];
+
+// ── Coverage. A concept nobody has realised is a governance gap you can act on, and
+//    the number Collibra cannot give you: it knows the concept exists, but not whether
+//    anything computable implements it.
+const slConceptCoverage = (c, ents, mets) => {
+  const realised = ents.filter(e=>e.concept===c.id);
+  const metrics  = mets.filter(m=>realised.some(e=>e.id===m.entity));
+  return {realised, metrics,
+          state: realised.length===0 ? "unrealised" : metrics.length===0 ? "no_metrics" : "live"};
+};
+const SL_COV = {
+  live:       {l:"Live",        c:"#16a34a", bg:"rgba(22,163,74,.1)",  d:"Realised by an entity and measured."},
+  no_metrics: {l:"No metrics",  c:"#d97706", bg:"rgba(217,119,6,.1)",  d:"Realised by an entity, but nothing is measured at that grain."},
+  unrealised: {l:"Unrealised",  c:"#9090a8", bg:"rgba(144,144,168,.12)",d:"Declared, but no entity implements it. Nothing can be asked of it."},
+};
+
+// Every name a concept answers to — its own, plus its synonyms. This is what compiles
+// into WITH SYNONYMS and what makes a natural-language question land on the right metric.
+const slConceptNames = (c) => [c.name, ...(c.synonyms||[])];
+
+// Taxonomy walk: a concept's ancestors, so a question about Party can reach Customer.
+const slBroaderChain = (c, all) => {
+  const out = []; let cur = c;
+  while(cur && cur.broader){ const p = all.find(x=>x.id===cur.broader); if(!p || out.includes(p)) break; out.push(p); cur = p; }
+  return out;
+};
+
+// ── Layout for the concept map. Taxonomy runs vertically (a parent sits above its
+//    children); non-taxonomy relationships are drawn as labelled edges between peers.
+//    Same deliberate choice as the ER canvas: positions computed in JS, drawn as inline
+//    SVG, so nothing depends on measuring the DOM.
+const slConceptLayout = (concepts, crels) => {
+  const NW=168, NH=64, GAPX=54, GAPY=78, PADX=24, PADY=22;
+  const depth = (c) => slBroaderChain(c, concepts).length;
+  const rows = {};
+  concepts.forEach(c=>{ const d=depth(c); (rows[d]=rows[d]||[]).push(c); });
+  const nodes = [];
+  Object.keys(rows).sort((a,b)=>a-b).forEach(d=>{
+    rows[d].forEach((c,i)=>nodes.push({...c, x:PADX + i*(NW+GAPX), y:PADY + Number(d)*(NH+GAPY), w:NW, h:NH}));
+  });
+  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  const edges = crels.map(r=>{
+    const a=byId[r.from], b=byId[r.to]; if(!a||!b) return null;
+    const taxonomy = r.type==="part_of" && a.broader===b.id;
+    return {...r, taxonomy,
+            x1:a.x+a.w/2, y1:taxonomy? a.y : a.y+a.h/2,
+            x2:b.x+b.w/2, y2:taxonomy? b.y+b.h : b.y+b.h/2};
+  }).filter(Boolean);
+  const maxRow = Math.max(...Object.values(rows).map(r=>r.length), 1);
+  return {nodes, edges, width: PADX*2 + maxRow*(NW+GAPX), height: PADY*2 + Object.keys(rows).length*(NH+GAPY)};
+};
+
 // ── Semantic entities. Grain is DECLARED, and proposed from profiling: a column at
 //    distinctPct 100 with no nulls is a candidate key. Without a declared grain a metric
 //    cannot be certified, because a number with no grain is what makes BI disagree.
 const SL_ENTITIES = [
-  {id:"e_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_order", concept:"c_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","updated_at"], desc:"One row per placed order. The grain every revenue metric resolves to.",
    evidence:"order_id · 100% distinct · 0% null over 48.2M rows",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.ORDERS", databricks:"main.commerce.orders",
              dbt:"ref('fct_orders')", powerbi:"Orders", tableau:"Orders_Certified"}},
-  {id:"e_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_customer", concept:"c_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","last_login"], desc:"One row per registered user account.",
    evidence:"user_id · unique constraint · 0% null",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.USERS", databricks:"main.commerce.users",
              dbt:"ref('dim_customers')", powerbi:"Customers", tableau:"Customers"}},
-  {id:"e_txn", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
+  {id:"e_txn", concept:"c_transaction", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
    timeDims:["txn_date","created_at"], desc:"One row per general-ledger transaction.",
    evidence:"txn_id · primary key · 0% null",
    bindings:{snowflake:"ORACLE_FIN.GL.TRANSACTIONS", databricks:"main.finance.transactions",
@@ -33295,10 +33431,34 @@ const slModelToESM = (mdl, ents, rels, mets) => {
   L.push(`owner: ${mdl.owner}`, `steward: ${mdl.steward}`, `domain: ${mdl.domain}`);
   L.push(`targets: [${(mdl.targets||[]).join(", ")}]`, "");
 
+  const usedConcepts = ents.map(e=>_slState.concepts.find(c=>c.id===e.concept)).filter(Boolean)
+                            .filter((c,i,a)=>a.indexOf(c)===i);
+  if(usedConcepts.length){
+    L.push("concepts:");
+    usedConcepts.forEach(c=>{
+      L.push(`  - name: ${slSlug(c.name)}`);
+      L.push(`    label: ${c.name}`);
+      L.push(`    definition: "${c.definition}"`);
+      L.push(`    synonyms: [${(c.synonyms||[]).map(s=>`"${s}"`).join(", ")}]`);
+      const br = _slState.concepts.find(x=>x.id===c.broader);
+      if(br) L.push(`    broader: ${slSlug(br.name)}`);
+      const rl = _slState.crels.filter(r=>r.from===c.id && r.type!=="part_of");
+      if(rl.length){
+        L.push(`    relationships:`);
+        rl.forEach(r=>{
+          const t=_slState.concepts.find(x=>x.id===r.to); if(!t) return;
+          L.push(`      - { ${(SL_REL_TYPES[r.type]||{}).l||r.type}: ${slSlug(t.name)} }`);
+        });
+      }
+    });
+    L.push("");
+  }
   L.push("entities:");
   ents.forEach(e=>{
     L.push(`  - name: ${e.name.toLowerCase()}`);
     L.push(`    primary_key: ${e.key}`);
+    const rc = _slState.concepts.find(c=>c.id===e.concept);
+    if(rc) L.push(`    realises: ${slSlug(rc.name)}`);
     L.push(`    time_dimension: ${e.timeDims[0]}`);
     L.push(`    description: "${e.desc}"`);
     L.push(`    bindings:`);
@@ -33389,6 +33549,7 @@ const slLayout = (ents, rels) => {
 //    that vanishes when the user visits the Glossary is not a durable decision.
 const _slSubs = new Set();
 let _slState = {models: SL_MODELS.map(m=>({...m})), metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})),
+                concepts: SL_CONCEPTS.map(c=>({...c})), crels: SL_CONCEPT_RELS.map(r=>({...r})),
                 entities: SL_ENTITIES.map(e=>({...e})), rels: SL_RELATIONSHIPS.map(r=>({...r}))};
 const slSet = (updater) => { _slState = typeof updater==="function" ? updater(_slState) : updater; _slSubs.forEach(fn=>fn()); };
 const useSemanticLayer = () => {
@@ -34016,6 +34177,10 @@ const slDims = (mets) => {
   return out;
 };
 const slMeasureName = (m) => `${m.col}_${String(m.agg).replace(/ /g,"_")}`;
+// The concept behind an entity, and every name it answers to. Synonyms are not
+// documentation here — they compile, which is what makes the ontology load-bearing.
+const slEntConcept = (e) => (e && e.concept) ? _slState.concepts.find(c=>c.id===e.concept) : null;
+const slSynList    = (e) => { const c = slEntConcept(e); return c ? slConceptNames(c) : []; };
 
 // ── dbt · MetricFlow. Joins are inferred from entity keys, so relationships are
 //    emitted as foreign entities rather than join clauses.
@@ -34030,6 +34195,12 @@ const slAdaptDbt = ({mdl, ents, rels, mets}) => {
     L.push(`  - name: ${e.name.toLowerCase()}`);
     L.push(`    model: ${(e.bindings||{}).dbt || "ref('"+e.table+"')"}`);
     L.push(`    description: "${e.desc}"`);
+    const ec = slEntConcept(e);
+    if(ec){
+      L.push(`    meta:`);
+      L.push(`      edg_concept: ${slSlug(ec.name)}`);
+      L.push(`      synonyms: [${slConceptNames(ec).map(s=>`"${s}"`).join(", ")}]`);
+    }
     L.push(`    defaults:`);
     L.push(`      agg_time_dimension: ${e.timeDims[0]}`);
     L.push(`    entities:`);
@@ -34097,7 +34268,12 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets}) => {
   L.push("");
   L.push(`CREATE OR REPLACE SEMANTIC VIEW ${view}`);
   L.push(`  TABLES (`);
-  L.push(ents.map(e=>`    ${slQ(e.name.toLowerCase())} AS ${(e.bindings||{}).snowflake||e.table}\n      PRIMARY KEY (${slPK(e)})\n      COMMENT = '${e.desc}'`).join(",\n"));
+  L.push(ents.map(e=>{
+    const syn = slSynList(e).filter(s=>s!==e.name);
+    return `    ${slQ(e.name.toLowerCase())} AS ${(e.bindings||{}).snowflake||e.table}`
+      + (syn.length ? `\n      WITH SYNONYMS = (${syn.map(s=>`'${s}'`).join(", ")})` : "")
+      + `\n      PRIMARY KEY (${slPK(e)})\n      COMMENT = '${e.desc}'`;
+  }).join(",\n"));
   L.push(`  )`);
   if(rels.length){
     L.push(`  RELATIONSHIPS (`);
@@ -34133,7 +34309,10 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets}) => {
     } else {
       expr = `-- ratio: ${m.numerator?m.numerator.label:""} / ${m.denominator?m.denominator.label:""}\n      NULL`;
     }
-    return `    ${slQ(t)}.${slSlug(m.name)} AS ${expr}\n      COMMENT = '${m.definition} [owner ${m.owner} · ${m.status}]'`;
+    const msyn = [m.name, ...(m.synonyms||[])].filter(s=>s!==slSlug(m.name));
+    return `    ${slQ(t)}.${slSlug(m.name)} AS ${expr}`
+      + (msyn.length ? `\n      WITH SYNONYMS = (${msyn.map(s=>`'${s}'`).join(", ")})` : "")
+      + `\n      COMMENT = '${m.definition} [owner ${m.owner} · ${m.status}]'`;
   }).join(",\n"));
   L.push(`  )`);
   L.push(`  COMMENT = '${mdl.desc}';`);
@@ -34189,7 +34368,9 @@ const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
   L.push("");
   ents.forEach(e=>{
     const eMets = mets.filter(m=>m.entity===e.id);
+    const pc = slEntConcept(e);
     L.push(`table ${(e.bindings||{}).powerbi||e.name}`);
+    if(pc) L.push(`\tdescription: "${pc.definition} [concept: ${pc.name}; also known as ${(pc.synonyms||[]).join(", ")}]"`);
     L.push(`\tcolumn ${slPK(e)}`);
     L.push(`\t\tdataType: int64`);
     L.push(`\t\tisKey`);
@@ -34264,6 +34445,189 @@ const SL_FINDING = {
   unclaimed: {l:"Unclaimed",     c:"#9090a8", bg:"rgba(144,144,168,.12)"},
   accepted:  {l:"Accepted diff", c:"#7c3aed", bg:"rgba(124,58,237,.1)"},
   ok:        {l:"In step",       c:"#16a34a", bg:"rgba(22,163,74,.1)"},
+};
+
+// ── The concept map. Taxonomy runs downward (a parent sits above its children);
+//    business relationships are labelled edges between peers. Inline SVG from a
+//    JS-computed layout, so it draws whether or not anything is measuring the DOM.
+const SLConceptCanvas = ({concepts, crels, entities, metrics, selected, onSelect}) => {
+  const {nodes, edges, width, height} = slConceptLayout(concepts, crels);
+  return (
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:16,overflowX:"auto"}}>
+      <svg width={width} height={height} style={{display:"block",minWidth:"100%"}}>
+        <defs>
+          <marker id="slcArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke={T.textMuted} strokeWidth="1.3"/>
+          </marker>
+        </defs>
+        {edges.map(e=>{
+          const rt = SL_REL_TYPES[e.type]||{l:e.type};
+          const mx=(e.x1+e.x2)/2, my=(e.y1+e.y2)/2;
+          return (
+            <g key={e.id}>
+              <path d={e.taxonomy ? `M${e.x1},${e.y1} L${e.x2},${e.y2}`
+                                  : `M${e.x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${e.x2},${e.y2}`}
+                fill="none" stroke={e.taxonomy?T.violet:T.borderLight} strokeWidth={e.taxonomy?1.8:1.5}
+                strokeDasharray={e.taxonomy?"none":"4 3"} markerEnd="url(#slcArrow)"/>
+              {!e.taxonomy && <>
+                <rect x={mx-42} y={my-9} width="84" height="18" rx="9" fill={T.bgElevated} stroke={T.border}/>
+                <text x={mx} y={my+4} textAnchor="middle" style={{fontSize:9,fontWeight:600,fill:T.textMuted}}>{rt.l}</text>
+              </>}
+            </g>
+          );
+        })}
+        {nodes.map(n=>{
+          const on = selected===n.id;
+          const cov = slConceptCoverage(n, entities, metrics);
+          const cfg = SL_COV[cov.state];
+          return (
+            <g key={n.id} onClick={()=>onSelect&&onSelect(on?null:n.id)} style={{cursor:"pointer"}}>
+              <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="10"
+                fill={on?T.bgActive:T.bgElevated} stroke={on?T.accent:cfg.c+"55"} strokeWidth={on?2:1.4}/>
+              <circle cx={n.x+12} cy={n.y+14} r="4" fill={cfg.c}/>
+              <text x={n.x+24} y={n.y+18} style={{fontSize:12.5,fontWeight:700,fill:T.text}}>{n.name}</text>
+              <text x={n.x+12} y={n.y+36} style={{fontSize:9.5,fill:T.textMuted}}>
+                {(n.synonyms||[]).slice(0,2).join(" · ")||"no synonyms"}
+              </text>
+              <text x={n.x+12} y={n.y+52} style={{fontSize:9.5,fill:cfg.c,fontWeight:600}}>
+                {cov.realised.length ? `${cov.realised.length} entity · ${cov.metrics.length} metric${cov.metrics.length===1?"":"s"}` : "not realised"}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{display:"flex",gap:16,marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
+        <span><span style={{color:T.violet}}>──</span> is a kind of (taxonomy)</span>
+        <span><span style={{color:T.textMuted}}>╌╌</span> business relationship</span>
+        {Object.entries(SL_COV).map(([k,c])=><span key={k}><span style={{color:c.c}}>●</span> {c.l}</span>)}
+      </div>
+    </div>
+  );
+};
+
+// ── Concept detail. The whole point is the chain: a business word, the entity that
+//    realises it, the table that entity binds to, and the metrics you can therefore ask for.
+const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, gTerms, onClose, onNav}) => {
+  if(!concept) return null;
+  const c = concept;
+  const cov = slConceptCoverage(c, entities, metrics);
+  const parent = concepts.find(x=>x.id===c.broader);
+  const children = concepts.filter(x=>x.broader===c.id);
+  const out = crels.filter(r=>r.from===c.id && r.type!=="part_of");
+  const inc = crels.filter(r=>r.to===c.id && r.type!=="part_of");
+  const term = c.termId ? gTerms.find(t=>t.id===c.termId) : null;
+  const cfg = SL_COV[cov.state];
+  const Head = ({children:ch}) => <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 9px"}}>{ch}</div>;
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:620,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:5}}>{c.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+              <SLStatusChip status={c.status}/>
+              <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:cfg.bg,color:cfg.c,border:`1px solid ${cfg.c}33`}}>{cfg.l}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{c.domain} · {c.owner}</span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"4px 22px 24px"}}>
+          <Head>What it is</Head>
+          <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{c.definition}</div>
+          {c.note && <div style={{marginTop:9,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>{c.note}</div>}
+
+          <Head>Also known as</Head>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+            {(c.synonyms||[]).length===0
+              ? <span style={{fontSize:12,color:T.textMuted}}>No synonyms.</span>
+              : c.synonyms.map(s=><span key={s} style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,padding:"3px 9px"}}>{s}</span>)}
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,lineHeight:1.55}}>
+            These compile. They become <b style={{color:T.textSub}}>WITH SYNONYMS</b> in the Snowflake semantic view, <b style={{color:T.textSub}}>meta.synonyms</b> in dbt and the table description in Power BI — which is what lets a natural-language question land on the certified metric instead of guessing.
+          </div>
+
+          <Head>Where it sits</Head>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {parent && <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}>
+              <span style={{color:T.violet}}>▲</span> is a kind of <b style={{color:T.text}}>{parent.name}</b></div>}
+            {children.map(ch=><div key={ch.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}>
+              <span style={{color:T.violet}}>▼</span> <b style={{color:T.text}}>{ch.name}</b> is a kind of this</div>)}
+            {!parent && children.length===0 && <span style={{fontSize:12,color:T.textMuted}}>Top-level concept with no sub-types.</span>}
+          </div>
+
+          <Head>How it relates</Head>
+          {out.length+inc.length===0
+            ? <div style={{fontSize:12,color:T.textMuted}}>No business relationships declared.</div>
+            : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                {[...out.map(r=>({r,dir:"out"})), ...inc.map(r=>({r,dir:"in"}))].map(({r,dir},i,a)=>{
+                  const rt = SL_REL_TYPES[r.type]||{l:r.type,inv:r.type};
+                  const other = concepts.find(x=>x.id===(dir==="out"?r.to:r.from));
+                  return (
+                    <div key={r.id+dir} style={{padding:"10px 13px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
+                      <div style={{fontSize:12,color:T.text}}>
+                        <b>{c.name}</b> <span style={{color:T.accent,fontWeight:600}}>{dir==="out"?rt.l:rt.inv}</span> <b>{other?other.name:"—"}</b>
+                      </div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:3,lineHeight:1.5}}>{r.note}</div>
+                    </div>
+                  );
+                })}
+              </div>}
+
+          <Head>What implements it</Head>
+          {cov.realised.length===0
+            ? <div style={{padding:"13px 15px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:10,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+                <b style={{color:T.text}}>Nothing implements this concept.</b> It is agreed and named, but no entity carries its grain, so nothing can be measured or asked of it. This is the gap a glossary alone cannot show you.
+              </div>
+            : cov.realised.map(e=>{
+                const em = metrics.filter(m=>m.entity===e.id);
+                const mdls = models.filter(md=>(md.entityIds||[]).includes(e.id));
+                return (
+                  <div key={e.id} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"13px 15px",marginBottom:8}}>
+                    <div style={{fontSize:12,color:T.textSub,marginBottom:8,lineHeight:1.7}}>
+                      <b style={{color:T.text}}>{c.name}</b> <span style={{color:T.textMuted}}>is realised by</span>{" "}
+                      <b style={{color:T.text}}>{e.name}</b> <span style={{color:T.textMuted}}>(one row per {e.key})</span>{" "}
+                      <span style={{color:T.textMuted}}>which binds to</span>{" "}
+                      <b style={{color:T.text,fontFamily:"ui-monospace,monospace"}}>{e.table}</b>
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:em.length?9:0}}>
+                      {Object.entries(e.bindings||{}).slice(0,3).map(([k,v])=>(
+                        <div key={k} style={{display:"flex",gap:10,fontSize:11}}>
+                          <span style={{minWidth:72,fontWeight:600,color:T.textSub}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
+                          <span style={{fontFamily:"ui-monospace,monospace",color:T.textMuted}}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {em.length>0 && <>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>You can therefore ask for</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {em.map(m=><span key={m.id} style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,padding:"4px 9px"}}>{m.name}</span>)}
+                      </div>
+                    </>}
+                    {mdls.length>0 && <div style={{fontSize:10.5,color:T.textMuted,marginTop:8}}>in {mdls.map(x=>x.name).join(", ")}</div>}
+                  </div>
+                );
+              })}
+
+          <Head>Glossary</Head>
+          {term
+            ? <button onClick={()=>onNav&&onNav("glossary")} style={{display:"flex",alignItems:"center",gap:9,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left",width:"100%"}}>
+                <span style={{color:T.violet,flexShrink:0}}>{Ic.glossary(14)}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.text}}>{term.term}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{term.definition}</div>
+                </div>
+                <SLStatusChip status={term.status}/>
+              </button>
+            : <div style={{padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.5}}>
+                Not yet registered as a Glossary term. The concept is the meaning; the term is the name people argue about — both should exist.
+              </div>}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // ── Metric detail. A drawer, not a page: a metric is read in the context of the model
@@ -34454,8 +34818,11 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, onPublish, onToa
 const SemanticLayerView = ({onToast, onNav}) => {
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
-  const {models, metrics, vendor, entities, rels} = store;
+  const {models, metrics, vendor, entities, rels, concepts, crels} = store;
 
+  const [rootTab, setRootTab] = useState("models");
+  const [selCon,  setSelCon]  = useState(null);
+  const [conFocus,setConFocus]= useState(null);
   const [selMdl,  setSelMdl]  = useState(null);
   const [tab,     setTab]     = useState("overview");
   const [selId,   setSelId]   = useState(null);
@@ -34588,6 +34955,31 @@ const SemanticLayerView = ({onToast, onNav}) => {
                         </div>
                       </div>
                     : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:24}}>{mdl.desc||"No description yet."}</div>}
+
+                  <SH title="Concepts this model realises"
+                      sub="The business meaning behind each entity. Synonyms declared here compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
+                  <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
+                    {mEnts.map(e=>{
+                      const c = concepts.find(x=>x.id===e.concept);
+                      if(!c) return (
+                        <div key={e.id} style={{padding:"11px 14px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:10,fontSize:11.5,color:T.textSub}}>
+                          <b style={{color:T.text}}>{e.name}</b> realises no concept — its business meaning is undeclared.
+                        </div>
+                      );
+                      return (
+                        <div key={e.id} onClick={()=>{setRootTab("concepts");setSelMdl(null);setSelCon(c.id);}}
+                          style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",flexWrap:"wrap"}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.text,minWidth:96}}>{c.name}</span>
+                          <span style={{fontSize:11,color:T.textMuted}}>realised by <b style={{color:T.textSub}}>{e.name}</b></span>
+                          <div style={{marginLeft:"auto",display:"flex",gap:5,flexWrap:"wrap"}}>
+                            {(c.synonyms||[]).slice(0,3).map(s=>(
+                              <span key={s} style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px"}}>{s}</span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
                   <SH title="Reverse sync"
                       sub="Read the model back out of each platform and report what has changed since the last publish."
@@ -34924,17 +35316,71 @@ const SemanticLayerView = ({onToast, onNav}) => {
   // ─────────────────────────────────────────────────────────────
   const shown = models.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.desc||"").toLowerCase().includes(q.toLowerCase()));
   const allDisagree = vendor.filter(v=>v.conformance==="drifted").length;
+  const unrealised  = concepts.filter(c=>slConceptCoverage(c, entities, metrics).state==="unrealised").length;
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Semantic Layer"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
 
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:24}}>
-          <Metric label="Semantic Models"   value={String(models.length)}  sub="registered"        color={T.accent}/>
-          <Metric label="Metrics"           value={String(metrics.length)} sub="across all models" color={T.blue}/>
-          <Metric label="Definitions Found" value={String(vendor.length)}  sub="in your tools"/>
-          <Metric label="Disagreeing"       value={String(allDisagree)}    sub="out of step"       color={allDisagree?T.amber:T.green}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,marginBottom:20}}>
+          <Metric label="Concepts"          value={String(concepts.length)} sub={`${unrealised} not implemented`} color={unrealised?T.amber:T.violet}/>
+          <Metric label="Semantic Models"   value={String(models.length)}   sub="registered"        color={T.accent}/>
+          <Metric label="Metrics"           value={String(metrics.length)}  sub="across all models" color={T.blue}/>
+          <Metric label="Definitions Found" value={String(vendor.length)}   sub="in your tools"/>
+          <Metric label="Disagreeing"       value={String(allDisagree)}     sub="out of step"       color={allDisagree?T.amber:T.green}/>
         </div>
+
+        <Tabs2 tabs={[{key:"models",label:`Models · ${models.length}`},{key:"concepts",label:`Concepts · ${concepts.length}`}]}
+          active={rootTab} onChange={k=>{setRootTab(k);setQ("");}}/>
+
+        {rootTab==="concepts" && <>
+          <SH title="Concept map"
+              sub="The business model, independent of any table. Solid lines are taxonomy — what is a kind of what. Dashed lines are business relationships, which stay true however a given system happens to join them."/>
+          <SLConceptCanvas concepts={concepts} crels={crels} entities={entities} metrics={metrics}
+            selected={conFocus} onSelect={setConFocus}/>
+
+          <div style={{marginTop:24}}>
+            <SH title="Concepts" sub="A concept nobody implements is a gap you can act on — the number a glossary alone cannot give you."/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{flex:1}}><Input2 placeholder="Search concepts, synonyms, definitions…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+          </div>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            {concepts.filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase())
+                              ||(c.definition||"").toLowerCase().includes(q.toLowerCase())
+                              ||(c.synonyms||[]).some(s=>s.toLowerCase().includes(q.toLowerCase())))
+              .map((c,i,a)=>{
+              const cov = slConceptCoverage(c, entities, metrics);
+              const cfg = SL_COV[cov.state];
+              const parent = concepts.find(x=>x.id===c.broader);
+              return (
+                <div key={c.id} className="row-hover" onClick={()=>setSelCon(c.id)}
+                  style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.text}}>{c.name}</span>
+                      <SLStatusChip status={c.status}/>
+                      <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:cfg.bg,color:cfg.c,border:`1px solid ${cfg.c}33`}}>{cfg.l}</span>
+                      {parent && <span style={{fontSize:10.5,color:T.violet}}>▲ {parent.name}</span>}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.definition}</div>
+                  </div>
+                  <div style={{width:190,flexShrink:0,display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {(c.synonyms||[]).slice(0,3).map(s=>(
+                      <span key={s} style={{fontSize:10,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 6px"}}>{s}</span>
+                    ))}
+                  </div>
+                  <div style={{width:120,flexShrink:0,fontSize:11,color:T.textMuted}}>
+                    {cov.realised.length ? `${cov.realised.length} entity · ${cov.metrics.length} metric${cov.metrics.length===1?"":"s"}` : "—"}
+                  </div>
+                  <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </>}
+
+        {rootTab==="models" && <>
 
         <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
           <div style={{flex:1}}>
@@ -34995,9 +35441,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
             );
           })}
         </div>
+        </>}
       </div>
 
       <SLNewModelDrawer open={newMdlOpen} onClose={()=>setNewMdlOpen(false)} onCreate={createModel} entities={entities} onToast={onToast}/>
+      <SLConceptDrawer concept={concepts.find(c=>c.id===selCon)} concepts={concepts} crels={crels}
+        entities={entities} metrics={metrics} models={models} gTerms={gTerms}
+        onClose={()=>setSelCon(null)} onNav={onNav}/>
     </div>
   );
 };
