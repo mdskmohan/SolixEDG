@@ -33483,14 +33483,17 @@ const SL_ENTITIES = [
 const SL_MODELS = [
   {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
    status:"Approved", entityIds:["e_order","e_customer"], targets:["dbt","snowflake","powerbi"],
+   owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue","KPI"], terms:["Customer Lifetime Value"],
    lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item"},
    desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
   {id:"mdl_product", name:"Product Engagement", domain:"Product", owner:"alex.wu", steward:"alex.wu",
    status:"Approved", entityIds:["e_customer"], targets:["dbt","databricks"],
+   owners:["alex.wu"], stewards:["alex.wu"], tags:["KPI"], terms:["Daily Active Users"],
    lastPublished:"2026-08-19", created:"2026-07-02", sync:{enabled:true, targets:["dbt","databricks"], frequency:"weekly", onDrift:"notify"},
    desc:"Active-user and engagement measures at customer grain."},
   {id:"mdl_finance", name:"Finance Ledger", domain:"Finance", owner:"sarah.kim", steward:"alex.wu",
    status:"Draft", entityIds:["e_txn","e_customer"], targets:["snowflake"],
+   owners:["sarah.kim"], stewards:["alex.wu"], tags:["finance"], terms:[],
    lastPublished:null, created:"2026-09-08", sync:{enabled:false, targets:["snowflake"], frequency:"daily", onDrift:"flag"},
    desc:"General-ledger transaction grain for recurring revenue. Not yet published anywhere."},
 ];
@@ -34061,19 +34064,6 @@ const SLConfChip = ({state, small}) => {
   const c = SL_CONF[state] || SL_CONF.unmanaged;
   return <span style={{fontSize:small?10:11,fontWeight:600,padding:small?"1px 6px":"2px 8px",borderRadius:4,background:c.bg,color:c.c,border:`1px solid ${c.c}33`,whiteSpace:"nowrap"}}>{c.l}</span>;
 };
-// The asset profile's sidebar vocabulary, so the semantic model's rail is the same
-// component set rather than something that merely looks similar.
-const SLRailLabel = ({children}) => (
-  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>
-);
-const SLRailRow = ({k, v, mono, last}) => (
-  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:last?0:7}}>
-    <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>{k}</span>
-    <span style={{fontSize:mono?11:12,color:mono?T.textSub:T.text,fontWeight:mono?400:600,textAlign:"right",
-      ...(mono?{fontFamily:"'Geist Mono',monospace"}:{})}}>{v}</span>
-  </div>
-);
-
 const SLStatusChip = ({status}) => {
   const c = CERT_META[status] || CERT_META.Draft;
   return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,whiteSpace:"nowrap"}}>{c.icon} {status}</span>;
@@ -35232,6 +35222,185 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
   );
 };
 
+// ── The model's metadata sidebar. This is the asset profile's right rail: 260px with a
+//    left border, sections separated by rules, a MetaLabel with a pencil that opens an
+//    inline picker, avatar chips, and a "+N more" expander. Owners, stewards and tags
+//    are assigned here rather than being read-only text.
+const SLMetaLabel = ({children, onEdit}) => (
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{children}</div>
+    {onEdit && (
+      <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
+        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
+        onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      </button>
+    )}
+  </div>
+);
+
+const SLPicker = ({open, items, selected, onToggle, onDone, placeholder, accent}) => {
+  const [q, setQ] = useState("");
+  if(!open) return null;
+  const c = accent || T.accent;
+  return (
+    <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${c}40`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+      <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
+        <input autoFocus placeholder={placeholder} value={q} onChange={e=>setQ(e.target.value)}
+          style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+          onFocus={e=>e.target.style.borderColor=c} onBlur={e=>e.target.style.borderColor=T.border}/>
+      </div>
+      <div style={{maxHeight:180,overflowY:"auto"}}>
+        {items.filter(u=>!q||String(u).toLowerCase().includes(q.toLowerCase())).map(u=>{
+          const sel = selected.includes(u);
+          return (
+            <button key={u} onClick={()=>onToggle(u)}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:sel?`${c}1a`:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
+              onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}}
+              onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
+              <div style={{width:22,height:22,borderRadius:5,background:`${c}1a`,border:`1px solid ${c}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:c,flexShrink:0}}>
+                {String(u).split(/[._ ]/).map(s=>s[0]||"").join("").slice(0,2).toUpperCase()}
+              </div>
+              <span style={{flex:1,fontSize:12,color:sel?c:T.text,fontWeight:sel?600:400}}>{u}</span>
+              {sel && <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={c} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{padding:"6px 8px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
+        <button onClick={onDone} style={{padding:"4px 12px",borderRadius:5,background:c,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+      </div>
+    </div>
+  );
+};
+
+const SLPersonChip = ({name, color}) => (
+  <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${color}0f`,border:`1px solid ${color}33`}}>
+    <div style={{width:18,height:18,borderRadius:3,background:`${color}22`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color}}>
+      {String(name).split(/[._ ]/).map(s=>s[0]||"").join("").slice(0,2).toUpperCase()}
+    </div>
+    <span style={{fontSize:12,color,fontWeight:500}}>{name}</span>
+  </div>
+);
+
+const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}) => {
+  const [openPane, setOpenPane] = useState(null);   // owners | stewards | tags | terms | status | null
+  const [showAllO, setShowAllO] = useState(false);
+  const [showAllS, setShowAllS] = useState(false);
+  const owners   = mdl.owners   || (mdl.owner   ? [mdl.owner]   : []);
+  const stewards = mdl.stewards || (mdl.steward ? [mdl.steward] : []);
+  const tags     = mdl.tags     || [];
+  const terms    = mdl.terms    || [];
+  const USERS = ["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh","priya.nair","lisa.ray"];
+  const TAGS  = ["revenue","KPI","finance","commerce","PII","certified","board-pack"];
+  const TERMS = (gTerms||[]).filter(t=>t.termType==="Metric"||t.termType==="Concept").map(t=>t.term);
+  const toggle = (key, list, v) => onPatch({[key]: list.includes(v) ? list.filter(x=>x!==v) : [...list, v]});
+  const Sec = ({children, last}) => (
+    <div style={{padding:"16px",borderBottom:last?"none":`1px solid ${T.border}`}}>{children}</div>
+  );
+
+  return (
+    <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",alignSelf:"stretch"}}>
+      <Sec>
+        <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="status"?null:"status")}>Status</SLMetaLabel>
+        <SLStatusChip status={mdl.status}/>
+        {openPane==="status" && (
+          <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,borderRadius:8,overflow:"hidden"}}>
+            {["Draft","In Review","Approved","Deprecated"].map(s=>{
+              const m = CERT_META[s]||CERT_META.Draft, sel = mdl.status===s;
+              return (
+                <button key={s} onClick={()=>{onPatch({status:s});setOpenPane(null);onToast&&onToast(`Status set to ${s}`,"success");}}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?m.bg:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:13}}>{m.icon}</span>
+                  <span style={{flex:1,fontSize:12.5,fontWeight:600,color:m.color}}>{s}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </Sec>
+
+      <Sec>
+        <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="owners"?null:"owners")}>Owners</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {owners.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
+          {(showAllO?owners:owners.slice(0,3)).map(o=><SLPersonChip key={o} name={o} color={T.accent}/>)}
+          {owners.length>3 && (
+            <span onClick={()=>setShowAllO(v=>!v)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>
+              {showAllO?"− less":`+${owners.length-3} more`}
+            </span>
+          )}
+        </div>
+        <SLPicker open={openPane==="owners"} items={USERS} selected={owners} placeholder="Search users…"
+          onToggle={u=>toggle("owners", owners, u)} onDone={()=>setOpenPane(null)}/>
+      </Sec>
+
+      <Sec>
+        <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="stewards"?null:"stewards")}>Stewards</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {stewards.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+          {(showAllS?stewards:stewards.slice(0,3)).map(s=><SLPersonChip key={s} name={s} color="#d97706"/>)}
+          {stewards.length>3 && (
+            <span onClick={()=>setShowAllS(v=>!v)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>
+              {showAllS?"− less":`+${stewards.length-3} more`}
+            </span>
+          )}
+        </div>
+        <SLPicker open={openPane==="stewards"} items={USERS} selected={stewards} placeholder="Search users…" accent="#d97706"
+          onToggle={u=>toggle("stewards", stewards, u)} onDone={()=>setOpenPane(null)}/>
+      </Sec>
+
+      <Sec>
+        <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="tags"?null:"tags")}>Tags</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {tags.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags</span>}
+          {tags.map(t=>(
+            <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 9px",borderRadius:5,background:T.blueDim,border:`1px solid ${T.blue}33`,color:T.blue,fontWeight:500}}>{t}</span>
+          ))}
+        </div>
+        <SLPicker open={openPane==="tags"} items={TAGS} selected={tags} placeholder="Search tags…" accent={T.blue}
+          onToggle={t=>toggle("tags", tags, t)} onDone={()=>setOpenPane(null)}/>
+      </Sec>
+
+      <Sec>
+        <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="terms"?null:"terms")}>Glossary Terms</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {terms.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
+          {terms.map(t=>(
+            <span key={t} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"3px 9px",borderRadius:5,background:T.violetDim,border:`1px solid ${T.violet}33`,color:T.violet,fontWeight:500}}>
+              ◆ {t}
+            </span>
+          ))}
+        </div>
+        <SLPicker open={openPane==="terms"} items={TERMS} selected={terms} placeholder="Search terms…" accent={T.violet}
+          onToggle={t=>toggle("terms", terms, t)} onDone={()=>setOpenPane(null)}/>
+      </Sec>
+
+      <Sec>
+        <SLMetaLabel>Details</SLMetaLabel>
+        {[["Domain",mdl.domain],["Entities",String(ents.length)],["Dimensions",String(dims.length)],
+          ["Facts",String(facts.length)],["Metrics",String(mets.length)],
+          ["Created",mdl.created],["Published",mdl.lastPublished||"Never"],["Synced",mdl.lastSynced||"Never"],
+          ["Format",`ESM v${ESM_VERSION}`]].map(([k,v])=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
+            <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
+            <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </Sec>
+
+      <Sec last>
+        <SLMetaLabel>Publishes To</SLMetaLabel>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+          {(mdl.targets||[]).length
+            ? mdl.targets.map(t=><SLSysChip key={t} system={t}/>)
+            : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No targets</span>}
+        </div>
+      </Sec>
+    </div>
+  );
+};
+
 // ── Rename, and the synonyms that go with the name.
 //    One drawer for entities, dimensions, facts and metrics, because the rules are the
 //    same for all four: the business name is yours to change, the column is not, and if
@@ -35380,6 +35549,10 @@ const SL_ENT_KIND = {
   fact:      {c:"#6366f1", l:"Has facts"},
   dimension: {c:"#0ea5e9", l:"Dimension table"},
 };
+// What a column is used AS inside the model — the legend on the Relationships canvas.
+const SL_COL_ROLE = {
+  key: {c:"#7c3aed", l:"Key"}, fact: {c:"#16a34a", l:"Fact"}, dim: {c:"#d97706", l:"Dimension"},
+};
 
 const SLRelNode = ({data}) => {
   const focused = data.focused;
@@ -35391,7 +35564,7 @@ const SLRelNode = ({data}) => {
       <div style={{
         background: focused ? "rgba(99,102,241,0.05)" : "#ffffff",
         border:`1.5px solid ${focused ? "#6366f1" : c+"55"}`,
-        borderRadius:9, boxSizing:"border-box", width:210,
+        borderRadius:9, boxSizing:"border-box", width:214,
         boxShadow: focused ? "0 0 0 3px rgba(99,102,241,0.12)" : "0 1px 3px rgba(15,23,42,.06)",
         overflow:"hidden"}}>
         <div style={{height:3,background:c}}/>
@@ -35405,14 +35578,16 @@ const SLRelNode = ({data}) => {
           </div>
           <div style={{fontSize:9.5,color:"#64748b",marginTop:3}}>one row per {data.grain||"—"}</div>
           <div style={{fontSize:9.5,color:"#94a3b8",marginTop:2,fontFamily:"ui-monospace,monospace"}}>{data.table}</div>
-          {(data.dimCount>0 || data.factCount>0) && (
-            <div style={{display:"flex",gap:10,marginTop:8,paddingTop:7,borderTop:"1px solid #e2e8f0"}}>
-              <span style={{fontSize:9.5,color:"#64748b"}}>
-                <b style={{color:"#d97706"}}>{data.dimCount}</b> dim
-              </span>
-              <span style={{fontSize:9.5,color:"#64748b"}}>
-                <b style={{color:"#16a34a"}}>{data.factCount}</b> fact
-              </span>
+          {(data.cols||[]).length>0 && (
+            <div style={{marginTop:8,paddingTop:7,borderTop:"1px solid #e2e8f0"}}>
+              {data.cols.map(c=>(
+                <div key={c.name} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <span style={{width:6,height:6,borderRadius:2,background:c.color,flexShrink:0}}/>
+                  <span style={{fontSize:9.5,color:"#475569",fontFamily:"ui-monospace,monospace",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                  <span style={{fontSize:8.5,color:c.color,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>{c.role}</span>
+                </div>
+              ))}
+              {data.moreCols>0 && <div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>+{data.moreCols} more</div>}
             </div>
           )}
         </div>
@@ -35430,8 +35605,8 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
     const left  = entities.filter(e => hasOut(e.id));
     const right = entities.filter(e => !hasOut(e.id));
     const pos = {};
-    left.forEach((e,i)  => { pos[e.id] = {x: 0,   y: i * 150}; });
-    right.forEach((e,i) => { pos[e.id] = {x: 420, y: i * 150}; });
+    left.forEach((e,i)  => { pos[e.id] = {x: 0,   y: i * 230}; });
+    right.forEach((e,i) => { pos[e.id] = {x: 430, y: i * 230}; });
     return pos;
   },[entities.map(e=>e.id).join(), rels.map(r=>r.id).join()]);
 
@@ -35440,12 +35615,21 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
     data: {
       name: e.name, table: e.table, grain: e.key,
       metricCount: metrics.filter(m=>m.entity===e.id).length,
-      dimCount:  dims.filter(d=>d.entity===e.id).length,
-      factCount: facts.filter(f=>f.entity===e.id).length,
+      ...(()=>{
+        // Every column the model actually uses, and what it is used AS — the key it is
+        // grained on, a dimension you can slice by, or a fact a metric aggregates.
+        const ds = dims.filter(d=>d.entity===e.id);
+        const fs = facts.filter(x=>x.entity===e.id);
+        const rows = [];
+        if(e.key) rows.push({name:e.key, role:"key", color:"#7c3aed"});
+        fs.forEach(x=>{ if(!rows.some(r=>r.name===x.column)) rows.push({name:x.column, role:"fact", color:"#16a34a"}); });
+        ds.forEach(d=>{ if(!rows.some(r=>r.name===d.column)) rows.push({name:d.column, role:"dim", color:"#d97706"}); });
+        return {cols: rows.slice(0,6), moreCols: Math.max(0, rows.length-6)};
+      })(),
       kindColor: facts.some(f=>f.entity===e.id) ? SL_ENT_KIND.fact.c : SL_ENT_KIND.dimension.c,
       focused: selected === e.id,
     },
-  })),[entities.map(e=>e.id).join(), layout, metrics.length, dims.length, facts.length, selected]);
+  })),[entities.map(e=>e.id).join(), layout, metrics.length, dims.map(d=>d.id).join(), facts.map(x=>x.id).join(), selected]);
 
   const rfEdges = useMemo(()=>rels.map(r=>({
     id: r.id, source: r.from, target: r.to,
@@ -35472,7 +35656,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
         background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:"10px 10px 0 0",
         borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
-          {Object.entries(SL_ENT_KIND).map(([k,v])=>(
+          {Object.entries(SL_COL_ROLE).map(([k,v])=>(
             <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
               <span style={{width:8,height:8,borderRadius:2,background:v.c,display:"inline-block"}}/>{v.l}
             </span>
@@ -35905,6 +36089,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [newMdlOpen,  setNewMdlOpen]  = useState(false);
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
+  const [defTab,      setDefTab]      = useState("dimensions");
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
@@ -36045,8 +36230,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
           <div style={{padding:"0 28px 28px"}}>
 
             {tab==="overview" && (
-              <div style={{display:"grid",gridTemplateColumns:"1fr 234px",gap:24,alignItems:"start"}}>
-                <div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:0,alignItems:"stretch",margin:"0 -28px 0 0"}}>
+                <div style={{paddingRight:24}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
                     {!descEdit&&<button onClick={()=>{setDescVal(mdl.desc);setDescEdit(true);}}
@@ -36165,45 +36350,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </>}
                 </div>
 
-                {/* Sidebar — the asset profile's rail, not a lookalike: a 234px column of
-                    Card2s, each opening with an SLabel over space-between rows. */}
-                <div style={{width:234,flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
-                  <Card2 style={{padding:"14px 16px"}}>
-                    <SLRailLabel>Ownership</SLRailLabel>
-                    <SLRailRow k="Domain"  v={mdl.domain}/>
-                    <SLRailRow k="Owner"   v={mdl.owner}/>
-                    <SLRailRow k="Steward" v={mdl.steward} last/>
-                  </Card2>
-
-                  <Card2 style={{padding:"14px 16px"}}>
-                    <SLRailLabel>Status</SLRailLabel>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
-                      <span style={{fontSize:12,color:T.textMuted}}>Certification</span>
-                      <SLStatusChip status={mdl.status}/>
-                    </div>
-                    <SLRailRow k="Created"   v={mdl.created} mono/>
-                    <SLRailRow k="Published" v={mdl.lastPublished||"Never"} mono/>
-                    <SLRailRow k="Synced"    v={mdl.lastSynced||"Never"} mono last/>
-                  </Card2>
-
-                  <Card2 style={{padding:"14px 16px"}}>
-                    <SLRailLabel>Model</SLRailLabel>
-                    <SLRailRow k="Entities"   v={String(mEnts.length)}  mono/>
-                    <SLRailRow k="Dimensions" v={String(mDims.length)}  mono/>
-                    <SLRailRow k="Facts"      v={String(mFacts.length)} mono/>
-                    <SLRailRow k="Metrics"    v={String(mMetrics.length)} mono last/>
-                  </Card2>
-
-                  <Card2 style={{padding:"14px 16px"}}>
-                    <SLRailLabel>Publishing</SLRailLabel>
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:9}}>
-                      {(mdl.targets||[]).length
-                        ? mdl.targets.map(t=><SLSysChip key={t} system={t}/>)
-                        : <span style={{fontSize:12,color:T.textMuted}}>No targets</span>}
-                    </div>
-                    <SLRailRow k="Format" v={`ESM v${ESM_VERSION}`} mono last/>
-                  </Card2>
-                </div>
+                <SLModelSidebar mdl={mdl} ents={mEnts} dims={mDims} facts={mFacts} mets={mMetrics}
+                  gTerms={gTerms} onPatch={patchModel} onToast={onToast}/>
               </div>
             )}
 
@@ -36346,26 +36494,39 @@ const SemanticLayerView = ({onToast, onNav}) => {
               );
             })()}
 
-            {tab==="definitions" && <>
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:24}}>
-                <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:820}}>
-                  Everything this model exposes, in the order it gets built. <b style={{color:T.text}}>Dimensions</b> are what you slice by, <b style={{color:T.text}}>facts</b> are the row-level numbers, and a <b style={{color:T.text}}>metric</b> aggregates a fact and can be broken down by the dimensions. Declare the first two and the third is a choice rather than a free-text guess.
-                </div>
-                <div style={{display:"flex",gap:26,marginTop:12,flexWrap:"wrap"}}>
-                  {[["Dimensions",mDims.length],["Facts",mFacts.length],["Metrics",mMetrics.length]].map(([k,v],i)=>(
-                    <div key={k} style={{display:"flex",alignItems:"baseline",gap:7}}>
-                      <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted}}>{i+1}</span>
-                      <span style={{fontSize:18,fontWeight:700,color:v?T.text:T.textMuted,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
-                      <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
-                    </div>
+            {tab==="definitions" && (()=>{
+              const DEFT = [
+                {key:"dimensions", label:`Dimensions · ${mDims.length}`,  add:"dimension"},
+                {key:"facts",      label:`Facts · ${mFacts.length}`,      add:"fact"},
+                {key:"metrics",    label:`Metrics · ${mMetrics.length}`,  add:"metric"},
+              ];
+              return (
+              <>
+              {/* Tab strip + primary action — the Data Quality arrangement */}
+              <div style={{borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:48,marginBottom:20}}>
+                <div style={{display:"flex",height:48}}>
+                  {DEFT.map(t=>(
+                    <button key={t.key} onClick={()=>setDefTab(t.key)}
+                      style={{padding:"0 16px",height:48,background:"transparent",border:"none",
+                        borderBottom:`2px solid ${defTab===t.key?T.accent:"transparent"}`,
+                        color:defTab===t.key?T.text:T.textMuted,fontSize:13,fontWeight:defTab===t.key?600:400,
+                        cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap",marginBottom:-1}}>{t.label}</button>
                   ))}
                 </div>
+                <Btn variant="primary" icon={Ic.plus(12)}
+                  onClick={()=>defTab==="metrics"?setBuilderOpen(true):setDfKind(defTab==="facts"?"fact":"dimension")}>
+                  Add {defTab==="metrics"?"Metric":defTab==="facts"?"Fact":"Dimension"}
+                </Btn>
               </div>
 
-              <div style={{marginTop:28}}>
-                <SH title="Dimensions"
-                    sub="What a metric on this model can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."
-                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("dimension")}>Add dimension</Btn>}/>
+              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,maxWidth:820,marginBottom:20}}>
+                {defTab==="dimensions" && "What a metric can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."}
+                {defTab==="facts"      && "The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric, which is what lets several metrics share one fact."}
+                {defTab==="metrics"    && "The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension on the same entity."}
+              </div>
+
+              {defTab==="dimensions" && <div>
+                <SH title="Dimensions"/>
                 {mDims.length===0
                   ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
                       No dimensions declared. Metrics can still be built, but nothing can be sliced.
@@ -36413,12 +36574,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     </div>
                   );
                 })()}
-              </div>
+              </div>}
 
-              <div style={{marginTop:28}}>
-                <SH title="Facts"
-                    sub="The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric — which is what lets several metrics share one fact."
-                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("fact")}>Add fact</Btn>}/>
+              {defTab==="facts" && <div>
+                <SH title="Facts"/>
                 {mFacts.length===0
                   ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
                       No facts declared. There is nothing for a metric to aggregate.
@@ -36448,12 +36607,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
                         );
                       })}
                     </div>}
-              </div>
+              </div>}
 
-              <div style={{marginTop:28}}>
-                <SH title="Metrics"
-                    sub="The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension declared above."
-                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>}/>
+              {defTab==="metrics" && <div>
+                <SH title="Metrics"/>
+                    />
               <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{mMetrics.length} metric{mMetrics.length!==1?"s":""} · {mMetrics.filter(m=>m.status==="Approved").length} certified</div>
               {mMetrics.length===0
                 ? <div style={{padding:"60px 0",textAlign:"center"}}>
@@ -36489,8 +36647,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       );
                     })}
                   </div>}
-              </div>
-            </>}
+              </div>}
+              </>
+              );
+            })()}
 
             {tab==="alignment" && <>
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:22}}>
