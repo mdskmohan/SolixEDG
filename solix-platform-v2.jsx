@@ -36090,6 +36090,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
   const [defTab,      setDefTab]      = useState("dimensions");
+  const [defQ,        setDefQ]        = useState("");
+  const [cfgTab,      setCfgTab]      = useState("source");
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
@@ -36377,7 +36379,12 @@ const SemanticLayerView = ({onToast, onNav}) => {
               const outFiles = slBuildArtifacts(outPlat, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts});
               return (
                 <div>
-                <div style={{maxWidth:900}}>
+                <div style={{marginBottom:20}}>
+                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Sync"}]}
+                    active={cfgTab} onChange={setCfgTab}/>
+                </div>
+
+                {cfgTab==="source" && <div style={{maxWidth:900}}>
                   <SH title={`Semantic model source · ESM v${ESM_VERSION}`}
                       sub="The one document everything else is built from. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
                   <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
@@ -36412,9 +36419,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
                 </div>}
 
-                <div style={{height:1,background:T.border,margin:"30px 0 26px",maxWidth:900}}/>
-
-                <div style={{maxWidth:760}}>
+                {cfgTab==="sync" && <div style={{maxWidth:760}}>
                   <SH title="Reverse sync"
                       sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
@@ -36489,29 +36494,32 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       {sync.enabled?"Results appear on Overview.":"Turn reverse sync on first."}
                     </span>
                   </div>
-                </div>
+                </div>}
                 </div>
               );
             })()}
 
             {tab==="definitions" && (()=>{
               const DEFT = [
-                {key:"dimensions", label:`Dimensions · ${mDims.length}`,  add:"dimension"},
-                {key:"facts",      label:`Facts · ${mFacts.length}`,      add:"fact"},
-                {key:"metrics",    label:`Metrics · ${mMetrics.length}`,  add:"metric"},
+                {key:"dimensions", short:"Dimensions", count:mDims.length},
+                {key:"facts",      short:"Facts",      count:mFacts.length},
+                {key:"metrics",    short:"Metrics",    count:mMetrics.length},
               ];
+              const dq = defQ.trim().toLowerCase();
+              const shownDims  = dq ? mDims.filter(d=>`${d.name} ${d.column} ${d.desc}`.toLowerCase().includes(dq)) : mDims;
+              const shownFacts = dq ? mFacts.filter(x=>`${x.name} ${x.column} ${x.desc}`.toLowerCase().includes(dq)) : mFacts;
+              const shownMets  = dq ? mMetrics.filter(m=>`${m.name} ${m.definition}`.toLowerCase().includes(dq)) : mMetrics;
               return (
               <>
-              {/* Tab strip + primary action — the Data Quality arrangement */}
-              <div style={{borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:48,marginBottom:20}}>
-                <div style={{display:"flex",height:48}}>
-                  {DEFT.map(t=>(
-                    <button key={t.key} onClick={()=>setDefTab(t.key)}
-                      style={{padding:"0 16px",height:48,background:"transparent",border:"none",
-                        borderBottom:`2px solid ${defTab===t.key?T.accent:"transparent"}`,
-                        color:defTab===t.key?T.text:T.textMuted,fontSize:13,fontWeight:defTab===t.key?600:400,
-                        cursor:"pointer",transition:"all .12s",whiteSpace:"nowrap",marginBottom:-1}}>{t.label}</button>
-                  ))}
+              <div style={{marginBottom:16}}>
+                <SegTabs tabs={DEFT.map(t=>({key:t.key,label:t.short,count:t.count}))}
+                  active={defTab} onChange={k=>{setDefTab(k);setDefQ("");}}/>
+              </div>
+
+              {/* Search and the action live inside the tab they belong to */}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+                <div style={{flex:1,maxWidth:380}}>
+                  <Input2 placeholder={`Search ${defTab}…`} value={defQ} onChange={e=>setDefQ(e.target.value)} icon={Ic.search(12)}/>
                 </div>
                 <Btn variant="primary" icon={Ic.plus(12)}
                   onClick={()=>defTab==="metrics"?setBuilderOpen(true):setDfKind(defTab==="facts"?"fact":"dimension")}>
@@ -36526,19 +36534,18 @@ const SemanticLayerView = ({onToast, onNav}) => {
               </div>
 
               {defTab==="dimensions" && <div>
-                <SH title="Dimensions"/>
-                {mDims.length===0
+                {shownDims.length===0
                   ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      No dimensions declared. Metrics can still be built, but nothing can be sliced.
+                      {dq ? `No dimension matches "${defQ.trim()}".` : "No dimensions declared. Metrics can still be built, but nothing can be sliced."}
                     </div>
                   : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {mDims.map((d,i)=>{
+                      {shownDims.map((d,i)=>{
                         const e = mEnts.find(x=>x.id===d.entity);
                         const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
                         const term = d.termId ? gTerms.find(t=>t.id===d.termId) : null;
                         const usedBy = mMetrics.filter(m=>(m.dims||[]).includes(d.column)).length;
                         return (
-                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mDims.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<shownDims.length-1?`1px solid ${T.border}`:"none"}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
                                 <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{d.name}</span>
@@ -36577,17 +36584,16 @@ const SemanticLayerView = ({onToast, onNav}) => {
               </div>}
 
               {defTab==="facts" && <div>
-                <SH title="Facts"/>
-                {mFacts.length===0
+                {shownFacts.length===0
                   ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      No facts declared. There is nothing for a metric to aggregate.
+                      {dq ? `No fact matches "${defQ.trim()}".` : "No facts declared. There is nothing for a metric to aggregate."}
                     </div>
                   : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {mFacts.map((x,i)=>{
+                      {shownFacts.map((x,i)=>{
                         const e = mEnts.find(y=>y.id===x.entity);
                         const usedBy = mMetrics.filter(m=>m.col===x.column && m.entity===x.entity).length;
                         return (
-                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mFacts.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<shownFacts.length-1?`1px solid ${T.border}`:"none"}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
                                 <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</span>
@@ -36610,17 +36616,19 @@ const SemanticLayerView = ({onToast, onNav}) => {
               </div>}
 
               {defTab==="metrics" && <div>
-                <SH title="Metrics"/>
-                    />
               <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{mMetrics.length} metric{mMetrics.length!==1?"s":""} · {mMetrics.filter(m=>m.status==="Approved").length} certified</div>
-              {mMetrics.length===0
-                ? <div style={{padding:"60px 0",textAlign:"center"}}>
-                    <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No metrics yet</div>
-                    <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>A model is a set of agreed numbers over a shared grain.</div>
-                    <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add the first metric</Btn>
-                  </div>
+              {shownMets.length===0
+                ? (dq
+                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                      No metric matches "{defQ.trim()}".
+                    </div>
+                  : <div style={{padding:"60px 0",textAlign:"center"}}>
+                      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No metrics yet</div>
+                      <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>A model is a set of agreed numbers over a shared grain.</div>
+                      <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add the first metric</Btn>
+                    </div>)
                 : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    {mMetrics.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.definition||"").toLowerCase().includes(q.toLowerCase())).map((m,i,a)=>{
+                    {shownMets.map((m,i,a)=>{
                       const copies = vendor.filter(v=>v.mappedTo===m.id);
                       const bad = copies.filter(c=>c.conformance!=="conformant").length;
                       const e = mEnts.find(x=>x.id===m.entity);
