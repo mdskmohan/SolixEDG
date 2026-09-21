@@ -34061,6 +34061,19 @@ const SLConfChip = ({state, small}) => {
   const c = SL_CONF[state] || SL_CONF.unmanaged;
   return <span style={{fontSize:small?10:11,fontWeight:600,padding:small?"1px 6px":"2px 8px",borderRadius:4,background:c.bg,color:c.c,border:`1px solid ${c.c}33`,whiteSpace:"nowrap"}}>{c.l}</span>;
 };
+// The asset profile's sidebar vocabulary, so the semantic model's rail is the same
+// component set rather than something that merely looks similar.
+const SLRailLabel = ({children}) => (
+  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>
+);
+const SLRailRow = ({k, v, mono, last}) => (
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:last?0:7}}>
+    <span style={{fontSize:12,color:T.textMuted,flexShrink:0}}>{k}</span>
+    <span style={{fontSize:mono?11:12,color:mono?T.textSub:T.text,fontWeight:mono?400:600,textAlign:"right",
+      ...(mono?{fontFamily:"'Geist Mono',monospace"}:{})}}>{v}</span>
+  </div>
+);
+
 const SLStatusChip = ({status}) => {
   const c = CERT_META[status] || CERT_META.Draft;
   return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,whiteSpace:"nowrap"}}>{c.icon} {status}</span>;
@@ -35356,234 +35369,211 @@ const SLTargetDrawer = ({open, plat, mdl, ents, rels, mets, dims, facts, onClose
   );
 };
 
-// ── Relationships. Presented the way the Lineage tab is: a toolbar strip with a legend
-//    and controls, then a canvas beside an info panel, on the same hardcoded light palette
-//    the lineage graph uses so the two read as one product.
+// ── Relationships, on ReactFlow — the same canvas the Lineage tab uses, with the same
+//    Background, Controls and MiniMap, so the two screens are one product rather than
+//    two that resemble each other.
 //
-//    Drawn as inline SVG from a layout computed in JS rather than with a graph library,
-//    because a library that measures the DOM renders nothing when the pane is hidden —
-//    the existing Lineage tab has exactly that failure mode.
-const LP = {bg:"#f8fafc", line:"#e2e8f0", muted:"#64748b", faint:"#94a3b8",
-            text:"#0f172a", sub:"#475569", card:"#ffffff", accent:"#6366f1"};
-const SL_COLKIND = {
-  key:       {c:"#7c3aed", l:"Key"},
-  dimension: {c:"#d97706", l:"Dimension"},
-  fact:      {c:"#16a34a", l:"Fact"},
-  plain:     {c:"#94a3b8", l:"Column"},
+//    fitView is DECLARATIVE. An imperative fit in onInit races node measurement and
+//    leaves the graph with hidden nodes and no edge paths — the same trap the Knowledge
+//    Layer canvas documents.
+const SL_ENT_KIND = {
+  fact:      {c:"#6366f1", l:"Has facts"},
+  dimension: {c:"#0ea5e9", l:"Dimension table"},
 };
 
-const slRelLayout = (ents, rels, showCols, dims, facts) => {
-  const NW = 232, HEAD = 62, ROW = 19, PADX = 34, PADY = 30, GAPX = 210, GAPY = 46;
-  const colsFor = (e) => {
-    if (!showCols) return [];
-    const ds = (dims || []).filter(d => d.entity === e.id).map(d => d.column);
-    const fs = (facts || []).filter(f => f.entity === e.id).map(f => f.column);
-    return (SCHEMA[e.table] || []).map(c => ({
-      name: c.name,
-      kind: c.name === e.key ? "key" : fs.includes(c.name) ? "fact" : ds.includes(c.name) ? "dimension" : "plain",
-    })).filter(c => c.kind !== "plain" || (SCHEMA[e.table] || []).length <= 6);
-  };
-  const hasOut = id => rels.some(r => r.from === id);
-  const left = ents.filter(e => hasOut(e.id));
-  const right = ents.filter(e => !hasOut(e.id));
-  const build = (arr, x) => {
-    let y = PADY;
-    return arr.map(e => {
-      const cols = colsFor(e);
-      const h = HEAD + (cols.length ? cols.length * ROW + 10 : 0);
-      const n = {...e, cols, x, y, w: NW, h};
-      y += h + GAPY;
-      return n;
-    });
-  };
-  const L = build(left, PADX), R = build(right, PADX + NW + GAPX);
-  const tallest = Math.max(L.reduce((s, n) => s + n.h + GAPY, 0), R.reduce((s, n) => s + n.h + GAPY, 0));
-  const centre = (arr) => {
-    const used = arr.reduce((s, n) => s + n.h + GAPY, 0);
-    const off = (tallest - used) / 2;
-    arr.forEach(n => { n.y += off; });
-  };
-  centre(L); centre(R);
-  const nodes = [...L, ...R];
-  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
-  const edges = rels.map(r => {
-    const a = byId[r.from], b = byId[r.to];
-    if (!a || !b) return null;
-    return {...r, x1: a.x + a.w, y1: a.y + HEAD / 2, x2: b.x, y2: b.y + HEAD / 2};
-  }).filter(Boolean);
-  return {nodes, edges, width: PADX * 2 + NW * 2 + GAPX, height: Math.max(tallest + PADY, 260)};
+const SLRelNode = ({data}) => {
+  const focused = data.focused;
+  const c = data.kindColor;
+  return (
+    <div style={{position:"relative",fontFamily:"'Geist Sans','Inter',sans-serif"}}>
+      <Handle type="target" position={Position.Left}  style={{opacity:0,width:1,height:1}}/>
+      <Handle type="source" position={Position.Right} style={{opacity:0,width:1,height:1}}/>
+      <div style={{
+        background: focused ? "rgba(99,102,241,0.05)" : "#ffffff",
+        border:`1.5px solid ${focused ? "#6366f1" : c+"55"}`,
+        borderRadius:9, boxSizing:"border-box", width:210,
+        boxShadow: focused ? "0 0 0 3px rgba(99,102,241,0.12)" : "0 1px 3px rgba(15,23,42,.06)",
+        overflow:"hidden"}}>
+        <div style={{height:3,background:c}}/>
+        <div style={{padding:"10px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:"#0f172a"}}>{data.name}</span>
+            {data.metricCount>0 && (
+              <span style={{fontSize:9.5,fontWeight:700,color:"#4338ca",background:"rgba(99,102,241,.1)",
+                border:"1px solid rgba(99,102,241,.33)",borderRadius:8,padding:"1px 7px"}}>{data.metricCount}</span>
+            )}
+          </div>
+          <div style={{fontSize:9.5,color:"#64748b",marginTop:3}}>one row per {data.grain||"—"}</div>
+          <div style={{fontSize:9.5,color:"#94a3b8",marginTop:2,fontFamily:"ui-monospace,monospace"}}>{data.table}</div>
+          {(data.dimCount>0 || data.factCount>0) && (
+            <div style={{display:"flex",gap:10,marginTop:8,paddingTop:7,borderTop:"1px solid #e2e8f0"}}>
+              <span style={{fontSize:9.5,color:"#64748b"}}>
+                <b style={{color:"#d97706"}}>{data.dimCount}</b> dim
+              </span>
+              <span style={{fontSize:9.5,color:"#64748b"}}>
+                <b style={{color:"#16a34a"}}>{data.factCount}</b> fact
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 };
+const SL_REL_NODE_TYPES = {slRelNode: SLRelNode};
 
-const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, onSelect, onOpenMetric, onRename}) => {
-  const [showCols, setShowCols] = useState(true);
-  const {nodes, edges, width, height} = slRelLayout(entities, rels, showCols, dims, facts);
-  const sel = selected ? entities.find(e => e.id === selected) : null;
-  const selDims = sel ? (dims || []).filter(d => d.entity === sel.id) : [];
-  const selFacts = sel ? (facts || []).filter(f => f.entity === sel.id) : [];
-  const selMets = sel ? (metrics || []).filter(m => m.entity === sel.id) : [];
-  const selRels = sel ? rels.filter(r => r.from === sel.id || r.to === sel.id) : [];
+const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, onOpenMetric, onRename}) => {
+  const [rf, setRf] = useState(null);
+
+  const layout = useMemo(()=>{
+    const hasOut = id => rels.some(r => r.from === id);
+    const left  = entities.filter(e => hasOut(e.id));
+    const right = entities.filter(e => !hasOut(e.id));
+    const pos = {};
+    left.forEach((e,i)  => { pos[e.id] = {x: 0,   y: i * 150}; });
+    right.forEach((e,i) => { pos[e.id] = {x: 420, y: i * 150}; });
+    return pos;
+  },[entities.map(e=>e.id).join(), rels.map(r=>r.id).join()]);
+
+  const rfNodes = useMemo(()=>entities.map(e=>({
+    id: e.id, type: "slRelNode", position: layout[e.id] || {x:0,y:0},
+    data: {
+      name: e.name, table: e.table, grain: e.key,
+      metricCount: metrics.filter(m=>m.entity===e.id).length,
+      dimCount:  dims.filter(d=>d.entity===e.id).length,
+      factCount: facts.filter(f=>f.entity===e.id).length,
+      kindColor: facts.some(f=>f.entity===e.id) ? SL_ENT_KIND.fact.c : SL_ENT_KIND.dimension.c,
+      focused: selected === e.id,
+    },
+  })),[entities.map(e=>e.id).join(), layout, metrics.length, dims.length, facts.length, selected]);
+
+  const rfEdges = useMemo(()=>rels.map(r=>({
+    id: r.id, source: r.from, target: r.to,
+    label: `${r.fromKey} → ${r.toKey}`,
+    type: "smoothstep", animated: false,
+    style: {stroke: selected && r.from!==selected && r.to!==selected ? "#e2e8f0" : "#94a3b8", strokeWidth: 1.6},
+    labelStyle: {fontSize: 9.5, fill: "#64748b", fontWeight: 600},
+    labelBgStyle: {fill: "#ffffff", stroke: "#e2e8f0"},
+    labelBgPadding: [6, 3], labelBgBorderRadius: 8,
+    markerEnd: {type: MarkerType.ArrowClosed, color: "#94a3b8", width: 16, height: 16},
+  })),[rels.map(r=>r.id).join(), selected]);
+
+  const sel      = selected ? entities.find(e=>e.id===selected) : null;
+  const selDims  = sel ? dims.filter(d=>d.entity===sel.id) : [];
+  const selFacts = sel ? facts.filter(f=>f.entity===sel.id) : [];
+  const selMets  = sel ? metrics.filter(m=>m.entity===sel.id) : [];
+  const selRels  = sel ? rels.filter(r=>r.from===sel.id||r.to===sel.id) : [];
+  const SLabel = ({children}) => <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",minHeight:420}}>
-      {/* Toolbar — same strip the Lineage tab opens with */}
+    <div style={{display:"flex",flexDirection:"column",height:520}}>
+      {/* Toolbar — the strip the Lineage tab opens with */}
       <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",
-        background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:"10px 10px 0 0",
+        background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:"10px 10px 0 0",
         borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
-          {Object.entries(SL_COLKIND).filter(([k])=>k!=="plain").map(([k,v])=>(
-            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:LP.muted}}>
-              <span style={{width:8,height:8,borderRadius:2,background:v.c,display:"inline-block"}}/>
-              {v.l}
+          {Object.entries(SL_ENT_KIND).map(([k,v])=>(
+            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
+              <span style={{width:8,height:8,borderRadius:2,background:v.c,display:"inline-block"}}/>{v.l}
             </span>
           ))}
         </div>
-        <span style={{fontSize:10.5,color:LP.faint}}>
-          many → one · a join into a key cannot fan out · click an entity for details
-        </span>
-        <button onClick={()=>setShowCols(v=>!v)}
-          title={showCols?"Hide the column list inside each entity":"Show which columns are the key, a dimension or a fact"}
-          style={{padding:"4px 10px",borderRadius:6,background:showCols?"rgba(99,102,241,.1)":"#fff",
-            border:`1px solid ${showCols?LP.accent:LP.line}`,color:showCols?"#4338ca":LP.muted,
-            fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
-          <span style={{width:8,height:8,borderRadius:2,background:showCols?LP.accent:"#cbd5e1",display:"inline-block"}}/>
-          Show columns
-        </button>
+        <span style={{fontSize:10.5,color:"#94a3b8"}}>many → one · click an entity for details</span>
         {selected && <button onClick={()=>onSelect(null)}
-          style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:`1px solid ${LP.line}`,color:LP.muted,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
-          Clear selection
+          style={{padding:"4px 11px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
+          Clear
         </button>}
+        <button onClick={()=>rf?.fitView({padding:0.18,duration:400})}
+          style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
+          Fit
+        </button>
       </div>
 
-      {/* Canvas + info panel, exactly the Lineage arrangement */}
-      <div style={{display:"flex",flex:1,minHeight:0,border:`1px solid ${LP.line}`,borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
-        <div style={{flex:1,minWidth:0,background:LP.bg,overflow:"auto",padding:4}}>
-          <svg width={width} height={height} style={{display:"block"}}>
-            <defs>
-              <marker id="slRelArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
-                <path d="M0,1.5 L9,5 L0,8.5" fill="none" stroke={LP.faint} strokeWidth="1.4"/>
-              </marker>
-            </defs>
-
-            {edges.map(e=>{
-              const mx=(e.x1+e.x2)/2;
-              const dim = selected && e.from!==selected && e.to!==selected;
-              return (
-                <g key={e.id} opacity={dim?.28:1}>
-                  <path d={`M${e.x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${e.x2},${e.y2}`}
-                    fill="none" stroke={dim?LP.line:"#cbd5e1"} strokeWidth="1.8" markerEnd="url(#slRelArrow)"/>
-                  {/* crow's foot on the many side */}
-                  <g stroke={LP.faint} strokeWidth="1.3" fill="none">
-                    <path d={`M${e.x1},${e.y1} l-10,-5`}/><path d={`M${e.x1},${e.y1} l-10,5`}/>
-                  </g>
-                  <rect x={mx-54} y={(e.y1+e.y2)/2-10} width="108" height="20" rx="10" fill="#fff" stroke={LP.line}/>
-                  <text x={mx} y={(e.y1+e.y2)/2+4} textAnchor="middle" style={{fontSize:9.5,fontWeight:600,fill:LP.muted}}>
-                    {e.fromKey} → {e.toKey}
-                  </text>
-                </g>
-              );
-            })}
-
-            {nodes.map(n=>{
-              const on = selected===n.id;
-              const dim = selected && !on && !rels.some(r=>(r.from===selected&&r.to===n.id)||(r.to===selected&&r.from===n.id));
-              const mc = (metrics||[]).filter(m=>m.entity===n.id).length;
-              return (
-                <g key={n.id} onClick={()=>onSelect(on?null:n.id)} style={{cursor:"pointer"}} opacity={dim?.4:1}>
-                  <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="9"
-                    fill={LP.card} stroke={on?LP.accent:LP.line} strokeWidth={on?2:1.2}/>
-                  <rect x={n.x} y={n.y} width={n.w} height="3" rx="1.5" fill={on?LP.accent:"#cbd5e1"}/>
-                  <text x={n.x+13} y={n.y+25} style={{fontSize:12.5,fontWeight:700,fill:LP.text}}>{n.name}</text>
-                  <text x={n.x+13} y={n.y+41} style={{fontSize:9.5,fill:LP.muted}}>one row per {n.key||"—"}</text>
-                  <text x={n.x+13} y={n.y+54} style={{fontSize:9.5,fill:LP.faint}}>{n.table}</text>
-                  {mc>0 && <>
-                    <rect x={n.x+n.w-42} y={n.y+15} width="30" height="16" rx="8" fill="rgba(99,102,241,.1)" stroke={`${LP.accent}55`}/>
-                    <text x={n.x+n.w-27} y={n.y+26} textAnchor="middle" style={{fontSize:9.5,fontWeight:700,fill:"#4338ca"}}>{mc}</text>
-                  </>}
-                  {n.cols.length>0 && <line x1={n.x+1} y1={n.y+62} x2={n.x+n.w-1} y2={n.y+62} stroke={LP.line}/>}
-                  {n.cols.map((c,i)=>{
-                    const k = SL_COLKIND[c.kind];
-                    return (
-                      <g key={c.name}>
-                        <circle cx={n.x+18} cy={n.y+62+12+i*19} r="3.5" fill={k.c}/>
-                        <text x={n.x+29} y={n.y+62+15.5+i*19} style={{fontSize:10,fill:LP.sub,fontFamily:"ui-monospace,monospace"}}>{c.name}</text>
-                      </g>
-                    );
-                  })}
-                </g>
-              );
-            })}
-          </svg>
+      {/* Canvas + info panel row */}
+      <div style={{display:"flex",flex:1,minHeight:0,border:"1px solid #e2e8f0",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
+        <div style={{flex:1,minWidth:0,position:"relative",background:"#f8fafc"}}>
+          <ReactFlow
+            nodes={rfNodes} edges={rfEdges}
+            nodeTypes={SL_REL_NODE_TYPES}
+            onInit={inst=>setRf(inst)}
+            onNodeClick={(_e,node)=>onSelect(selected===node.id?null:node.id)}
+            minZoom={0.15} maxZoom={2.5}
+            fitView fitViewOptions={{padding:0.18}}
+            nodesDraggable={false} nodesConnectable={false}
+            proOptions={{hideAttribution:true}}
+            colorMode="light"
+            style={{background:"#f8fafc"}}>
+            <Background color="#cbd5e1" gap={22} size={1.2} variant="dots"/>
+            <Controls showInteractive={false}
+              style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
+            <MiniMap nodeColor={n=>n.data?.kindColor||"#94a3b8"}
+              style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8}}
+              maskColor="rgba(248,250,252,0.7)" position="bottom-right"/>
+          </ReactFlow>
         </div>
 
-        {/* Info panel — mirrors the Lineage node panel */}
-        <div style={{width:300,flexShrink:0,borderLeft:`1px solid ${LP.line}`,background:"#fff",overflowY:"auto"}}>
+        <div style={{width:300,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",overflowY:"auto"}}>
           {!sel
-            ? <div style={{padding:"22px 18px",fontSize:11.5,color:LP.muted,lineHeight:1.65}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:LP.text,marginBottom:8}}>{entities.length} entities · {rels.length} join{rels.length===1?"":"s"}</div>
-                Click an entity on the canvas to see its grain, where it lives on each platform, and what is declared against it.
+            ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b",lineHeight:1.65}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:8}}>{entities.length} entities · {rels.length} join{rels.length===1?"":"s"}</div>
+                Click an entity to see its grain, its joins, what is declared against it and where it lives on each platform.
                 {rels.length===0 && <div style={{marginTop:12,padding:"10px 12px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,color:"#92400e"}}>
                   No joins declared — every metric in this model sits on a single table.
                 </div>}
               </div>
             : <div style={{padding:"16px 18px"}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
-                  <div style={{fontSize:14,fontWeight:700,color:LP.text,marginBottom:3}}>{sel.name}</div>
-                  {onRename && <button onClick={()=>onRename("entity", sel)} title="Rename this entity and set its synonyms"
-                    style={{width:24,height:24,borderRadius:6,background:"#fff",border:`1px solid ${LP.line}`,color:LP.muted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{sel.name}</div>
+                  {onRename && <button onClick={()=>onRename("entity", sel)} title="Rename and set synonyms"
+                    style={{width:24,height:24,borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     {Ic.edit(12)}
                   </button>}
                 </div>
-                <div style={{fontSize:11,color:LP.muted,fontFamily:"ui-monospace,monospace",marginBottom:8}}>{sel.table}</div>
+                <div style={{fontSize:11,color:"#64748b",fontFamily:"ui-monospace,monospace",marginBottom:8}}>{sel.table}</div>
                 {(sel.synonyms||[]).length>0 && <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
-                  {sel.synonyms.map(s=><span key={s} style={{fontSize:10,color:LP.muted,background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:4,padding:"1px 6px"}}>{s}</span>)}
+                  {sel.synonyms.map(s=><span key={s} style={{fontSize:10,color:"#64748b",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:4,padding:"1px 6px"}}>{s}</span>)}
                 </div>}
 
                 <div style={{padding:"9px 11px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14}}>
-                  <div style={{fontSize:10.5,fontWeight:700,color:"#15803d",marginBottom:2}}>GRAIN</div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#15803d",letterSpacing:"0.06em",marginBottom:2}}>GRAIN</div>
                   <div style={{fontSize:11.5,color:"#166534"}}>one row per {sel.key||"—"}</div>
                   <div style={{fontSize:10.5,color:"#16a34a",marginTop:3}}>{sel.evidence}</div>
                 </div>
 
-                {selRels.length>0 && <>
-                  <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",marginBottom:6}}>JOINS</div>
+                {selRels.length>0 && <><SLabel>Joins</SLabel>
                   {selRels.map(r=>{
                     const other = entities.find(e=>e.id===(r.from===sel.id?r.to:r.from));
-                    const outgoing = r.from===sel.id;
                     return (
-                      <div key={r.id} style={{padding:"8px 10px",background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:7,marginBottom:6}}>
-                        <div style={{fontSize:11.5,fontWeight:600,color:LP.text}}>
-                          {outgoing?"→":"←"} {other?other.name:"—"}
-                        </div>
-                        <div style={{fontSize:10.5,color:LP.muted,fontFamily:"ui-monospace,monospace",marginTop:2}}>{r.fromKey} = {r.toKey}</div>
-                        <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>
-                          {r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}
-                        </div>
+                      <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
+                        <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a"}}>{r.from===sel.id?"→":"←"} {other?other.name:"—"}</div>
+                        <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{r.fromKey} = {r.toKey}</div>
+                        <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>{r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}</div>
                       </div>
                     );
                   })}
                 </>}
 
-                <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",margin:"14px 0 6px"}}>DECLARED HERE</div>
+                <div style={{marginTop:14}}><SLabel>Declared here</SLabel></div>
                 <div style={{display:"flex",gap:14,marginBottom:10}}>
-                  {[["Dimensions",selDims.length,SL_COLKIND.dimension.c],["Facts",selFacts.length,SL_COLKIND.fact.c],["Metrics",selMets.length,LP.accent]].map(([k,v,c])=>(
+                  {[["Dimensions",selDims.length,"#d97706"],["Facts",selFacts.length,"#16a34a"],["Metrics",selMets.length,"#6366f1"]].map(([k,v,c])=>(
                     <div key={k}>
-                      <div style={{fontSize:15,fontWeight:700,color:v?c:LP.faint,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
-                      <div style={{fontSize:10,color:LP.muted,marginTop:2}}>{k}</div>
+                      <div style={{fontSize:15,fontWeight:700,color:v?c:"#94a3b8",fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
+                      <div style={{fontSize:10,color:"#64748b",marginTop:2}}>{k}</div>
                     </div>
                   ))}
                 </div>
                 {selMets.length>0 && <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
                   {selMets.map(m=>(
                     <button key={m.id} onClick={()=>onOpenMetric&&onOpenMetric(m.id)}
-                      style={{fontSize:10.5,fontWeight:600,color:LP.sub,background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit"}}>{m.name}</button>
+                      style={{fontSize:10.5,fontWeight:600,color:"#475569",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit"}}>{m.name}</button>
                   ))}
                 </div>}
 
-                <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",marginBottom:6}}>WHERE IT LIVES</div>
+                <SLabel>Where it lives</SLabel>
                 {Object.entries(sel.bindings||{}).map(([k,v])=>(
                   <div key={k} style={{display:"flex",gap:8,fontSize:10.5,marginBottom:4}}>
-                    <span style={{minWidth:64,fontWeight:600,color:LP.sub}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
-                    <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?LP.faint:LP.muted,wordBreak:"break-all"}}>{v}</span>
+                    <span style={{minWidth:64,fontWeight:600,color:"#475569"}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
+                    <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?"#94a3b8":"#64748b",wordBreak:"break-all"}}>{v}</span>
                   </div>
                 ))}
               </div>}
@@ -35592,6 +35582,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, on
     </div>
   );
 };
+
 
 // ── Declare a dimension or a fact. One drawer, because the only real difference is
 //    what the column is for: slicing, or being aggregated.
@@ -35914,7 +35905,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [newMdlOpen,  setNewMdlOpen]  = useState(false);
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
-  const [cfgPane,     setCfgPane]     = useState("sync");  // "sync" | "source" | "output"
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
@@ -36013,18 +36003,12 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
-                  {k:"alignment",l:`In your tools · ${mVendor.length}`},
+                  {k:"alignment",l:`Alignment · ${mVendor.length}`},
                   {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
     const startEdit = () => { setDraft({...mdl}); setEditing(true); };
     const saveEdit  = () => { patchModel({name:draft.name,desc:draft.desc,domain:draft.domain,owner:draft.owner,steward:draft.steward,targets:draft.targets,entityIds:draft.entityIds}); setEditing(false); onToast&&onToast("Model updated","success"); };
-    const SB = ({label, children}) => (
-      <div style={{marginBottom:16}}>
-        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{label}</div>
-        {children}
-      </div>
-    );
 
     return (
       <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -36061,7 +36045,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
           <div style={{padding:"0 28px 28px"}}>
 
             {tab==="overview" && (
-              <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24,alignItems:"start"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 234px",gap:24,alignItems:"start"}}>
                 <div>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
@@ -36181,37 +36165,44 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </>}
                 </div>
 
-                {/* Right sidebar — same shape as the other profile screens */}
-                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px"}}>
-                  <SB label="Status"><SLStatusChip status={mdl.status}/></SB>
-                  <SB label="Domain"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.domain}</div></SB>
-                  <SB label="Owners">
-                    <div style={{display:"flex",alignItems:"center",gap:7}}>
-                      <span style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,color:T.accent,fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {String(mdl.owner||"?").split(".").map(s=>s[0]||"").join("").toUpperCase()}
-                      </span>
-                      <span style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.owner}</span>
+                {/* Sidebar — the asset profile's rail, not a lookalike: a 234px column of
+                    Card2s, each opening with an SLabel over space-between rows. */}
+                <div style={{width:234,flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
+                  <Card2 style={{padding:"14px 16px"}}>
+                    <SLRailLabel>Ownership</SLRailLabel>
+                    <SLRailRow k="Domain"  v={mdl.domain}/>
+                    <SLRailRow k="Owner"   v={mdl.owner}/>
+                    <SLRailRow k="Steward" v={mdl.steward} last/>
+                  </Card2>
+
+                  <Card2 style={{padding:"14px 16px"}}>
+                    <SLRailLabel>Status</SLRailLabel>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+                      <span style={{fontSize:12,color:T.textMuted}}>Certification</span>
+                      <SLStatusChip status={mdl.status}/>
                     </div>
-                  </SB>
-                  <SB label="Stewards">
-                    <div style={{display:"flex",alignItems:"center",gap:7}}>
-                      <span style={{width:22,height:22,borderRadius:"50%",background:T.blueDim,color:T.blue,fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {String(mdl.steward||"?").split(".").map(s=>s[0]||"").join("").toUpperCase()}
-                      </span>
-                      <span style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.steward}</span>
+                    <SLRailRow k="Created"   v={mdl.created} mono/>
+                    <SLRailRow k="Published" v={mdl.lastPublished||"Never"} mono/>
+                    <SLRailRow k="Synced"    v={mdl.lastSynced||"Never"} mono last/>
+                  </Card2>
+
+                  <Card2 style={{padding:"14px 16px"}}>
+                    <SLRailLabel>Model</SLRailLabel>
+                    <SLRailRow k="Entities"   v={String(mEnts.length)}  mono/>
+                    <SLRailRow k="Dimensions" v={String(mDims.length)}  mono/>
+                    <SLRailRow k="Facts"      v={String(mFacts.length)} mono/>
+                    <SLRailRow k="Metrics"    v={String(mMetrics.length)} mono last/>
+                  </Card2>
+
+                  <Card2 style={{padding:"14px 16px"}}>
+                    <SLRailLabel>Publishing</SLRailLabel>
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:9}}>
+                      {(mdl.targets||[]).length
+                        ? mdl.targets.map(t=><SLSysChip key={t} system={t}/>)
+                        : <span style={{fontSize:12,color:T.textMuted}}>No targets</span>}
                     </div>
-                  </SB>
-                  <SB label="Entities"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mEnts.map(e=>e.name).join(", ")||"—"}</div></SB>
-                  <SB label="Publishes to">
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(mdl.targets||[]).map(t=><SLSysChip key={t} system={t}/>)}</div>
-                  </SB>
-                  <SB label="Last published"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.lastPublished||"Never"}</div></SB>
-                  <SB label="Last reverse sync"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.lastSynced||"Never"}</div></SB>
-                  <SB label="Created"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.created}</div></SB>
-                  <div style={{paddingTop:6,borderTop:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Format</div>
-                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>ESM v{ESM_VERSION} · platform-neutral</div>
-                  </div>
+                    <SLRailRow k="Format" v={`ESM v${ESM_VERSION}`} mono last/>
+                  </Card2>
                 </div>
               </div>
             )}
@@ -36227,10 +36218,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
 
             {tab==="config" && (()=>{
-              const CFG = [
-                {k:"sync",   l:"Reverse sync", d:"Reading definitions back out of your platforms"},
-                {k:"source", l:"Source",       d:"The ESM document — edit it and everything follows"},
-              ];
               const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
               const FREQ = [{v:"hourly",l:"Every hour"},{v:"daily",l:"Daily"},{v:"weekly",l:"Weekly"},{v:"manual",l:"Manual only"}];
               const DRIFT = [
@@ -36242,15 +36229,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
               const outFiles = slBuildArtifacts(outPlat, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts});
               return (
                 <div>
-                <div style={{display:"flex",gap:3,borderBottom:`1px solid ${T.border}`,marginBottom:22}}>
-                  {CFG.map(c=>(
-                    <button key={c.k} onClick={()=>setCfgPane(c.k)} title={c.d}
-                      style={{padding:"8px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${cfgPane===c.k?T.accent:"transparent"}`,
-                        color:cfgPane===c.k?T.text:T.textMuted,fontSize:12.5,fontWeight:cfgPane===c.k?700:500,cursor:"pointer",marginBottom:-1}}>{c.l}</button>
-                  ))}
-                </div>
-
-                {cfgPane==="source" && <div style={{maxWidth:900}}>
+                <div style={{maxWidth:900}}>
                   <SH title={`Semantic model source · ESM v${ESM_VERSION}`}
                       sub="The one document everything else is built from. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
                   <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
@@ -36285,7 +36264,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
                 </div>}
 
-                {cfgPane==="sync" && <div style={{maxWidth:760}}>
+                <div style={{height:1,background:T.border,margin:"30px 0 26px",maxWidth:900}}/>
+
+                <div style={{maxWidth:760}}>
                   <SH title="Reverse sync"
                       sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
@@ -36360,7 +36341,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       {sync.enabled?"Results appear on Overview.":"Turn reverse sync on first."}
                     </span>
                   </div>
-                </div>}
+                </div>
                 </div>
               );
             })()}
