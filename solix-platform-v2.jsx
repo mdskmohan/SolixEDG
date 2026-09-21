@@ -33482,7 +33482,7 @@ const SL_ENTITIES = [
 
 const SL_MODELS = [
   {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
-   status:"Approved", entityIds:["e_order","e_customer"], targets:["dbt","snowflake","powerbi"],
+   status:"Approved", entityIds:["e_order","e_customer"], targets:["ossie","dbt","snowflake","powerbi"],
    owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue","KPI"], terms:["Customer Lifetime Value"],
    lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item"},
    desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
@@ -33664,6 +33664,13 @@ const ESM_VERSION = "1.0";
 
 
 const SL_PLATFORMS = {
+  ossie: {
+    label:"Apache Ossie", family:"interchange", adapter:"ready", order:0,
+    artifact:"core-spec 0.2.0.dev0 YAML",
+    caps:{joins:"explicit", timeIntelligence:"window", semiAdditive:true,
+          metricTypes:["simple","ratio","derived","cumulative"], filterDirection:false,
+          governanceCarry:"custom_extensions (lossless)"},
+    note:"The interchange standard rather than a runtime — formerly Open Semantic Interchange. It has no metric typology, so every metric compiles to a single expression; everything the core spec leaves out travels in custom_extensions under one vendor name and comes back unchanged."},
   dbt: {
     label:"dbt", family:"declarative", adapter:"ready", order:1,
     artifact:"semantic_models + metrics YAML",
@@ -34072,10 +34079,10 @@ const SLTypeChip = ({type}) => {
   const t = SL_TYPES[type]||SL_TYPES.simple;
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}30`,whiteSpace:"nowrap"}}>{t.l}</span>;
 };
+const SL_SYS_COLOUR = {dbt:"#ff694b", powerbi:"#f2c811", tableau:"#4e79a7",
+                       snowflake:"#29b5e8", databricks:"#ff3621", cube:"#a259ff", ossie:"#d22128"};
 const SLSysChip = ({system}) => {
-  const map = {dbt:{l:"dbt",c:"#ff694b"}, powerbi:{l:"Power BI",c:"#f2c811"}, tableau:{l:"Tableau",c:"#4e79a7"},
-               snowflake:{l:"Snowflake",c:"#29b5e8"}, databricks:{l:"Databricks",c:"#ff3621"}, cube:{l:"Cube",c:"#a259ff"}};
-  const s = map[system]||{l:system,c:T.textMuted};
+  const s = {l:(SL_PLATFORMS[system]||{}).label || system, c:SL_SYS_COLOUR[system] || T.textMuted};
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:`${s.c}18`,color:s.c,border:`1px solid ${s.c}35`,whiteSpace:"nowrap"}}>{s.l}</span>;
 };
 
@@ -35001,7 +35008,385 @@ const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
   return [{path:`${mdl.name.replace(/ /g,"")}.tmdl`, lang:"tmdl", body:L.join("\n")}];
 };
 
-const SL_ADAPTERS = {dbt:slAdaptDbt, snowflake:slAdaptSnowflake, databricks:slAdaptDatabricks, powerbi:slAdaptPowerBI};
+// ══════════════════════════════════════════════════════════════════════════════════
+// APACHE OSSIE (incubating) — formerly Open Semantic Interchange (OSI).
+// core-spec 0.2.0.dev0 · https://github.com/apache/ossie
+//
+// This is not another vendor target. It is the interchange standard, so EDG emits a
+// document that validates against the published JSON Schema rather than something
+// Ossie-flavoured. The core spec is deliberately small — no metric typology, no
+// ownership, no certification, no additivity, no grain — and it defines
+// `custom_extensions` as the escape hatch for exactly that. Everything EDG knows and
+// Ossie does not travels there under one vendor name and comes back unchanged, which
+// is the difference between extending a standard and diverging from it.
+// ══════════════════════════════════════════════════════════════════════════════════
+const OSSIE_VERSION   = "0.2.0.dev0";
+const OSSIE_VENDOR    = "SOLIX";
+const OSSIE_DIALECTS  = ["ANSI_SQL","SNOWFLAKE","MDX","TABLEAU","DATABRICKS","MAQL","BIGQUERY","SIGMA","THOUGHTSPOT","DAX"];
+const OSSIE_DATATYPES = ["String","Integer","Decimal","Float","Boolean","Date","Time","DateTime","DateTimeTz","Opaque"];
+
+// Every object in the schema sets additionalProperties:false, so an unrecognised key
+// is a validation failure and not a harmless extra. Holding the allowed sets here is
+// what lets the check below be the real rule rather than a spot check.
+const OSSIE_SHAPE = {
+  document:     {req:["version","name","datasets"],                    opt:["description","ai_context","relationships","metrics","custom_extensions"]},
+  dataset:      {req:["name","source"],                                opt:["primary_key","unique_keys","description","ai_context","fields","custom_extensions"]},
+  field:        {req:["name","expression"],                            opt:["dimension","label","description","datatype","ai_context","custom_extensions"]},
+  relationship: {req:["name","from","to","from_columns","to_columns"], opt:["ai_context","custom_extensions"]},
+  metric:       {req:["name","expression"],                            opt:["description","datatype","ai_context","custom_extensions"]},
+};
+
+// Physical type onto the portable vocabulary. A type genuinely outside it becomes
+// Opaque and an unrecognised one is omitted — both are what the spec asks for, and
+// both beat guessing, because a wrong datatype is worse than a missing one.
+const slOssieType = (physical) => {
+  const t = String(physical||"").toUpperCase().trim();
+  if(!t) return null;
+  if(/^TIMESTAMPTZ|^TIMESTAMP WITH TIME ZONE/.test(t))                  return "DateTimeTz";
+  if(/^TIMESTAMP|^DATETIME/.test(t))                                    return "DateTime";
+  if(/^DATE$/.test(t))                                                  return "Date";
+  if(/^TIME$/.test(t))                                                  return "Time";
+  if(/^BOOL/.test(t))                                                   return "Boolean";
+  if(/^FLOAT|^DOUBLE|^REAL/.test(t))                                    return "Float";
+  if(/^DECIMAL|^NUMERIC/.test(t))                                       return "Decimal";
+  if(/^NUMBER\(\s*\d+\s*,\s*[1-9]/.test(t))                             return "Decimal";
+  if(/^NUMBER|^BIGINT|^INT|^SMALLINT|^TINYINT|^SERIAL|^BIGSERIAL/.test(t)) return "Integer";
+  if(/^VARCHAR|^CHAR|^STRING|^TEXT|^NVARCHAR|^ENUM/.test(t))            return "String";
+  if(/^JSON|^BLOB|^BYTEA|^BINARY|^ARRAY|^STRUCT|^VARIANT|^GEO/.test(t)) return "Opaque";
+  return null;
+};
+const slColPhysType = (table, col) => ((SCHEMA[table]||[]).find(c=>c.name===col)||{}).type || null;
+
+// A metric's result type. Derived from what the aggregation does, not from the unit,
+// because COUNT is an Integer whether you label it users or sessions.
+const slOssieMetricType = (m) => {
+  if(m.type==="ratio")   return "Decimal";
+  if(m.type==="derived") return m.unit==="%" ? "Decimal" : null;
+  const agg = String(m.agg||"");
+  if(/count/.test(agg))  return "Integer";
+  if(/sum|avg|min|max/.test(agg)) return slOssieType(slColPhysType((m._table||""), m.col)) || "Decimal";
+  return null;
+};
+
+// ── ONE EXPRESSION PER METRIC. Ossie has no metric typology: a ratio, a derived
+//    metric and a running total are all just expressions to it. Whatever cannot be
+//    written as one is reported, never faked — a plausible expression that does not
+//    compute the metric is the worst thing this file could produce.
+const slOssieExpr = (m, ents, allMets) => {
+  const e  = ents.find(x=>x.id===m.entity);
+  const ds = e ? slSlug(e.table) : "t";
+  const issues = [];
+  const col  = c => `${ds}.${c}`;
+  const pred = () => (m.filters||[]).map(f=>`${col(f.col)} ${f.op==="is not"?"<>":"="} '${f.val}'`).join(" AND ");
+  const agg  = (a,c,filtered) => {
+    const inner = filtered && (m.filters||[]).length ? `CASE WHEN ${pred()} THEN ${col(c)} END` : col(c);
+    return String(a)==="count distinct" ? `COUNT(DISTINCT ${inner})` : `${String(a).toUpperCase()}(${inner})`;
+  };
+
+  if(m.type==="simple"){
+    if(!m.col || !m.agg){ issues.push("no column or aggregation declared"); return {sql:null, issues}; }
+    return {sql: agg(m.agg, m.col, true), issues};
+  }
+
+  if(m.type==="ratio"){
+    const n=m.numerator, d=m.denominator;
+    if(!n||!d){ issues.push("numerator or denominator is not declared"); return {sql:null, issues}; }
+    return {sql:`${agg(n.agg,n.col,true)} / NULLIF(${agg(d.agg,d.col,false)}, 0)`, issues};
+  }
+
+  if(m.type==="cumulative"){
+    const base = (m.basedOn||[]).map(id=>(allMets||[]).find(x=>x.id===id) || _slState.metrics.find(x=>x.id===id)).filter(Boolean)[0];
+    if(!base){ issues.push("no base metric to accumulate"); return {sql:null, issues}; }
+    const inner = slOssieExpr(base, ents, allMets);
+    if(!inner.sql){ issues.push(`base metric ${base.name} has no expression of its own`); return {sql:null, issues}; }
+    return {sql:`SUM(${inner.sql}) OVER (ORDER BY ${col(m.timeDim)} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`, issues};
+  }
+
+  // Derived. The formula is authored for people, so the mathematical symbols have to
+  // become operators and every name in it has to resolve to a metric in this document.
+  if(m.type==="derived"){
+    if(!m.formula){ issues.push("no formula"); return {sql:null, issues}; }
+    const known = {};
+    (allMets||[]).forEach(x=>{ known[slSlug(x.name)] = true; });
+    let f = String(m.formula).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–—]/g,"-");
+    (allMets||[]).forEach(x=>{ f = f.split(x.name).join(slSlug(x.name)); });
+    const unresolved = (f.match(/[A-Za-z_][A-Za-z0-9_]*/g)||[])
+      .filter((w,i,a)=>a.indexOf(w)===i)
+      .filter(w=>!known[w] && !/^(and|or|not|case|when|then|else|end|null|sum|count|avg|min|max|distinct|over|partition|by|order|rows|between|unbounded|preceding|current|row|nullif)$/i.test(w));
+    if(unresolved.length)
+      issues.push(`formula names ${unresolved.map(w=>`\`${w}\``).join(", ")}, which ${unresolved.length===1?"is not a metric":"are not metrics"} in this document`);
+    return {sql:f, issues};
+  }
+
+  issues.push(`metric type \`${m.type}\` has no expression form`);
+  return {sql:null, issues};
+};
+
+// ── BUILD THE DOCUMENT. A plain object, not text, so the validator below checks the
+//    same thing the serialiser writes rather than a second guess at it.
+const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
+  const ext  = (o) => [{vendor_name: OSSIE_VENDOR, data: JSON.stringify(o, null, 2)}];
+  const term = (id) => { const t = GLOSSARY_TERMS.find(x=>x.id===id); return t ? t.term : null; };
+  const ai   = (instructions, synonyms) => {
+    const syn = (synonyms||[]).filter(Boolean).filter((s,i,a)=>a.indexOf(s)===i);
+    if(!instructions && !syn.length) return undefined;
+    const o = {}; if(instructions) o.instructions = instructions; if(syn.length) o.synonyms = syn;
+    return o;
+  };
+
+  const doc = {
+    version: OSSIE_VERSION,
+    name: slSlug(mdl.name),
+    description: mdl.desc || undefined,
+    ai_context: ai(mdl.desc, (mdl.terms||[])),
+    datasets: [],
+  };
+
+  ents.forEach(e=>{
+    const eDims  = (dims ||[]).filter(d=>d.entity===e.id);
+    const eFacts = (facts||[]).filter(x=>x.entity===e.id);
+    const concept = slEntConcept(e);
+    const ds = slSlug(e.table);
+    const fields = [];
+    const push = (name, label, description, isTime, synonyms, solix) => {
+      if(fields.some(f=>f.name===name)) return;
+      const dt = slOssieType(slColPhysType(e.table, name));
+      fields.push({
+        name,
+        expression: {dialects:[{dialect:"ANSI_SQL", expression:`${ds}.${name}`}]},
+        dimension: {is_time: !!isTime},
+        label: label || undefined,
+        description: description || undefined,
+        datatype: dt || undefined,
+        ai_context: ai(null, synonyms),
+        custom_extensions: ext(solix),
+      });
+    };
+
+    // The key first, then what the model measures, then what it slices by — the same
+    // order the Relationships canvas labels a node's columns in.
+    if(e.key) push(e.key, null, `Primary key of ${e.name}.`, false, null, {role:"key"});
+    eFacts.forEach(x=>push(x.column, x.name, x.desc, false, [x.name],
+      {role:"fact", additive:x.additive!==false}));
+    eDims.forEach(d=>push(d.column, d.name, d.desc, d.type==="time", [d.name, term(d.termId)],
+      {role:"dimension", dimension_type:d.type, glossary_term:term(d.termId)||null}));
+
+    doc.datasets.push({
+      name: ds,
+      source: (e.bindings||{}).snowflake || (e.bindings||{}).databricks || e.table,
+      primary_key: e.key ? [e.key] : undefined,
+      description: e.desc || undefined,
+      ai_context: ai(e.desc, [e.name, ...(concept ? slConceptNames(concept) : [])]),
+      fields: fields.length ? fields : undefined,
+      custom_extensions: ext({
+        label: e.name,
+        concept: concept ? slSlug(concept.name) : null,
+        domain: e.domain, owner: e.owner,
+        grain_evidence: e.evidence || null,
+        time_dimensions: e.timeDims || [],
+        bindings: e.bindings || {},
+      }),
+    });
+  });
+
+  if((rels||[]).length) doc.relationships = rels.map(r=>{
+    const f = ents.find(x=>x.id===r.from), t = ents.find(x=>x.id===r.to);
+    return {
+      name: `${f?slSlug(f.table):r.from}_to_${t?slSlug(t.table):r.to}`,
+      from: f ? slSlug(f.table) : r.from,   // many side
+      to:   t ? slSlug(t.table) : r.to,     // one side
+      from_columns: [r.fromKey],
+      to_columns:   [r.toKey],
+      ai_context: ai(r.note, null),
+      // Cardinality, filter direction and fan-out safety are EDG's answer to the
+      // question Ossie does not ask. Power BI and Snowflake both need them.
+      custom_extensions: ext({
+        cardinality: r.cardinality,
+        filter_direction: r.filterDirection,
+        fan_out_safe: r.fanOutSafe!==false,
+      }),
+    };
+  });
+
+  if((mets||[]).length) doc.metrics = mets.map(m=>{
+    const e = ents.find(x=>x.id===m.entity);
+    const {sql} = slOssieExpr({...m, _table:e?e.table:null}, ents, mets);
+    return {
+      name: slSlug(m.name),
+      expression: {dialects: sql ? [{dialect:"ANSI_SQL", expression: sql}] : []},
+      description: m.definition || undefined,
+      datatype: slOssieMetricType({...m, _table:e?e.table:null}) || undefined,
+      ai_context: ai(m.definition, [m.name, term(m.termId)]),
+      custom_extensions: ext({
+        label: m.name,
+        metric_type: m.type,
+        dataset: e ? slSlug(e.table) : null,
+        time_dimension: m.timeDim || null,
+        time_grain: m.timeGrain || null,
+        window: m.window || null,
+        unit: m.unit || null,
+        additive: m.additive!==false,
+        filters: (m.filters||[]).map(f=>({column:f.col, op:f.op, value:f.val})),
+        dimensions: m.dims || [],
+        governance: {
+          owner: m.owner, steward: m.steward,
+          certification: String(m.status||"").toLowerCase().replace(/ /g,"_"),
+          certified_by: m.certifiedBy || null, certified_at: m.certifiedAt || null,
+          glossary_term: term(m.termId) || null,
+        },
+      }),
+    };
+  });
+
+  doc.custom_extensions = ext({
+    esm_version: ESM_VERSION,
+    model_id: mdl.id, label: mdl.name, domain: mdl.domain, status: mdl.status,
+    owners: mdl.owners||[], stewards: mdl.stewards||[], tags: mdl.tags||[], terms: mdl.terms||[],
+    publish_targets: mdl.targets||[], last_published: mdl.lastPublished||null,
+  });
+
+  // undefined keys must not reach the serialiser — the schema forbids nulls where it
+  // expects a type, and an empty key is not the same as an absent one.
+  const prune = (v) => {
+    if(Array.isArray(v)) return v.map(prune);
+    if(v && typeof v==="object"){
+      const o = {};
+      Object.entries(v).forEach(([k,x])=>{ if(x!==undefined) o[k]=prune(x); });
+      return o;
+    }
+    return v;
+  };
+  return prune(doc);
+};
+
+// ── SERIALISE. A small YAML writer rather than a dependency, so the document in the
+//    UI is the document the validator saw.
+const slYaml = (v, ind=0) => {
+  const pad = " ".repeat(ind);
+  const scalar = (s) => {
+    if(typeof s === "boolean" || typeof s === "number") return String(s);
+    const t = String(s);
+    if(t.includes("\n")) return null;                                 // caller uses a block
+    if(t === "") return '""';
+    if(/^[\w./@-]+$/.test(t) && !/^(true|false|null|yes|no|on|off|~)$/i.test(t) && !/^-?\d/.test(t)) return t;
+    return `"${t.replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`;
+  };
+  if(Array.isArray(v)) return v.map(item=>{
+    if(item && typeof item === "object" && !Array.isArray(item)){
+      const body = slYaml(item, ind+2);
+      return `${pad}-${body.slice(ind+1)}`;                           // hoist the first key onto the dash
+    }
+    return `${pad}- ${scalar(item)}`;
+  }).join("\n");
+  if(v && typeof v === "object") return Object.entries(v).map(([k,x])=>{
+    if(Array.isArray(x)) return x.length ? `${pad}${k}:\n${slYaml(x, ind+2)}` : `${pad}${k}: []`;
+    if(x && typeof x === "object") return `${pad}${k}:\n${slYaml(x, ind+2)}`;
+    const s = scalar(x);
+    if(s === null) return `${pad}${k}: |\n${String(x).split("\n").map(l=>" ".repeat(ind+2)+l).join("\n")}`;
+    return `${pad}${k}: ${s}`;
+  }).join("\n");
+  return `${pad}${scalar(v)}`;
+};
+
+// ── VALIDATE against ossie-schema.json. Required fields, the closed key sets, the two
+//    enums and the cross-references. This is what makes "OSI compatible" a claim the
+//    screen can be wrong about, rather than a sentence in a deck.
+const slOssieValidate = (doc) => {
+  const out = [];
+  const add = (level, path, msg) => out.push({level, path, msg});
+  const shape = (obj, kind, path) => {
+    const s = OSSIE_SHAPE[kind];
+    s.req.forEach(k=>{
+      const v = obj[k];
+      if(v===undefined || v===null || (Array.isArray(v) && !v.length) || v==="")
+        add("error", path, `missing required field \`${k}\``);
+    });
+    const allowed = [...s.req, ...s.opt];
+    Object.keys(obj).forEach(k=>{
+      if(!allowed.includes(k)) add("error", path, `\`${k}\` is not a ${kind} field — the schema sets additionalProperties:false`);
+    });
+  };
+  const expr = (o, path) => {
+    const d = (o.expression||{}).dialects;
+    if(!Array.isArray(d) || !d.length){ add("error", path, "expression.dialects needs at least one entry"); return; }
+    d.forEach((x,i)=>{
+      if(!OSSIE_DIALECTS.includes(x.dialect)) add("error", `${path}.expression.dialects[${i}]`, `\`${x.dialect}\` is not a supported dialect`);
+      if(!x.expression) add("error", `${path}.expression.dialects[${i}]`, "expression is empty");
+    });
+  };
+  const dtype = (o, path) => {
+    if(o.datatype!==undefined && !OSSIE_DATATYPES.includes(o.datatype))
+      add("error", path, `\`${o.datatype}\` is not one of the ten portable datatypes`);
+  };
+  const exts = (o, path) => (o.custom_extensions||[]).forEach((x,i)=>{
+    if(!x.vendor_name) add("error", `${path}.custom_extensions[${i}]`, "vendor_name is required");
+    if(typeof x.data !== "string") add("error", `${path}.custom_extensions[${i}]`, "data must be a JSON string, not an object");
+    else { try { JSON.parse(x.data); } catch(err){ add("error", `${path}.custom_extensions[${i}]`, "data is not valid JSON"); } }
+  });
+
+  if(doc.version !== OSSIE_VERSION) add("error", "version", `must be "${OSSIE_VERSION}"`);
+  shape(doc, "document", "document");
+  exts(doc, "document");
+  if(!Array.isArray(doc.datasets) || !doc.datasets.length) add("error", "datasets", "at least one dataset is required");
+
+  const names = {};
+  (doc.datasets||[]).forEach(d=>{
+    const p = `datasets.${d.name||"?"}`;
+    shape(d, "dataset", p); exts(d, p);
+    if(names[d.name]) add("error", p, "duplicate dataset name"); names[d.name] = d;
+    (d.primary_key||[]).forEach(k=>{
+      if((d.fields||[]).length && !d.fields.some(f=>f.name===k))
+        add("warning", p, `primary key \`${k}\` is not among the declared fields`);
+    });
+    (d.fields||[]).forEach(f=>{
+      const fp = `${p}.${f.name||"?"}`;
+      shape(f, "field", fp); expr(f, fp); dtype(f, fp); exts(f, fp);
+    });
+  });
+
+  (doc.relationships||[]).forEach(r=>{
+    const p = `relationships.${r.name||"?"}`;
+    shape(r, "relationship", p); exts(r, p);
+    if(r.from && !names[r.from]) add("error", p, `\`from\` names \`${r.from}\`, which is not a dataset in this document`);
+    if(r.to   && !names[r.to])   add("error", p, `\`to\` names \`${r.to}\`, which is not a dataset in this document`);
+    if((r.from_columns||[]).length !== (r.to_columns||[]).length)
+      add("error", p, "from_columns and to_columns must have the same number of columns");
+  });
+
+  (doc.metrics||[]).forEach(m=>{
+    const p = `metrics.${m.name||"?"}`;
+    shape(m, "metric", p); expr(m, p); dtype(m, p); exts(m, p);
+  });
+  return out;
+};
+
+// Ossie is an artifact like any other target, so it goes through the same adapter
+// registry and shows up in the same publish drawer.
+const slAdaptOssie = (ctx) => {
+  const doc = slOssieDoc(ctx);
+  const head = [
+    `# Apache Ossie (incubating) core-spec ${OSSIE_VERSION} — formerly Open Semantic Interchange`,
+    `# Generated by EDG · Semantic Layer · model ${ctx.mdl.name}`,
+    `# Validates against https://github.com/apache/ossie/blob/main/core-spec/ossie-schema.json`,
+    "",
+  ].join("\n");
+  return [{path:`ossie/${slSlug(ctx.mdl.name)}.yaml`, lang:"yaml", body: head + slYaml(doc)}];
+};
+
+// Which metrics cannot cross the standard, and why. Separate from schema validity: a
+// document can validate and still have dropped something, and saying so is the point.
+const slOssieGaps = ({ents, mets}) => {
+  const gaps = [];
+  (mets||[]).forEach(m=>{
+    const e = ents.find(x=>x.id===m.entity);
+    const {sql, issues} = slOssieExpr({...m, _table:e?e.table:null}, ents, mets);
+    if(!sql)          gaps.push({metric:m, level:"blocked", why:issues[0]||"cannot be expressed"});
+    else if(issues.length) gaps.push({metric:m, level:"check", why:issues[0]});
+  });
+  return gaps;
+};
+
+const SL_ADAPTERS = {ossie:slAdaptOssie, dbt:slAdaptDbt, snowflake:slAdaptSnowflake, databricks:slAdaptDatabricks, powerbi:slAdaptPowerBI};
 const slBuildArtifacts = (platKey, ctx) => {
   const fn = SL_ADAPTERS[platKey];
   if(!fn) return [];
@@ -36380,7 +36765,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
               return (
                 <div>
                 <div style={{marginBottom:20}}>
-                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Sync"}]}
+                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"ossie",label:"Ossie"},{key:"sync",label:"Sync"}]}
                     active={cfgTab} onChange={setCfgTab}/>
                 </div>
 
@@ -36419,6 +36804,108 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
                 </div>}
 
+                {cfgTab==="ossie" && (()=>{
+                  const octx = {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts};
+                  const odoc = slOssieDoc(octx);
+                  const oerr = slOssieValidate(odoc);
+                  const bad  = oerr.filter(e=>e.level==="error");
+                  const warn = oerr.filter(e=>e.level==="warning");
+                  const gaps = slOssieGaps(octx);
+                  const file = (slBuildArtifacts("ossie", octx)||[])[0] || {path:"—", body:""};
+                  const nFields = (odoc.datasets||[]).reduce((n,d)=>n+(d.fields||[]).length, 0);
+                  const carried = [
+                    ["datasets",      `${(odoc.datasets||[]).length} — one per entity, bound to its physical source`],
+                    ["fields",        `${nFields} — keys, facts and dimensions, each with an ANSI_SQL expression`],
+                    ["relationships", `${(odoc.relationships||[]).length} — declared joins, many side to one side`],
+                    ["metrics",       `${(odoc.metrics||[]).length} — one expression each, because the spec has no metric typology`],
+                    ["ai_context",    "descriptions and every synonym the concepts declare"],
+                  ];
+                  const extended = [
+                    "metric type, grain, window and unit",
+                    "owner, steward and certification",
+                    "cardinality, filter direction and fan-out safety",
+                    "additivity, dimension roles and glossary terms",
+                  ];
+                  return (
+                  <div style={{maxWidth:900}}>
+                    <SH title={`Apache Ossie · core-spec ${OSSIE_VERSION}`}
+                        sub="The interchange standard, formerly Open Semantic Interchange. This is the document EDG hands to anything that is not EDG, so it is generated against the published JSON Schema rather than made to resemble it."/>
+
+                    <div style={{padding:"13px 16px",borderRadius:10,marginBottom:20,
+                      background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
+                      border:`1px solid ${bad.length?T.rose+"35":T.green+"35"}`}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:bad.length||warn.length?7:0}}>
+                        <span style={{fontSize:13,fontWeight:700,color:bad.length?T.rose:T.green}}>
+                          {bad.length
+                            ? `Does not validate — ${bad.length} problem${bad.length===1?"":"s"}`
+                            : `Validates against ossie-schema.json ${OSSIE_VERSION}`}
+                        </span>
+                        {!bad.length && <span style={{fontSize:11,color:T.textMuted}}>
+                          required fields, closed key sets, both enums and every cross-reference
+                        </span>}
+                      </div>
+                      {[...bad, ...warn].map((e,i)=>(
+                        <div key={i} style={{fontSize:11.5,lineHeight:1.6,color:e.level==="error"?T.textSub:T.amber}}>
+                          · <span style={{fontFamily:"ui-monospace,monospace"}}>{e.path}</span> — {e.msg}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:22}}>
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>In the core spec</div>
+                        {carried.map(([k,v])=>(
+                          <div key={k} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:4}}>
+                            <span style={{fontFamily:"ui-monospace,monospace",color:T.text}}>{k}</span> · {v}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>
+                          In custom_extensions
+                        </div>
+                        {extended.map(t=>(
+                          <div key={t} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:4}}>· {t}</div>
+                        ))}
+                        <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+                          The escape hatch the spec defines, under one vendor name. Nothing is invented alongside the standard, and a reader that ignores it still gets a working model.
+                        </div>
+                      </div>
+                    </div>
+
+                    {gaps.length>0 && <div style={{marginBottom:22}}>
+                      <SH title="What the crossing costs"
+                          sub="Ossie has no metric typology, so a metric that cannot be written as one expression cannot cross intact. Reported rather than quietly approximated."/>
+                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                        {gaps.map((g,i)=>(
+                          <div key={g.metric.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 15px",
+                            borderBottom:i<gaps.length-1?`1px solid ${T.border}`:"none"}}>
+                            <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",
+                              padding:"3px 7px",borderRadius:5,flexShrink:0,marginTop:1,
+                              background:g.level==="blocked"?T.roseDim:T.amberDim,
+                              color:g.level==="blocked"?T.rose:T.amber}}>
+                              {g.level==="blocked"?"blocked":"check"}
+                            </span>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{g.metric.name}</div>
+                              <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,marginTop:2}}>{g.why}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>}
+
+                    <SH title={file.path}
+                        sub="Generated from the model as it stands. Ossie is a publish target like any other, so this is also what the Alignment tab sends."/>
+                    <textarea value={file.body} readOnly spellCheck={false}
+                      style={{width:"100%",minHeight:420,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
+                        color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
+                    <div style={{marginTop:12,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
+                      Read-only, because the model is authored on the Source tab and this is what it compiles to. Editing the output and not the source is how two versions of a definition start.
+                    </div>
+                  </div>);
+                })()}
+
                 {cfgTab==="sync" && <div style={{maxWidth:760}}>
                   <SH title="Reverse sync"
                       sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
@@ -36441,7 +36928,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
                   <SH title="What to read" sub="Tableau is read-only everywhere — it is the one platform EDG never publishes into, so reading it back is the only way to know what it says."/>
                   <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
-                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none").map(p=>{
+                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange").map(p=>{
                       const on=(sync.targets||[]).includes(p.k);
                       return (
                         <button key={p.k} onClick={()=>setSync({targets: on?(sync.targets||[]).filter(x=>x!==p.k):[...(sync.targets||[]),p.k]})}
