@@ -33316,6 +33316,128 @@ const slBroaderChain = (c, all) => {
 //    children); non-taxonomy relationships are drawn as labelled edges between peers.
 //    Same deliberate choice as the ER canvas: positions computed in JS, drawn as inline
 //    SVG, so nothing depends on measuring the DOM.
+// ═══════════════════════════════════════════════════════════════════════════
+// EDITING THE SOURCE
+// ───────────────────────────────────────────────────────────────────────────
+// The ESM document is EDG's own format, so it can be read back: edit the YAML, apply it,
+// and the entities, dimensions, facts and metrics behind every other tab change with it.
+//
+// The generated platform files are NOT editable the same way. Parsing Snowflake DDL, dbt
+// YAML, Databricks YAML and TMDL back into one model would mean maintaining four dialect
+// parsers, and a mis-parse would silently rewrite a certified metric. They stay read-only
+// output — which is also the honest shape of the system: one source, many compiled targets.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// A focused reader for the document we ourselves emit — not a general YAML parser.
+// Anything it does not recognise is reported rather than guessed at.
+const slParseESM = (text) => {
+  const errors = [], warnings = [];
+  const lines = String(text).split("\n");
+  const out = {model:{}, dims:[], facts:[], metrics:[]};
+  let section = null, cur = null;
+
+  const indent = (l) => l.length - l.replace(/^ +/, "").length;
+  const kv = (l) => {
+    const m = l.match(/^\s*-?\s*([a-z_]+):\s*(.*)$/i);
+    return m ? [m[1], m[2].trim()] : null;
+  };
+  const unq = (v) => String(v).replace(/^["']|["']$/g, "");
+  const list = (v) => unq(v).replace(/^\[|\]$/g, "").split(",").map(s => unq(s.trim())).filter(Boolean);
+
+  lines.forEach((raw, i) => {
+    const l = raw.replace(/\s+$/, "");
+    if (!l.trim() || l.trim().startsWith("#")) return;
+    const ind = indent(l);
+
+    if (ind === 0) {
+      const p = kv(l);
+      if (!p) { errors.push(`Line ${i+1}: could not read "${l.trim()}"`); return; }
+      const [k, v] = p;
+      if (["concepts","entities","relationships","measures","metrics","dimensions","facts","governance"].includes(k) && v === "") {
+        section = k; cur = null; return;
+      }
+      section = null; cur = null;
+      if (k === "esm_version" && unq(v) !== ESM_VERSION)
+        warnings.push(`Document says ESM ${unq(v)}; this build writes ${ESM_VERSION}.`);
+      if (k === "label")       out.model.name  = unq(v);
+      if (k === "description") out.model.desc  = unq(v);
+      if (k === "owner")       out.model.owner = unq(v);
+      if (k === "steward")     out.model.steward = unq(v);
+      if (k === "domain")      out.model.domain = unq(v);
+      if (k === "targets")     out.model.targets = list(v);
+      return;
+    }
+
+    if (!section) return;
+    const isItem = /^\s*-\s/.test(l);
+    if (isItem) {
+      cur = {};
+      if (section === "dimensions") out.dims.push(cur);
+      else if (section === "facts") out.facts.push(cur);
+      else if (section === "metrics") out.metrics.push(cur);
+    }
+    const p = kv(l);
+    if (!p || !cur) return;
+    const [k, v] = p;
+    if (v === "") return;
+    if (["dimensions"].includes(k) && section === "metrics") { cur.dims = list(v); return; }
+    cur[k] = /^\[/.test(v.trim()) ? list(v) : unq(v);
+  });
+
+  if (!out.model.name) errors.push("No `label:` found — the model needs a name.");
+  return {...out, errors, warnings};
+};
+
+// Apply a parsed document: patch the model, and update dimensions, facts and metrics that
+// the document actually names. Objects it does not mention are left alone rather than
+// deleted — an editor that silently drops what you did not retype is a data-loss bug.
+const slApplyESM = (parsed, ctx) => {
+  const changes = [];
+  const modelPatch = {};
+  ["name","desc","owner","steward","domain","targets"].forEach(k => {
+    if (parsed.model[k] !== undefined && String(parsed.model[k]) !== String(ctx.mdl[k] || "")) {
+      modelPatch[k] = parsed.model[k];
+      changes.push(`Model ${k}: "${ctx.mdl[k] || "—"}" → "${parsed.model[k]}"`);
+    }
+  });
+
+  const dims = ctx.dims.map(d => {
+    const p = parsed.dims.find(x => x.name === slSlug(d.name) || x.name === d.column || x.label === d.name);
+    if (!p) return d;
+    const next = {...d};
+    if (p.label && p.label !== d.name)       { changes.push(`Dimension ${d.name} renamed to ${p.label}`); next.name = p.label; }
+    if (p.type && p.type !== d.type && SL_DIM_TYPES[p.type]) { changes.push(`Dimension ${next.name} type → ${p.type}`); next.type = p.type; }
+    return next;
+  });
+
+  const facts = ctx.facts.map(x => {
+    const p = parsed.facts.find(y => y.name === slSlug(x.name) || y.column === x.column);
+    if (!p) return x;
+    const next = {...x};
+    if (p.additive !== undefined) {
+      const add = String(p.additive) === "true";
+      if (add !== x.additive) { changes.push(`Fact ${x.name} additive → ${add}`); next.additive = add; }
+    }
+    return next;
+  });
+
+  const metrics = ctx.metrics.map(m => {
+    const p = parsed.metrics.find(x => x.name === slSlug(m.name) || x.label === m.name);
+    if (!p) return m;
+    const next = {...m};
+    if (p.label && p.label !== m.name)      { changes.push(`Metric ${m.name} renamed to ${p.label}`); next.name = p.label; }
+    if (p.grain && p.grain !== m.timeGrain) { changes.push(`Metric ${next.name} grain → ${p.grain}`); next.timeGrain = p.grain; }
+    if (p.unit && p.unit !== m.unit)        { changes.push(`Metric ${next.name} unit → ${p.unit}`); next.unit = p.unit; }
+    if (p.dims && p.dims.join(",") !== (m.dims || []).join(",")) {
+      changes.push(`Metric ${next.name} dimensions → ${p.dims.join(", ") || "none"}`);
+      next.dims = p.dims;
+    }
+    return next;
+  });
+
+  return {modelPatch, dims, facts, metrics, changes};
+};
+
 const slConceptLayout = (concepts, crels) => {
   const NW=168, NH=64, GAPX=54, GAPY=78, PADX=24, PADY=22;
   const depth = (c) => slBroaderChain(c, concepts).length;
@@ -33735,27 +33857,6 @@ const slModelToESM = (mdl, ents, rels, mets) => {
   return L.join("\n");
 };
 
-// ── Deterministic left-to-right layout for the model canvas. Computed in plain JS and
-//    drawn as inline SVG on purpose: a graph library that measures the DOM renders zero
-//    edges whenever the pane is hidden, which makes the canvas untestable. This does not.
-const slLayout = (ents, rels) => {
-  const hasOut = id => rels.some(r=>r.from===id);
-  const left = ents.filter(e=>hasOut(e.id));
-  const right = ents.filter(e=>!hasOut(e.id));
-  const NW=210, NH=88, GAPX=180, GAPY=34, PADX=30, PADY=26;
-  const col = (arr, x) => arr.map((e,i)=>({...e, x, y:PADY + i*(NH+GAPY), w:NW, h:NH}));
-  const nodes = [...col(left,PADX), ...col(right, PADX+NW+GAPX)];
-  const tallest = Math.max(left.length, right.length, 1);
-  // centre the shorter column so the diagram does not look top-heavy
-  const centre = (arr) => { const off=((tallest-arr.length)*(NH+GAPY))/2; arr.forEach(n=>{n.y+=off;}); };
-  centre(nodes.filter(n=>n.x===PADX)); centre(nodes.filter(n=>n.x!==PADX));
-  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
-  const edges = rels.map(r=>{
-    const a=byId[r.from], b=byId[r.to]; if(!a||!b) return null;
-    return {...r, x1:a.x+a.w, y1:a.y+a.h/2, x2:b.x, y2:b.y+b.h/2};
-  }).filter(Boolean);
-  return {nodes, edges, width: PADX*2+NW*2+GAPX, height: PADY*2 + tallest*(NH+GAPY)};
-};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DIMENSIONS AND FACTS — the middle of the modelling flow
@@ -34028,63 +34129,6 @@ const SLSelect = ({value, onChange, options, placeholder}) => (
   </select>
 );
 
-// ── The model canvas. Entities, their grain, and the relationships between them —
-//    drawn as inline SVG from a layout computed in JS, so it renders identically
-//    whether or not anything is measuring the DOM.
-const SLModelCanvas = ({entities, rels, metrics, selected, onSelect}) => {
-  const {nodes, edges, width, height} = slLayout(entities, rels);
-  return (
-    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:16,overflowX:"auto"}}>
-      <svg width={width} height={height} style={{display:"block",minWidth:"100%"}}>
-        <defs>
-          <marker id="slArrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
-            <path d="M0,1 L8,4.5 L0,8" fill="none" stroke={T.textMuted} strokeWidth="1.3"/>
-          </marker>
-        </defs>
-
-        {edges.map(e=>{
-          const mx = (e.x1+e.x2)/2;
-          return (
-            <g key={e.id}>
-              <path d={`M${e.x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${e.x2},${e.y2}`}
-                fill="none" stroke={T.borderLight} strokeWidth="1.6" markerEnd="url(#slArrow)"/>
-              {/* crow's foot on the many side */}
-              <g stroke={T.textMuted} strokeWidth="1.3" fill="none">
-                <path d={`M${e.x1},${e.y1} l-9,-5`}/><path d={`M${e.x1},${e.y1} l-9,5`}/>
-              </g>
-              <rect x={mx-46} y={e.y1===e.y2?e.y1-9:(e.y1+e.y2)/2-9} width="92" height="18" rx="9"
-                fill={T.bgElevated} stroke={T.border}/>
-              <text x={mx} y={(e.y1===e.y2?e.y1:(e.y1+e.y2)/2)+4} textAnchor="middle"
-                style={{fontSize:9.5,fontWeight:600,fill:T.textMuted}}>many → one</text>
-            </g>
-          );
-        })}
-
-        {nodes.map(n=>{
-          const on = selected===n.id;
-          const count = metrics.filter(m=>m.entity===n.id).length;
-          return (
-            <g key={n.id} onClick={()=>onSelect&&onSelect(on?null:n.id)} style={{cursor:"pointer"}}>
-              <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="10"
-                fill={on?T.bgActive:T.bgElevated} stroke={on?T.accent:T.border} strokeWidth={on?2:1.2}/>
-              <text x={n.x+14} y={n.y+24} style={{fontSize:13,fontWeight:700,fill:T.text}}>{n.name}</text>
-              <text x={n.x+14} y={n.y+43} style={{fontSize:10.5,fill:T.textMuted}}>one row per {n.key}</text>
-              <rect x={n.x+14} y={n.y+53} width={n.w-28} height="1" fill={T.border}/>
-              <text x={n.x+14} y={n.y+72} style={{fontSize:10.5,fill:T.textSub}}>{n.table}</text>
-              <circle cx={n.x+n.w-26} cy={n.y+66} r="10" fill={count?T.accentDim:"transparent"} stroke={count?`${T.accent}55`:T.border}/>
-              <text x={n.x+n.w-26} y={n.y+69.5} textAnchor="middle" style={{fontSize:10,fontWeight:700,fill:count?T.accent:T.textMuted}}>{count}</text>
-            </g>
-          );
-        })}
-      </svg>
-      <div style={{display:"flex",gap:18,marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
-        <span>Click an entity to inspect it</span>
-        <span>· The number is how many metrics resolve to that grain</span>
-        <span>· Crow's foot marks the many side</span>
-      </div>
-    </div>
-  );
-};
 
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35171,6 +35215,234 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
   );
 };
 
+// ── Relationships. Presented the way the Lineage tab is: a toolbar strip with a legend
+//    and controls, then a canvas beside an info panel, on the same hardcoded light palette
+//    the lineage graph uses so the two read as one product.
+//
+//    Drawn as inline SVG from a layout computed in JS rather than with a graph library,
+//    because a library that measures the DOM renders nothing when the pane is hidden —
+//    the existing Lineage tab has exactly that failure mode.
+const LP = {bg:"#f8fafc", line:"#e2e8f0", muted:"#64748b", faint:"#94a3b8",
+            text:"#0f172a", sub:"#475569", card:"#ffffff", accent:"#6366f1"};
+const SL_COLKIND = {
+  key:       {c:"#7c3aed", l:"Key"},
+  dimension: {c:"#d97706", l:"Dimension"},
+  fact:      {c:"#16a34a", l:"Fact"},
+  plain:     {c:"#94a3b8", l:"Column"},
+};
+
+const slRelLayout = (ents, rels, showCols, dims, facts) => {
+  const NW = 232, HEAD = 62, ROW = 19, PADX = 34, PADY = 30, GAPX = 210, GAPY = 46;
+  const colsFor = (e) => {
+    if (!showCols) return [];
+    const ds = (dims || []).filter(d => d.entity === e.id).map(d => d.column);
+    const fs = (facts || []).filter(f => f.entity === e.id).map(f => f.column);
+    return (SCHEMA[e.table] || []).map(c => ({
+      name: c.name,
+      kind: c.name === e.key ? "key" : fs.includes(c.name) ? "fact" : ds.includes(c.name) ? "dimension" : "plain",
+    })).filter(c => c.kind !== "plain" || (SCHEMA[e.table] || []).length <= 6);
+  };
+  const hasOut = id => rels.some(r => r.from === id);
+  const left = ents.filter(e => hasOut(e.id));
+  const right = ents.filter(e => !hasOut(e.id));
+  const build = (arr, x) => {
+    let y = PADY;
+    return arr.map(e => {
+      const cols = colsFor(e);
+      const h = HEAD + (cols.length ? cols.length * ROW + 10 : 0);
+      const n = {...e, cols, x, y, w: NW, h};
+      y += h + GAPY;
+      return n;
+    });
+  };
+  const L = build(left, PADX), R = build(right, PADX + NW + GAPX);
+  const tallest = Math.max(L.reduce((s, n) => s + n.h + GAPY, 0), R.reduce((s, n) => s + n.h + GAPY, 0));
+  const centre = (arr) => {
+    const used = arr.reduce((s, n) => s + n.h + GAPY, 0);
+    const off = (tallest - used) / 2;
+    arr.forEach(n => { n.y += off; });
+  };
+  centre(L); centre(R);
+  const nodes = [...L, ...R];
+  const byId = Object.fromEntries(nodes.map(n => [n.id, n]));
+  const edges = rels.map(r => {
+    const a = byId[r.from], b = byId[r.to];
+    if (!a || !b) return null;
+    return {...r, x1: a.x + a.w, y1: a.y + HEAD / 2, x2: b.x, y2: b.y + HEAD / 2};
+  }).filter(Boolean);
+  return {nodes, edges, width: PADX * 2 + NW * 2 + GAPX, height: Math.max(tallest + PADY, 260)};
+};
+
+const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, onSelect, onOpenMetric}) => {
+  const [showCols, setShowCols] = useState(true);
+  const {nodes, edges, width, height} = slRelLayout(entities, rels, showCols, dims, facts);
+  const sel = selected ? entities.find(e => e.id === selected) : null;
+  const selDims = sel ? (dims || []).filter(d => d.entity === sel.id) : [];
+  const selFacts = sel ? (facts || []).filter(f => f.entity === sel.id) : [];
+  const selMets = sel ? (metrics || []).filter(m => m.entity === sel.id) : [];
+  const selRels = sel ? rels.filter(r => r.from === sel.id || r.to === sel.id) : [];
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",minHeight:420}}>
+      {/* Toolbar — same strip the Lineage tab opens with */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",
+        background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:"10px 10px 0 0",
+        borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
+          {Object.entries(SL_COLKIND).filter(([k])=>k!=="plain").map(([k,v])=>(
+            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:LP.muted}}>
+              <span style={{width:8,height:8,borderRadius:2,background:v.c,display:"inline-block"}}/>
+              {v.l}
+            </span>
+          ))}
+        </div>
+        <span style={{fontSize:10.5,color:LP.faint}}>
+          many → one · a join into a key cannot fan out · click an entity for details
+        </span>
+        <button onClick={()=>setShowCols(v=>!v)}
+          title={showCols?"Hide the column list inside each entity":"Show which columns are the key, a dimension or a fact"}
+          style={{padding:"4px 10px",borderRadius:6,background:showCols?"rgba(99,102,241,.1)":"#fff",
+            border:`1px solid ${showCols?LP.accent:LP.line}`,color:showCols?"#4338ca":LP.muted,
+            fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+          <span style={{width:8,height:8,borderRadius:2,background:showCols?LP.accent:"#cbd5e1",display:"inline-block"}}/>
+          Show columns
+        </button>
+        {selected && <button onClick={()=>onSelect(null)}
+          style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:`1px solid ${LP.line}`,color:LP.muted,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
+          Clear selection
+        </button>}
+      </div>
+
+      {/* Canvas + info panel, exactly the Lineage arrangement */}
+      <div style={{display:"flex",flex:1,minHeight:0,border:`1px solid ${LP.line}`,borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
+        <div style={{flex:1,minWidth:0,background:LP.bg,overflow:"auto",padding:4}}>
+          <svg width={width} height={height} style={{display:"block"}}>
+            <defs>
+              <marker id="slRelArrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <path d="M0,1.5 L9,5 L0,8.5" fill="none" stroke={LP.faint} strokeWidth="1.4"/>
+              </marker>
+            </defs>
+
+            {edges.map(e=>{
+              const mx=(e.x1+e.x2)/2;
+              const dim = selected && e.from!==selected && e.to!==selected;
+              return (
+                <g key={e.id} opacity={dim?.28:1}>
+                  <path d={`M${e.x1},${e.y1} C${mx},${e.y1} ${mx},${e.y2} ${e.x2},${e.y2}`}
+                    fill="none" stroke={dim?LP.line:"#cbd5e1"} strokeWidth="1.8" markerEnd="url(#slRelArrow)"/>
+                  {/* crow's foot on the many side */}
+                  <g stroke={LP.faint} strokeWidth="1.3" fill="none">
+                    <path d={`M${e.x1},${e.y1} l-10,-5`}/><path d={`M${e.x1},${e.y1} l-10,5`}/>
+                  </g>
+                  <rect x={mx-54} y={(e.y1+e.y2)/2-10} width="108" height="20" rx="10" fill="#fff" stroke={LP.line}/>
+                  <text x={mx} y={(e.y1+e.y2)/2+4} textAnchor="middle" style={{fontSize:9.5,fontWeight:600,fill:LP.muted}}>
+                    {e.fromKey} → {e.toKey}
+                  </text>
+                </g>
+              );
+            })}
+
+            {nodes.map(n=>{
+              const on = selected===n.id;
+              const dim = selected && !on && !rels.some(r=>(r.from===selected&&r.to===n.id)||(r.to===selected&&r.from===n.id));
+              const mc = (metrics||[]).filter(m=>m.entity===n.id).length;
+              return (
+                <g key={n.id} onClick={()=>onSelect(on?null:n.id)} style={{cursor:"pointer"}} opacity={dim?.4:1}>
+                  <rect x={n.x} y={n.y} width={n.w} height={n.h} rx="9"
+                    fill={LP.card} stroke={on?LP.accent:LP.line} strokeWidth={on?2:1.2}/>
+                  <rect x={n.x} y={n.y} width={n.w} height="3" rx="1.5" fill={on?LP.accent:"#cbd5e1"}/>
+                  <text x={n.x+13} y={n.y+25} style={{fontSize:12.5,fontWeight:700,fill:LP.text}}>{n.name}</text>
+                  <text x={n.x+13} y={n.y+41} style={{fontSize:9.5,fill:LP.muted}}>one row per {n.key||"—"}</text>
+                  <text x={n.x+13} y={n.y+54} style={{fontSize:9.5,fill:LP.faint}}>{n.table}</text>
+                  {mc>0 && <>
+                    <rect x={n.x+n.w-42} y={n.y+15} width="30" height="16" rx="8" fill="rgba(99,102,241,.1)" stroke={`${LP.accent}55`}/>
+                    <text x={n.x+n.w-27} y={n.y+26} textAnchor="middle" style={{fontSize:9.5,fontWeight:700,fill:"#4338ca"}}>{mc}</text>
+                  </>}
+                  {n.cols.length>0 && <line x1={n.x+1} y1={n.y+62} x2={n.x+n.w-1} y2={n.y+62} stroke={LP.line}/>}
+                  {n.cols.map((c,i)=>{
+                    const k = SL_COLKIND[c.kind];
+                    return (
+                      <g key={c.name}>
+                        <circle cx={n.x+18} cy={n.y+62+12+i*19} r="3.5" fill={k.c}/>
+                        <text x={n.x+29} y={n.y+62+15.5+i*19} style={{fontSize:10,fill:LP.sub,fontFamily:"ui-monospace,monospace"}}>{c.name}</text>
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Info panel — mirrors the Lineage node panel */}
+        <div style={{width:300,flexShrink:0,borderLeft:`1px solid ${LP.line}`,background:"#fff",overflowY:"auto"}}>
+          {!sel
+            ? <div style={{padding:"22px 18px",fontSize:11.5,color:LP.muted,lineHeight:1.65}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:LP.text,marginBottom:8}}>{entities.length} entities · {rels.length} join{rels.length===1?"":"s"}</div>
+                Click an entity on the canvas to see its grain, where it lives on each platform, and what is declared against it.
+                {rels.length===0 && <div style={{marginTop:12,padding:"10px 12px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,color:"#92400e"}}>
+                  No joins declared — every metric in this model sits on a single table.
+                </div>}
+              </div>
+            : <div style={{padding:"16px 18px"}}>
+                <div style={{fontSize:14,fontWeight:700,color:LP.text,marginBottom:3}}>{sel.name}</div>
+                <div style={{fontSize:11,color:LP.muted,fontFamily:"ui-monospace,monospace",marginBottom:12}}>{sel.table}</div>
+
+                <div style={{padding:"9px 11px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14}}>
+                  <div style={{fontSize:10.5,fontWeight:700,color:"#15803d",marginBottom:2}}>GRAIN</div>
+                  <div style={{fontSize:11.5,color:"#166534"}}>one row per {sel.key||"—"}</div>
+                  <div style={{fontSize:10.5,color:"#16a34a",marginTop:3}}>{sel.evidence}</div>
+                </div>
+
+                {selRels.length>0 && <>
+                  <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",marginBottom:6}}>JOINS</div>
+                  {selRels.map(r=>{
+                    const other = entities.find(e=>e.id===(r.from===sel.id?r.to:r.from));
+                    const outgoing = r.from===sel.id;
+                    return (
+                      <div key={r.id} style={{padding:"8px 10px",background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:7,marginBottom:6}}>
+                        <div style={{fontSize:11.5,fontWeight:600,color:LP.text}}>
+                          {outgoing?"→":"←"} {other?other.name:"—"}
+                        </div>
+                        <div style={{fontSize:10.5,color:LP.muted,fontFamily:"ui-monospace,monospace",marginTop:2}}>{r.fromKey} = {r.toKey}</div>
+                        <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>
+                          {r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>}
+
+                <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",margin:"14px 0 6px"}}>DECLARED HERE</div>
+                <div style={{display:"flex",gap:14,marginBottom:10}}>
+                  {[["Dimensions",selDims.length,SL_COLKIND.dimension.c],["Facts",selFacts.length,SL_COLKIND.fact.c],["Metrics",selMets.length,LP.accent]].map(([k,v,c])=>(
+                    <div key={k}>
+                      <div style={{fontSize:15,fontWeight:700,color:v?c:LP.faint,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
+                      <div style={{fontSize:10,color:LP.muted,marginTop:2}}>{k}</div>
+                    </div>
+                  ))}
+                </div>
+                {selMets.length>0 && <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+                  {selMets.map(m=>(
+                    <button key={m.id} onClick={()=>onOpenMetric&&onOpenMetric(m.id)}
+                      style={{fontSize:10.5,fontWeight:600,color:LP.sub,background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"inherit"}}>{m.name}</button>
+                  ))}
+                </div>}
+
+                <div style={{fontSize:10.5,fontWeight:700,color:LP.muted,letterSpacing:"0.06em",marginBottom:6}}>WHERE IT LIVES</div>
+                {Object.entries(sel.bindings||{}).map(([k,v])=>(
+                  <div key={k} style={{display:"flex",gap:8,fontSize:10.5,marginBottom:4}}>
+                    <span style={{minWidth:64,fontWeight:600,color:LP.sub}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
+                    <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?LP.faint:LP.muted,wordBreak:"break-all"}}>{v}</span>
+                  </div>
+                ))}
+              </div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Declare a dimension or a fact. One drawer, because the only real difference is
 //    what the column is for: slicing, or being aggregated.
 const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
@@ -35492,6 +35764,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [newMdlOpen,  setNewMdlOpen]  = useState(false);
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
+  const [cfgPane,     setCfgPane]     = useState("sync");  // "sync" | "source" | "output"
+  const [yamlDraft,   setYamlDraft]   = useState(null);
+  const [yamlResult,  setYamlResult]  = useState(null);
+  const [outPlat,     setOutPlat]     = useState("dbt");
   const [mapFor,  setMapFor]  = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(null);
@@ -35516,6 +35792,20 @@ const SemanticLayerView = ({onToast, onNav}) => {
             entities:(m.entityIds||[]).length, disagree:vs.filter(v=>v.conformance!=="conformant").length, copies:vs.length};
   };
   const patchModel = (patch) => setStore(prev=>({...prev, models:prev.models.map(m=>m.id===selMdl?{...m,...patch}:m)}));
+  const applyYaml = () => {
+    const parsed = slParseESM(yamlDraft);
+    if(parsed.errors.length){ setYamlResult({ok:false, ...parsed}); return; }
+    const res = slApplyESM(parsed, {mdl, dims:mDims, facts:mFacts, metrics:mMetrics});
+    setStore(prev=>({...prev,
+      models:   prev.models.map(m=>m.id===selMdl?{...m,...res.modelPatch}:m),
+      dims:     prev.dims.map(d=>res.dims.find(x=>x.id===d.id)||d),
+      facts:    prev.facts.map(x=>res.facts.find(y=>y.id===x.id)||x),
+      metrics:  prev.metrics.map(m=>res.metrics.find(x=>x.id===m.id)||m),
+    }));
+    setYamlResult({ok:true, ...parsed, changes:res.changes});
+    onToast && onToast(res.changes.length ? `${res.changes.length} change${res.changes.length===1?"":"s"} applied` : "No changes to apply","success");
+  };
+
   const addDimFact = (kind, obj) => setStore(prev=>({...prev,
     [kind==="dimension"?"dims":"facts"]: [...prev[kind==="dimension"?"dims":"facts"], obj]}));
   const saveMetric = (m) => { setStore(prev=>({...prev, metrics:[...prev.metrics, {...m, model:selMdl}]})); setBuilderOpen(false);
@@ -35559,10 +35849,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
   if(mdl){
     const st = statsFor(mdl);
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
-    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"ER Diagram"},
+    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
                   {k:"alignment",l:`Alignment · ${mVendor.length}`},
-                  {k:"sync",l:sync.enabled?"Sync":"Sync · off"}];
+                  {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
     const startEdit = () => { setDraft({...mdl}); setEditing(true); };
@@ -35745,69 +36035,20 @@ const SemanticLayerView = ({onToast, onNav}) => {
             )}
 
             {tab==="erd" && <>
-              <SH title="Entity relationship diagram"
-                  sub="Entities are what you count; the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
-              <SLModelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} selected={selEnt} onSelect={setSelEnt}/>
+              <SH title="Relationships"
+                  sub="Entities are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
+              <SLRelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} dims={mDims} facts={mFacts}
+                models={models} selected={selEnt} onSelect={setSelEnt} onOpenMetric={(id)=>setSelId(id)}/>
 
-              <div style={{marginTop:24}}><SH title="Joins" sub="Carried in the format with cardinality and direction, so the strictest platform is satisfied."/></div>
-              {mRels.length===0
-                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>No joins — every metric in this model sits on a single entity.</div>
-                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    {mRels.map((r,i)=>{
-                      const f=mEnts.find(x=>x.id===r.from), t=mEnts.find(x=>x.id===r.to);
-                      return (
-                        <div key={r.id} style={{padding:"12px 15px",borderBottom:i<mRels.length-1?`1px solid ${T.border}`:"none"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",marginBottom:3}}>
-                            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{f&&f.name} → {t&&t.name}</span>
-                            <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>many to one</span>
-                            <span style={{fontSize:11,fontFamily:"ui-monospace,monospace",color:T.textSub}}>{r.fromKey} = {r.toKey}</span>
-                            {r.fanOutSafe && <span style={{fontSize:10.5,color:T.green}}>✓ cannot fan out</span>}
-                          </div>
-                          <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{r.note}</div>
-                        </div>
-                      );
-                    })}
-                  </div>}
-
-
-              {selEnt && (()=>{
-                const e = mEnts.find(x=>x.id===selEnt); if(!e) return null;
-                const used = mMetrics.filter(m=>m.entity===e.id);
-                return (
-                  <div style={{marginTop:24}}>
-                    <SH title={e.name} sub={e.desc}/>
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px"}}>
-                      <div style={{display:"flex",gap:26,flexWrap:"wrap",marginBottom:12}}>
-                        {[["Grain",`one row per ${e.key}`],["Table",e.table],["Owner",e.owner],["Time columns",e.timeDims.join(", ")],["Metrics",String(used.length)]].map(([k,v])=>(
-                          <div key={k}><div style={{fontSize:10,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k}</div>
-                          <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginTop:3}}>{v}</div></div>
-                        ))}
-                      </div>
-                      <div style={{fontSize:11,color:T.green,marginBottom:14}}>✓ Key evidence — {e.evidence}</div>
-                      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Where it lives on each platform</div>
-                      <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                        {Object.entries(e.bindings||{}).map(([k,v])=>(
-                          <div key={k} style={{display:"flex",gap:12,alignItems:"center",fontSize:11.5}}>
-                            <span style={{minWidth:84,fontWeight:600,color:T.text}}>{(SL_PLATFORMS[k]||{}).label||k}</span>
-                            <span style={{fontFamily:"ui-monospace,monospace",color:v==="—"?T.textMuted:T.textSub}}>{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {used.length>0 && <div style={{marginTop:14}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:7}}>Metrics at this grain</div>
-                        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                          {used.map(m=><button key={m.id} onClick={()=>setSelId(m.id)}
-                            style={{fontSize:11.5,fontWeight:600,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"5px 10px",cursor:"pointer"}}>{m.name}</button>)}
-                        </div>
-                      </div>}
-                    </div>
-                  </div>
-                );
-              })()}
             </>}
 
 
-            {tab==="sync" && (()=>{
+            {tab==="config" && (()=>{
+              const CFG = [
+                {k:"sync",   l:"Reverse sync", d:"Reading definitions back out of your platforms"},
+                {k:"source", l:"Source",       d:"The ESM document — edit it and everything follows"},
+                {k:"output", l:"Generated",    d:"What each platform gets, compiled from the source"},
+              ];
               const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
               const FREQ = [{v:"hourly",l:"Every hour"},{v:"daily",l:"Daily"},{v:"weekly",l:"Weekly"},{v:"manual",l:"Manual only"}];
               const DRIFT = [
@@ -35815,8 +36056,77 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 {v:"notify",    l:"Notify the owner",    d:"The model owner gets a notification when a definition drifts."},
                 {v:"work_item", l:"Open a work item",    d:"A task lands in the steward's Inbox and stays open until someone resolves it."},
               ];
+              const curYaml = yamlDraft!==null ? yamlDraft : slModelToESM(mdl, mEnts, mRels, mMetrics);
+              const outFiles = slBuildArtifacts(outPlat, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts});
               return (
-                <div style={{maxWidth:760}}>
+                <div>
+                <div style={{display:"flex",gap:3,borderBottom:`1px solid ${T.border}`,marginBottom:22}}>
+                  {CFG.map(c=>(
+                    <button key={c.k} onClick={()=>setCfgPane(c.k)} title={c.d}
+                      style={{padding:"8px 14px",background:"transparent",border:"none",borderBottom:`2px solid ${cfgPane===c.k?T.accent:"transparent"}`,
+                        color:cfgPane===c.k?T.text:T.textMuted,fontSize:12.5,fontWeight:cfgPane===c.k?700:500,cursor:"pointer",marginBottom:-1}}>{c.l}</button>
+                  ))}
+                </div>
+
+                {cfgPane==="source" && <div style={{maxWidth:900}}>
+                  <SH title={`Semantic model source · ESM v${ESM_VERSION}`}
+                      sub="The one document everything else is built from. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
+                  <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
+                    style={{width:"100%",minHeight:420,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
+                      color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
+                    <Btn variant="primary" onClick={applyYaml} disabled={yamlDraft===null}>Apply changes</Btn>
+                    <Btn ghost onClick={()=>{setYamlDraft(null);setYamlResult(null);}} disabled={yamlDraft===null}>Revert</Btn>
+                    <span style={{fontSize:11.5,color:T.textMuted}}>
+                      {yamlDraft===null ? "Generated from the model as it stands." : "Edited — not applied yet."}
+                    </span>
+                  </div>
+
+                  {yamlResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
+                    background:yamlResult.ok?"rgba(22,163,74,.07)":T.roseDim,
+                    border:`1px solid ${yamlResult.ok?T.green+"35":T.rose+"35"}`}}>
+                    {!yamlResult.ok && <>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not applied — {yamlResult.errors.length} problem{yamlResult.errors.length===1?"":"s"}</div>
+                      {yamlResult.errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
+                    </>}
+                    {yamlResult.ok && <>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
+                        {yamlResult.changes.length ? `${yamlResult.changes.length} change${yamlResult.changes.length===1?"":"s"} applied` : "Parsed cleanly — nothing differed"}
+                      </div>
+                      {yamlResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
+                      {yamlResult.warnings.map((w,i)=><div key={"w"+i} style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>· {w}</div>)}
+                    </>}
+                  </div>}
+
+                  <div style={{marginTop:16,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
+                    Objects the document does not mention are left alone rather than deleted — an editor that silently drops what you did not retype is a data-loss bug, not a feature.
+                  </div>
+                </div>}
+
+                {cfgPane==="output" && <div style={{maxWidth:900}}>
+                  <SH title="Generated output"
+                      sub="Compiled from the source on the left. Read-only: reading Snowflake DDL, dbt YAML, Databricks YAML and TMDL back into one model would need four dialect parsers, and a mis-parse would quietly rewrite a certified metric. Edit the source instead."/>
+                  <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap"}}>
+                    {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>(
+                      <button key={p.k} onClick={()=>setOutPlat(p.k)}
+                        style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${outPlat===p.k?T.accent:T.border}`,
+                          background:outPlat===p.k?T.accentDim:T.bgSurface,color:outPlat===p.k?T.accent:T.textSub,
+                          fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{p.label}</button>
+                    ))}
+                  </div>
+                  {outFiles.map(fl=>(
+                    <div key={fl.path} style={{marginBottom:14}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{fl.path}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted}}>{fl.body.split("\n").length} lines</span>
+                      </div>
+                      <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
+                        background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{fl.body}</pre>
+                    </div>
+                  ))}
+                </div>}
+
+                {cfgPane==="sync" && <div style={{maxWidth:760}}>
                   <SH title="Reverse sync"
                       sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
@@ -35891,6 +36201,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       {sync.enabled?"Results appear on Overview.":"Turn reverse sync on first."}
                     </span>
                   </div>
+                </div>}
                 </div>
               );
             })()}
