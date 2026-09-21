@@ -33757,11 +33757,101 @@ const slLayout = (ents, rels) => {
   return {nodes, edges, width: PADX*2+NW*2+GAPX, height: PADY*2 + tallest*(NH+GAPY)};
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// DIMENSIONS AND FACTS — the middle of the modelling flow
+// ───────────────────────────────────────────────────────────────────────────
+// The order a semantic model is actually built in is: tables, then joins, then the
+// things each table exposes — the dimensions you can slice by and the facts you can
+// aggregate — and only then the metrics built out of them. It is also the order
+// Snowflake's CREATE SEMANTIC VIEW expects: TABLES, RELATIONSHIPS, FACTS, DIMENSIONS,
+// METRICS.
+//
+// Until now dimensions were loose strings typed inside a metric and facts were inferred
+// from whichever metrics happened to be simple. That has two costs: a dimension defined
+// for one metric cannot be reused by the next, and nothing can be declared before a
+// metric exists — so the model has no shape until someone writes a number.
+//
+// Declared instead. A dimension belongs to an entity, carries a type, and can point at
+// the Glossary Dimension term that names it. A fact is the row-level number a metric
+// aggregates. Both exist whether or not a metric uses them yet.
+// ═══════════════════════════════════════════════════════════════════════════
+
+const SL_DIM_TYPES = {
+  categorical: {l:"Categorical", c:"#d97706", d:"A finite set of values you group by."},
+  time:        {l:"Time",        c:"#0284c7", d:"A date or timestamp a metric is trended over."},
+  identifier:  {l:"Identifier",  c:"#7c3aed", d:"A key. Groupable, but usually too unique to be useful."},
+};
+
+const SL_DIMENSIONS = [
+  {id:"d_ord_status",  entity:"e_order",    name:"Order Status", column:"status",      type:"categorical", termId:"td2",
+   desc:"The lifecycle state of an order: completed, pending, cancelled or refunded."},
+  {id:"d_ord_created", entity:"e_order",    name:"Order Date",   column:"created_at",  type:"time",        termId:null,
+   desc:"When the order was placed. The time dimension every order-grain metric trends over."},
+  {id:"d_ord_cust",    entity:"e_order",    name:"Customer",     column:"customer_id", type:"identifier",  termId:null,
+   desc:"The customer the order belongs to. Groupable, but high cardinality."},
+  {id:"d_cus_active",  entity:"e_customer", name:"Active Flag",  column:"is_active",   type:"categorical", termId:null,
+   desc:"Whether the account is currently active."},
+  {id:"d_cus_created", entity:"e_customer", name:"Signup Date",  column:"created_at",  type:"time",        termId:null,
+   desc:"When the account was created."},
+  {id:"d_txn_ccy",     entity:"e_txn",      name:"Currency",     column:"currency",    type:"categorical", termId:"td3",
+   desc:"The ISO 4217 currency the transaction was posted in."},
+  {id:"d_txn_dir",     entity:"e_txn",      name:"Direction",    column:"direction",   type:"categorical", termId:null,
+   desc:"DEBIT or CREDIT."},
+  {id:"d_txn_date",    entity:"e_txn",      name:"Posting Date", column:"txn_date",    type:"time",        termId:null,
+   desc:"The date the entry was posted to the ledger."},
+];
+
+// A fact is row-level. SUM lives on the metric, not here — which is the whole point of
+// keeping them apart: one fact, many metrics over it.
+const SL_FACTS = [
+  {id:"f_ord_amount", entity:"e_order",    name:"Order Amount",       column:"amount",  additive:true,
+   desc:"The gross value of a single order line, before any filtering."},
+  {id:"f_txn_amount", entity:"e_txn",      name:"Transaction Amount", column:"amount",  additive:true,
+   desc:"The posted value of a single ledger entry."},
+  {id:"f_cus_id",     entity:"e_customer", name:"Customer Count",     column:"user_id", additive:false,
+   desc:"Counting key. Not additive — summing it is meaningless, only counting is."},
+];
+
+
+// A metric that slices by a column nobody declared still works, but the model cannot
+// say what that column means, and it will not reach a platform that needs dimensions
+// declared up front. Surfacing it is cheaper than discovering it at publish.
+const slUndeclaredDims = (mets, dims) => {
+  const declared = new Set((dims || []).map(d => d.column));
+  const out = [];
+  (mets || []).forEach(m => (m.dims || []).forEach(c => {
+    if (!declared.has(c) && !out.some(x => x.column === c)) out.push({column: c, entity: m.entity, metric: m.name});
+  }));
+  return out;
+};
+
+// Columns on an entity that are not yet a dimension or a fact — what you can still add.
+const slSpareColumns = (ent, dims, facts) => {
+  if (!ent) return [];
+  const used = new Set([...(dims||[]).filter(d=>d.entity===ent.id).map(d=>d.column),
+                        ...(facts||[]).filter(f=>f.entity===ent.id).map(f=>f.column)]);
+  return (SCHEMA[ent.table] || []).filter(c => !used.has(c.name));
+};
+
+// What a column looks like it should be, from the profile. A proposal, not a decision.
+const slSuggestDimType = (colName) => {
+  const p = COL_PROFILES[colName] || {};
+  if (p.dataType === "datetime") return "time";
+  if (p.distinctPct === 100) return "identifier";
+  return "categorical";
+};
+const slIsFactish = (ent, colName) => {
+  const c = (SCHEMA[(ent||{}).table] || []).find(x => x.name === colName);
+  const p = COL_PROFILES[colName] || {};
+  return !!(c && /DECIMAL|NUMBER|BIGINT|INT|DOUBLE|FLOAT/i.test(c.type)) || p.dataType === "numeric";
+};
+
 // ── Governed state lives in a module store, not component state. A conformance decision
 //    that vanishes when the user visits the Glossary is not a durable decision.
 const _slSubs = new Set();
 let _slState = {models: SL_MODELS.map(m=>({...m})), metrics: SL_METRICS.map(m=>({...m})), vendor: SL_VENDOR.map(v=>({...v})),
                 concepts: SL_CONCEPTS.map(c=>({...c})), crels: SL_CONCEPT_RELS.map(r=>({...r})),
+                dims: SL_DIMENSIONS.map(d=>({...d})), facts: SL_FACTS.map(x=>({...x})),
                 entities: SL_ENTITIES.map(e=>({...e})), rels: SL_RELATIONSHIPS.map(r=>({...r}))};
 const slSet = (updater) => { _slState = typeof updater==="function" ? updater(_slState) : updater; _slSubs.forEach(fn=>fn()); };
 const useSemanticLayer = () => {
@@ -33841,14 +33931,6 @@ const slPropose = (table, intent) => {
   }).filter(c=>c.score>0).sort((a,b)=>b.score-a.score);
   return scored.slice(0,4);
 };
-
-// Dimensions propose themselves: low-cardinality categoricals group, datetimes trend.
-const slProposeDims = (table) => (SCHEMA[table]||[]).map(c=>{
-  const p = COL_PROFILES[c.name]||{};
-  const kind = p.dataType==="categorical" ? "categorical" : p.dataType==="datetime" ? "time" : c.pk ? "key" : "other";
-  return {col:c.name, kind, pii:c.pii,
-          hint: p.topValues ? p.topValues.slice(0,3).join(" · ") : p.distinctCount ? `${p.distinctCount} distinct` : c.type};
-}).filter(d=>d.kind==="categorical" || (d.kind==="other" && !d.pii));
 
 // ── Policy inherits into the metric. If a bound column is PII the metric carries it,
 //    and an unexempted mask BLOCKS certification. No semantic-layer vendor can do this,
@@ -34009,7 +34091,7 @@ const SLModelCanvas = ({entities, rels, metrics, selected, onSelect}) => {
 // THE BUILDER — a right-side drawer with a section rail, per the create/edit
 // convention. Five sections, because five things are genuine decisions.
 // ═══════════════════════════════════════════════════════════════════════════
-const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
+const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast}) => {
   const SECTIONS = [
     {k:"identity",   l:"Identity",     d:"What it is called, and who owns it"},
     {k:"definition", l:"Definition",   d:"The sentence a business user fills in"},
@@ -34036,6 +34118,8 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
   const patch = (p) => setM(prev=>({...prev,...p}));
   const ent = m.entity ? slEntity(m.entity) : null;
   const tableCols = ent ? (SCHEMA[ent.table]||[]) : [];
+  const entFacts  = ent ? (facts||[]).filter(x=>x.entity===ent.id) : [];
+  const entDims   = ent ? (dims ||[]).filter(d=>d.entity===ent.id) : [];
   const derived = m.type==="derived" || m.type==="cumulative";
 
   // AI proposes against the chosen entity's table, using profiling + classification.
@@ -34123,8 +34207,13 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
 
                 {m.type==="simple" && <div style={{display:"flex",gap:14}}>
                   <div style={{flex:1}}><SLField label="Aggregation"><SLSelect value={m.agg} onChange={e=>patch({agg:e.target.value})} options={SL_AGGS}/></SLField></div>
-                  <div style={{flex:1}}><SLField label="Measure column" hint="Confirm this in Bindings — EDG proposes it from profiling.">
-                    <SLSelect value={m.col} onChange={e=>patch({col:e.target.value})} placeholder={ent?"Select a column":"Pick an entity first"} options={tableCols.map(c=>c.name)}/></SLField></div>
+                  <div style={{flex:1}}><SLField label="Fact"
+                    hint={ent && entFacts.length===0
+                      ? `No facts declared on ${ent.name}. Declare one on the Model tab first — a metric aggregates a fact.`
+                      : "The row-level number this metric aggregates."}>
+                    <SLSelect value={m.col} onChange={e=>patch({col:e.target.value})}
+                      placeholder={ent?(entFacts.length?"Select a fact":"No facts on this entity"):"Pick an entity first"}
+                      options={entFacts.map(x=>({v:x.column,l:`${x.name} — ${x.column}${x.additive?"":" · not additive"}`}))}/></SLField></div>
                 </div>}
 
                 {m.type==="ratio" && <>
@@ -34233,18 +34322,25 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, onToast}) => {
             </>}
 
             {sec==="dims" && <>
-              <SLSection title="Dimensions" note="What the metric may be sliced by. Low-cardinality categoricals propose themselves from profiling; a column carrying PII is offered but flagged, because grouping by it pulls the metric into scope of a masking policy.">
+              <SLSection title="Dimensions" note="Chosen from what this model declares, so a dimension means the same thing on every metric that uses it. To slice by something not listed, declare it on the Model tab first.">
                 {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick an entity in Definition first.</div>}
+                {ent && entDims.length===0 && <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                  <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginBottom:4}}>No dimensions declared on {ent.name}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>The metric will still compute — it just cannot be broken down by anything.</div>
+                </div>}
                 <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                  {ent && slProposeDims(ent.table).map(d=>{
-                    const on = (m.dims||[]).includes(d.col);
+                  {entDims.map(d=>{
+                    const on = (m.dims||[]).includes(d.column);
+                    const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
+                    const col = (SCHEMA[ent.table]||[]).find(c=>c.name===d.column);
                     return (
-                      <button key={d.col} onClick={()=>patch({dims: on ? m.dims.filter(x=>x!==d.col) : [...(m.dims||[]), d.col]})}
+                      <button key={d.id} onClick={()=>patch({dims: on ? m.dims.filter(x=>x!==d.column) : [...(m.dims||[]), d.column]})}
                         style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
                         <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"ui-monospace,monospace",minWidth:130}}>{d.col}</span>
-                        <span style={{fontSize:10.5,color:T.textMuted,flex:1}}>{d.hint}</span>
-                        {d.pii&&<span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>PII</span>}
+                        <span style={{fontSize:12,fontWeight:600,color:T.text,minWidth:120}}>{d.name}</span>
+                        <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${dt.c}18`,color:dt.c,border:`1px solid ${dt.c}35`}}>{dt.l}</span>
+                        <span style={{fontSize:10.5,color:T.textMuted,flex:1,fontFamily:"ui-monospace,monospace"}}>{d.column}</span>
+                        {col&&col.pii&&<span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>PII</span>}
                       </button>
                     );
                   })}
@@ -34600,14 +34696,6 @@ const slPK   = (e) => e.key;
 // "order" is reserved in every SQL dialect targeted here, so a logical table name is
 // always quoted rather than hoping no entity is ever called something reserved.
 const slQ    = (n) => `"${n}"`;
-const slDims = (mets) => {
-  const out = [];
-  mets.forEach(m=>{
-    (m.dims||[]).forEach(d=>{ if(!out.some(x=>x.col===d)) out.push({col:d, entity:m.entity}); });
-    (m.filters||[]).forEach(f=>{ if(f.col && !out.some(x=>x.col===f.col)) out.push({col:f.col, entity:m.entity}); });
-  });
-  return out;
-};
 const slMeasureName = (m) => `${m.col}_${String(m.agg).replace(/ /g,"_")}`;
 // The concept behind an entity, and every name it answers to. Synonyms are not
 // documentation here — they compile, which is what makes the ontology load-bearing.
@@ -34616,7 +34704,7 @@ const slSynList    = (e) => { const c = slEntConcept(e); return c ? slConceptNam
 
 // ── dbt · MetricFlow. Joins are inferred from entity keys, so relationships are
 //    emitted as foreign entities rather than join clauses.
-const slAdaptDbt = ({mdl, ents, rels, mets}) => {
+const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
   const L = [];
   L.push(`# Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
   L.push(`# Model: ${mdl.name} · owner ${mdl.owner} · do not edit by hand`);
@@ -34645,23 +34733,32 @@ const slAdaptDbt = ({mdl, ents, rels, mets}) => {
       L.push(`        type: foreign`);
       L.push(`        expr: ${r.fromKey}`);
     });
+    const eDims = (dims||[]).filter(d=>d.entity===e.id);
     L.push(`    dimensions:`);
-    L.push(`      - name: ${e.timeDims[0]}`);
-    L.push(`        type: time`);
-    L.push(`        type_params:`);
-    L.push(`          time_granularity: day`);
-    slDims(eMets).forEach(d=>{
-      L.push(`      - name: ${d.col}`);
-      L.push(`        type: categorical`);
-    });
+    if(eDims.length){
+      eDims.forEach(d=>{
+        L.push(`      - name: ${d.column}`);
+        L.push(`        label: "${d.name}"`);
+        L.push(`        type: ${d.type==="time"?"time":"categorical"}`);
+        if(d.type==="time"){ L.push(`        type_params:`); L.push(`          time_granularity: day`); }
+      });
+    } else {
+      L.push(`      - name: ${e.timeDims[0]}`);
+      L.push(`        type: time`);
+      L.push(`        type_params:`);
+      L.push(`          time_granularity: day`);
+    }
+    const eFacts = (facts||[]).filter(x=>x.entity===e.id);
     const simple = eMets.filter(m=>m.type==="simple");
     if(simple.length){
       L.push(`    measures:`);
       simple.forEach(m=>{
+        const fct = eFacts.find(x=>x.column===m.col);
         L.push(`      - name: ${slMeasureName(m)}`);
         L.push(`        agg: ${m.agg==="count distinct"?"count_distinct":m.agg}`);
         L.push(`        expr: ${m.col}`);
         L.push(`        agg_time_dimension: ${m.timeDim}`);
+        if(fct && !fct.additive) L.push(`        non_additive_dimension: { name: ${m.timeDim}, window_choice: max }`);
       });
     }
     L.push("");
@@ -34692,7 +34789,7 @@ const slAdaptDbt = ({mdl, ents, rels, mets}) => {
 
 // ── Snowflake · CREATE SEMANTIC VIEW. Relationships are declared, and time
 //    intelligence has to become a window expression.
-const slAdaptSnowflake = ({mdl, ents, rels, mets}) => {
+const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
   const L = [];
   const view = slSlug(mdl.name).toUpperCase();
   L.push(`-- Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
@@ -34715,16 +34812,28 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets}) => {
     }).join(",\n"));
     L.push(`  )`);
   }
-  const facts = mets.filter(m=>m.type==="simple");
-  if(facts.length){
+  const mFacts = (facts||[]).filter(x=>ents.some(e=>e.id===x.entity));
+  if(mFacts.length){
     L.push(`  FACTS (`);
-    L.push(facts.map(m=>{const e=ents.find(x=>x.id===m.entity);return `    ${slQ(e.name.toLowerCase())}.${m.col} AS ${e.name.toLowerCase()}_${m.col}`;}).filter((v,i,a)=>a.indexOf(v)===i).join(",\n"));
+    L.push(mFacts.map(x=>{
+      const e=ents.find(y=>y.id===x.entity);
+      return `    ${slQ(e.name.toLowerCase())}.${x.column} AS ${slSlug(x.name)}`
+        + `\n      COMMENT = '${x.desc}${x.additive?"":" [not additive]"}'`;
+    }).join(",\n"));
     L.push(`  )`);
   }
-  const dims = [];
-  mets.forEach(m=>{ const e=ents.find(x=>x.id===m.entity); if(!e) return;
-    [...(m.dims||[]), m.timeDim].filter(Boolean).forEach(d=>{const s=`    ${slQ(e.name.toLowerCase())}.${d} AS ${e.name.toLowerCase()}_${d}`; if(!dims.includes(s)) dims.push(s);}); });
-  if(dims.length){ L.push(`  DIMENSIONS (`); L.push(dims.join(",\n")); L.push(`  )`); }
+  const mDims = (dims||[]).filter(d=>ents.some(e=>e.id===d.entity));
+  if(mDims.length){
+    L.push(`  DIMENSIONS (`);
+    L.push(mDims.map(d=>{
+      const e=ents.find(y=>y.id===d.entity);
+      const syn=[d.name].filter(s=>s!==d.column);
+      return `    ${slQ(e.name.toLowerCase())}.${d.column} AS ${slSlug(d.name)}`
+        + (syn.length?`\n      WITH SYNONYMS = (${syn.map(s=>`'${s}'`).join(", ")})`:"")
+        + `\n      COMMENT = '${d.desc}'`;
+    }).join(",\n"));
+    L.push(`  )`);
+  }
   L.push(`  METRICS (`);
   L.push(mets.map(m=>{
     const e=ents.find(x=>x.id===m.entity); const t=e?e.name.toLowerCase():"t";
@@ -35062,6 +35171,123 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
   );
 };
 
+// ── Declare a dimension or a fact. One drawer, because the only real difference is
+//    what the column is for: slicing, or being aggregated.
+const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
+  const [d, setD] = useState(null);
+  useEffect(()=>{ if(open) setD({entity:"", name:"", column:"", type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
+  if(!open || !d) return null;
+  const isDim = kind === "dimension";
+  const ent = entities.find(e=>e.id===d.entity);
+  const spare = slSpareColumns(ent, dims, facts);
+  const dimTerms = (gTerms||[]).filter(t=>t.termType==="Dimension");
+  const ready = d.entity && d.column && d.name.trim();
+
+  const pickColumn = (col) => {
+    const pretty = col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+    setD(p=>({...p, column:col, name:p.name||pretty, type:isDim?slSuggestDimType(col):p.type}));
+  };
+
+  const Field = ({label,hint,children}) => (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>{label}</div>
+      {children}
+      {hint&&<div style={{fontSize:11,color:T.textMuted,marginTop:4,lineHeight:1.5}}>{hint}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isDim?"Add a dimension":"Add a fact"}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              {isDim ? "Something a metric can be sliced by. Declared once, reusable by every metric on this entity."
+                     : "A row-level number a metric aggregates. The SUM lives on the metric, not here."}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <Field label="Entity" hint="Which table this belongs to.">
+            <SLSelect value={d.entity} onChange={e=>setD({...d,entity:e.target.value,column:""})} placeholder="Select an entity"
+              options={entities.map(e=>({v:e.id,l:`${e.name} — ${e.table}`}))}/>
+          </Field>
+
+          {ent && <Field label="Column" hint={spare.length?`${spare.length} column${spare.length===1?"":"s"} on ${ent.table} not yet declared.`:"Every column on this entity is already declared."}>
+            <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:230,overflowY:"auto"}}>
+              {spare.map(c=>{
+                const on = d.column===c.name;
+                const factish = slIsFactish(ent, c.name);
+                const p = COL_PROFILES[c.name]||{};
+                const mismatch = isDim ? false : !factish;
+                return (
+                  <button key={c.name} onClick={()=>pickColumn(c.name)}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                    <span style={{width:14,height:14,borderRadius:"50%",border:`1.5px solid ${on?T.accent:T.borderLight}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {on&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}
+                    </span>
+                    <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"ui-monospace,monospace",minWidth:120}}>{c.name}</span>
+                    <span style={{fontSize:10.5,color:T.textMuted,flex:1}}>{c.type}{p.topValues?` · ${p.topValues.slice(0,2).join(", ")}`:p.distinctCount?` · ${p.distinctCount} distinct`:""}</span>
+                    {c.pii && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}}>PII</span>}
+                    {mismatch && <span style={{fontSize:10,color:T.amber}}>not numeric</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>}
+
+          {d.column && <>
+            <Field label="Name" hint="What a business user calls it.">
+              <Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})}/>
+            </Field>
+            <Field label="Description">
+              <Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}
+                placeholder={isDim?"The lifecycle state of an order.":"The gross value of a single order line."}/>
+            </Field>
+
+            {isDim && <>
+              <Field label="Type" hint={SL_DIM_TYPES[d.type].d}>
+                <SLSelect value={d.type} onChange={e=>setD({...d,type:e.target.value})}
+                  options={Object.entries(SL_DIM_TYPES).map(([v,x])=>({v,l:x.l}))}/>
+              </Field>
+              <Field label="Glossary term"
+                hint="Linking it means the business definition lives in the register, not here — and the dimension inherits its owner and approval.">
+                <SLSelect value={d.termId} onChange={e=>setD({...d,termId:e.target.value})} placeholder="Not linked"
+                  options={dimTerms.map(t=>({v:t.id,l:t.term}))}/>
+              </Field>
+            </>}
+
+            {!isDim && <Field label="Additive"
+              hint="Additive means summing across every dimension is valid. A balance or a counting key is not additive, and platforms that cannot express that will silently sum it anyway.">
+              <SLSelect value={d.additive?"yes":"no"} onChange={e=>setD({...d,additive:e.target.value==="yes"})}
+                options={[{v:"yes",l:"Additive — safe to sum across anything"},{v:"no",l:"Not additive — summing it is meaningless"}]}/>
+            </Field>}
+          </>}
+        </div>
+
+        <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
+          <span style={{fontSize:11.5,color:ready?T.green:T.textMuted}}>
+            {ready?"Ready.":!d.entity?"Pick an entity.":!d.column?"Pick a column.":"Give it a name."}
+          </span>
+          <div style={{display:"flex",gap:9}}>
+            <Btn ghost onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" disabled={!ready} onClick={()=>{
+              onSave(kind, isDim
+                ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, type:d.type, termId:d.termId||null, desc:d.desc}
+                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, additive:d.additive, desc:d.desc});
+              onToast && onToast(`${d.name.trim()} added`,"success");
+            }}>Add {isDim?"dimension":"fact"}</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Metric detail. A drawer, not a page: a metric is read in the context of the model
 //    it belongs to, and one scroll with real headings beats five invented tab names.
 const SLMetricDrawer = ({metric, metrics, entities, rels, vendor, gTerms, onClose, onNav, onOpenMetric}) => {
@@ -35182,7 +35408,7 @@ const SLMetricDrawer = ({metric, metrics, entities, rels, vendor, gTerms, onClos
 };
 
 // ── Publish. Runs the adapters and shows exactly what they produce.
-const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, onPublish, onToast}) => {
+const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onPublish, onToast}) => {
   const targets = (mdl && mdl.targets || []).filter(t=>(SL_PLATFORMS[t]||{}).adapter==="ready");
   const [plat, setPlat] = useState("__esm");
   useEffect(()=>{ if(open) setPlat("__esm"); },[open]);
@@ -35190,7 +35416,7 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, onPublish, onToa
   const isSource = plat==="__esm";
   const files = isSource
     ? [{path:`${slSlug(mdl.name)}.esm.yaml`, lang:"esm", body:slModelToESM(mdl, ents, rels, mets)}]
-    : slBuildArtifacts(plat, {mdl, ents, rels, mets});
+    : slBuildArtifacts(plat, {mdl, ents, rels, mets, dims, facts});
   const warns = isSource ? [] : mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
@@ -35254,7 +35480,7 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, onPublish, onToa
 const SemanticLayerView = ({onToast, onNav}) => {
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
-  const {models, metrics, vendor, entities, rels, concepts, crels} = store;
+  const {models, metrics, vendor, entities, rels, concepts, crels, dims, facts} = store;
 
   const [selMdl,  setSelMdl]  = useState(null);
   const [tab,     setTab]     = useState("overview");
@@ -35265,6 +35491,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [newMdlOpen,  setNewMdlOpen]  = useState(false);
   const [pubOpen,     setPubOpen]     = useState(false);
+  const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
   const [mapFor,  setMapFor]  = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(null);
@@ -35278,6 +35505,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const mEnts    = mdl ? entities.filter(e=>(mdl.entityIds||[]).includes(e.id)) : [];
   const mRels    = mdl ? rels.filter(r=>(mdl.entityIds||[]).includes(r.from)&&(mdl.entityIds||[]).includes(r.to)) : [];
   const mVendor  = mdl ? vendor.filter(v=>mMetrics.some(x=>x.id===v.mappedTo)) : [];
+  const mDims    = mdl ? dims.filter(d=>(mdl.entityIds||[]).includes(d.entity)) : [];
+  const mFacts   = mdl ? facts.filter(x=>(mdl.entityIds||[]).includes(x.entity)) : [];
   const sel      = selId ? metrics.find(m=>m.id===selId) : null;
 
   const statsFor = (m) => {
@@ -35287,6 +35516,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
             entities:(m.entityIds||[]).length, disagree:vs.filter(v=>v.conformance!=="conformant").length, copies:vs.length};
   };
   const patchModel = (patch) => setStore(prev=>({...prev, models:prev.models.map(m=>m.id===selMdl?{...m,...patch}:m)}));
+  const addDimFact = (kind, obj) => setStore(prev=>({...prev,
+    [kind==="dimension"?"dims":"facts"]: [...prev[kind==="dimension"?"dims":"facts"], obj]}));
   const saveMetric = (m) => { setStore(prev=>({...prev, metrics:[...prev.metrics, {...m, model:selMdl}]})); setBuilderOpen(false);
     onToast && onToast(m.status==="In Review" ? `${m.name} published for approval` : `${m.name} saved as a draft`,"success"); };
   const mapVendor = (vId, metricId) => {
@@ -35328,7 +35559,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   if(mdl){
     const st = statsFor(mdl);
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
-    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"ER Diagram"},
+    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Model"},
                   {k:"metrics",l:`Metrics · ${mMetrics.length}`},{k:"alignment",l:`Alignment · ${mVendor.length}`},
                   {k:"sync",l:sync.enabled?"Sync":"Sync · off"}];
     const dis = slDisagreements(mVendor, mMetrics);
@@ -35464,7 +35695,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."/>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {(mdl.targets||[]).map(t=>{
-                      const p = SL_PLATFORMS[t]||{}; const fileCount = slBuildArtifacts(t,{mdl,ents:mEnts,rels:mRels,mets:mMetrics}).length;
+                      const p = SL_PLATFORMS[t]||{}; const fileCount = slBuildArtifacts(t,{mdl,ents:mEnts,rels:mRels,mets:mMetrics,dims:mDims,facts:mFacts}).length;
                       const lossy = mMetrics.filter(m=>slCompilability(m,t,mRels).level!=="full").length;
                       return (
                         <div key={t} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,flexWrap:"wrap"}}>
@@ -35540,6 +35771,86 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       );
                     })}
                   </div>}
+
+              <div style={{marginTop:28}}>
+                <SH title="Dimensions"
+                    sub="What a metric on this model can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."
+                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("dimension")}>Add dimension</Btn>}/>
+                {mDims.length===0
+                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                      No dimensions declared. Metrics can still be built, but nothing can be sliced.
+                    </div>
+                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      {mDims.map((d,i)=>{
+                        const e = mEnts.find(x=>x.id===d.entity);
+                        const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
+                        const term = d.termId ? gTerms.find(t=>t.id===d.termId) : null;
+                        const usedBy = mMetrics.filter(m=>(m.dims||[]).includes(d.column)).length;
+                        return (
+                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mDims.length-1?`1px solid ${T.border}`:"none"}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{d.name}</span>
+                                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${dt.c}18`,color:dt.c,border:`1px solid ${dt.c}35`}}>{dt.l}</span>
+                                {term && <span style={{fontSize:10.5,color:T.violet}}>◆ {term.term}</span>}
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted}}>{d.desc}</div>
+                            </div>
+                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{d.column}</span>
+                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>}
+
+                {(()=>{
+                  const undec = slUndeclaredDims(mMetrics, mDims);
+                  if(!undec.length) return null;
+                  return (
+                    <div style={{marginTop:10,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>
+                        {undec.length} column{undec.length===1?"":"s"} sliced by a metric but never declared
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
+                        {undec.map(u=>u.column).join(", ")} — the model cannot say what {undec.length===1?"it means":"they mean"}, and platforms that need dimensions declared up front will drop {undec.length===1?"it":"them"}.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div style={{marginTop:28}}>
+                <SH title="Facts"
+                    sub="The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric — which is what lets several metrics share one fact."
+                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("fact")}>Add fact</Btn>}/>
+                {mFacts.length===0
+                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                      No facts declared. There is nothing for a metric to aggregate.
+                    </div>
+                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      {mFacts.map((x,i)=>{
+                        const e = mEnts.find(y=>y.id===x.entity);
+                        const usedBy = mMetrics.filter(m=>m.col===x.column && m.entity===x.entity).length;
+                        return (
+                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mFacts.length-1?`1px solid ${T.border}`:"none"}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</span>
+                                {!x.additive && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>not additive</span>}
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted}}>{x.desc}</div>
+                            </div>
+                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{x.column}</span>
+                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>}
+              </div>
 
               {selEnt && (()=>{
                 const e = mEnts.find(x=>x.id===selEnt); if(!e) return null;
@@ -35835,8 +36146,12 @@ const SemanticLayerView = ({onToast, onNav}) => {
           </>}
         </Modal>
 
-        <SLPublishDrawer open={pubOpen} onClose={()=>setPubOpen(false)} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics} onPublish={doPublish} onToast={onToast}/>
-        <SLBuilderDrawer open={builderOpen} onClose={()=>setBuilderOpen(false)} onSave={saveMetric} metrics={metrics} onToast={onToast}/>
+        <SLDimFactDrawer open={!!dfKind} kind={dfKind} entities={mEnts} dims={dims} facts={facts} gTerms={gTerms}
+          onClose={()=>setDfKind(null)} onSave={(k,o)=>{addDimFact(k,o);setDfKind(null);}} onToast={onToast}/>
+        <SLPublishDrawer open={pubOpen} onClose={()=>setPubOpen(false)} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
+          dims={mDims} facts={mFacts} onPublish={doPublish} onToast={onToast}/>
+        <SLBuilderDrawer open={builderOpen} onClose={()=>setBuilderOpen(false)} onSave={saveMetric} metrics={metrics}
+          dims={mDims} facts={mFacts} onToast={onToast}/>
         <SLMetricDrawer metric={sel} metrics={metrics} entities={entities} rels={rels} vendor={vendor} gTerms={gTerms}
           onClose={()=>setSelId(null)} onNav={onNav}/>
       </div>
