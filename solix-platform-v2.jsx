@@ -35559,8 +35559,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
   if(mdl){
     const st = statsFor(mdl);
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
-    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Model"},
-                  {k:"metrics",l:`Metrics · ${mMetrics.length}`},{k:"alignment",l:`Alignment · ${mVendor.length}`},
+    const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"ER Diagram"},
+                  {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
+                  {k:"alignment",l:`Alignment · ${mVendor.length}`},
                   {k:"sync",l:sync.enabled?"Sync":"Sync · off"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
@@ -35596,10 +35597,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 <button onClick={startEdit} title="Edit model"
                   style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{Ic.edit(14)}</button>
-                <button onClick={()=>setBuilderOpen(true)}
-                  style={{height:34,padding:"0 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
-                  {Ic.plus(10)} Add Metric
-                </button>
                 <button onClick={()=>setPubOpen(true)} disabled={mMetrics.length===0}
                   style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:mMetrics.length?"pointer":"not-allowed",opacity:mMetrics.length?1:.5,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
                   Publish
@@ -35772,85 +35769,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     })}
                   </div>}
 
-              <div style={{marginTop:28}}>
-                <SH title="Dimensions"
-                    sub="What a metric on this model can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."
-                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("dimension")}>Add dimension</Btn>}/>
-                {mDims.length===0
-                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      No dimensions declared. Metrics can still be built, but nothing can be sliced.
-                    </div>
-                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {mDims.map((d,i)=>{
-                        const e = mEnts.find(x=>x.id===d.entity);
-                        const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
-                        const term = d.termId ? gTerms.find(t=>t.id===d.termId) : null;
-                        const usedBy = mMetrics.filter(m=>(m.dims||[]).includes(d.column)).length;
-                        return (
-                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mDims.length-1?`1px solid ${T.border}`:"none"}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{d.name}</span>
-                                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${dt.c}18`,color:dt.c,border:`1px solid ${dt.c}35`}}>{dt.l}</span>
-                                {term && <span style={{fontSize:10.5,color:T.violet}}>◆ {term.term}</span>}
-                              </div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{d.desc}</div>
-                            </div>
-                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{d.column}</span>
-                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
-                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>}
-
-                {(()=>{
-                  const undec = slUndeclaredDims(mMetrics, mDims);
-                  if(!undec.length) return null;
-                  return (
-                    <div style={{marginTop:10,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
-                      <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>
-                        {undec.length} column{undec.length===1?"":"s"} sliced by a metric but never declared
-                      </div>
-                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
-                        {undec.map(u=>u.column).join(", ")} — the model cannot say what {undec.length===1?"it means":"they mean"}, and platforms that need dimensions declared up front will drop {undec.length===1?"it":"them"}.
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              <div style={{marginTop:28}}>
-                <SH title="Facts"
-                    sub="The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric — which is what lets several metrics share one fact."
-                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("fact")}>Add fact</Btn>}/>
-                {mFacts.length===0
-                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      No facts declared. There is nothing for a metric to aggregate.
-                    </div>
-                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {mFacts.map((x,i)=>{
-                        const e = mEnts.find(y=>y.id===x.entity);
-                        const usedBy = mMetrics.filter(m=>m.col===x.column && m.entity===x.entity).length;
-                        return (
-                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mFacts.length-1?`1px solid ${T.border}`:"none"}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</span>
-                                {!x.additive && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>not additive</span>}
-                              </div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{x.desc}</div>
-                            </div>
-                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{x.column}</span>
-                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
-                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>}
-              </div>
 
               {selEnt && (()=>{
                 const e = mEnts.find(x=>x.id===selEnt); if(!e) return null;
@@ -35888,50 +35806,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
               })()}
             </>}
 
-            {tab==="metrics" && <>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <div style={{flex:1}}><Input2 placeholder="Search metrics, definitions…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
-                <button onClick={()=>setBuilderOpen(true)}
-                  style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",flexShrink:0}}>
-                  {Ic.plus(10)} Add Metric
-                </button>
-              </div>
-              <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{mMetrics.length} metric{mMetrics.length!==1?"s":""} · {mMetrics.filter(m=>m.status==="Approved").length} certified</div>
-              {mMetrics.length===0
-                ? <div style={{padding:"60px 0",textAlign:"center"}}>
-                    <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No metrics yet</div>
-                    <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>A model is a set of agreed numbers over a shared grain.</div>
-                    <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add the first metric</Btn>
-                  </div>
-                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                    {mMetrics.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.definition||"").toLowerCase().includes(q.toLowerCase())).map((m,i,a)=>{
-                      const copies = vendor.filter(v=>v.mappedTo===m.id);
-                      const bad = copies.filter(c=>c.conformance!=="conformant").length;
-                      const e = mEnts.find(x=>x.id===m.entity);
-                      return (
-                        <div key={m.id} className="row-hover" onClick={()=>setSelId(m.id)}
-                          style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
-                              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{m.name}</span>
-                              <SLStatusChip status={m.status}/><SLTypeChip type={m.type}/>
-                              {!m.termId && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>no term</span>}
-                            </div>
-                            <div style={{fontSize:11.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.definition}</div>
-                          </div>
-                          <div style={{width:110,flexShrink:0,fontSize:11,color:T.textMuted}}>{e?e.name:"—"} · {m.timeGrain}</div>
-                          <div style={{width:130,flexShrink:0,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-                            {copies.length===0
-                              ? <span style={{fontSize:10.5,color:T.textMuted}}>not in any tool</span>
-                              : <>{copies.map(c=><SLSysChip key={c.id} system={c.system}/>)}
-                                 {bad>0 && <span style={{fontSize:10.5,fontWeight:700,color:T.amber}}>{bad}✕</span>}</>}
-                          </div>
-                          <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>}
-            </>}
 
             {tab==="sync" && (()=>{
               const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
@@ -36020,6 +35894,144 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 </div>
               );
             })()}
+
+            {tab==="definitions" && <>
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:24}}>
+                <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:820}}>
+                  Everything this model exposes, in the order it gets built. <b style={{color:T.text}}>Dimensions</b> are what you slice by, <b style={{color:T.text}}>facts</b> are the row-level numbers, and a <b style={{color:T.text}}>metric</b> aggregates a fact and can be broken down by the dimensions. Declare the first two and the third is a choice rather than a free-text guess.
+                </div>
+                <div style={{display:"flex",gap:26,marginTop:12,flexWrap:"wrap"}}>
+                  {[["Dimensions",mDims.length],["Facts",mFacts.length],["Metrics",mMetrics.length]].map(([k,v],i)=>(
+                    <div key={k} style={{display:"flex",alignItems:"baseline",gap:7}}>
+                      <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted}}>{i+1}</span>
+                      <span style={{fontSize:18,fontWeight:700,color:v?T.text:T.textMuted,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{marginTop:28}}>
+                <SH title="Dimensions"
+                    sub="What a metric on this model can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."
+                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("dimension")}>Add dimension</Btn>}/>
+                {mDims.length===0
+                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                      No dimensions declared. Metrics can still be built, but nothing can be sliced.
+                    </div>
+                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      {mDims.map((d,i)=>{
+                        const e = mEnts.find(x=>x.id===d.entity);
+                        const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
+                        const term = d.termId ? gTerms.find(t=>t.id===d.termId) : null;
+                        const usedBy = mMetrics.filter(m=>(m.dims||[]).includes(d.column)).length;
+                        return (
+                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mDims.length-1?`1px solid ${T.border}`:"none"}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{d.name}</span>
+                                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${dt.c}18`,color:dt.c,border:`1px solid ${dt.c}35`}}>{dt.l}</span>
+                                {term && <span style={{fontSize:10.5,color:T.violet}}>◆ {term.term}</span>}
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted}}>{d.desc}</div>
+                            </div>
+                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{d.column}</span>
+                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>}
+
+                {(()=>{
+                  const undec = slUndeclaredDims(mMetrics, mDims);
+                  if(!undec.length) return null;
+                  return (
+                    <div style={{marginTop:10,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>
+                        {undec.length} column{undec.length===1?"":"s"} sliced by a metric but never declared
+                      </div>
+                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
+                        {undec.map(u=>u.column).join(", ")} — the model cannot say what {undec.length===1?"it means":"they mean"}, and platforms that need dimensions declared up front will drop {undec.length===1?"it":"them"}.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              <div style={{marginTop:28}}>
+                <SH title="Facts"
+                    sub="The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric — which is what lets several metrics share one fact."
+                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setDfKind("fact")}>Add fact</Btn>}/>
+                {mFacts.length===0
+                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
+                      No facts declared. There is nothing for a metric to aggregate.
+                    </div>
+                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      {mFacts.map((x,i)=>{
+                        const e = mEnts.find(y=>y.id===x.entity);
+                        const usedBy = mMetrics.filter(m=>m.col===x.column && m.entity===x.entity).length;
+                        return (
+                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<mFacts.length-1?`1px solid ${T.border}`:"none"}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</span>
+                                {!x.additive && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>not additive</span>}
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted}}>{x.desc}</div>
+                            </div>
+                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{x.column}</span>
+                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>}
+              </div>
+
+              <div style={{marginTop:28}}>
+                <SH title="Metrics"
+                    sub="The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension declared above."
+                    action={<Btn small icon={Ic.plus(11)} onClick={()=>setBuilderOpen(true)}>Add metric</Btn>}/>
+              <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{mMetrics.length} metric{mMetrics.length!==1?"s":""} · {mMetrics.filter(m=>m.status==="Approved").length} certified</div>
+              {mMetrics.length===0
+                ? <div style={{padding:"60px 0",textAlign:"center"}}>
+                    <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No metrics yet</div>
+                    <div style={{fontSize:12,color:T.textMuted,marginBottom:16}}>A model is a set of agreed numbers over a shared grain.</div>
+                    <Btn variant="primary" small icon={Ic.plus(12)} onClick={()=>setBuilderOpen(true)}>Add the first metric</Btn>
+                  </div>
+                : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                    {mMetrics.filter(m=>!q||m.name.toLowerCase().includes(q.toLowerCase())||(m.definition||"").toLowerCase().includes(q.toLowerCase())).map((m,i,a)=>{
+                      const copies = vendor.filter(v=>v.mappedTo===m.id);
+                      const bad = copies.filter(c=>c.conformance!=="conformant").length;
+                      const e = mEnts.find(x=>x.id===m.entity);
+                      return (
+                        <div key={m.id} className="row-hover" onClick={()=>setSelId(m.id)}
+                          style={{display:"flex",alignItems:"center",gap:14,padding:"13px 16px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
+                              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{m.name}</span>
+                              <SLStatusChip status={m.status}/><SLTypeChip type={m.type}/>
+                              {!m.termId && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>no term</span>}
+                            </div>
+                            <div style={{fontSize:11.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.definition}</div>
+                          </div>
+                          <div style={{width:110,flexShrink:0,fontSize:11,color:T.textMuted}}>{e?e.name:"—"} · {m.timeGrain}</div>
+                          <div style={{width:130,flexShrink:0,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+                            {copies.length===0
+                              ? <span style={{fontSize:10.5,color:T.textMuted}}>not in any tool</span>
+                              : <>{copies.map(c=><SLSysChip key={c.id} system={c.system}/>)}
+                                 {bad>0 && <span style={{fontSize:10.5,fontWeight:700,color:T.amber}}>{bad}✕</span>}</>}
+                          </div>
+                          <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(13)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>}
+              </div>
+            </>}
 
             {tab==="alignment" && <>
               <SH title="Where the tools disagree" sub="Every number in this model that more than one tool defines, and how many copies are out of step."/>
