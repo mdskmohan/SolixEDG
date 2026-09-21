@@ -34744,7 +34744,11 @@ const slMeasureName = (m) => `${m.col}_${String(m.agg).replace(/ /g,"_")}`;
 // The concept behind an entity, and every name it answers to. Synonyms are not
 // documentation here — they compile, which is what makes the ontology load-bearing.
 const slEntConcept = (e) => (e && e.concept) ? _slState.concepts.find(c=>c.id===e.concept) : null;
-const slSynList    = (e) => { const c = slEntConcept(e); return c ? slConceptNames(c) : []; };
+const slSynList    = (e) => {
+  const c = slEntConcept(e);
+  return [...(c ? slConceptNames(c) : []), ...((e && e.synonyms) || [])]
+    .filter((v,i,a)=>a.indexOf(v)===i);
+};
 
 // ── dbt · MetricFlow. Joins are inferred from entity keys, so relationships are
 //    emitted as foreign entities rather than join clauses.
@@ -34871,7 +34875,7 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
     L.push(`  DIMENSIONS (`);
     L.push(mDims.map(d=>{
       const e=ents.find(y=>y.id===d.entity);
-      const syn=[d.name].filter(s=>s!==d.column);
+      const syn=[d.name, ...(d.synonyms||[])].filter(s=>s!==d.column).filter((v,i,a)=>a.indexOf(v)===i);
       return `    ${slQ(e.name.toLowerCase())}.${d.column} AS ${slSlug(d.name)}`
         + (syn.length?`\n      WITH SYNONYMS = (${syn.map(s=>`'${s}'`).join(", ")})`:"")
         + `\n      COMMENT = '${d.desc}'`;
@@ -35215,6 +35219,143 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
   );
 };
 
+// ── Rename, and the synonyms that go with the name.
+//    One drawer for entities, dimensions, facts and metrics, because the rules are the
+//    same for all four: the business name is yours to change, the column is not, and if
+//    a Glossary term owns the name then the Glossary owns it — editing it here would
+//    recreate the two-names problem one level down.
+//
+//    Synonyms are not decoration. They compile: WITH SYNONYMS on the Snowflake object,
+//    meta.synonyms in dbt, the description in Power BI — which is what lets somebody ask
+//    for "buyers" and land on the certified Customer metric.
+const SL_RENAME_KINDS = {
+  entity:    {l:"entity",    physical:"table"},
+  dimension: {l:"dimension", physical:"column"},
+  fact:      {l:"fact",      physical:"column"},
+  metric:    {l:"metric",    physical:"fact"},
+};
+
+const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
+  const [d, setD] = useState(null);
+  const [syn, setSyn] = useState("");
+  useEffect(()=>{ if(open && obj) { setD({name:obj.name||"", synonyms:[...(obj.synonyms||[])]}); setSyn(""); } },[open,obj]);
+  if(!open || !obj || !d) return null;
+  const meta = SL_RENAME_KINDS[kind] || SL_RENAME_KINDS.entity;
+  const locked = !!term;
+  const physical = kind==="entity" ? obj.table : kind==="metric" ? (obj.col||"—") : obj.column;
+  const addSyn = () => {
+    const v = syn.trim(); if(!v) return;
+    if(d.synonyms.includes(v) || v===d.name){ onToast&&onToast("Already there.","error"); return; }
+    setD(p=>({...p, synonyms:[...p.synonyms, v]})); setSyn("");
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Rename {meta.l}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>The business name and the other names it answers to.</div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <SLField label="Name" hint={locked
+              ? `Owned by the Glossary term "${term.term}". Rename it there and it changes everywhere — two places to edit one name is how definitions drift apart.`
+              : "What a business user calls it. Changing it here changes it everywhere the model is compiled."}>
+            {locked
+              ? <div style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                  <span style={{color:T.violet,flexShrink:0}}>{Ic.glossary(13)}</span>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{term.term}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted}}>read-only here</span>
+                </div>
+              : <Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})}/>}
+          </SLField>
+
+          <SLField label={`Physical ${meta.physical}`} hint="Not editable — this is the binding. Point it somewhere else and it is a different object, not a rename.">
+            <div style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,
+              fontSize:12,fontFamily:"ui-monospace,monospace",color:T.textMuted}}>{physical}</div>
+          </SLField>
+
+          <SLField label="Also known as"
+            hint="These compile — WITH SYNONYMS in the Snowflake semantic view, meta.synonyms in dbt, the description in Power BI. They are what let a natural-language question land on this instead of guessing.">
+            <div style={{display:"flex",gap:8,marginBottom:9}}>
+              <div style={{flex:1}}><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Buyer"/></div>
+              <Btn small onClick={addSyn} disabled={!syn.trim()}>Add</Btn>
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {d.synonyms.length===0
+                ? <span style={{fontSize:11.5,color:T.textMuted}}>None yet.</span>
+                : d.synonyms.map(s=>(
+                  <span key={s} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:600,color:T.text,
+                    background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,padding:"3px 7px 3px 9px"}}>
+                    {s}
+                    <button onClick={()=>setD(p=>({...p,synonyms:p.synonyms.filter(x=>x!==s)}))}
+                      style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:0}}>{Ic.x(10)}</button>
+                  </span>
+                ))}
+            </div>
+          </SLField>
+
+          {term && <div style={{padding:"11px 13px",background:T.violetDim,border:`1px solid ${T.violet}35`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
+            Synonyms set here are specific to this model. The term's own synonyms apply everywhere it is used, and both are emitted.
+          </div>}
+        </div>
+
+        <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:9,background:T.bg}}>
+          <Btn ghost onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" disabled={!locked && !d.name.trim()}
+            onClick={()=>{ onSave(kind, obj, {name: locked ? obj.name : d.name.trim(), synonyms:d.synonyms});
+                           onToast && onToast("Saved","success"); }}>Save</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── One target's compiled output, opened from the row where you chose that target.
+const SLTargetDrawer = ({open, plat, mdl, ents, rels, mets, dims, facts, onClose}) => {
+  if(!open || !plat || !mdl) return null;
+  const p = SL_PLATFORMS[plat] || {};
+  const files = slBuildArtifacts(plat, {mdl, ents, rels, mets, dims, facts});
+  const warns = mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:820,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
+              <SLSysChip system={plat}/>
+              <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{p.artifact}</span>
+            </div>
+            <div style={{fontSize:11.5,color:T.textMuted}}>Compiled from the model source. Read-only — edit the source in Configuration.</div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px 22px"}}>
+          {warns.length>0 && <div style={{marginBottom:14,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:6}}>{warns.length} metric{warns.length===1?"":"s"} lose something here</div>
+            {warns.map(w=><div key={w.m.id} style={{fontSize:11,color:T.textSub,lineHeight:1.55}}>· <b style={{color:T.text}}>{w.m.name}</b> — {w.r.notes[0]}</div>)}
+          </div>}
+          {files.map(fl=>(
+            <div key={fl.path} style={{marginBottom:14}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{fl.path}</span>
+                <span style={{fontSize:10.5,color:T.textMuted}}>{fl.body.split("\n").length} lines</span>
+              </div>
+              <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
+                background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{fl.body}</pre>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Relationships. Presented the way the Lineage tab is: a toolbar strip with a legend
 //    and controls, then a canvas beside an info panel, on the same hardcoded light palette
 //    the lineage graph uses so the two read as one product.
@@ -35273,7 +35414,7 @@ const slRelLayout = (ents, rels, showCols, dims, facts) => {
   return {nodes, edges, width: PADX * 2 + NW * 2 + GAPX, height: Math.max(tallest + PADY, 260)};
 };
 
-const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, onSelect, onOpenMetric}) => {
+const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, onSelect, onOpenMetric, onRename}) => {
   const [showCols, setShowCols] = useState(true);
   const {nodes, edges, width, height} = slRelLayout(entities, rels, showCols, dims, facts);
   const sel = selected ? entities.find(e => e.id === selected) : null;
@@ -35385,8 +35526,17 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, models, selected, on
                 </div>}
               </div>
             : <div style={{padding:"16px 18px"}}>
-                <div style={{fontSize:14,fontWeight:700,color:LP.text,marginBottom:3}}>{sel.name}</div>
-                <div style={{fontSize:11,color:LP.muted,fontFamily:"ui-monospace,monospace",marginBottom:12}}>{sel.table}</div>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                  <div style={{fontSize:14,fontWeight:700,color:LP.text,marginBottom:3}}>{sel.name}</div>
+                  {onRename && <button onClick={()=>onRename("entity", sel)} title="Rename this entity and set its synonyms"
+                    style={{width:24,height:24,borderRadius:6,background:"#fff",border:`1px solid ${LP.line}`,color:LP.muted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {Ic.edit(12)}
+                  </button>}
+                </div>
+                <div style={{fontSize:11,color:LP.muted,fontFamily:"ui-monospace,monospace",marginBottom:8}}>{sel.table}</div>
+                {(sel.synonyms||[]).length>0 && <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:12}}>
+                  {sel.synonyms.map(s=><span key={s} style={{fontSize:10,color:LP.muted,background:LP.bg,border:`1px solid ${LP.line}`,borderRadius:4,padding:"1px 6px"}}>{s}</span>)}
+                </div>}
 
                 <div style={{padding:"9px 11px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14}}>
                   <div style={{fontSize:10.5,fontWeight:700,color:"#15803d",marginBottom:2}}>GRAIN</div>
@@ -35768,6 +35918,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
+  const [renameFor,   setRenameFor]   = useState(null);  // {kind, obj}
+  const [tgtDrawer,   setTgtDrawer]   = useState(null);  // platform key
   const [mapFor,  setMapFor]  = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft,   setDraft]   = useState(null);
@@ -35804,6 +35956,16 @@ const SemanticLayerView = ({onToast, onNav}) => {
     }));
     setYamlResult({ok:true, ...parsed, changes:res.changes});
     onToast && onToast(res.changes.length ? `${res.changes.length} change${res.changes.length===1?"":"s"} applied` : "No changes to apply","success");
+  };
+
+  const saveRename = (kind, obj, patch) => {
+    setStore(prev=>{
+      if(kind==="entity")    return {...prev, entities: prev.entities.map(e=>e.id===obj.id?{...e,...patch}:e)};
+      if(kind==="dimension") return {...prev, dims:     prev.dims.map(d=>d.id===obj.id?{...d,...patch}:d)};
+      if(kind==="fact")      return {...prev, facts:    prev.facts.map(x=>x.id===obj.id?{...x,...patch}:x)};
+      return {...prev, metrics: prev.metrics.map(m=>m.id===obj.id?{...m,...patch}:m)};
+    });
+    setRenameFor(null);
   };
 
   const addDimFact = (kind, obj) => setStore(prev=>({...prev,
@@ -35851,7 +36013,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"flag"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
-                  {k:"alignment",l:`Alignment · ${mVendor.length}`},
+                  {k:"alignment",l:`In your tools · ${mVendor.length}`},
                   {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
@@ -35992,7 +36154,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                           {lossy>0
                             ? <span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>{lossy} metric{lossy===1?"":"s"} degraded</span>
                             : <span style={{fontSize:10.5,fontWeight:600,color:T.green}}>clean</span>}
-                          <Btn small ghost onClick={()=>setPubOpen(true)}>Preview</Btn>
+                          <button onClick={()=>setTgtDrawer(t)} title={`View the ${p.label} output`}
+                            style={{width:28,height:28,borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,
+                              cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+                            {Ic.catalog(13)}
+                          </button>
                         </div>
                       );
                     })}
@@ -36016,9 +36184,23 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 {/* Right sidebar — same shape as the other profile screens */}
                 <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px"}}>
                   <SB label="Status"><SLStatusChip status={mdl.status}/></SB>
-                  <SB label="Owner"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.owner}</div></SB>
-                  <SB label="Steward"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.steward}</div></SB>
                   <SB label="Domain"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.domain}</div></SB>
+                  <SB label="Owners">
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <span style={{width:22,height:22,borderRadius:"50%",background:T.accentDim,color:T.accent,fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {String(mdl.owner||"?").split(".").map(s=>s[0]||"").join("").toUpperCase()}
+                      </span>
+                      <span style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.owner}</span>
+                    </div>
+                  </SB>
+                  <SB label="Stewards">
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <span style={{width:22,height:22,borderRadius:"50%",background:T.blueDim,color:T.blue,fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {String(mdl.steward||"?").split(".").map(s=>s[0]||"").join("").toUpperCase()}
+                      </span>
+                      <span style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mdl.steward}</span>
+                    </div>
+                  </SB>
                   <SB label="Entities"><div style={{fontSize:12.5,color:T.text,fontWeight:600}}>{mEnts.map(e=>e.name).join(", ")||"—"}</div></SB>
                   <SB label="Publishes to">
                     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(mdl.targets||[]).map(t=><SLSysChip key={t} system={t}/>)}</div>
@@ -36038,7 +36220,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
               <SH title="Relationships"
                   sub="Entities are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
               <SLRelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} dims={mDims} facts={mFacts}
-                models={models} selected={selEnt} onSelect={setSelEnt} onOpenMetric={(id)=>setSelId(id)}/>
+                models={models} selected={selEnt} onSelect={setSelEnt} onOpenMetric={(id)=>setSelId(id)}
+                onRename={(k,o)=>setRenameFor({kind:k,obj:o})}/>
 
             </>}
 
@@ -36047,7 +36230,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
               const CFG = [
                 {k:"sync",   l:"Reverse sync", d:"Reading definitions back out of your platforms"},
                 {k:"source", l:"Source",       d:"The ESM document — edit it and everything follows"},
-                {k:"output", l:"Generated",    d:"What each platform gets, compiled from the source"},
               ];
               const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
               const FREQ = [{v:"hourly",l:"Every hour"},{v:"daily",l:"Daily"},{v:"weekly",l:"Weekly"},{v:"manual",l:"Manual only"}];
@@ -36101,29 +36283,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   <div style={{marginTop:16,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
                     Objects the document does not mention are left alone rather than deleted — an editor that silently drops what you did not retype is a data-loss bug, not a feature.
                   </div>
-                </div>}
-
-                {cfgPane==="output" && <div style={{maxWidth:900}}>
-                  <SH title="Generated output"
-                      sub="Compiled from the source on the left. Read-only: reading Snowflake DDL, dbt YAML, Databricks YAML and TMDL back into one model would need four dialect parsers, and a mis-parse would quietly rewrite a certified metric. Edit the source instead."/>
-                  <div style={{display:"flex",gap:5,marginBottom:12,flexWrap:"wrap"}}>
-                    {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>(
-                      <button key={p.k} onClick={()=>setOutPlat(p.k)}
-                        style={{padding:"5px 11px",borderRadius:7,border:`1px solid ${outPlat===p.k?T.accent:T.border}`,
-                          background:outPlat===p.k?T.accentDim:T.bgSurface,color:outPlat===p.k?T.accent:T.textSub,
-                          fontSize:11.5,fontWeight:600,cursor:"pointer"}}>{p.label}</button>
-                    ))}
-                  </div>
-                  {outFiles.map(fl=>(
-                    <div key={fl.path} style={{marginBottom:14}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                        <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{fl.path}</span>
-                        <span style={{fontSize:10.5,color:T.textMuted}}>{fl.body.split("\n").length} lines</span>
-                      </div>
-                      <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
-                        background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{fl.body}</pre>
-                    </div>
-                  ))}
                 </div>}
 
                 {cfgPane==="sync" && <div style={{maxWidth:760}}>
@@ -36247,9 +36406,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                               <div style={{fontSize:11,color:T.textMuted}}>{d.desc}</div>
                             </div>
                             <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{d.column}</span>
-                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                            <span style={{width:80,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
                               {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
                             </span>
+                            <button onClick={()=>setRenameFor({kind:"dimension",obj:d})} title="Rename and set synonyms"
+                              style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                              {Ic.edit(12)}
+                            </button>
                           </div>
                         );
                       })}
@@ -36293,9 +36456,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                               <div style={{fontSize:11,color:T.textMuted}}>{x.desc}</div>
                             </div>
                             <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{x.column}</span>
-                            <span style={{width:90,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
+                            <span style={{width:80,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
                               {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
                             </span>
+                            <button onClick={()=>setRenameFor({kind:"fact",obj:x})} title="Rename and set synonyms"
+                              style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                              {Ic.edit(12)}
+                            </button>
                           </div>
                         );
                       })}
@@ -36345,6 +36512,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
             </>}
 
             {tab==="alignment" && <>
+              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:22}}>
+                <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:820}}>
+                  The same numbers, as they are already defined in dbt, Power BI, Tableau and the rest — harvested, not written by EDG. This is where you find out that three tools each compute "revenue" differently, which of them matches the certified definition, and which ones nobody owns.
+                </div>
+              </div>
               <SH title="Where the tools disagree" sub="Every number in this model that more than one tool defines, and how many copies are out of step."/>
               {dis.length===0
                 ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10,marginBottom:24}}>Nothing in this model is defined in more than one tool.</div>
@@ -36469,6 +36641,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
           </>}
         </Modal>
 
+        <SLRenameDrawer open={!!renameFor} kind={renameFor&&renameFor.kind} obj={renameFor&&renameFor.obj}
+          term={renameFor&&renameFor.obj&&renameFor.obj.termId ? gTerms.find(t=>t.id===renameFor.obj.termId) : null}
+          onClose={()=>setRenameFor(null)} onSave={saveRename} onToast={onToast}/>
+        <SLTargetDrawer open={!!tgtDrawer} plat={tgtDrawer} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
+          dims={mDims} facts={mFacts} onClose={()=>setTgtDrawer(null)}/>
         <SLDimFactDrawer open={!!dfKind} kind={dfKind} entities={mEnts} dims={dims} facts={facts} gTerms={gTerms}
           onClose={()=>setDfKind(null)} onSave={(k,o)=>{addDimFact(k,o);setDfKind(null);}} onToast={onToast}/>
         <SLPublishDrawer open={pubOpen} onClose={()=>setPubOpen(false)} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
