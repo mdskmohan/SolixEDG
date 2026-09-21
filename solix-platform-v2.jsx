@@ -34309,7 +34309,6 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
     {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
     {k:"assets",   l:"Assets",    d:"The tables this model is built from"},
     {k:"joins",    l:"Joins",     d:"How those tables connect"},
-    {k:"targets",  l:"Publish to",d:"Where it gets compiled"},
     {k:"review",   l:"Review",    d:"What will be created"},
   ];
   const [sec, setSec] = useState("identity");
@@ -34321,7 +34320,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
 
   useEffect(()=>{ if(open){ setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
     setNj({from:"",fromCol:"",to:"",toCol:""});
-    setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",assetIds:[],joins:[],targets:["dbt"]}); } },[open]);
+    setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",assetIds:[],joins:[]}); } },[open]);
   if(!open || !d) return null;
 
   const pool = slModellableAssets();
@@ -34542,23 +34541,6 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 </>}
             </>}
 
-            {sec==="targets" && <>
-              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:720}}>
-                Where this model gets compiled and sent. Publishing always opens a reviewed change set — EDG never writes into a platform directly.
-              </div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
-                  const on=d.targets.includes(p.k);
-                  return <button key={p.k} onClick={()=>setD({...d, targets: on?d.targets.filter(x=>x!==p.k):[...d.targets,p.k]})}
-                    style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                    <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                    <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
-                    <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
-                  </button>;
-                })}
-              </div>
-            </>}
-
             {sec==="review" && <>
               <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:9}}>WHAT WILL BE CREATED</div>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
@@ -34567,7 +34549,6 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                   ["Assets", d.assetIds.length ? derived.map(x=>x.asset.name).join(", ") : "none"],
                   ["Entities", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
                   ["Joins", d.joins.length ? `${d.joins.length} declared` : "none — every metric sits on one table"],
-                  ["Publishes to", d.targets.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")||"—"],
                 ].map(([k,v],i,a)=>(
                   <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
                     <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
@@ -34580,7 +34561,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{noKey.map(x=>x.entity.table).join(", ")} — remove them, or declare a key before this model can be certified.</div>
               </div>}
               <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-                The model is created as a draft. Metrics are added afterwards, against the grain of the entities above.
+                The model is created as a draft. Add metrics against the grain of the entities above, then choose where it publishes when there is something worth publishing.
               </div>
             </>}
           </div>
@@ -34596,8 +34577,8 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
             <Btn variant="primary" disabled={!ready} onClick={()=>onCreate({
               model:{id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
                      steward:d.steward||d.owner, status:"Draft", entityIds:derived.map(x=>x.entity.id),
-                     targets:d.targets, lastPublished:null, created:new Date().toISOString().slice(0,10),
-                     sync:{enabled:true, targets:d.targets, frequency:"daily", onDrift:"flag"}},
+                     targets:[], lastPublished:null, created:new Date().toISOString().slice(0,10),
+                     sync:{enabled:false, targets:[], frequency:"daily", onDrift:"flag"}},
               newEntities: derived.filter(x=>x.created).map(x=>x.entity),
               joins: d.joins,
             })}>Create model</Btn>
@@ -35226,6 +35207,10 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, onPublish, onToa
           <Tabs2 tabs={[{key:"__esm",label:`ESM source · v${ESM_VERSION}`}, ...targets.map(t=>({key:t,label:SL_PLATFORMS[t].label}))]} active={plat} onChange={setPlat}/>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"0 22px 20px"}}>
+          {isSource && targets.length===0 && <div style={{margin:"14px 0",padding:"12px 14px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
+            <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>No publish targets yet</div>
+            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>The model compiles to the source below, but nothing has been chosen to compile it into. Pick targets with Edit on the model header.</div>
+          </div>}
           {isSource && <div style={{margin:"14px 0",fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
             The platform-neutral document EDG stores. Every tab to the right is compiled from exactly this — the adapters read it and nothing else, which is why adding a platform never changes the model.
           </div>}
@@ -35372,7 +35357,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <SLStatusChip status={mdl.status}/>
                   <span style={{fontSize:11,color:T.textMuted}}>{mdl.domain} · {mdl.owner}</span>
-                  <span style={{fontSize:11,color:T.textMuted}}>· {st.entities} entities · {st.metrics} metrics</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>· {st.entities} {st.entities===1?"entity":"entities"} · {st.metrics} metric{st.metrics===1?"":"s"}</span>
                   {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} out of step</span>}
                 </div>
               </div>
