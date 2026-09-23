@@ -38541,7 +38541,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
                     onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
                   {mdlMenuOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",overflow:"hidden"}}>
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
                       {[
                         {icon:"🖊️",label:"Edit Details",sub:"Name, owner, datasets, targets",action:()=>{setMdlMenuOpen(false);startEdit();}},
                         {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setMdlStyleOpen(true);setMdlMenuOpen(false);}},
@@ -38569,7 +38569,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     </div>
                   )}
                   {mdlStyleOpen&&(
-                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,width:260,boxSizing:"border-box",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",padding:16}}>
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,width:300,boxSizing:"border-box",background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",padding:16}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                         <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
                         <button onClick={()=>setMdlStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
@@ -38601,6 +38601,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
           {tab==="overview" && (
             <div style={{flex:1,display:"flex",overflow:"hidden"}}>
               <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
+                <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
                     {!descEdit&&<button onClick={()=>{setDescVal(mdl.desc);setDescEdit(true);}}
@@ -38609,18 +38610,20 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>{Ic.edit(13)}</button>}
                   </div>
                   {descEdit
-                    ? <div style={{marginBottom:24}}>
+                    ? <div>
                         <Input2 multiline rows={4} value={descVal} onChange={e=>setDescVal(e.target.value)}/>
                         <div style={{display:"flex",gap:8,marginTop:8}}>
                           <Btn small variant="primary" onClick={()=>{patchModel({desc:descVal});setDescEdit(false);onToast&&onToast("Description updated","success");}}>Save</Btn>
                           <Btn small ghost onClick={()=>setDescEdit(false)}>Cancel</Btn>
                         </div>
                       </div>
-                    : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:24}}>{mdl.desc||"No description yet."}</div>}
+                    : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{mdl.desc||"No description yet."}</div>}
+                </div></Card2>
 
+                <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <SH title="Concepts this model realises"
                       sub="The business meaning behind each dataset. Synonyms declared here compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
-                  <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {mEnts.map(e=>{
                       const c = concepts.find(x=>x.id===e.concept);
                       if(!c) return (
@@ -38644,6 +38647,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
 
 
+                </div></Card2>
+
+                <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."
                       action={<Btn small variant="primary" disabled={!mMetrics.length}
                         onClick={()=>setPubOpen(true)}>{mMetrics.length?"Publish":"Nothing to publish"}</Btn>}/>
@@ -38684,6 +38690,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       ))}
                     </div>
                   </>}
+                </div></Card2>
               </div>
               <SLModelSidebar mdl={mdl} ents={mEnts} dims={mDims} facts={mFacts} mets={mMetrics}
                 gTerms={gTerms} onPatch={patchModel} onToast={onToast}/>
