@@ -34321,7 +34321,7 @@ const SL_ENTITIES = [
 
 const SL_MODELS = [
   {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
-   status:"Approved", entityIds:["e_order","e_customer"], targets:["ossie","dbt","snowflake","powerbi"],
+   status:"Approved", entityIds:["e_order","e_customer"], targets:["ossie","dbt","snowflake","powerbi"], icon:"∑", color:"#e11d48",
    owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue","KPI"], terms:["Customer Lifetime Value"],
    lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item"},
    desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
@@ -35517,6 +35517,11 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
 const slSlug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
 // A dataset is identified by one column or several. `key` is the single-column form
 // every seed and screen started with; `keys` is the general one.
+// A model's own icon and colour, so a list of them is scannable the way a list of
+// domains is. Neither is required; both have a sensible default.
+const slMdlIcon   = (m) => (m && m.icon)  || "∑";
+const slMdlColour = (m) => (m && m.color) || "#e11d48";
+
 const slKeys = (e) => (e && e.keys && e.keys.length) ? e.keys : (e && e.key ? [e.key] : []);
 const slPK   = (e) => slKeys(e);
 const slPKText = (e) => slKeys(e).join(" + ") || "—";
@@ -37890,6 +37895,8 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onP
 // THE SCREEN — a list of semantic models, then one model at a time.
 // ═══════════════════════════════════════════════════════════════════════════
 const SemanticLayerView = ({onToast, onNav}) => {
+  const { role: slRole, roleCfg: slRoleCfg } = useRole();
+  const slMe = ((slRoleCfg&&slRoleCfg.email)||"you@jnj").split("@")[0];
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
   const {models, metrics, vendor, entities, rels, concepts, crels, dims, facts} = store;
@@ -37909,6 +37916,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [cfgTab,      setCfgTab]      = useState("source");
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [joinFor,     setJoinFor]     = useState(null);
+  const [mdlMenuOpen, setMdlMenuOpen] = useState(false);
+  const [mdlStyleOpen,setMdlStyleOpen]= useState(false);
+  const [mdlDelete,   setMdlDelete]   = useState(null);
   const [pullText,    setPullText]    = useState("");
   const [pullResult,  setPullResult]  = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
@@ -38036,10 +38046,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
           {label:"Semantic Layer", onClick:()=>{setSelMdl(null);setEditing(false);setSelEnt(null);setFindings(null);}},
           {label:mdl.name},
         ]}/>
-        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}
+          onClick={()=>{setMdlMenuOpen(false);setMdlStyleOpen(false);}}>
           <div style={{padding:"24px 28px 0",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
-              <div style={{width:64,height:64,borderRadius:18,background:T.accentDim,border:`2.5px solid ${T.accent}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.accent}}>{Ic.semantic(30)}</div>
+              <div style={{width:64,height:64,borderRadius:18,background:`${slMdlColour(mdl)}18`,border:`2.5px solid ${slMdlColour(mdl)}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:slMdlColour(mdl),fontSize:28,fontWeight:700}}>{slMdlIcon(mdl)}</div>
               <div style={{flex:1,minWidth:0}}>
                 <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{mdl.name}</h1>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
@@ -38049,14 +38060,68 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} out of step</span>}
                 </div>
               </div>
-              <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
-                <button onClick={startEdit} title="Edit model"
-                  style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{Ic.edit(14)}</button>
-                <button onClick={()=>setPubOpen(true)} disabled={mMetrics.length===0}
-                  style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:mMetrics.length?"pointer":"not-allowed",opacity:mMetrics.length?1:.5,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
-                  Publish
-                </button>
+              {/* ⋮ — the same menu, the same order and the same owner-gated delete as
+                   a Data Domain. One pattern for every governed object. */}
+              <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>{setMdlMenuOpen(p=>!p);setMdlStyleOpen(false);}}
+                    style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+                  {mdlMenuOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:240,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",overflow:"hidden"}}>
+                      {[
+                        {icon:"🖊️",label:"Edit Details",sub:"Name, owner, datasets, targets",action:()=>{setMdlMenuOpen(false);startEdit();}},
+                        {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setMdlStyleOpen(true);setMdlMenuOpen(false);}},
+                        {icon:"🚀",label:"Publish",sub:mMetrics.length?"Compile and open a change set":"Nothing to publish yet",
+                         disabled:!mMetrics.length, action:()=>{setMdlMenuOpen(false);setPubOpen(true);}},
+                      ].map(item=>(
+                        <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
+                          style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",
+                            cursor:item.disabled?"not-allowed":"pointer",opacity:item.disabled?.45:1,textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                          onMouseEnter={e=>{if(!item.disabled)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                        </button>
+                      ))}
+                      <button onClick={()=>{
+                        setMdlMenuOpen(false);
+                        if(slRole==='admin'||(mdl.owners||[]).includes(slMe)){ setMdlDelete({id:mdl.id,name:mdl.name}); }
+                        else { requestDeletion({kind:'semantic model',targetId:mdl.id,name:mdl.name,requestedBy:slMe,note:'Requested via semantic model detail',owner:(mdl.owners||[])[0]||null});
+                               pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${mdl.name} (semantic model)`,body:`${slMe} requested to delete this semantic model`,nav:"semantic"});
+                               onToast&&onToast('Deletion requested — pending owner approval','success'); }
+                      }}
+                        style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                        <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Model</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this semantic model</div></div>
+                      </button>
+                    </div>
+                  )}
+                  {mdlStyleOpen&&(
+                    <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,width:260,boxSizing:"border-box",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,boxShadow:"0 12px 36px rgba(0,0,0,.28)",padding:16}}>
+                      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
+                        <button onClick={()=>setMdlStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
+                      </div>
+                      <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Icon</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+                        {["∑","◆","⊞","◷","▦","◧","⌗","≡","◑","✦","△","◉"].map(ic=>(
+                          <button key={ic} onClick={()=>patchModel({icon:ic})}
+                            style={{width:32,height:32,borderRadius:7,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                              background:slMdlIcon(mdl)===ic?`${slMdlColour(mdl)}20`:T.bgElevated,
+                              border:`1.5px solid ${slMdlIcon(mdl)===ic?slMdlColour(mdl):T.border}`,color:T.text}}>{ic}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Colour</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {COLOR_PALETTE.map(c=>(
+                          <button key={c} onClick={()=>patchModel({color:c})}
+                            style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${slMdlColour(mdl)===c?"#fff":c}`,outline:slMdlColour(mdl)===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <Tabs2 tabs={TABS.map(t=>({key:t.k,label:t.l}))} active={tab} onChange={k=>{setTab(k);setQ("");}}/>
@@ -38764,6 +38829,39 @@ const SemanticLayerView = ({onToast, onNav}) => {
         <SLRenameDrawer open={!!renameFor} kind={renameFor&&renameFor.kind} obj={renameFor&&renameFor.obj}
           term={renameFor&&renameFor.obj&&renameFor.obj.termId ? gTerms.find(t=>t.id===renameFor.obj.termId) : null}
           onClose={()=>setRenameFor(null)} onSave={saveRename} onToast={onToast}/>
+        {mdlDelete&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:950,backdropFilter:"blur(4px)"}}>
+            <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:400,padding:"28px 28px 22px",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+              <div style={{width:44,height:44,borderRadius:12,background:`${T.rose}15`,border:`1px solid ${T.rose}30`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,marginBottom:16}}>🗑️</div>
+              <div style={{fontSize:16,fontWeight:700,color:T.text,marginBottom:8}}>Delete Semantic Model?</div>
+              <p style={{fontSize:13,color:T.textSub,lineHeight:1.65,margin:"0 0 8px"}}>
+                You are about to permanently delete <span style={{fontWeight:700,color:T.text}}>"{mdlDelete.name}"</span>.
+              </p>
+              <p style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,margin:"0 0 20px"}}>
+                Its metrics go with it. The datasets and joins stay — they belong to the catalogue and other models may use them. Anything already published to a platform is not withdrawn.
+              </p>
+              <div style={{padding:"12px 14px",background:`${T.rose}08`,border:`1px solid ${T.rose}25`,borderRadius:9,fontSize:12.5,color:T.textSub,marginBottom:22}}>
+                ⚠️ This action is irreversible.
+              </div>
+              <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+                <button onClick={()=>setMdlDelete(null)}
+                  style={{padding:"9px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:13,fontWeight:500,cursor:"pointer"}}>
+                  Cancel
+                </button>
+                <button onClick={()=>{
+                  const id = mdlDelete.id;
+                  setStore(prev=>({...prev,
+                    models:  prev.models.filter(m=>m.id!==id),
+                    metrics: prev.metrics.filter(m=>m.model!==id)}));
+                  setMdlDelete(null); setSelMdl(null);
+                  onToast && onToast(`${mdlDelete.name} deleted`,"error");
+                }} style={{padding:"9px 18px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <SLJoinDrawer open={!!joinFor} join={joinFor} entities={mEnts}
           onClose={()=>setJoinFor(null)} onSave={saveJoin} onDelete={deleteJoin} onToast={onToast}/>
         <SLTargetDrawer open={!!tgtDrawer} plat={tgtDrawer} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
@@ -38829,6 +38927,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 <div style={{height:4,background:hue}}/>
                 <div style={{padding:"16px 18px"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:7}}>
+                    <span style={{width:26,height:26,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:14,fontWeight:700,background:`${slMdlColour(m)}18`,border:`1px solid ${slMdlColour(m)}45`,color:slMdlColour(m)}}>{slMdlIcon(m)}</span>
                     <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{m.name}</span>
                     <SLStatusChip status={m.status}/>
                     {!m.lastPublished && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
