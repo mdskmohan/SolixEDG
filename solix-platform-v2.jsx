@@ -14089,14 +14089,14 @@ const PolicyManager2View = ({onToast, onNav}) => {
       {secLabel(`New policies (${newT.length})`)}
       {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None — everything this framework needs already exists.</div>}
       {newT.map(t=>{ const pv=previewTplPolicy(t,fw); const k=pm2Kinds(pv); const n=pm2Eval(pv).targets.length;
-        return card(<>
+        return <div key={t}>{card(<>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span>{k.map(x=><span key={x}>{kindPill(x)}</span>)}</div>
           <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
             <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Owner {userSel(wiz.owners[t]||wiz.owner, v=>setW("owners",{...wiz.owners,[t]:v}))}</label>
             <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.stewards[t]||[], v=>setW("stewards",{...wiz.stewards,[t]:v}), wiz.owners[t]||wiz.owner)}</div>
           </div>
           <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(k, n)}</div>
-        </>,{marginBottom:8,padding:"12px 14px"}); })}
+        </>,{marginBottom:8,padding:"12px 14px"})}</div>; })}
       {exT.length>0&&<>{secLabel(`Existing policies this reuses (${exT.length})`)}
         {exT.map(t=>{ const ex=existingFor(t); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}><span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner} · stewards {(ex.stewards||[]).join(", ")||"none"}</span></div>; })}
         <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Linking a framework widens an active policy's scope without a new approval. Any new table it would change still goes to that table's owner.</div></>}
@@ -45000,7 +45000,7 @@ const InboxView = ({onToast}) => {
   const statusReqs = useStatusReqs();
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
     id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||(r.kind||"").startsWith("pm2"))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":r.kind==="policy"?"Policy":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
+    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||r.kind==="pm2policy")?"Policy":r.kind==="pm2exception"?"Exception":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
     body:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
