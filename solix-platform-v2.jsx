@@ -12911,16 +12911,17 @@ const AccessView = ({onToast}) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════
-// POLICY MANAGER 2 — framework-first compliance
-// The user starts from a regulation, not a blank rule builder. Every regulation's
-// articles map onto ONE shared control library, so a control adopted for GDPR also
-// counts for HIPAA/SOC 2 wherever the same article intent applies (crosswalk).
-// Each control is honest about what EDG does with it:
-//   enforce — EDG executes it through CDP (Mask / Retain / Disposition / Legal hold),
-//             each target table's owner approves first (same approval store + Inbox).
-//   monitor — evaluated continuously against catalog metadata; produces findings.
-//   attest  — procedural; a person records evidence, per framework.
-//   outside — listed for completeness, never scored (identity, incident response…).
+// POLICY MANAGER 2 — framework-first compliance, end to end
+//   Article  — what the law asks, in plain language.
+//   Policy   — your organisation's commitment that satisfies one or more articles.
+//              Owned (owner + stewards), versioned, approved: Draft → In review → Active.
+//   Rule     — the part that runs: WHEN conditions hold THEN an action. One vocabulary for
+//              template policies and hand-built ones, so every rule reads the same way.
+//   Approval policies — who approves activation, changes, enforcement on a table,
+//              exceptions and hold releases. Requests land in the one Workspace inbox.
+// Enforce actions (mask / dispose / retain / hold) execute through CDP only after the policy
+// is Active AND each target table's owner approves. Monitor rules raise findings. Evidence
+// rules need a person to attest, per framework. "Outside EDG" articles are never scored.
 // ═════════════════════════════════════════════════════════════════════════
 const PM2_CLASS_META = {
   PII:  {label:"Personal data",               color:"#8b5cf6"},
@@ -12931,259 +12932,313 @@ const PM2_CLASS_META = {
   AUDIT:{label:"Audit & access logs",         color:"#64748b"},
 };
 const PM2_KIND_META = {
-  enforce:{label:"Enforce", hint:"EDG executes it through CDP after the table owner approves"},
-  monitor:{label:"Monitor", hint:"Evaluated continuously against catalog metadata — raises findings"},
-  attest: {label:"Attest",  hint:"Procedural — a person records evidence for this framework"},
-  outside:{label:"Outside EDG", hint:"Another system's job — listed, never scored"},
+  enforce:{label:"Enforce", hint:"Changes data through CDP — only after the policy is approved and each table owner approves"},
+  monitor:{label:"Monitor", hint:"Checks catalog metadata continuously and raises findings. Changes nothing."},
+  attest: {label:"Attest",  hint:"A procedure EDG can't observe — a person records evidence for each framework"},
+  outside:{label:"Outside EDG", hint:"Another system's job — listed so nothing is hidden, never scored"},
 };
 
-// ── Shared control library (the crosswalk) ──
-const PM2_CONTROLS = [
-  {id:"C-INV",  kind:"monitor", name:"Sensitive data is discovered and classified",
-    what:"Flags catalogued assets whose columns look sensitive but carry no classification. You can't protect data you haven't found.", params:[]},
-  {id:"C-OWN",  kind:"monitor", name:"Every in-scope asset has an owner and a steward",
-    what:"Flags in-scope assets with no accountable owner or no steward — the person who approves enforcement and answers for the data.", params:[]},
-  {id:"C-ROPA", kind:"monitor", name:"Processing purpose is recorded on each personal-data asset",
-    what:"Flags personal-data assets with no documented purpose / lawful basis — the catalog becomes your record of processing.", params:[]},
-  {id:"C-ENC",  kind:"monitor", name:"Sensitive data is encrypted at rest",
-    what:"Reads encryption status from the source connector and flags in-scope assets that aren't encrypted. EDG reports it; the source system fixes it.", params:[]},
-  {id:"C-ACC",  kind:"monitor", name:"Sensitive data is not broadly accessible",
-    what:"Flags in-scope assets granted to broad roles (all-employees, public, analysts-all) instead of a need-to-know group.", params:[]},
-  {id:"C-XB",   kind:"monitor", name:"Data outside approved regions has a transfer mechanism",
-    what:"Flags personal data stored outside your approved regions with no transfer basis recorded (SCCs, adequacy, BCRs, security assessment).",
-    params:[{k:"regions",label:"Approved regions",type:"text",def:"eu-west-1, eu-central-1"}]},
-  {id:"C-MIN",  kind:"monitor", name:"Unused personal data is flagged for review",
-    what:"Flags in-scope assets nobody has read in a long time — a minimisation signal for a human to review, never an automatic delete.",
-    params:[{k:"days",label:"Idle for more than (days)",type:"number",def:180}]},
-  {id:"C-DQ",   kind:"monitor", name:"In-scope data meets the quality bar",
-    what:"Flags in-scope assets whose Data Quality score is below the threshold — accuracy obligations and reporting integrity.",
-    params:[{k:"min",label:"Minimum quality score",type:"number",def:85}]},
-  {id:"C-MASKNP", kind:"enforce", verb:"Mask", name:"Identifiers are masked outside production",
-    what:"Masks sensitive columns in dev, test and analytics copies through CDP. Hashing keeps joins working across masked tables.",
-    params:[{k:"style",label:"Masking style",type:"enum",opts:["Hash (join-safe)","Redact","Partial","Tokenize"],def:"Hash (join-safe)"}]},
-  {id:"C-MASKENT",kind:"enforce", verb:"Mask", name:"Sensitive columns are masked for users without entitlement",
-    what:"Masks sensitive columns in production for anyone outside the entitled group — minimum necessary, by default.",
-    params:[{k:"style",label:"Masking style",type:"enum",opts:["Partial","Redact","Hash (join-safe)","Tokenize"],def:"Partial"},{k:"group",label:"Sees unmasked values",type:"text",def:"Entitled roles only"}]},
-  {id:"C-RET",  kind:"enforce", verb:"Set disposition", name:"Personal data is disposed of when its retention period ends",
-    what:"Applies a retention schedule through CDP and disposes of records at the end of it. Records under a mandated minimum keep the longer period; a legal hold suspends both.",
-    params:[{k:"months",label:"Dispose after (months)",type:"number",def:36}]},
-  {id:"C-RETREC",kind:"enforce", verb:"Retain", name:"Mandated records are retained for the required minimum",
-    what:"Locks a minimum retention period on records a regulation requires you to keep, so nothing disposes of them early. The longest requirement among your adopted frameworks wins.",
-    params:[]},
-  {id:"C-HOLD", kind:"enforce", verb:"Legal hold", name:"Legal hold suspends disposition",
-    what:"Records under a legal matter are frozen — retention and erasure can't touch them until the hold is released through approval.", params:[]},
-  {id:"C-DSR",  kind:"attest", name:"Individual rights requests are answered from a complete data map",
-    what:"Access and deletion requests are fulfilled across every system that holds the person's data. EDG supplies the map (classification + lineage); the request workflow records completion.", params:[]},
-  {id:"C-AUDIT",kind:"attest", name:"Access to sensitive data is logged",
-    what:"Source systems log reads of sensitive data. EDG doesn't have a canonical audit-logging field yet, so this is evidenced by attestation.", params:[]},
-  {id:"C-RISK", kind:"attest", name:"Risk / impact assessment is completed",
-    what:"The regulation's own assessment (DPIA, HIPAA risk analysis, PIA…) is done and reviewed on schedule. EDG pre-fills the in-scope asset list.", params:[]},
-];
-const PM2_CTL = Object.fromEntries(PM2_CONTROLS.map(c=>[c.id,c]));
+// ── Rule vocabulary. Every field is something the catalog actually knows about an asset.
+const PM2_FIELDS = {
+  env:     {label:"Environment",          type:"enum", opts:["prod","dev"], get:a=>a.env},
+  access:  {label:"Access",               type:"enum", opts:["Broad","Restricted"], get:a=>a.access},
+  enc:     {label:"Encrypted at rest",    type:"bool", get:a=>!!a.enc},
+  hold:    {label:"Under legal hold",     type:"bool", get:a=>!!a.hold},
+  suspect: {label:"Unclassified sensitive-looking columns", type:"bool", get:a=>!!a.suspect},
+  owner:   {label:"Owner",                type:"presence", get:a=>!!a.owner},
+  steward: {label:"Steward",              type:"presence", get:a=>!!a.steward},
+  purpose: {label:"Processing purpose",   type:"presence", get:a=>!!a.purpose},
+  transfer:{label:"Transfer mechanism",   type:"presence", get:a=>!!a.transfer},
+  region:  {label:"Region",               type:"list", get:a=>a.region},
+  idle:    {label:"Days since last read", type:"number", get:a=>a.idle},
+  quality: {label:"Quality score",        type:"number", get:a=>a.quality},
+};
+const PM2_OPS = {enum:["is","is not"], bool:["is yes","is no"], presence:["is set","is not set"], list:["is one of","is not one of"], number:["greater than","less than"]};
+const pm2CondTest = (c,a) => {
+  const F = PM2_FIELDS[c.f]; if(!F) return false; const x = F.get(a);
+  switch(c.op){
+    case "is": return x===c.v; case "is not": return x!==c.v;
+    case "is yes": return x===true; case "is no": return x===false;
+    case "is set": return !!x; case "is not set": return !x;
+    case "is one of": case "is not one of": { const l=String(c.v||"").split(",").map(s=>s.trim()).filter(Boolean); return c.op==="is one of"?l.includes(x):!l.includes(x); }
+    case "greater than": return Number(x)>Number(c.v);
+    case "less than": return Number(x)<Number(c.v);
+    default: return false;
+  }
+};
+const PM2_ACTIONS = {
+  flag:    {label:"Raise a finding",                 kind:"monitor"},
+  mask:    {label:"Mask columns",                    kind:"enforce", verb:"Mask"},
+  dispose: {label:"Dispose of records after a period",kind:"enforce", verb:"Set disposition"},
+  retain:  {label:"Retain records for a minimum",    kind:"enforce", verb:"Retain"},
+  hold:    {label:"Suspend disposition (legal hold)",kind:"enforce", verb:"Legal hold"},
+  evidence:{label:"Require evidence",                kind:"attest"},
+};
+const PM2_MASK_STYLES = ["Partial","Redact","Hash (join-safe)","Tokenize"];
+const pm2DefaultAct = type => ({
+  flag:{type,msg:""}, mask:{type,cols:"all",style:"Partial",unmasked:"nobody"}, dispose:{type,months:36},
+  retain:{type,years:3}, hold:{type}, evidence:{type,what:"",every:12},
+}[type]);
 
-// ── Frameworks → articles → controls. `covers` = data classes the regulation applies to
-// ("ALL" = every classified asset). recordClasses/recordYears drive C-RETREC. retentionCeiling
-// is a legal maximum (months) where one exists; otherwise the retention schedule is yours.
+// ── Policy templates — what EDG recommends for each article. Adopting a framework turns
+// the templates you keep into real policies (one per template, shared across frameworks).
+const PM2_TEMPLATES = [
+  {id:"C-INV", name:"Sensitive data discovery", scopeBy:"suspect",
+    why:"You can't protect data you haven't found. Flags assets whose columns look like regulated data but carry no classification yet.",
+    rules:[{conds:[{f:"suspect",op:"is yes"}], act:{type:"flag",msg:"Sensitive-looking columns are unclassified"}}]},
+  {id:"C-OWN", name:"Ownership & stewardship",
+    why:"Every in-scope asset needs an owner (who approves enforcement on it) and a steward (who fixes what's found).",
+    rules:[{conds:[{f:"owner",op:"is not set"}], act:{type:"flag",msg:"No owner"}},{conds:[{f:"steward",op:"is not set"}], act:{type:"flag",msg:"No steward"}}]},
+  {id:"C-ROPA", name:"Processing purpose on record",
+    why:"The catalog doubles as your record of processing: every personal-data asset states why it's processed.",
+    rules:[{conds:[{f:"purpose",op:"is not set"}], act:{type:"flag",msg:"No processing purpose recorded"}}]},
+  {id:"C-ENC", name:"Encryption at rest",
+    why:"EDG reads encryption status from the source connector. It reports the gap; the source system closes it.",
+    rules:[{conds:[{f:"enc",op:"is no"}], act:{type:"flag",msg:"Not encrypted at rest"}}]},
+  {id:"C-ACC", name:"Need-to-know access",
+    why:"Regulated data is granted to a need-to-know group — never to a broad role such as all-employees or analysts-all.",
+    rules:[{conds:[{f:"access",op:"is",v:"Broad"}], act:{type:"flag",msg:"Granted to a broad role"}}]},
+  {id:"C-XB", name:"Cross-border transfers",
+    why:"Personal data stored outside your approved regions must have a transfer mechanism on record (SCCs, adequacy, BCRs, security assessment).",
+    rules:[{conds:[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1"},{f:"transfer",op:"is not set"}], act:{type:"flag",msg:"Outside approved regions with no transfer mechanism"}}]},
+  {id:"C-MIN", name:"Minimisation review",
+    why:"Data nobody reads is a signal it may no longer be needed. A person reviews it — EDG never deletes on this signal alone.",
+    rules:[{conds:[{f:"idle",op:"greater than",v:180},{f:"hold",op:"is no"}], act:{type:"flag",msg:"Not read in a long time — confirm it's still needed"}}]},
+  {id:"C-DQ", name:"Data quality bar",
+    why:"Accuracy obligations and reporting integrity: in-scope data must meet the quality threshold.",
+    rules:[{conds:[{f:"quality",op:"less than",v:85}], act:{type:"flag",msg:"Below the quality bar"}}]},
+  {id:"C-MASKNP", name:"Masking outside production",
+    why:"Dev, test and analytics copies never show real identifiers. Hashing keeps joins working across masked tables.",
+    rules:[{conds:[{f:"env",op:"is not",v:"prod"}], act:{type:"mask",cols:"all",style:"Hash (join-safe)",unmasked:"nobody"}}]},
+  {id:"C-MASKENT", name:"Masking for non-entitled users",
+    why:"In production, sensitive-category columns are masked for everyone outside the entitled group — minimum necessary, by default.",
+    rules:[{conds:[{f:"env",op:"is",v:"prod"}], act:{type:"mask",cols:"sensitive",style:"Partial",unmasked:"entitled roles (phi_read, pci_read, hr_sensitive)"}}]},
+  {id:"C-RET", name:"Retention & disposal",
+    why:"Personal data is disposed of when its retention period ends. Records under a mandated minimum keep the longer period, and a legal hold suspends both.",
+    rules:[{conds:[{f:"env",op:"is",v:"prod"},{f:"hold",op:"is no"}], act:{type:"dispose",months:36}}]},
+  {id:"C-RETREC", name:"Mandated records retention", scopeFrom:"records",
+    why:"Records a regulation says you must keep are locked for the minimum period so nothing disposes of them early. The longest requirement wins.",
+    rules:[{conds:[], act:{type:"retain",years:3}}]},
+  {id:"C-HOLD", name:"Legal hold",
+    why:"Records under a legal matter are frozen: retention and erasure can't touch them until the hold is released through two-person approval.",
+    rules:[{conds:[{f:"hold",op:"is yes"}], act:{type:"hold"}}]},
+  {id:"C-DSR", name:"Individual rights requests",
+    why:"Access and deletion requests are fulfilled across every system holding the person's data. EDG supplies the map; the request log is the evidence.",
+    rules:[{conds:[], act:{type:"evidence",what:"Request log showing access and deletion requests completed within the deadline",every:12}}]},
+  {id:"C-AUDIT", name:"Access logging",
+    why:"Source systems log reads of sensitive data. EDG has no canonical audit-logging field yet, so this is evidenced by attestation.",
+    rules:[{conds:[], act:{type:"evidence",what:"Source-system audit-log configuration covering the in-scope tables",every:12}}]},
+  {id:"C-RISK", name:"Risk / impact assessment",
+    why:"The regulation's own assessment (DPIA, HIPAA risk analysis, PIA…) is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
+    rules:[{conds:[], act:{type:"evidence",what:"Signed assessment covering the in-scope assets",every:12}}]},
+];
+const PM2_TPL = Object.fromEntries(PM2_TEMPLATES.map(t=>[t.id,t]));
+
+// ── Frameworks → articles. `ask` = what the law requires, plainly. `c` = recommended
+// template policies. `out` = belongs to another system. covers = data classes it applies
+// to ("ALL" = every classified asset). recordClasses/recordYears drive records retention;
+// retentionCeiling is a legal maximum in months where one exists.
 const PM2_FW = [
   {id:"gdpr", name:"GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 5(1)(c)", t:"Data minimisation", c:["C-MIN"]},
-    {ref:"Art. 5(1)(d)", t:"Accuracy", c:["C-DQ"]},
-    {ref:"Art. 5(1)(e)", t:"Storage limitation", c:["C-RET"]},
-    {ref:"Art. 5(2)",    t:"Accountability", c:["C-OWN"]},
-    {ref:"Art. 9",       t:"Special categories identified and handled", c:["C-INV","C-MASKENT"]},
-    {ref:"Art. 15, 17",  t:"Right of access and erasure", c:["C-DSR"]},
-    {ref:"Art. 25",      t:"Data protection by design and by default", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"Art. 30",      t:"Records of processing activities", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 32",      t:"Security of processing", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 35",      t:"Data protection impact assessment", c:["C-RISK"]},
-    {ref:"Art. 44–46",   t:"International transfers", c:["C-XB"]},
-    {ref:"Art. 33–34",   t:"Breach notification", out:"Incident response"},
-    {ref:"Art. 6–7",     t:"Lawful basis and consent capture", out:"Consent management"}]},
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need for the purpose.", c:["C-MIN"]},
+    {ref:"Art. 5(1)(d)", t:"Accuracy", ask:"Personal data must be accurate and, where necessary, kept up to date.", c:["C-DQ"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data in identifiable form longer than the purpose requires.", c:["C-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to show compliance — someone is answerable for each dataset.", c:["C-OWN"]},
+    {ref:"Art. 9",       t:"Special categories", ask:"Health, biometric, religious and similar data need extra protection and a specific legal condition.", c:["C-INV","C-MASKENT"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased, generally within one month.", c:["C-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"Build protection in; by default only the data each purpose needs is accessible.", c:["C-MASKNP","C-MASKENT"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what personal data you process, why, and where it lives.", c:["C-ROPA","C-INV"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk — encryption, pseudonymisation, access control.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["C-RISK"]},
+    {ref:"Art. 44–46",   t:"International transfers", ask:"Personal data leaving the EU needs an adequacy decision or safeguards such as SCCs.", c:["C-XB"]},
+    {ref:"Art. 33–34",   t:"Breach notification", ask:"Report breaches to the authority within 72 hours, and to people when the risk is high.", out:"Incident response"},
+    {ref:"Art. 6–7",     t:"Lawful basis and consent", ask:"Every processing activity needs a lawful basis; consent must be provable.", out:"Consent management"}]},
   {id:"ukgdpr", name:"UK GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 5(1)(c)", t:"Data minimisation", c:["C-MIN"]},
-    {ref:"Art. 5(1)(e)", t:"Storage limitation", c:["C-RET"]},
-    {ref:"Art. 5(2)",    t:"Accountability", c:["C-OWN"]},
-    {ref:"Art. 15, 17",  t:"Right of access and erasure", c:["C-DSR"]},
-    {ref:"Art. 25",      t:"Data protection by design and by default", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"Art. 30",      t:"Records of processing activities", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 32",      t:"Security of processing", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 35",      t:"Data protection impact assessment", c:["C-RISK"]},
-    {ref:"Art. 44–46",   t:"Restricted transfers", c:["C-XB"]},
-    {ref:"Art. 33",      t:"Breach reporting to the ICO within 72 hours", out:"Incident response"}]},
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need.", c:["C-MIN"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data longer than the purpose requires.", c:["C-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to demonstrate compliance.", c:["C-OWN"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased.", c:["C-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"By default only the data each purpose needs is accessible.", c:["C-MASKNP","C-MASKENT"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what you process, why, and where.", c:["C-ROPA","C-INV"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["C-RISK"]},
+    {ref:"Art. 44–46",   t:"Restricted transfers", ask:"Transfers out of the UK need adequacy regulations or appropriate safeguards (e.g. the IDTA).", c:["C-XB"]},
+    {ref:"Art. 33",      t:"Breach reporting", ask:"Report notifiable breaches to the ICO within 72 hours.", out:"Incident response"}]},
   {id:"ccpa", name:"CCPA / CPRA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"§1798.100(a)(3)", t:"Retain no longer than reasonably necessary", c:["C-RET"]},
-    {ref:"§1798.100(c)", t:"Collection proportionate to purpose", c:["C-MIN","C-ROPA"]},
-    {ref:"§1798.105",    t:"Right to delete", c:["C-DSR"]},
-    {ref:"§1798.110",    t:"Right to know", c:["C-DSR"]},
-    {ref:"§1798.121",    t:"Limit use of sensitive personal information", c:["C-MASKENT"]},
-    {ref:"§1798.150",    t:"Reasonable security", c:["C-ENC","C-ACC"]},
-    {ref:"§1798.185(a)(15)", t:"Risk assessments for significant-risk processing", c:["C-RISK"]},
-    {ref:"§1798.120",    t:"Opt-out of sale or sharing", out:"Consent & preference platform"}]},
+    {ref:"§1798.100(a)(3)", t:"Retention limits", ask:"Disclose how long you keep each category, and keep it no longer than reasonably necessary.", c:["C-RET"]},
+    {ref:"§1798.100(c)", t:"Proportionate collection", ask:"Collection and use must be reasonably necessary and proportionate to the disclosed purpose.", c:["C-MIN","C-ROPA"]},
+    {ref:"§1798.105",    t:"Right to delete", ask:"Consumers can have their personal information deleted, including by your service providers.", c:["C-DSR"]},
+    {ref:"§1798.110",    t:"Right to know", ask:"Consumers can learn what personal information you hold about them.", c:["C-DSR"]},
+    {ref:"§1798.121",    t:"Limit use of sensitive personal information", ask:"Consumers can limit use of sensitive personal information to what the service needs.", c:["C-MASKENT"]},
+    {ref:"§1798.150",    t:"Reasonable security", ask:"A breach caused by unreasonable security exposes you to private lawsuits.", c:["C-ENC","C-ACC"]},
+    {ref:"§1798.185(a)(15)", t:"Risk assessments", ask:"Processing with significant risk needs a documented risk assessment.", c:["C-RISK"]},
+    {ref:"§1798.120",    t:"Opt-out of sale or sharing", ask:"Consumers can opt out of the sale or sharing of their personal information.", out:"Consent & preference platform"}]},
   {id:"lgpd", name:"LGPD", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 6 (III)", t:"Necessity", c:["C-MIN"]},
-    {ref:"Art. 16",      t:"Deletion at the end of processing", c:["C-RET"]},
-    {ref:"Art. 18",      t:"Data subject rights", c:["C-DSR"]},
-    {ref:"Art. 33",      t:"International transfer", c:["C-XB"]},
-    {ref:"Art. 37",      t:"Record of processing operations", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 38",      t:"Data protection impact report (RIPD)", c:["C-RISK"]},
-    {ref:"Art. 46",      t:"Security measures", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 48",      t:"Security incident communication to ANPD", out:"Incident response"}]},
+    {ref:"Art. 6 (III)", t:"Necessity", ask:"Limit processing to the minimum necessary for the purpose.", c:["C-MIN"]},
+    {ref:"Art. 16",      t:"Deletion at the end of processing", ask:"Delete personal data once processing ends, unless an exception applies.", c:["C-RET"]},
+    {ref:"Art. 18",      t:"Data subject rights", ask:"Data subjects can confirm, access, correct and delete their data.", c:["C-DSR"]},
+    {ref:"Art. 33",      t:"International transfer", ask:"Transfers abroad are allowed only under the mechanisms the law lists.", c:["C-XB"]},
+    {ref:"Art. 37",      t:"Record of processing operations", ask:"Controllers and processors keep records of their processing operations.", c:["C-ROPA","C-INV"]},
+    {ref:"Art. 38",      t:"Data protection impact report", ask:"The ANPD can require a data protection impact report (RIPD).", c:["C-RISK"]},
+    {ref:"Art. 46",      t:"Security measures", ask:"Adopt measures that protect data from unauthorised access, loss and leakage.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 48",      t:"Incident communication", ask:"Notify the ANPD and data subjects of incidents that may cause relevant risk.", out:"Incident response"}]},
   {id:"pipl", name:"PIPL", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 6",       t:"Minimum necessary", c:["C-MIN"]},
-    {ref:"Art. 19",      t:"Retention for the shortest period necessary", c:["C-RET"]},
-    {ref:"Art. 28–29",   t:"Sensitive personal information", c:["C-INV","C-MASKENT"]},
-    {ref:"Art. 38–40",   t:"Cross-border provision", c:["C-XB"]},
-    {ref:"Art. 44–47",   t:"Individual rights incl. deletion", c:["C-DSR"]},
-    {ref:"Art. 51",      t:"Security measures", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 55–56",   t:"Personal information protection impact assessment", c:["C-RISK"]},
-    {ref:"Art. 57",      t:"Incident remediation and notification", out:"Incident response"}]},
+    {ref:"Art. 6",       t:"Minimum necessary", ask:"Processing is limited to the minimum scope needed for the purpose.", c:["C-MIN"]},
+    {ref:"Art. 19",      t:"Retention", ask:"Keep personal information only for the shortest period necessary.", c:["C-RET"]},
+    {ref:"Art. 28–29",   t:"Sensitive personal information", ask:"Sensitive data needs a specific purpose, strict protection and separate consent.", c:["C-INV","C-MASKENT"]},
+    {ref:"Art. 38–40",   t:"Cross-border provision", ask:"Sending data out of China needs a security assessment, certification or standard contract.", c:["C-XB"]},
+    {ref:"Art. 44–47",   t:"Individual rights", ask:"Individuals can access, copy, correct and delete their personal information.", c:["C-DSR"]},
+    {ref:"Art. 51",      t:"Security measures", ask:"Use technical measures such as encryption and de-identification, and manage access.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 55–56",   t:"Impact assessment", ask:"Assess impact before sensitive or cross-border processing.", c:["C-RISK"]},
+    {ref:"Art. 57",      t:"Incident notification", ask:"Remediate incidents and notify the authorities and the individuals affected.", out:"Incident response"}]},
   {id:"pipeda", name:"PIPEDA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Sch. 1 §4.1",  t:"Accountability", c:["C-OWN"]},
-    {ref:"Sch. 1 §4.4",  t:"Limiting collection", c:["C-MIN"]},
-    {ref:"Sch. 1 §4.5",  t:"Limiting use, disclosure and retention", c:["C-RET"]},
-    {ref:"Sch. 1 §4.6",  t:"Accuracy", c:["C-DQ"]},
-    {ref:"Sch. 1 §4.7",  t:"Safeguards", c:["C-ENC","C-ACC"]},
-    {ref:"Sch. 1 §4.9",  t:"Individual access", c:["C-DSR"]},
-    {ref:"Sch. 1 §4.3",  t:"Consent", out:"Consent management"},
-    {ref:"§10.1",        t:"Breach reporting", out:"Incident response"}]},
+    {ref:"Sch. 1 §4.1",  t:"Accountability", ask:"Designate someone accountable for the organisation's personal information.", c:["C-OWN"]},
+    {ref:"Sch. 1 §4.4",  t:"Limiting collection", ask:"Collect only what the identified purposes need.", c:["C-MIN"]},
+    {ref:"Sch. 1 §4.5",  t:"Limiting use, disclosure and retention", ask:"Keep personal information only as long as the purpose needs it.", c:["C-RET"]},
+    {ref:"Sch. 1 §4.6",  t:"Accuracy", ask:"Keep personal information accurate, complete and up to date.", c:["C-DQ"]},
+    {ref:"Sch. 1 §4.7",  t:"Safeguards", ask:"Protect personal information with safeguards suited to its sensitivity.", c:["C-ENC","C-ACC"]},
+    {ref:"Sch. 1 §4.9",  t:"Individual access", ask:"Individuals can access their personal information on request.", c:["C-DSR"]},
+    {ref:"Sch. 1 §4.3",  t:"Consent", ask:"Meaningful consent is required for collection, use and disclosure.", out:"Consent management"},
+    {ref:"§10.1",        t:"Breach reporting", ask:"Report breaches with a real risk of significant harm to the Commissioner.", out:"Incident response"}]},
   {id:"pdpa_sg", name:"PDPA (Singapore)", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"s.18",   t:"Purpose limitation", c:["C-ROPA"]},
-    {ref:"s.21–22",t:"Access and correction", c:["C-DSR"]},
-    {ref:"s.23",   t:"Accuracy", c:["C-DQ"]},
-    {ref:"s.24",   t:"Protection", c:["C-ENC","C-ACC"]},
-    {ref:"s.25",   t:"Retention limitation", c:["C-RET"]},
-    {ref:"s.26",   t:"Transfer limitation", c:["C-XB"]},
-    {ref:"s.13",   t:"Consent", out:"Consent management"},
-    {ref:"Part 6A",t:"Data breach notification", out:"Incident response"}]},
+    {ref:"s.18",   t:"Purpose limitation", ask:"Use personal data only for appropriate purposes that were notified.", c:["C-ROPA"]},
+    {ref:"s.21–22",t:"Access and correction", ask:"Individuals can access and correct their personal data.", c:["C-DSR"]},
+    {ref:"s.23",   t:"Accuracy", ask:"Make a reasonable effort to keep personal data accurate and complete.", c:["C-DQ"]},
+    {ref:"s.24",   t:"Protection", ask:"Make reasonable security arrangements to protect personal data.", c:["C-ENC","C-ACC"]},
+    {ref:"s.25",   t:"Retention limitation", ask:"Stop retaining personal data once it no longer serves the purpose.", c:["C-RET"]},
+    {ref:"s.26",   t:"Transfer limitation", ask:"Transfers out of Singapore need comparable protection.", c:["C-XB"]},
+    {ref:"s.13",   t:"Consent", ask:"Obtain consent before collecting, using or disclosing personal data.", out:"Consent management"},
+    {ref:"Part 6A",t:"Breach notification", ask:"Notify the PDPC within 3 days of assessing a breach as notifiable.", out:"Incident response"}]},
   {id:"appi", name:"APPI", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 17",   t:"Specifying the purpose of use", c:["C-ROPA"]},
-    {ref:"Art. 22",   t:"Accuracy, and deletion once no longer needed", c:["C-DQ","C-RET"]},
-    {ref:"Art. 23",   t:"Security control measures", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 28",   t:"Provision to third parties in foreign countries", c:["C-XB"]},
-    {ref:"Art. 33–35",t:"Disclosure, correction and cessation requests", c:["C-DSR"]},
-    {ref:"Art. 26",   t:"Leak reporting to the PPC", out:"Incident response"}]},
+    {ref:"Art. 17",   t:"Purpose of use", ask:"Specify the purpose of use as concretely as possible.", c:["C-ROPA"]},
+    {ref:"Art. 22",   t:"Accuracy and deletion", ask:"Keep data accurate, and try to delete it once it's no longer needed.", c:["C-DQ","C-RET"]},
+    {ref:"Art. 23",   t:"Security control measures", ask:"Take the measures needed to prevent leakage, loss or damage.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 28",   t:"Third parties in foreign countries", ask:"Providing data to a party abroad needs consent or an equivalent-protection basis.", c:["C-XB"]},
+    {ref:"Art. 33–35",t:"Individual requests", ask:"Individuals can request disclosure, correction and cessation of use.", c:["C-DSR"]},
+    {ref:"Art. 26",   t:"Leak reporting", ask:"Report harmful leaks to the PPC and notify the individuals.", out:"Incident response"}]},
   {id:"popia", name:"POPIA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"s.8",    t:"Accountability", c:["C-OWN"]},
-    {ref:"s.10",   t:"Minimality", c:["C-MIN"]},
-    {ref:"s.14",   t:"Retention and restriction of records", c:["C-RET"]},
-    {ref:"s.16",   t:"Quality of information", c:["C-DQ"]},
-    {ref:"s.19",   t:"Security measures on integrity and confidentiality", c:["C-ENC","C-ACC"]},
-    {ref:"s.23–24",t:"Access and correction", c:["C-DSR"]},
-    {ref:"s.72",   t:"Transfers outside the Republic", c:["C-XB"]},
-    {ref:"s.22",   t:"Notification of security compromises", out:"Incident response"}]},
+    {ref:"s.8",    t:"Accountability", ask:"The responsible party ensures the conditions for lawful processing are met.", c:["C-OWN"]},
+    {ref:"s.10",   t:"Minimality", ask:"Process only what's adequate, relevant and not excessive.", c:["C-MIN"]},
+    {ref:"s.14",   t:"Retention and restriction of records", ask:"Keep records no longer than necessary, then destroy or de-identify them.", c:["C-RET"]},
+    {ref:"s.16",   t:"Quality of information", ask:"Keep personal information complete, accurate and updated.", c:["C-DQ"]},
+    {ref:"s.19",   t:"Security safeguards", ask:"Secure the integrity and confidentiality of personal information.", c:["C-ENC","C-ACC"]},
+    {ref:"s.23–24",t:"Access and correction", ask:"Data subjects can access and correct their personal information.", c:["C-DSR"]},
+    {ref:"s.72",   t:"Transfers outside the Republic", ask:"Transfers out of South Africa need adequate protection or consent.", c:["C-XB"]},
+    {ref:"s.22",   t:"Security compromises", ask:"Notify the Regulator and data subjects of security compromises.", out:"Incident response"}]},
   {id:"dpdp", name:"DPDP Act", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"§8(3)",   t:"Completeness and accuracy", c:["C-DQ"]},
-    {ref:"§8(5)",   t:"Reasonable security safeguards", c:["C-ENC","C-ACC"]},
-    {ref:"§8(7)",   t:"Erase once the purpose is no longer served", c:["C-RET"]},
-    {ref:"§10",     t:"Significant Data Fiduciary: DPIA and audit", c:["C-RISK"]},
-    {ref:"§11–12",  t:"Access, correction and erasure", c:["C-DSR"]},
-    {ref:"§16",     t:"Cross-border transfer", c:["C-XB"]},
-    {ref:"§6",      t:"Consent", out:"Consent management"},
-    {ref:"§8(6)",   t:"Breach intimation to the Board", out:"Incident response"}]},
+    {ref:"§8(3)",  t:"Completeness and accuracy", ask:"Data used for decisions or disclosed must be complete, accurate and consistent.", c:["C-DQ"]},
+    {ref:"§8(5)",  t:"Security safeguards", ask:"Take reasonable security safeguards to prevent breaches.", c:["C-ENC","C-ACC"]},
+    {ref:"§8(7)",  t:"Erasure", ask:"Erase data once consent is withdrawn or the purpose is no longer served.", c:["C-RET"]},
+    {ref:"§10",    t:"Significant Data Fiduciaries", ask:"Significant Data Fiduciaries run periodic DPIAs and independent audits.", c:["C-RISK"]},
+    {ref:"§11–12", t:"Access, correction and erasure", ask:"Data principals can get a summary of their data and have it corrected or erased.", c:["C-DSR"]},
+    {ref:"§16",    t:"Cross-border transfer", ask:"Transfers are allowed except to countries the government restricts.", c:["C-XB"]},
+    {ref:"§6",     t:"Consent", ask:"Consent must be free, specific, informed, unconditional and unambiguous.", out:"Consent management"},
+    {ref:"§8(6)",  t:"Breach intimation", ask:"Report personal data breaches to the Board and to affected data principals.", out:"Incident response"}]},
   {id:"iso27701", name:"ISO 27701", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"7.2.5", t:"Privacy impact assessment", c:["C-RISK"]},
-    {ref:"7.2.8", t:"Records related to processing PII", c:["C-ROPA","C-INV"]},
-    {ref:"7.3.6", t:"Access, correction and/or erasure", c:["C-DSR"]},
-    {ref:"7.4.1", t:"Limit collection", c:["C-MIN"]},
-    {ref:"7.4.7", t:"Retention", c:["C-RET"]},
-    {ref:"7.5.1", t:"Basis for PII transfer between jurisdictions", c:["C-XB"]}]},
+    {ref:"7.2.5", t:"Privacy impact assessment", ask:"Assess privacy impact where processing is new or changed.", c:["C-RISK"]},
+    {ref:"7.2.8", t:"Records related to processing PII", ask:"Maintain records that support your PII processing obligations.", c:["C-ROPA","C-INV"]},
+    {ref:"7.3.6", t:"Access, correction and erasure", ask:"Give PII principals a way to access, correct and erase their PII.", c:["C-DSR"]},
+    {ref:"7.4.1", t:"Limit collection", ask:"Limit PII collection to what's relevant and necessary.", c:["C-MIN"]},
+    {ref:"7.4.7", t:"Retention", ask:"Keep PII no longer than necessary for its purposes.", c:["C-RET"]},
+    {ref:"7.5.1", t:"Basis for transfer", ask:"Identify and document the basis for moving PII between jurisdictions.", c:["C-XB"]}]},
   {id:"hipaa", name:"HIPAA", type:"Healthcare", covers:["PHI"], recordClasses:["AUDIT"], recordYears:6, arts:[
-    {ref:"§164.308(a)(1)(ii)(A)", t:"Risk analysis — know where ePHI lives", c:["C-RISK","C-INV"]},
-    {ref:"§164.312(a)(1)",        t:"Access control", c:["C-ACC","C-OWN"]},
-    {ref:"§164.312(a)(2)(iv)",    t:"Encryption and decryption (addressable)", c:["C-ENC"]},
-    {ref:"§164.312(b)",           t:"Audit controls", c:["C-AUDIT"]},
-    {ref:"§164.502(b)",           t:"Minimum necessary", c:["C-MASKENT"]},
-    {ref:"§164.514(b)",           t:"De-identification (Safe Harbor identifiers)", c:["C-MASKNP"]},
-    {ref:"§164.316(b)(2)(i)",     t:"Retain required documentation for 6 years", c:["C-RETREC"]},
-    {ref:"§164.524",              t:"Individual's right of access", c:["C-DSR"]},
-    {ref:"§164.310",              t:"Physical safeguards", out:"Facilities & device management"},
-    {ref:"§164.404–410",          t:"Breach notification", out:"Incident response"}]},
+    {ref:"§164.308(a)(1)(ii)(A)", t:"Risk analysis", ask:"Accurately assess risks to ePHI — which starts with knowing where it lives.", c:["C-RISK","C-INV"]},
+    {ref:"§164.312(a)(1)",        t:"Access control", ask:"Only authorised people and software can access ePHI.", c:["C-ACC","C-OWN"]},
+    {ref:"§164.312(a)(2)(iv)",    t:"Encryption and decryption", ask:"Encrypt ePHI where reasonable, or document the equivalent measure you use instead.", c:["C-ENC"]},
+    {ref:"§164.312(b)",           t:"Audit controls", ask:"Record and examine activity in systems that contain ePHI.", c:["C-AUDIT"]},
+    {ref:"§164.502(b)",           t:"Minimum necessary", ask:"Use and disclose only the minimum PHI necessary for the purpose.", c:["C-MASKENT"]},
+    {ref:"§164.514(b)",           t:"De-identification", ask:"Data counts as de-identified once the 18 Safe Harbor identifiers are removed.", c:["C-MASKNP"]},
+    {ref:"§164.316(b)(2)(i)",     t:"Documentation retention", ask:"Keep required policies, procedures and records for 6 years.", c:["C-RETREC"]},
+    {ref:"§164.524",              t:"Right of access", ask:"Patients can access and get copies of their PHI, generally within 30 days.", c:["C-DSR"]},
+    {ref:"§164.310",              t:"Physical safeguards", ask:"Control physical access to facilities, workstations and devices.", out:"Facilities & device management"},
+    {ref:"§164.404–410",          t:"Breach notification", ask:"Notify individuals, HHS and sometimes the media after a breach of unsecured PHI.", out:"Incident response"}]},
   {id:"hitech", name:"HITECH", type:"Healthcare", covers:["PHI"], arts:[
-    {ref:"§13405(b)", t:"Minimum necessary / limited data set", c:["C-MASKENT"]},
-    {ref:"§13405(c)", t:"Accounting of disclosures from an EHR", c:["C-AUDIT"]},
-    {ref:"§13405(e)", t:"Access in electronic format", c:["C-DSR"]},
-    {ref:"§13401",    t:"Business associate obligations", out:"Vendor contracts"},
-    {ref:"§13402",    t:"Breach notification", out:"Incident response"}]},
+    {ref:"§13405(b)", t:"Minimum necessary", ask:"Limit uses and disclosures to a limited data set or the minimum necessary.", c:["C-MASKENT"]},
+    {ref:"§13405(c)", t:"Accounting of disclosures", ask:"Account for disclosures made through an electronic health record.", c:["C-AUDIT"]},
+    {ref:"§13405(e)", t:"Electronic access", ask:"Patients can get their PHI in electronic format.", c:["C-DSR"]},
+    {ref:"§13401",    t:"Business associates", ask:"Business associates must meet the Security Rule directly.", out:"Vendor contracts"},
+    {ref:"§13402",    t:"Breach notification", ask:"Notify individuals of breaches of unsecured PHI.", out:"Incident response"}]},
   {id:"pci_dss", name:"PCI DSS", type:"Financial", covers:["PCI"], recordClasses:["AUDIT"], recordYears:1, arts:[
-    {ref:"Req. 3.2.1", t:"Keep stored account data to a minimum via retention", c:["C-RET"]},
-    {ref:"Req. 3.4.1", t:"PAN masked when displayed", c:["C-MASKENT"]},
-    {ref:"Req. 3.5.1", t:"PAN rendered unreadable wherever stored", c:["C-ENC","C-MASKNP"]},
-    {ref:"Req. 7.2",   t:"Access by business need to know", c:["C-ACC"]},
-    {ref:"Req. 10.2",  t:"Audit logs capture access to cardholder data", c:["C-AUDIT"]},
-    {ref:"Req. 10.5.1",t:"Retain audit log history for at least 12 months", c:["C-RETREC"]},
-    {ref:"Req. 12.5.2",t:"PCI DSS scope documented and confirmed", c:["C-INV","C-OWN"]},
-    {ref:"Req. 8",     t:"Identify and authenticate users (MFA)", out:"Identity provider"},
-    {ref:"Req. 11",    t:"Test security of systems and networks", out:"Security testing"}]},
+    {ref:"Req. 3.2.1", t:"Minimise stored account data", ask:"Keep account data only as long as needed, then delete it securely.", c:["C-RET"]},
+    {ref:"Req. 3.4.1", t:"Mask the PAN when displayed", ask:"Only people with a business need see more than the BIN and last four digits.", c:["C-MASKENT"]},
+    {ref:"Req. 3.5.1", t:"PAN unreadable when stored", ask:"Make the PAN unreadable wherever it's stored — hashing, truncation, tokens or strong encryption.", c:["C-ENC","C-MASKNP"]},
+    {ref:"Req. 7.2",   t:"Need-to-know access", ask:"Grant access to systems and cardholder data only by need to know.", c:["C-ACC"]},
+    {ref:"Req. 10.2",  t:"Audit logs", ask:"Audit logs capture every individual's access to cardholder data.", c:["C-AUDIT"]},
+    {ref:"Req. 10.5.1",t:"Audit log retention", ask:"Keep audit log history for at least 12 months, the last 3 immediately available.", c:["C-RETREC"]},
+    {ref:"Req. 12.5.2",t:"Scope confirmed", ask:"Document and confirm PCI DSS scope at least every 12 months.", c:["C-INV","C-OWN"]},
+    {ref:"Req. 8",     t:"Authentication", ask:"Authenticate users, including MFA into the cardholder data environment.", out:"Identity provider"},
+    {ref:"Req. 11",    t:"Security testing", ask:"Test the security of systems and networks regularly.", out:"Security testing"}]},
   {id:"sox", name:"SOX", type:"Financial", covers:["FIN"], recordClasses:["FIN"], recordYears:7, arts:[
-    {ref:"§404",  t:"Internal control over financial reporting — data integrity", c:["C-DQ","C-OWN"]},
-    {ref:"§802",  t:"Retain audit and review records for 7 years", c:["C-RETREC"]},
-    {ref:"§802",  t:"No destruction of records under investigation", c:["C-HOLD"]},
-    {ref:"§302",  t:"CEO/CFO certification", out:"Finance leadership sign-off"},
-    {ref:"§409",  t:"Real-time disclosure", out:"Investor relations"}]},
+    {ref:"§404",  t:"Internal control over financial reporting", ask:"Management assesses internal controls over financial reporting every year — the data must be owned and accurate.", c:["C-DQ","C-OWN"]},
+    {ref:"§802",  t:"Records retention", ask:"Audit workpapers and related records must be kept for 7 years.", c:["C-RETREC"]},
+    {ref:"§802",  t:"No destruction under investigation", ask:"Destroying or altering records to obstruct an investigation is a crime.", c:["C-HOLD"]},
+    {ref:"§302",  t:"Officer certification", ask:"The CEO and CFO personally certify each periodic report.", out:"Finance leadership sign-off"},
+    {ref:"§409",  t:"Real-time disclosure", ask:"Disclose material changes in financial condition rapidly.", out:"Investor relations"}]},
   {id:"glba", name:"GLBA", type:"Financial", covers:["PII","FIN"], retentionCeiling:24, arts:[
-    {ref:"16 CFR 314.4(b)",    t:"Written risk assessment", c:["C-RISK"]},
-    {ref:"16 CFR 314.4(c)(1)", t:"Access controls", c:["C-ACC"]},
-    {ref:"16 CFR 314.4(c)(2)", t:"Inventory of data and systems", c:["C-INV","C-OWN"]},
-    {ref:"16 CFR 314.4(c)(3)", t:"Encryption of customer information", c:["C-ENC"]},
-    {ref:"16 CFR 314.4(c)(6)", t:"Dispose of customer information within 2 years of last use", c:["C-RET"]},
-    {ref:"16 CFR 314.4(c)(5)", t:"Multi-factor authentication", out:"Identity provider"},
-    {ref:"§6802–6803",        t:"Privacy notices and opt-out", out:"Customer communications"}]},
+    {ref:"16 CFR 314.4(b)",    t:"Written risk assessment", ask:"Base the information security programme on a written risk assessment.", c:["C-RISK"]},
+    {ref:"16 CFR 314.4(c)(1)", t:"Access controls", ask:"Limit access to customer information to authorised users who need it.", c:["C-ACC"]},
+    {ref:"16 CFR 314.4(c)(2)", t:"Data inventory", ask:"Identify and manage the data, systems and devices in your environment.", c:["C-INV","C-OWN"]},
+    {ref:"16 CFR 314.4(c)(3)", t:"Encryption", ask:"Encrypt customer information at rest and in transit.", c:["C-ENC"]},
+    {ref:"16 CFR 314.4(c)(6)", t:"Secure disposal", ask:"Dispose of customer information no later than 2 years after last use, unless still needed.", c:["C-RET"]},
+    {ref:"16 CFR 314.4(c)(5)", t:"Multi-factor authentication", ask:"Require MFA for anyone accessing information systems.", out:"Identity provider"},
+    {ref:"§6802–6803",        t:"Privacy notices and opt-out", ask:"Give customers privacy notices and the right to opt out of some sharing.", out:"Customer communications"}]},
   {id:"dora", name:"DORA", type:"Financial", covers:["ALL"], arts:[
-    {ref:"Art. 6",     t:"ICT risk management framework", c:["C-RISK"]},
-    {ref:"Art. 8",     t:"Identify and classify information assets", c:["C-INV","C-OWN"]},
-    {ref:"Art. 9",     t:"Protection and prevention", c:["C-ACC","C-ENC"]},
-    {ref:"Art. 12",    t:"Backup and restoration", out:"Backup / DR"},
-    {ref:"Art. 17–19", t:"ICT incident management and reporting", out:"Incident response"},
-    {ref:"Art. 28",    t:"ICT third-party risk", out:"Vendor risk"}]},
+    {ref:"Art. 6",     t:"ICT risk management framework", ask:"Maintain a documented ICT risk management framework.", c:["C-RISK"]},
+    {ref:"Art. 8",     t:"Identification", ask:"Identify, classify and document information assets and their owners.", c:["C-INV","C-OWN"]},
+    {ref:"Art. 9",     t:"Protection and prevention", ask:"Protect ICT systems and data with security policies and access controls.", c:["C-ACC","C-ENC"]},
+    {ref:"Art. 12",    t:"Backup and restoration", ask:"Keep backup and restoration policies and procedures.", out:"Backup / DR"},
+    {ref:"Art. 17–19", t:"ICT incidents", ask:"Manage, classify and report major ICT incidents.", out:"Incident response"},
+    {ref:"Art. 28",    t:"ICT third-party risk", ask:"Manage risk from ICT third-party providers.", out:"Vendor risk"}]},
   {id:"soc2", name:"SOC 2", type:"Security", covers:["ALL"], arts:[
-    {ref:"CC6.1", t:"Logical access security", c:["C-ACC","C-ENC"]},
-    {ref:"CC6.5", t:"Discontinue protections only after data is unrecoverable", c:["C-RET"]},
-    {ref:"CC7.2", t:"Monitor system components for anomalies", c:["C-AUDIT"]},
-    {ref:"C1.1",  t:"Identify and maintain confidential information", c:["C-INV","C-OWN"]},
-    {ref:"C1.2",  t:"Dispose of confidential information", c:["C-RET"]},
-    {ref:"CC8.1", t:"Change management", out:"SDLC tooling"},
-    {ref:"A1.2",  t:"Backup and recovery", out:"Backup / DR"}]},
+    {ref:"CC6.1", t:"Logical access security", ask:"Logical access controls protect information assets.", c:["C-ACC","C-ENC"]},
+    {ref:"CC6.5", t:"Protections removed only when unrecoverable", ask:"Protections come off an asset only once its data can no longer be read or recovered.", c:["C-RET"]},
+    {ref:"CC7.2", t:"Monitoring for anomalies", ask:"Monitor systems for anomalies that indicate malicious acts or errors.", c:["C-AUDIT"]},
+    {ref:"C1.1",  t:"Confidential information identified", ask:"Identify and maintain confidential information to meet your commitments.", c:["C-INV","C-OWN"]},
+    {ref:"C1.2",  t:"Confidential information disposed", ask:"Dispose of confidential information to meet your commitments.", c:["C-RET"]},
+    {ref:"CC8.1", t:"Change management", ask:"Authorise, test and approve changes before they go live.", out:"SDLC tooling"},
+    {ref:"A1.2",  t:"Backup and recovery", ask:"Back up data and test recovery.", out:"Backup / DR"}]},
   {id:"iso27001", name:"ISO 27001", type:"Security", covers:["ALL"], recordClasses:["AUDIT","FIN"], arts:[
-    {ref:"6.1.2", t:"Information security risk assessment", c:["C-RISK"]},
-    {ref:"A.5.9", t:"Inventory of information and associated assets, with owners", c:["C-INV","C-OWN"]},
-    {ref:"A.5.12",t:"Classification of information", c:["C-INV"]},
-    {ref:"A.5.15",t:"Access control", c:["C-ACC"]},
-    {ref:"A.5.33",t:"Protection of records", c:["C-RETREC","C-HOLD"]},
-    {ref:"A.8.10",t:"Information deletion", c:["C-RET"]},
-    {ref:"A.8.11",t:"Data masking", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"A.8.15",t:"Logging", c:["C-AUDIT"]},
-    {ref:"A.8.24",t:"Use of cryptography", c:["C-ENC"]},
-    {ref:"A.7",   t:"Physical controls", out:"Facilities"}]},
+    {ref:"6.1.2", t:"Risk assessment", ask:"Define and apply an information security risk assessment process.", c:["C-RISK"]},
+    {ref:"A.5.9", t:"Inventory of assets", ask:"Keep an inventory of information and assets, each with an owner.", c:["C-INV","C-OWN"]},
+    {ref:"A.5.12",t:"Classification", ask:"Classify information by its confidentiality, integrity and availability needs.", c:["C-INV"]},
+    {ref:"A.5.15",t:"Access control", ask:"Set and apply rules for physical and logical access.", c:["C-ACC"]},
+    {ref:"A.5.33",t:"Protection of records", ask:"Protect records from loss, destruction, falsification and unauthorised release.", c:["C-RETREC","C-HOLD"]},
+    {ref:"A.8.10",t:"Information deletion", ask:"Delete information once it's no longer required.", c:["C-RET"]},
+    {ref:"A.8.11",t:"Data masking", ask:"Mask data in line with the access-control policy and business need.", c:["C-MASKNP","C-MASKENT"]},
+    {ref:"A.8.15",t:"Logging", ask:"Produce, store and review logs of activities and events.", c:["C-AUDIT"]},
+    {ref:"A.8.24",t:"Use of cryptography", ask:"Define and apply rules for effective use of cryptography.", c:["C-ENC"]},
+    {ref:"A.7",   t:"Physical controls", ask:"Physical perimeters, entry controls and equipment protection.", out:"Facilities"}]},
   {id:"nistcsf", name:"NIST CSF", type:"Security", covers:["ALL"], arts:[
-    {ref:"ID.AM-07", t:"Inventories of data and metadata are maintained", c:["C-INV","C-OWN"]},
-    {ref:"ID.RA",    t:"Risk assessment", c:["C-RISK"]},
-    {ref:"PR.AA-05", t:"Access permissions follow least privilege", c:["C-ACC"]},
-    {ref:"PR.DS-01", t:"Data at rest is protected", c:["C-ENC","C-MASKNP"]},
-    {ref:"PR.PS-04", t:"Log records are generated", c:["C-AUDIT"]},
-    {ref:"DE.CM",    t:"Continuous security monitoring", out:"SIEM / SOC"},
-    {ref:"RS.MA",    t:"Incident management", out:"Incident response"}]},
+    {ref:"ID.AM-07", t:"Data inventories", ask:"Maintain inventories of data and its metadata for designated data types.", c:["C-INV","C-OWN"]},
+    {ref:"ID.RA",    t:"Risk assessment", ask:"Understand the cybersecurity risk to your assets and operations.", c:["C-RISK"]},
+    {ref:"PR.AA-05", t:"Least privilege", ask:"Define, manage and review access permissions using least privilege.", c:["C-ACC"]},
+    {ref:"PR.DS-01", t:"Data at rest", ask:"Protect the confidentiality and integrity of data at rest.", c:["C-ENC","C-MASKNP"]},
+    {ref:"PR.PS-04", t:"Log records", ask:"Generate log records and make them available for monitoring.", c:["C-AUDIT"]},
+    {ref:"DE.CM",    t:"Continuous monitoring", ask:"Monitor networks and assets to find adverse events.", out:"SIEM / SOC"},
+    {ref:"RS.MA",    t:"Incident management", ask:"Manage responses to detected incidents.", out:"Incident response"}]},
   {id:"nis2", name:"NIS2", type:"Security", covers:["ALL"], arts:[
-    {ref:"Art. 21(2)(a)", t:"Risk analysis and security policies", c:["C-RISK"]},
-    {ref:"Art. 21(2)(h)", t:"Cryptography and encryption", c:["C-ENC"]},
-    {ref:"Art. 21(2)(i)", t:"Access control and asset management", c:["C-ACC","C-INV"]},
-    {ref:"Art. 21(2)(c)", t:"Business continuity", out:"Backup / DR"},
-    {ref:"Art. 21(2)(d)", t:"Supply chain security", out:"Vendor risk"},
-    {ref:"Art. 23",       t:"Incident reporting (24h / 72h)", out:"Incident response"}]},
+    {ref:"Art. 21(2)(a)", t:"Risk analysis and security policies", ask:"Have policies on risk analysis and information system security.", c:["C-RISK"]},
+    {ref:"Art. 21(2)(h)", t:"Cryptography", ask:"Have policies on the use of cryptography and encryption.", c:["C-ENC"]},
+    {ref:"Art. 21(2)(i)", t:"Access control and asset management", ask:"Apply access control and asset management.", c:["C-ACC","C-INV"]},
+    {ref:"Art. 21(2)(c)", t:"Business continuity", ask:"Maintain business continuity, backup and crisis management.", out:"Backup / DR"},
+    {ref:"Art. 21(2)(d)", t:"Supply chain security", ask:"Secure your supply chain.", out:"Vendor risk"},
+    {ref:"Art. 23",       t:"Incident reporting", ask:"Early warning within 24 hours, notification within 72 hours.", out:"Incident response"}]},
   {id:"fedramp", name:"FedRAMP", type:"Security", covers:["ALL"], recordClasses:["AUDIT"], arts:[
-    {ref:"RA-2",  t:"Security categorization", c:["C-INV"]},
-    {ref:"RA-3",  t:"Risk assessment", c:["C-RISK"]},
-    {ref:"AC-6",  t:"Least privilege", c:["C-ACC"]},
-    {ref:"SC-28", t:"Protection of information at rest", c:["C-ENC"]},
-    {ref:"AU-2",  t:"Event logging", c:["C-AUDIT"]},
-    {ref:"AU-11", t:"Audit record retention", c:["C-RETREC"]},
-    {ref:"SI-12", t:"Information management and retention", c:["C-RET"]},
-    {ref:"IA-2",  t:"Identification and authentication (MFA)", out:"Identity provider"},
-    {ref:"IR-4",  t:"Incident handling", out:"Incident response"}]},
+    {ref:"RA-2",  t:"Security categorization", ask:"Categorize information and systems by impact level.", c:["C-INV"]},
+    {ref:"RA-3",  t:"Risk assessment", ask:"Assess risk and update the assessment regularly.", c:["C-RISK"]},
+    {ref:"AC-6",  t:"Least privilege", ask:"Grant only the access users need for their tasks.", c:["C-ACC"]},
+    {ref:"SC-28", t:"Protection at rest", ask:"Protect information at rest.", c:["C-ENC"]},
+    {ref:"AU-2",  t:"Event logging", ask:"Define and log the events the system must capture.", c:["C-AUDIT"]},
+    {ref:"AU-11", t:"Audit record retention", ask:"Keep audit records for the defined period to support investigations.", c:["C-RETREC"]},
+    {ref:"SI-12", t:"Information retention", ask:"Manage and retain information per policy and legal requirements.", c:["C-RET"]},
+    {ref:"IA-2",  t:"Identification and authentication", ask:"Uniquely identify and authenticate users, with MFA.", out:"Identity provider"},
+    {ref:"IR-4",  t:"Incident handling", ask:"Prepare, detect, contain and recover from incidents.", out:"Incident response"}]},
 ];
+const pm2Fw = id => PM2_FW.find(f=>f.id===id);
 
-// ── Governed metadata the controls evaluate. Real catalog asset names; the governance
-// attributes (env, region, encryption, access breadth, purpose) are what connectors +
-// custom properties would supply. `cols` = classified columns; `suspect` = looks sensitive, unclassified.
+// ── Governed metadata the rules evaluate. Real catalog asset names; the governance
+// attributes (env, region, encryption, access breadth, purpose) are what connectors and
+// custom properties supply. cols = classified columns; suspect = looks sensitive, unclassified.
 const PM2_ASSETS = [
   {name:"customers",        service:"snowflake", domain:"Commerce", owner:"dev.patel", steward:"maya.chen", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:1,   quality:91, purpose:true,  transfer:"SCCs", cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",date_of_birth:"PII",address:"PII"}},
   {name:"users",            service:"postgres",  domain:"Platform", owner:"james.oh",  steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:3,   quality:88, purpose:false, transfer:"",     cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII"}},
@@ -13204,654 +13259,1028 @@ const PM2_ASSETS = [
   {name:"user_events",      service:"databricks",domain:"Product",  owner:"alex.wu",   steward:"alex.wu",   env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:1,   quality:82, purpose:false, transfer:"",     cols:{}, suspect:{properties:"PII"}},
   {name:"claims_staging",   service:"glue",      domain:"Finance",  owner:"sarah.kim", steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:6,   quality:77, purpose:false, transfer:"",     cols:{}, suspect:{member_id:"PHI",date_of_birth:"PHI"}},
 ];
+const PM2_PERSONAL = ["PII","SPI","PHI","PCI"];
+const PM2_USERS = ["alex.rivera","maya.chen","lisa.ray","sarah.kim","priya.nair","james.oh","dev.patel","alex.wu"];
 const pm2Today = () => new Date().toISOString().slice(0,10);
 const pm2Classes = a => [...new Set([...(a.classes||[]),...Object.values(a.cols||{})])];
 const pm2InScope = (a, covers) => covers.includes("ALL") ? pm2Classes(a).length>0 : pm2Classes(a).some(c=>covers.includes(c));
-const pm2SuspectIn = (a, covers) => a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
-const PM2_PERSONAL = ["PII","SPI","PHI","PCI"];
+const pm2SuspectIn = (a, covers) => !!a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
+const pm2AssetInPolicy = (a, p) => p.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
+const pm2AssetInFw = (a, p, fw) => p.scopeBy==="suspect" ? pm2SuspectIn(a,fw.covers)
+  : pm2InScope(a, p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers);
+const pm2Kinds = p => [...new Set((p.rules||[]).map(r=>PM2_ACTIONS[r.act.type]?.kind).filter(Boolean))];
+const pm2PrimaryKind = p => { const k=pm2Kinds(p); return k.includes("enforce")?"enforce":k.includes("monitor")?"monitor":"attest"; };
 
-// ── Module-level store: adopted frameworks, control state, attestations. Shared so the
-// state survives navigation, same pattern as the other governance stores.
-let _pm2 = {
-  adopted:{ gdpr:{owner:"maya.chen", at:"2026-06-02"}, soc2:{owner:"alex.rivera", at:"2026-06-20"} },
-  ctl:{}, attest:{ "gdpr:C-RISK":{by:"maya.chen",date:"2026-06-10",evidence:"DPIA-2026-03 for customer analytics, signed off by DPO"} },
-  approved:{}, // enforcement targets approved before this session — keyed ctlId:asset
-};
+// The strictest requirement wins when frameworks overlap.
+const pm2LinkedFws = p => [...new Set((p.articles||[]).map(x=>x.fw))].map(pm2Fw).filter(Boolean);
+function pm2EffectiveMonths(p, act){
+  const caps = pm2LinkedFws(p).filter(f=>f.retentionCeiling).map(f=>({fw:f.name,m:f.retentionCeiling})).sort((a,b)=>a.m-b.m);
+  const own = Number(act.months||36);
+  return caps[0]&&caps[0].m<own ? {months:caps[0].m, why:`${caps[0].fw} caps disposal at ${caps[0].m} months after last use`} : {months:own, why:"your retention schedule — the linked regulations set no fixed number"};
+}
+function pm2EffectiveYears(p, act){
+  const reqs = pm2LinkedFws(p).filter(f=>f.recordYears).map(f=>({fw:f.name,y:f.recordYears})).sort((a,b)=>b.y-a.y);
+  return reqs[0] ? {years:reqs[0].y, why:`${reqs[0].fw} requires ${reqs[0].y} year${reqs[0].y>1?"s":""}`, all:reqs} : {years:Number(act.years||3), why:"your schedule — no linked regulation sets a number", all:[]};
+}
+
+// ── Rule engine: one evaluator for every policy, template-built or hand-built.
+function pm2Eval(p){
+  const out = {findings:[], targets:[], evidence:[]};
+  (p.rules||[]).forEach(r=>{
+    const kind = PM2_ACTIONS[r.act.type]?.kind;
+    if(kind==="attest"){ out.evidence.push(r); return; }
+    PM2_ASSETS.forEach(a=>{
+      if(!pm2AssetInPolicy(a,p)) return;
+      if(!(r.conds||[]).every(c=>pm2CondTest(c,a))) return;
+      const scopeCols = Object.entries(a.cols||{}).filter(([,c])=>p.scope.includes("ALL")?PM2_PERSONAL.includes(c):p.scope.includes(c));
+      if(kind==="monitor") out.findings.push({asset:a, rule:r, msg:r.act.msg||"Matches the rule"});
+      else if(r.act.type==="mask"){
+        const cols = scopeCols.filter(([,c])=>r.act.cols!=="sensitive"||["SPI","PHI","PCI"].includes(c)).map(([k])=>k);
+        if(cols.length) out.targets.push({asset:a, rule:r, detail:`${cols.length} column${cols.length>1?"s":""}: ${cols.join(", ")}`});
+      } else if(r.act.type==="dispose"){
+        if(!scopeCols.length) return;
+        const longer = pm2Classes(a).some(c=>["FIN","AUDIT"].includes(c));
+        out.targets.push({asset:a, rule:r, detail:longer?"Keeps the longer mandated period":`Disposed ${pm2EffectiveMonths(p,r.act).months} months after last use`});
+      } else if(r.act.type==="retain"){
+        out.targets.push({asset:a, rule:r, detail:`Locked for ${pm2EffectiveYears(p,r.act).years} years · ${pm2Classes(a).filter(c=>p.scope.includes(c)).map(c=>PM2_CLASS_META[c].label).join(", ")}`});
+      } else if(r.act.type==="hold"){
+        out.targets.push({asset:a, rule:r, detail:"Matter LIT-2026-014 — disposition suspended"});
+      }
+    });
+  });
+  return out;
+}
+
+// ── Store: adopted frameworks, policies, evidence, exceptions and the approval policies.
+const PM2_TPL_OWNER = {"C-INV":"maya.chen","C-OWN":"maya.chen","C-ROPA":"maya.chen","C-ENC":"james.oh","C-ACC":"james.oh","C-XB":"maya.chen","C-MIN":"maya.chen","C-DQ":"sarah.kim","C-MASKNP":"james.oh","C-MASKENT":"maya.chen","C-RET":"dev.patel","C-RETREC":"sarah.kim","C-HOLD":"sarah.kim","C-DSR":"maya.chen","C-AUDIT":"james.oh","C-RISK":"maya.chen"};
+const PM2_TPL_STEWARD = {"C-ENC":"alex.wu","C-ACC":"alex.wu","C-AUDIT":"alex.wu","C-MASKNP":"alex.wu","C-DQ":"dev.patel","C-RETREC":"dev.patel","C-HOLD":"dev.patel","C-RET":"sarah.kim"};
+function pm2PolicyFromTemplate(tid, owner, stewards){
+  const t = PM2_TPL[tid];
+  return {id:"p-"+tid, template:tid, name:t.name, purpose:t.why, scopeBy:t.scopeBy||"class", scope:[], articles:[],
+    rules:t.rules.map((r,i)=>({id:`${tid}-r${i+1}`, conds:r.conds.map(c=>({...c})), act:{...r.act}})),
+    owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm2Today()};
+}
+// Link a policy to every article of `fw` that recommends its template, and widen its scope.
+function pm2LinkToFw(p, fw){
+  const arts = fw.arts.map((a,i)=>({a,i})).filter(({a})=>(a.c||[]).includes(p.template)).map(({i})=>({fw:fw.id,i}));
+  const add = p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers;
+  const scope = [...new Set([...p.scope, ...add])];
+  const articles = [...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))];
+  return {...p, scope, articles};
+}
+let _pm2 = (()=>{
+  const adopted = {gdpr:{owner:"maya.chen", at:"2026-06-02"}, soc2:{owner:"james.oh", at:"2026-06-20"}};
+  const byTpl = {};
+  Object.keys(adopted).forEach(fid=>{
+    const fw = pm2Fw(fid);
+    [...new Set(fw.arts.flatMap(a=>a.c||[]))].forEach(tid=>{
+      if(!byTpl[tid]) byTpl[tid] = pm2PolicyFromTemplate(tid, PM2_TPL_OWNER[tid], [PM2_TPL_STEWARD[tid]||"priya.nair"]);
+      byTpl[tid] = pm2LinkToFw(byTpl[tid], fw);
+    });
+  });
+  const policies = Object.values(byTpl).map(p=>({...p, status:"Active", history:[
+    {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
+    {when:"2026-06-02", who:p.owner, what:"Created from the GDPR / SOC 2 templates"}]}));
+  // A hand-built policy still in Draft — shows the lifecycle from the start.
+  policies.push({id:"p-cust-hr", template:null, name:"HR compensation masking", purpose:"Salary and national ID are visible only to the HR compensation team, in every environment.",
+    scopeBy:"class", scope:["SPI"], articles:[{fw:"gdpr", i:8}],
+    rules:[{id:"p-cust-hr-r1", conds:[], act:{type:"mask", cols:"sensitive", style:"Redact", unmasked:"hr_compensation role"}}],
+    owner:"james.oh", stewards:["maya.chen"], status:"Draft", version:1, reqId:null, draft:null, created:"2026-09-12",
+    history:[{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
+  const approved = {};
+  policies.filter(p=>p.status==="Active").forEach(p=>pm2Eval(p).targets.forEach(t=>{ approved[p.id+":"+t.asset.name]=true; }));
+  return {
+    adopted, policies, approved,
+    attest:{"gdpr:p-C-RISK":{by:"maya.chen", date:"2026-06-10", evidence:"DPIA-2026-03 for customer analytics, signed off by the DPO"}},
+    exceptions:{},
+    approvalPolicy:{
+      activation:{approver:"maya.chen", autoMonitor:true},
+      enforcement:{fallback:"alex.rivera"},
+      exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90},
+      hold:{twoPerson:true},
+      sod:true,
+    },
+    lastRun:{},
+  };
+})();
 const _pm2Subs = new Set();
 const pm2Set = (u)=>{ _pm2 = typeof u==="function"?u(_pm2):u; _pm2Subs.forEach(f=>f()); };
 const usePM2 = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_pm2Subs.add(fn);return()=>{_pm2Subs.delete(fn);};},[]); return _pm2; };
 
-const pm2FwCtlIds = fw => [...new Set(fw.arts.flatMap(a=>a.c||[]))];
-const pm2ParamDefaults = id => Object.fromEntries((PM2_CTL[id].params||[]).map(p=>[p.k,p.def]));
-// Seed: every control of the pre-adopted frameworks is on, with its targets already approved.
-(()=>{
-  const ctl={}, approved={};
-  Object.keys(_pm2.adopted).forEach(fid=>{
-    const fw=PM2_FW.find(f=>f.id===fid);
-    pm2FwCtlIds(fw).forEach(id=>{ ctl[id]={on:true, params:pm2ParamDefaults(id)}; });
+// Enforcement target status: approved before this session, or the live request.
+const pm2TargetStatus = (polId, asset) => {
+  if(_pm2.approved[polId+":"+asset]) return "approved";
+  const r = (typeof _enfReqs!=="undefined"?_enfReqs:[]).filter(x=>x.policyId==="pm2:"+polId&&x.table===asset).slice(-1)[0];
+  return r ? r.status : "none";
+};
+const pm2Approver = (named, requester) => {
+  const ap = _pm2.approvalPolicy;
+  if(ap.sod && named===requester) return named===ap.enforcement.fallback ? "maya.chen" : ap.enforcement.fallback;
+  return named;
+};
+// Once a policy is Active, every enforcement target without a decision goes to its table owner.
+// A table owned by the requester is recorded as approved — the owner is consenting.
+function pm2RequestTargets(){
+  const ap = _pm2.approvalPolicy; let approved = null;
+  _pm2.policies.filter(p=>p.status==="Active").forEach(p=>{
+    pm2Eval(p).targets.forEach(t=>{
+      if(pm2TargetStatus(p.id,t.asset.name)!=="none") return;
+      const owner = t.asset.owner;
+      if(owner && owner===p.owner){ approved = approved||{..._pm2.approved}; approved[p.id+":"+t.asset.name]=true; return; }
+      const approver = owner || ap.enforcement.fallback;
+      const verb = PM2_ACTIONS[t.rule.act.type].verb;
+      addEnfApproval({id:`er-pm2-${p.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+p.id, policyName:p.name, ruleId:`pm2:${t.rule.id}:${t.asset.name}`, action:verb, table:t.asset.name, approver, requestedBy:p.owner});
+      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${p.name}" needs ${approver} to approve "${verb}" on ${t.asset.name}`, nav:"stewardship"});
+    });
   });
-  _pm2 = {..._pm2, ctl, approved};
-  // Approvals for seeded targets are computed lazily (see pm2Targets) so they reflect the seeded scope.
-  const adoptedFws = PM2_FW.filter(f=>_pm2.adopted[f.id]);
-  PM2_CONTROLS.filter(c=>c.kind==="enforce"&&ctl[c.id]).forEach(c=>{
-    pm2TargetsFor(c.id, adoptedFws).forEach(t=>{ approved[c.id+":"+t.asset.name]=true; });
+  if(approved) pm2Set(s=>({...s, approved}));
+}
+// Apply decisions made anywhere (Workspace inbox or here) back onto the policies.
+function pm2Sync(){
+  if(typeof _statusReqs==="undefined") return;
+  let changed = false;
+  const reqOf = id => _statusReqs.find(r=>r.id===id);
+  const policies = _pm2.policies.map(p=>{
+    const rid = p.draft ? p.draft.reqId : p.reqId; if(!rid) return p;
+    const r = reqOf(rid); if(!r || r.status==="pending") return p;
+    changed = true;
+    const who = r.decidedBy || r.approver || "approver";
+    if(r.status==="approved"){
+      const base = p.draft ? {...p, ...p.draft.fields, version:p.draft.version, draft:null} : {...p};
+      return {...base, status:"Active", reqId:null, history:[{when:pm2Today(), who, what:`Approved — v${base.version} active`}, ...(p.history||[])]};
+    }
+    if(p.draft) return {...p, draft:null, history:[{when:pm2Today(), who, what:`Change to v${p.draft.version} rejected — v${p.version} keeps running`}, ...(p.history||[])]};
+    return {...p, status:"Rejected", reqId:null, history:[{when:pm2Today(), who, what:"Rejected — back to the owner"}, ...(p.history||[])]};
   });
-})();
-
-// Scope of a control = union of the data classes of every adopted framework that uses it.
-function pm2ScopeFor(ctlId, fws){
-  const s=new Set();
-  fws.forEach(fw=>{ if(pm2FwCtlIds(fw).includes(ctlId)) (ctlId==="C-RETREC"?(fw.recordClasses||[]):fw.covers).forEach(c=>s.add(c)); });
-  return [...s];
-}
-// Enforcement targets — the tables CDP would act on, and on which columns.
-function pm2TargetsFor(ctlId, fws){
-  const scope = pm2ScopeFor(ctlId, fws);
-  if(!scope.length) return [];
-  const colsIn = a => Object.entries(a.cols||{}).filter(([,c])=>scope.includes("ALL")?PM2_PERSONAL.includes(c):scope.includes(c)).map(([k])=>k);
-  return PM2_ASSETS.flatMap(a=>{
-    if(ctlId==="C-MASKNP"){ const cols=colsIn(a); return a.env!=="prod"&&cols.length?[{asset:a,detail:`${cols.length} column${cols.length>1?"s":""}: ${cols.join(", ")}`}]:[]; }
-    if(ctlId==="C-MASKENT"){ const cols=colsIn(a).filter(k=>["SPI","PHI","PCI"].includes(a.cols[k])||scope.includes("PII")&&["date_of_birth","national_id"].includes(k)); return a.env==="prod"&&cols.length?[{asset:a,detail:`${cols.length} column${cols.length>1?"s":""}: ${cols.join(", ")}`}]:[]; }
-    if(ctlId==="C-RET"){ return colsIn(a).length&&a.env==="prod"?[{asset:a,detail:a.hold?"Suspended — under legal hold":(pm2Classes(a).some(c=>["FIN","AUDIT"].includes(c))?"Keeps the longer mandated period":"Disposition schedule applied")}]:[]; }
-    if(ctlId==="C-RETREC"){ return pm2Classes(a).some(c=>scope.includes(c))?[{asset:a,detail:pm2Classes(a).filter(c=>scope.includes(c)).map(c=>PM2_CLASS_META[c].label).join(", ")}]:[]; }
-    if(ctlId==="C-HOLD"){ return a.hold&&pm2InScope(a,scope)?[{asset:a,detail:"Matter LIT-2026-014"}]:[]; }
-    return [];
+  const exceptions = {..._pm2.exceptions};
+  Object.entries(exceptions).forEach(([k,e])=>{
+    if(e.status!=="pending") return; const r = reqOf(e.reqId); if(!r||r.status==="pending") return;
+    changed = true;
+    const until = new Date(Date.now()+Number(_pm2.approvalPolicy.exceptions.maxDays||90)*86400000).toISOString().slice(0,10);
+    exceptions[k] = r.status==="approved" ? {...e, status:"accepted", until, decidedBy:r.decidedBy||r.approver} : {...e, status:"rejected", decidedBy:r.decidedBy||r.approver};
   });
+  if(changed) pm2Set(s=>({...s, policies, exceptions}));
+  pm2RequestTargets();
 }
-// Monitor evaluation — returns findings for the given framework scope.
-function pm2Findings(ctlId, covers, params){
-  const p = params||pm2ParamDefaults(ctlId);
-  const inS = PM2_ASSETS.filter(a=>pm2InScope(a,covers));
-  const personal = a => pm2Classes(a).some(c=>PM2_PERSONAL.includes(c));
-  switch(ctlId){
-    case "C-INV":  return PM2_ASSETS.filter(a=>pm2SuspectIn(a,covers)).map(a=>({asset:a,issue:`Unclassified columns look like ${[...new Set(Object.values(a.suspect))].join("/")}: ${Object.keys(a.suspect).join(", ")}`}));
-    case "C-OWN":  return inS.filter(a=>!a.owner||!a.steward).map(a=>({asset:a,issue:!a.owner?"No owner assigned":"No steward assigned"}));
-    case "C-ROPA": return inS.filter(a=>personal(a)&&!a.purpose).map(a=>({asset:a,issue:"No processing purpose recorded"}));
-    case "C-ENC":  return inS.filter(a=>!a.enc).map(a=>({asset:a,issue:"Not encrypted at rest (reported by source)"}));
-    case "C-ACC":  return inS.filter(a=>a.access==="Broad").map(a=>({asset:a,issue:"Granted to a broad role"}));
-    case "C-XB": { const ok=String(p.regions||"").split(",").map(s=>s.trim()).filter(Boolean);
-                   return inS.filter(a=>personal(a)&&!ok.includes(a.region)&&!a.transfer).map(a=>({asset:a,issue:`Stored in ${a.region} with no transfer mechanism recorded`})); }
-    case "C-MIN":  return inS.filter(a=>personal(a)&&a.idle>Number(p.days||180)&&!a.hold).map(a=>({asset:a,issue:`Not read in ${a.idle} days`}));
-    case "C-DQ":   return inS.filter(a=>a.quality<Number(p.min||85)).map(a=>({asset:a,issue:`Quality score ${a.quality} (bar is ${p.min})`}));
-    default: return [];
-  }
-}
-// The strictest requirement wins when frameworks overlap.
-function pm2EffectiveRetention(fws, orgMonths){
-  const ceilings = fws.filter(f=>f.retentionCeiling&&pm2FwCtlIds(f).includes("C-RET")).map(f=>({fw:f.name,m:f.retentionCeiling}));
-  const tight = ceilings.sort((a,b)=>a.m-b.m)[0];
-  return tight&&tight.m<orgMonths ? {months:tight.m, by:`${tight.fw} caps it at ${tight.m} months`} : {months:orgMonths, by:"Your retention schedule — the adopted regulations set no fixed number"};
-}
-function pm2EffectiveRecords(fws){
-  const reqs = fws.filter(f=>f.recordYears&&pm2FwCtlIds(f).includes("C-RETREC")).map(f=>({fw:f.name,y:f.recordYears}));
-  return reqs.sort((a,b)=>b.y-a.y);
-}
+let _pm2Hooked = false;
 
 const PolicyManager2View = ({onToast, onNav}) => {
   const st = usePM2();
   const enfReqs = useEnfApprovals();
-  const {roleCfg} = useRole();
+  const statusReqs = useStatusReqs();
+  const {role, roleCfg} = useRole();
   const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
-  const [tab, setTab] = useState("frameworks");
-  const [selFw, setSelFw] = useState(null);         // framework detail page
-  const [wiz, setWiz] = useState(null);             // {fwId, step, owner, picks:{ctlId:bool}, params:{ctlId:{}}}
-  const [ctlOpen, setCtlOpen] = useState(null);     // control drawer
-  const [q, setQ] = useState("");
-  const [openArt, setOpenArt] = useState({});
-  const [attestDraft, setAttestDraft] = useState(null); // {key, evidence, date}
-  const [findFilter, setFindFilter] = useState("all");
+  const isAdmin = role==="admin";
+  const ap = st.approvalPolicy;
+  // Decisions taken in the Workspace inbox flow back through the shared request store.
+  useEffect(()=>{ if(!_pm2Hooked){ _srSubs.add(pm2Sync); _pm2Hooked=true; } pm2Sync(); },[]);
 
+  const [tab, setTab]         = useState("frameworks");
+  const [selFw, setSelFw]     = useState(null);
+  const [selPol, setSelPol]   = useState(null);
+  const [wiz, setWiz]         = useState(null);
+  const [ed, setEd]           = useState(null);
+  const [q, setQ]             = useState("");
+  const [polFilter, setPolFilter] = useState("All");
+  const [findFilter, setFindFilter] = useState("all");
+  const [attestDraft, setAttestDraft] = useState(null); // {fwId, polId, evidence}
+  const [excDraft, setExcDraft] = useState(null);       // {key, reason}
+
+  // ── permissions ──
+  const canEdit   = p => isAdmin || p.owner===me || (p.stewards||[]).includes(me);
+  const canSubmit = p => isAdmin || p.owner===me;
+  const canDecide = r => (r.approver===me || isAdmin) && !(ap.sod && r.requestedBy===me);
+
+  // ── derived ──
   const adoptedFws = PM2_FW.filter(f=>st.adopted[f.id]);
+  const livePols   = st.policies.filter(p=>p.status!=="Retired");
+  const evalOf     = p => pm2Eval(p);
+  const excKey     = (p,r,a) => `${p.id}|${r.id}|${a.name}`;
+  const excOf      = (p,r,a) => st.exceptions[excKey(p,r,a)];
+  const isExcepted = (p,r,a) => excOf(p,r,a)?.status==="accepted";
+  const polsForArt = (fw,i) => livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i));
+  const artsOfPol  = p => p.articles.map(x=>{ const fw=pm2Fw(x.fw); return fw&&{fw, i:x.i, art:fw.arts[x.i]}; }).filter(Boolean);
+  const reqById    = id => statusReqs.find(r=>r.id===id);
+  const pendingReqOf = p => { const r = reqById(p.draft?p.draft.reqId:p.reqId); return r&&r.status==="pending"?r:null; };
+
+  const polHealth = (p, fw) => {
+    if(p.status==="Draft")    return {state:"draft", label:"Draft — not submitted"};
+    if(p.status==="Rejected") return {state:"rejected", label:"Rejected"};
+    if(p.status==="In review"){ const r=pendingReqOf(p); return {state:"review", label:`In review with ${r?.approver||"approver"}`}; }
+    const ev = evalOf(p);
+    const inFw = a => !fw || pm2AssetInFw(a,p,fw);
+    const f = ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,x.rule,x.asset));
+    if(f.length) return {state:"findings", label:`${f.length} finding${f.length>1?"s":""}`, n:f.length};
+    const tg = ev.targets.filter(t=>inFw(t.asset));
+    const ts = tg.map(t=>pm2TargetStatus(p.id,t.asset.name));
+    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected enforcement"};
+    const pend = ts.filter(s=>s!=="approved").length;
+    if(pend) return {state:"pending", label:`${pend} table${pend>1?"s":""} awaiting owner approval`};
+    if(ev.evidence.length){
+      const fws = fw ? [fw] : pm2LinkedFws(p);
+      const miss = fws.filter(f2=>!st.attest[f2.id+":"+p.id]);
+      if(miss.length) return {state:"evidence", label:fw?"Needs evidence":`Evidence needed for ${miss.map(x=>x.name).join(", ")}`};
+    }
+    return {state:"met", label: tg.length?`Running on ${tg.length} table${tg.length>1?"s":""}`:ev.evidence.length?"Evidenced":"Passing"};
+  };
+  const ART_ORDER = ["uncovered","rejected","findings","draft","review","pending","evidence","met"];
+  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted}, review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, evidence:{l:"Needs evidence",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
+  const artState = (fw,i) => {
+    const art = fw.arts[i]; if(art.out) return "outside";
+    const pols = polsForArt(fw,i); if(!pols.length) return "uncovered";
+    const states = pols.map(p=>polHealth(p,fw).state);
+    return ART_ORDER.find(s=>states.includes(s))||"met";
+  };
+  const fwScore = fw => { const ins=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out); return ins.length?Math.round(ins.filter(i=>artState(fw,i)==="met").length/ins.length*100):0; };
+  const scoreColor = s => s>=80?T.green:s>=50?T.amber:T.rose;
   const kindColor = k => ({enforce:T.green, monitor:T.blue, attest:T.violet, outside:T.textMuted}[k]||T.textMuted);
   const typeColor = t => ({Privacy:T.violet, Healthcare:T.rose, Financial:T.amber, Security:T.blue}[t]||T.accent);
+  const statusColor = s => ({Active:T.green, "In review":T.amber, Draft:T.textMuted, Rejected:T.rose, Retired:T.textMuted}[s]||T.textMuted);
   const regMeta = id => REGS_META.find(r=>r.id===id)||{};
 
-  // Status of one enforcement target: seeded approval, or the live approval request.
-  const targetStatus = (ctlId, assetName) => {
-    if(st.approved[ctlId+":"+assetName]) return "approved";
-    const r = enfReqs.filter(x=>x.policyId==="pm2:"+ctlId&&x.table===assetName).slice(-1)[0];
-    return r ? r.status : "none";
-  };
-  // Health of a control within a framework's scope.
-  const ctlHealth = (ctlId, fw) => {
-    const c = PM2_CTL[ctlId], s = st.ctl[ctlId];
-    if(!s||!s.on) return {state:"off", label:"Not adopted"};
-    if(c.kind==="attest"){ const a=st.attest[fw.id+":"+ctlId]; return a?{state:"met",label:`Attested by ${a.by}`}:{state:"evidence",label:"Needs evidence"}; }
-    if(c.kind==="monitor"){ const f=pm2Findings(ctlId,fw.covers,s.params); return f.length?{state:"findings",label:`${f.length} finding${f.length>1?"s":""}`,n:f.length}:{state:"met",label:"Passing"}; }
-    const tg = pm2TargetsFor(ctlId, adoptedFws).filter(t=>pm2InScope(t.asset, ctlId==="C-RETREC"?(fw.recordClasses||[]):fw.covers));
-    const pend = tg.filter(t=>targetStatus(ctlId,t.asset.name)!=="approved");
-    if(pend.some(t=>targetStatus(ctlId,t.asset.name)==="rejected")) return {state:"findings",label:"Owner rejected"};
-    return pend.length?{state:"pending",label:`${pend.length} awaiting owner approval`}:{state:"met",label:tg.length?`Running on ${tg.length} table${tg.length>1?"s":""}`:"Running"};
-  };
-  const artState = (art, fw) => {
-    if(art.out) return "outside";
-    const hs = art.c.map(id=>ctlHealth(id,fw).state);
-    if(hs.includes("off")) return "off";
-    if(hs.includes("findings")) return "findings";
-    if(hs.includes("pending")) return "pending";
-    if(hs.includes("evidence")) return "evidence";
-    return "met";
-  };
-  const ART_META = {met:{l:"Met",c:T.green}, findings:{l:"Findings",c:T.rose}, pending:{l:"Awaiting approval",c:T.amber}, evidence:{l:"Needs evidence",c:T.violet}, off:{l:"Not covered",c:T.textMuted}, outside:{l:"Outside EDG",c:T.textMuted}};
-  const fwScore = fw => { const ins=fw.arts.filter(a=>!a.out); return ins.length?Math.round(ins.filter(a=>artState(a,fw)==="met").length/ins.length*100):0; };
-  const fwMix = fw => { const ids=pm2FwCtlIds(fw); const m={enforce:0,monitor:0,attest:0}; ids.forEach(id=>m[PM2_CTL[id].kind]++); return {...m, outside:fw.arts.filter(a=>a.out).length}; };
-  const scoreColor = s => s>=80?T.green:s>=50?T.amber:T.rose;
+  // All open findings, de-duplicated by policy + rule + asset, carrying every article they break.
+  const allFindings = livePols.filter(p=>p.status==="Active").flatMap(p=>evalOf(p).findings.map(f=>({
+    ...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset),
+    refs: artsOfPol(p).filter(x=>st.adopted[x.fw.id]&&pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name, ref:x.art.ref})),
+  }))).filter(f=>f.refs.length);
+  const openFindings = allFindings.filter(f=>f.exc?.status!=="accepted");
+  const pm2StatusPending = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.status==="pending");
+  const pm2EnfPending    = enfReqs.filter(r=>(r.policyId||"").startsWith("pm2:")&&r.status==="pending");
+  const evidenceNeeded   = livePols.filter(p=>p.status==="Active"&&evalOf(p).evidence.length).flatMap(p=>pm2LinkedFws(p).filter(f=>st.adopted[f.id]&&!st.attest[f.id+":"+p.id]).map(f=>({p,f})));
 
-  // All live findings across adopted frameworks, de-duplicated by control+asset, carrying every article they break.
-  const allFindings = (()=>{
-    const map = {};
-    adoptedFws.forEach(fw=>fw.arts.filter(a=>!a.out).forEach(art=>art.c.forEach(id=>{
-      if(PM2_CTL[id].kind!=="monitor"||!st.ctl[id]?.on) return;
-      pm2Findings(id,fw.covers,st.ctl[id].params).forEach(f=>{
-        const k=id+":"+f.asset.name;
-        if(!map[k]) map[k]={...f, ctlId:id, refs:[]};
-        if(!map[k].refs.some(r=>r.fw===fw.name&&r.ref===art.ref)) map[k].refs.push({fw:fw.name, ref:art.ref});
-      });
-    })));
-    return Object.values(map);
-  })();
-  const pendingApprovals = PM2_CONTROLS.filter(c=>c.kind==="enforce"&&st.ctl[c.id]?.on).flatMap(c=>pm2TargetsFor(c.id,adoptedFws).filter(t=>targetStatus(c.id,t.asset.name)==="pending"));
-  const evidenceNeeded = adoptedFws.flatMap(fw=>pm2FwCtlIds(fw).filter(id=>PM2_CTL[id].kind==="attest"&&!st.attest[fw.id+":"+id]));
-
-  // ── Adoption ──
-  const startAdopt = (fwId, step=1) => {
-    const fw = PM2_FW.find(f=>f.id===fwId);
-    const picks={}, params={};
-    pm2FwCtlIds(fw).forEach(id=>{ picks[id]= st.ctl[id]?.on ?? true; params[id]={...pm2ParamDefaults(id), ...(st.ctl[id]?.params||{})}; });
-    setWiz({fwId, step, owner:st.adopted[fwId]?.owner||me, picks, params, editing:!!st.adopted[fwId]});
+  // ── actions ──
+  const addHist = (p, what) => ({...p, history:[{when:pm2Today(), who:me, what}, ...(p.history||[])]});
+  const updPol  = (id, fn) => pm2Set(s=>({...s, policies:s.policies.map(p=>p.id===id?fn(p):p)}));
+  const submitPolicy = (id, note, quiet) => {
+    const p = _pm2.policies.find(x=>x.id===id); if(!p) return;
+    const fields = p.draft ? {...p, ...p.draft.fields} : p;
+    const monitorOnly = pm2Kinds(fields).every(k=>k==="monitor");
+    if(monitorOnly && _pm2.approvalPolicy.activation.autoMonitor){
+      updPol(id, x=>{ const base = x.draft?{...x, ...x.draft.fields, version:x.draft.version, draft:null}:x;
+        return {...base, status:"Active", reqId:null, history:[{when:pm2Today(), who:"EDG", what:`Activated v${base.version} without approval — monitor-only policies change no data (approval policy)`}, ...(x.history||[])]}; });
+      if(!quiet) onToast(`"${p.name}" is active — monitor-only, so no approval needed`,"success");
+      setTimeout(pm2RequestTargets,0); return;
+    }
+    const approver = pm2Approver(_pm2.approvalPolicy.activation.approver, me);
+    const reqId = `sr-pm2-${p.id}-${Date.now()}`;
+    const isChange = !!p.draft;
+    requestStatusChange({id:reqId, kind:"pm2policy", targetId:p.id, name:isChange?`${p.name} (v${p.draft.version} change)`:p.name, requestedStatus:"Active", requestedBy:me, note:note||(isChange?"Change to an active policy":"New policy"), approver});
+    pushNotif({category:"Policy", type:"policy", event:"policy_review", title:`Policy approval requested · ${p.name}`, body:`${me} asks ${approver} to approve ${isChange?`v${p.draft.version} of`:""} "${p.name}"`, nav:"stewardship"});
+    updPol(id, x=> isChange ? addHist({...x, draft:{...x.draft, reqId}}, `v${x.draft.version} submitted to ${approver} — v${x.version} keeps running meanwhile`)
+                            : addHist({...x, status:"In review", reqId}, `Submitted to ${approver} for approval`));
+    if(!quiet) onToast(`Sent to ${approver} for approval`,"success");
   };
-  const activate = () => {
-    const fw = PM2_FW.find(f=>f.id===wiz.fwId);
-    const nextAdopted = {...st.adopted, [fw.id]:{owner:wiz.owner, at:pm2Today()}};
-    const nextFws = PM2_FW.filter(f=>nextAdopted[f.id]);
-    const ctl = {...st.ctl};
-    Object.entries(wiz.picks).forEach(([id,on])=>{
-      const shared = nextFws.some(f=>f.id!==fw.id&&pm2FwCtlIds(f).includes(id));
-      if(on) ctl[id]={on:true, params:wiz.params[id]};
-      else if(!shared) ctl[id]={...(ctl[id]||{}), on:false};
-    });
-    let requested = 0;
-    PM2_CONTROLS.filter(c=>c.kind==="enforce"&&ctl[c.id]?.on).forEach(c=>{
-      pm2TargetsFor(c.id,nextFws).forEach(t=>{
-        if(targetStatus(c.id,t.asset.name)!=="none") return;
-        const approver = t.asset.owner||"alex.rivera";
-        // Explicit id: the store's default ("er-"+Date.now()) collides when a batch is created in one tick.
-        addEnfApproval({id:`er-pm2-${c.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+c.id, policyName:`${fw.name} · ${c.name}`, ruleId:`pm2:${c.id}:${t.asset.name}`, action:c.verb, table:t.asset.name, approver, requestedBy:me});
-        pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`${me} asks ${approver} to approve "${c.verb}" for ${fw.name}`, nav:"stewardship"});
-        requested++;
-      });
-    });
-    pm2Set(s=>({...s, adopted:nextAdopted, ctl}));
-    const turnedOn = Object.values(wiz.picks).filter(Boolean).length;
-    onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${turnedOn} controls on${requested?`, ${requested} approval request${requested>1?"s":""} sent to table owners`:""}`,"success");
-    setWiz(null); setSelFw(fw.id); setTab("frameworks");
+  const decideReq = (r, ok) => {
+    srSet(prev=>prev.map(x=>x.id===r.id?{...x, status:ok?"approved":"rejected", decidedBy:me}:x));
+    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`${ok?"Approved":"Rejected"} · ${r.name}`, body:`${me} ${ok?"approved":"rejected"} ${r.requestedBy}'s request`, nav:"policymanager2"});
+    onToast(ok?"Approved":"Rejected — the requester is notified", ok?"success":"info");
   };
-  const removeFw = (fwId) => {
-    const nextAdopted = {...st.adopted}; delete nextAdopted[fwId];
-    const nextFws = PM2_FW.filter(f=>nextAdopted[f.id]);
-    const ctl = {...st.ctl};
-    pm2FwCtlIds(PM2_FW.find(f=>f.id===fwId)).forEach(id=>{ if(!nextFws.some(f=>pm2FwCtlIds(f).includes(id))) ctl[id]={...(ctl[id]||{}),on:false}; });
-    pm2Set(s=>({...s, adopted:nextAdopted, ctl}));
-    setSelFw(null); onToast("Framework removed — controls it shared with other frameworks keep running","info");
+  const decideEnf = (r, ok) => {
+    resolveEnfApproval(r.id, ok?"approved":"rejected");
+    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`Enforcement ${ok?"approved":"rejected"} · ${r.table}`, body:`${r.action} on ${r.table} — ${ok?"now running":"sent back to the policy owner"}`, nav:"policymanager2"});
+    onToast(ok?`${r.action} on ${r.table} is now running`:`${r.action} on ${r.table} rejected`, ok?"success":"info");
+  };
+  const requestException = (f, reason) => {
+    const named = ap.exceptions.approver==="policy owner" ? f.pol.owner : ap.exceptions.named;
+    const approver = pm2Approver(named, me);
+    const reqId = `sr-pm2x-${Date.now()}`;
+    requestStatusChange({id:reqId, kind:"pm2exception", targetId:f.key, name:`Exception · ${f.asset.name} · ${f.pol.name}`, requestedStatus:"Exception", requestedBy:me, note:reason, approver});
+    pushNotif({category:"Policy", type:"policy", title:`Exception requested · ${f.asset.name}`, body:`${me}: "${reason}"`, nav:"stewardship"});
+    pm2Set(s=>({...s, exceptions:{...s.exceptions, [f.key]:{status:"pending", reqId, reason, by:me, approver}}}));
+    setExcDraft(null); onToast(`Exception sent to ${approver}`,"success");
   };
   const saveAttest = () => {
     if(!attestDraft.evidence.trim()) return;
-    pm2Set(s=>({...s, attest:{...s.attest, [attestDraft.key]:{by:me, date:attestDraft.date||pm2Today(), evidence:attestDraft.evidence.trim()}}}));
+    pm2Set(s=>({...s, attest:{...s.attest, [attestDraft.fwId+":"+attestDraft.polId]:{by:me, date:pm2Today(), evidence:attestDraft.evidence.trim()}}}));
+    updPol(attestDraft.polId, p=>addHist(p, `Evidence recorded for ${pm2Fw(attestDraft.fwId).name}`));
     setAttestDraft(null); onToast("Evidence recorded","success");
   };
-  const setParam = (ctlId,k,v) => pm2Set(s=>({...s, ctl:{...s.ctl, [ctlId]:{...(s.ctl[ctlId]||{}), params:{...(s.ctl[ctlId]?.params||{}), [k]:v}}}}));
+  const runNow = p => {
+    const ev = evalOf(p);
+    pm2Set(s=>({...s, lastRun:{...s.lastRun, [p.id]:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}}));
+    pm2RequestTargets();
+    onToast(`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}, ${ev.targets.length} enforcement target${ev.targets.length===1?"":"s"}`,"success");
+  };
+  const setAp = (path, v) => pm2Set(s=>{ const a={...s.approvalPolicy}; const [k1,k2]=path; a[k1]= k2?{...a[k1],[k2]:v}:v; return {...s, approvalPolicy:a}; });
 
-  // ── small UI helpers ──
-  const Pill = ({c,children,solid}) => <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:solid?c:`${c}15`,color:solid?"#fff":c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{children}</span>;
-  const KindPill = ({k}) => <span title={PM2_KIND_META[k].hint}><Pill c={kindColor(k)}>{PM2_KIND_META[k].label}</Pill></span>;
-  const ClassChip = ({c}) => <Pill c={c==="ALL"?T.textSub:PM2_CLASS_META[c].color}>{c==="ALL"?"All classified data":PM2_CLASS_META[c].label}</Pill>;
-  const Ref = ({children,c}) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{children}</span>;
-  const secLabel = (t,extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"18px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
-  const paramInput = (p,val,onChange) => p.type==="enum"
-    ? <select value={val} onChange={e=>onChange(e.target.value)} style={{padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12}}>{p.opts.map(o=><option key={o}>{o}</option>)}</select>
-    : <input value={val} type={p.type==="number"?"number":"text"} onChange={e=>onChange(p.type==="number"?Number(e.target.value):e.target.value)} style={{width:p.type==="number"?80:200,padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"}}/>;
-  // Which other frameworks/articles a control also satisfies.
-  const crosswalk = (ctlId, exceptFw) => PM2_FW.flatMap(f=>f.arts.filter(a=>(a.c||[]).includes(ctlId)).map(a=>({fw:f, ref:a.ref}))).filter(x=>x.fw.id!==exceptFw);
-
-  const summary = [
-    {l:"Frameworks adopted", v:adoptedFws.length, c:T.accent},
-    {l:"Controls running", v:PM2_CONTROLS.filter(c=>st.ctl[c.id]?.on).length, c:T.green},
-    {l:"Open findings", v:allFindings.length, c:allFindings.length?T.rose:T.green},
-    {l:"Awaiting approval", v:pendingApprovals.length, c:pendingApprovals.length?T.amber:T.textMuted},
-    {l:"Evidence needed", v:evidenceNeeded.length, c:evidenceNeeded.length?T.violet:T.textMuted},
-  ];
-
-  // ═════ FRAMEWORK DETAIL ═════
-  const renderFwDetail = () => {
-    const fw = PM2_FW.find(f=>f.id===selFw); const m = regMeta(fw.id);
-    const adopted = !!st.adopted[fw.id]; const score = fwScore(fw); const tc = typeColor(fw.type);
-    const inArts = fw.arts.filter(a=>!a.out), outArts = fw.arts.filter(a=>a.out);
-    const counts = {}; inArts.forEach(a=>{ const s=artState(a,fw); counts[s]=(counts[s]||0)+1; });
-    const inScopeAssets = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers));
+  // ── small render helpers (plain functions — no remounting) ──
+  const pill = (c, text, title) => <span title={title} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${c}15`,color:c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{text}</span>;
+  const kindPill = k => pill(kindColor(k), PM2_KIND_META[k].label, PM2_KIND_META[k].hint);
+  const classChip = c => <span key={c}>{pill(c==="ALL"?T.textSub:PM2_CLASS_META[c].color, c==="ALL"?"All classified data":PM2_CLASS_META[c].label)}</span>;
+  const refTag = (text, c) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{text}</span>;
+  const secLabel = (t, extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"20px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
+  const selStyle = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12};
+  const inStyle  = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"};
+  const userSel = (v, on, opts) => <select value={v} onChange={e=>on(e.target.value)} style={selStyle}>{(opts||PM2_USERS).map(u=><option key={u} value={u}>{u}</option>)}</select>;
+  const card = (children, extra) => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",...extra}}>{children}</div>;
+  const scopePhrase = p => p.scopeBy==="suspect"
+    ? <>an asset that <b>looks like</b> {p.scope.includes("ALL")?"regulated":p.scope.map(c=>PM2_CLASS_META[c]?.label.toLowerCase()).join(" / ")} data but <b>isn't classified</b></>
+    : <>an asset holding {p.scope.length?p.scope.map((c,i)=><React.Fragment key={c}>{i>0&&" or "}<b>{c==="ALL"?"any classified data":PM2_CLASS_META[c]?.label.toLowerCase()}</b></React.Fragment>):<i>no data class yet</i>}</>;
+  const condText = c => { const F=PM2_FIELDS[c.f]; if(!F) return "?"; return F.type==="bool"||F.type==="presence" ? `${F.label} ${c.op}` : `${F.label} ${c.op} ${c.v}`; };
+  // A rule, read as a sentence: WHEN … AND … THEN …  (onChange makes the values editable in place)
+  const ruleView = (r, p, onChange) => {
+    const kw = t => <span style={{fontSize:10,fontWeight:800,color:T.textMuted,letterSpacing:"0.06em",marginRight:6}}>{t}</span>;
+    const chip = (content, i) => <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,padding:"2px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{content}</span>;
+    const setCond = (i, v) => onChange({...r, conds:r.conds.map((c,j)=>j===i?{...c,v}:c)});
+    const setAct  = (k, v) => onChange({...r, act:{...r.act, [k]:v}});
+    const a = r.act; const kind = PM2_ACTIONS[a.type]?.kind;
+    let then;
+    if(a.type==="flag") then = <>raise a finding{onChange?<> — <input value={a.msg||""} onChange={e=>setAct("msg",e.target.value)} style={{...inStyle,width:260}}/></>:a.msg?<> — <i>“{a.msg}”</i></>:null}</>;
+    else if(a.type==="mask") then = <>mask {a.cols==="sensitive"?"sensitive-category":"all in-scope"} columns as {onChange?<select value={a.style} onChange={e=>setAct("style",e.target.value)} style={selStyle}>{PM2_MASK_STYLES.map(s=><option key={s}>{s}</option>)}</select>:<b>{a.style}</b>}; unmasked for {onChange?<input value={a.unmasked||""} onChange={e=>setAct("unmasked",e.target.value)} style={{...inStyle,width:220}}/>:<b>{a.unmasked||"nobody"}</b>}</>;
+    else if(a.type==="dispose"){ const eff=p&&pm2EffectiveMonths(p,a); then = <>dispose of records {onChange?<input type="number" value={a.months} onChange={e=>setAct("months",Number(e.target.value))} style={{...inStyle,width:64}}/>:<b>{eff?eff.months:a.months}</b>} months after last use{eff&&!onChange&&<span style={{color:T.textMuted}}> — {eff.why}</span>}</>; }
+    else if(a.type==="retain"){ const eff=p&&pm2EffectiveYears(p,a); then = <>retain records for at least <b>{eff?eff.years:a.years}</b> years{eff&&<span style={{color:T.textMuted}}> — {eff.why}</span>}</>; }
+    else if(a.type==="hold") then = <>suspend retention and erasure until the hold is released</>;
+    else if(a.type==="evidence") then = <>require evidence: {onChange?<input value={a.what} onChange={e=>setAct("what",e.target.value)} style={{...inStyle,width:320}}/>:<b>{a.what}</b>}, reviewed every {onChange?<input type="number" value={a.every} onChange={e=>setAct("every",Number(e.target.value))} style={{...inStyle,width:56}}/>:a.every} months</>;
     return (
-      <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px"}}>
-        <button onClick={()=>setSelFw(null)} style={{background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:12}}>‹ All frameworks</button>
-        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"18px 20px",display:"flex",gap:18,alignItems:"flex-start"}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:20,fontWeight:800,color:T.text,letterSpacing:"-0.4px"}}>{fw.name}</span>
-              <Pill c={tc}>{fw.type}</Pill>{m.jurisdiction&&<Pill c={T.textSub}>{m.jurisdiction}</Pill>}
-            </div>
-            <div style={{fontSize:12.5,color:T.textSub,marginTop:4}}>{m.fullName}</div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
-              <span style={{fontSize:11,color:T.textMuted}}>Applies to</span>{fw.covers.map(c=><ClassChip key={c} c={c}/>)}
-              <span style={{fontSize:11,color:T.textMuted}}>· {inScopeAssets.length} assets in scope</span>
-            </div>
-            {adopted&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Adopted {st.adopted[fw.id].at} · owner <b style={{color:T.textSub}}>{st.adopted[fw.id].owner}</b></div>}
-          </div>
-          {adopted ? (
-            <div style={{width:210,flexShrink:0}}>
-              <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:28,fontWeight:800,color:scoreColor(score),fontFamily:"'Geist Mono',monospace"}}>{score}%</span><span style={{fontSize:11,color:T.textMuted}}>readiness</span></div>
-              <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"4px 0 6px"}}><div style={{width:`${score}%`,height:"100%",background:scoreColor(score)}}/></div>
-              <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{counts.met||0} of {inArts.length} in-scope articles met. Data-governance readiness — not a {fw.name} certification.</div>
-              <div style={{display:"flex",gap:6,marginTop:10}}><Btn small onClick={()=>startAdopt(fw.id,2)}>Manage controls</Btn><Btn small ghost onClick={()=>removeFw(fw.id)}>Remove</Btn></div>
-            </div>
-          ) : <Btn variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt {fw.name}</Btn>}
+      <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${kindColor(kind)}`,borderRadius:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.textSub}}>
+          {kw("WHEN")}<span>{p?scopePhrase(p):"an in-scope asset"}</span>
+          {(r.conds||[]).map((c,i)=>{ const F=PM2_FIELDS[c.f]; const editable = onChange && (F.type==="number"||F.type==="list"||F.type==="enum");
+            return <React.Fragment key={i}>{kw("AND")}{chip(editable
+              ? <>{F.label} {c.op} {F.type==="enum"?<select value={c.v} onChange={e=>setCond(i,e.target.value)} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>
+                                   :<input type={F.type==="number"?"number":"text"} value={c.v} onChange={e=>setCond(i,F.type==="number"?Number(e.target.value):e.target.value)} style={{...inStyle,width:F.type==="number"?64:190}}/>}</>
+              : condText(c), i)}</React.Fragment>; })}
         </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.text}}>{kw("THEN")}{kindPill(kind)}<span>{then}</span></div>
+      </div>
+    );
+  };
 
-        {adopted&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:14}}>
-          {["findings","pending","evidence","off","met"].filter(k=>counts[k]).map(k=><Pill key={k} c={ART_META[k].c}>{counts[k]} {ART_META[k].l.toLowerCase()}</Pill>)}
-        </div>}
+  const pad = {flex:1,overflowY:"auto",padding:"20px 28px 48px"};
+  const openPolicy = id => { setTab("policies"); setSelFw(null); setSelPol(id); };
+  const policyRow = (p, fw) => {
+    const h = polHealth(p, fw); const hc = ART_META[h.state]?.c||T.textMuted;
+    return (
+      <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+        <div style={{display:"flex",gap:4}}>{pm2Kinds(p).map(k=><span key={k}>{kindPill(k)}</span>)}</div>
+        <span onClick={()=>openPolicy(p.id)} style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:T.text,cursor:"pointer"}}>{p.name}{!p.template&&<span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}> · custom</span>}</span>
+        <span style={{fontSize:11,color:T.textMuted}}>owner <b style={{color:T.textSub}}>{p.owner}</b></span>
+        {pill(statusColor(p.status), p.status)}
+        <span style={{fontSize:11,fontWeight:600,color:hc,minWidth:130,textAlign:"right"}}>{p.status==="Active"?h.label:""}</span>
+      </div>
+    );
+  };
 
-        {secLabel(`Articles in EDG's scope (${inArts.length})`)}
-        {inArts.map((art,i)=>{
-          const key=fw.id+":"+i; const s = adopted?artState(art,fw):null; const open = openArt[key];
-          return (
-            <div key={key} style={{background:T.bgSurface,border:`1px solid ${s==="met"?T.green+"40":T.border}`,borderRadius:9,marginBottom:6}}>
-              <div onClick={()=>setOpenArt(o=>({...o,[key]:!o[key]}))} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",cursor:"pointer"}}>
-                <span style={{color:T.textMuted,fontSize:10,width:8}}>{open?"▾":"▸"}</span>
-                <Ref c={tc}>{art.ref}</Ref>
-                <span style={{flex:1,fontSize:12.5,color:T.text}}>{art.t}</span>
-                <div style={{display:"flex",gap:4}}>{[...new Set(art.c.map(id=>PM2_CTL[id].kind))].map(k=><KindPill key={k} k={k}/>)}</div>
-                {s&&<Pill c={ART_META[s].c}>{ART_META[s].l}</Pill>}
-              </div>
-              {open&&<div style={{borderTop:`1px solid ${T.border}`,padding:"8px 14px 12px 32px"}}>
-                {art.c.map(id=>{
-                  const c=PM2_CTL[id]; const h=adopted?ctlHealth(id,fw):null; const akey=fw.id+":"+id; const att=st.attest[akey];
-                  const hc = h?({met:T.green,findings:T.rose,pending:T.amber,evidence:T.violet,off:T.textMuted}[h.state]):T.textMuted;
-                  return (
-                    <div key={id} style={{padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <KindPill k={c.kind}/>
-                        <span onClick={()=>setCtlOpen(id)} style={{flex:1,fontSize:12.5,color:T.text,fontWeight:600,cursor:"pointer"}}>{c.name}</span>
-                        {h&&<span style={{fontSize:11,color:hc,fontWeight:600}}>{h.label}</span>}
-                        {adopted&&c.kind==="attest"&&!att&&<Btn small onClick={()=>setAttestDraft({key:akey,evidence:"",date:""})}>Add evidence</Btn>}
-                        {c.kind!=="attest"&&<button onClick={()=>setCtlOpen(id)} style={{fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer"}}>Details ›</button>}
-                      </div>
-                      {att&&<div style={{fontSize:11,color:T.textMuted,marginTop:4,fontStyle:"italic"}}>"{att.evidence}" — {att.by}, {att.date}</div>}
-                      {attestDraft&&attestDraft.key===akey&&(
-                        <div style={{marginTop:8,padding:10,background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}}>
-                          <textarea rows={2} value={attestDraft.evidence} onChange={e=>setAttestDraft(d=>({...d,evidence:e.target.value}))} placeholder={`How is this met for ${fw.name}, and where does the evidence live?`} style={{padding:"7px 9px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,fontFamily:"inherit",resize:"vertical",outline:"none"}}/>
-                          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn small ghost onClick={()=>setAttestDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={saveAttest}>Save evidence</Btn></div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>}
-            </div>
-          );
+  // ═════ FRAMEWORKS ═════
+  const renderFrameworks = () => {
+    const ql = q.toLowerCase();
+    const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(f=>!ql||[f.name,regMeta(f.id).fullName,regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql));
+    return (
+      <div style={pad}>
+        {card(<div style={{display:"flex",gap:18,flexWrap:"wrap"}}>
+          {[["1","Adopt a regulation","Its articles are listed in plain language, scoped to the data it covers."],["2","Keep the recommended policies","Each is a set of WHEN → THEN rules. Assign an owner and stewards."],["3","Approve","Policies go Active after approval; table owners approve anything that changes data."],["4","Run & prove","Monitors raise findings, enforcement runs through CDP, evidence is recorded per regulation."]].map(([n,t,d])=>(
+            <div key={n} style={{flex:"1 1 200px",display:"flex",gap:10}}>
+              <span style={{width:22,height:22,borderRadius:"50%",background:T.accent,color:"#fff",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{n}</span>
+              <div><div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{t}</div><div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{d}</div></div>
+            </div>))}
+        </div>)}
+        {secLabel(`Adopted (${adoptedFws.length})`)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+          {adoptedFws.map(fw=>{
+            const s=fwScore(fw); const idx=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
+            const cnt={}; idx.forEach(i=>{const k=artState(fw,i); cnt[k]=(cnt[k]||0)+1;});
+            return (
+              <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:15,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(typeColor(fw.type), fw.type)}
+                  <span style={{marginLeft:"auto",fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:scoreColor(s)}}>{s}%</span>
+                </div>
+                <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"8px 0"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
+                <div style={{fontSize:11.5,color:T.textSub}}>{cnt.met||0} of {idx.length} articles met · owner {st.adopted[fw.id].owner}</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>{ART_ORDER.filter(k=>k!=="met"&&cnt[k]).map(k=><span key={k}>{pill(ART_META[k].c, `${cnt[k]} · ${ART_META[k].l.toLowerCase()}`)}</span>)}</div>
+              </div>);
+          })}
+        </div>
+        {secLabel("Available", <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name or jurisdiction…" style={{...inStyle,marginLeft:"auto",textTransform:"none",letterSpacing:0,fontWeight:400,width:240}}/>)}
+        {["Privacy","Healthcare","Financial","Security"].map(g=>{
+          const list=avail.filter(f=>f.type===g); if(!list.length) return null;
+          return (<div key={g} style={{marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:typeColor(g),margin:"6px 0 8px"}}>{g}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
+              {list.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>a.c||[]))];
+                const reused=tids.filter(t=>livePols.some(p=>p.template===t)).length;
+                return (<div key={fw.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
+                  <div style={{display:"flex",alignItems:"baseline",gap:8}}><span onClick={()=>setSelFw(fw.id)} style={{fontSize:14.5,fontWeight:800,color:T.text,cursor:"pointer"}}>{fw.name}</span><span style={{fontSize:11,color:T.textMuted}}>{m.jurisdiction}</span></div>
+                  <div style={{fontSize:11.5,color:T.textSub,minHeight:30}}>{m.fullName}</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{fw.covers.map(classChip)}</div>
+                  <div style={{fontSize:11,color:T.textMuted}}>{fw.arts.filter(a=>!a.out).length} articles EDG can act on · {fw.arts.filter(a=>a.out).length} outside · {tids.length} recommended policies</div>
+                  {reused>0&&<div style={{fontSize:11,color:T.green}}>{reused} of those policies already exist — they'd simply count for {fw.name} too</div>}
+                  <div style={{display:"flex",gap:6,marginTop:4}}><Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt</Btn><Btn small ghost onClick={()=>setSelFw(fw.id)}>Read the articles</Btn></div>
+                </div>); })}
+            </div></div>);
         })}
-        {outArts.length>0&&<>
-          {secLabel(`Outside EDG (${outArts.length}) — never counted in readiness`)}
-          {outArts.map((a,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",border:`1px dashed ${T.border}`,borderRadius:9,marginBottom:6,background:T.bgElevated}}>
-              <Ref>{a.ref}</Ref><span style={{flex:1,fontSize:12.5,color:T.textSub}}>{a.t}</span><span style={{fontSize:11,color:T.textMuted}}>Belongs to: {a.out}</span>
-            </div>
-          ))}
+      </div>
+    );
+  };
+
+  // ═════ FRAMEWORK DETAIL — article by article ═════
+  const renderFwDetail = () => {
+    const fw = pm2Fw(selFw); const m = regMeta(fw.id); const adopted = !!st.adopted[fw.id]; const s = fwScore(fw);
+    const idx = fw.arts.map((a,i)=>i); const inIdx = idx.filter(i=>!fw.arts[i].out); const outIdx = idx.filter(i=>fw.arts[i].out);
+    return (
+      <div style={pad}>
+        <button onClick={()=>setSelFw(null)} style={{background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:12}}>‹ All frameworks</button>
+        {card(<div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 360px",minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(typeColor(fw.type),fw.type)}{m.jurisdiction&&pill(T.textSub,m.jurisdiction)}</div>
+            <div style={{fontSize:12.5,color:T.textSub,marginTop:4}}>{m.fullName}{m.penalty?` · penalties up to ${m.penalty}`:""}</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,alignItems:"center"}}><span style={{fontSize:11,color:T.textMuted}}>Applies to</span>{fw.covers.map(classChip)}<span style={{fontSize:11,color:T.textMuted}}>· {PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)).length} assets in scope</span></div>
+            {adopted&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Adopted {st.adopted[fw.id].at} · framework owner <b style={{color:T.textSub}}>{st.adopted[fw.id].owner}</b></div>}
+          </div>
+          {adopted ? <div style={{width:220}}>
+            <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:28,fontWeight:800,color:scoreColor(s),fontFamily:"'Geist Mono',monospace"}}>{s}%</span><span style={{fontSize:11,color:T.textMuted}}>readiness</span></div>
+            <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"4px 0 6px"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
+            <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{inIdx.filter(i=>artState(fw,i)==="met").length} of {inIdx.length} articles met. Data-governance readiness — not a {fw.name} certification.</div>
+            <div style={{marginTop:10}}><Btn small onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn></div>
+          </div> : <Btn variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt {fw.name}</Btn>}
+        </div>)}
+        {card(<div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11.5,color:T.textSub}}>
+          <b style={{color:T.text}}>How to read this page</b>
+          <span>Each article says what the law asks. Under it, the <b>policies</b> that satisfy it, and each policy's <b>rules</b>. An article is <span style={{color:T.green,fontWeight:700}}>met</span> when every policy under it is active, has no open findings, runs on every table it targets, and has its evidence.</span>
+        </div>,{marginTop:10,background:T.bgElevated})}
+        {secLabel(`Articles EDG can act on (${inIdx.length})`)}
+        {inIdx.map(i=>{
+          const art=fw.arts[i]; const stt=adopted?artState(fw,i):null; const pols=polsForArt(fw,i);
+          const recs=(art.c||[]).filter(t=>!pols.some(p=>p.template===t));
+          return (
+            <div key={i} style={{background:T.bgSurface,border:`1px solid ${stt==="met"?T.green+"50":T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                {refTag(art.ref, typeColor(fw.type))}<span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{art.t}</span>
+                {stt&&pill(ART_META[stt].c, ART_META[stt].l)}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"110px 1fr",gap:"6px 10px",marginTop:8,fontSize:12}}>
+                <span style={{color:T.textMuted,fontWeight:600}}>The law asks</span><span style={{color:T.text}}>{art.ask}</span>
+                <span style={{color:T.textMuted,fontWeight:600}}>Satisfied by</span>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {pols.map(p=>{
+                    const h=polHealth(p,fw); const ev=evalOf(p);
+                    return (<div key={p.id}>
+                      {policyRow(p,fw)}
+                      <div style={{margin:"4px 0 0 10px",fontSize:11.5,color:T.textSub}}>{p.purpose}</div>
+                      {adopted&&p.status==="Active"&&ev.evidence.length>0&&(()=>{ const a=st.attest[fw.id+":"+p.id]; const open=attestDraft&&attestDraft.fwId===fw.id&&attestDraft.polId===p.id;
+                        return <div style={{margin:"6px 0 0 10px"}}>
+                          {a?<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Evidence for {fw.name}: “{a.evidence}” — {a.by}, {a.date}</div>
+                            :!open&&<Btn small onClick={()=>setAttestDraft({fwId:fw.id,polId:p.id,evidence:""})}>Add {fw.name} evidence</Btn>}
+                          {open&&<div style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:4}}>
+                            <textarea rows={2} value={attestDraft.evidence} onChange={e=>setAttestDraft(d=>({...d,evidence:e.target.value}))} placeholder={`${ev.evidence[0].act.what} — where does it live?`} style={{...inStyle,flex:1,fontFamily:"inherit",resize:"vertical"}}/>
+                            <Btn small ghost onClick={()=>setAttestDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={saveAttest}>Save</Btn></div>}
+                        </div>; })()}
+                      {h.state==="findings"&&<div style={{margin:"4px 0 0 10px"}}><button onClick={()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}} style={{fontSize:11,color:T.rose,background:"none",border:"none",cursor:"pointer",padding:0}}>See the findings ›</button></div>}
+                    </div>);
+                  })}
+                  {recs.map(t=><div key={t} style={{fontSize:11.5,color:T.textMuted,padding:"6px 10px",border:`1px dashed ${T.border}`,borderRadius:8}}>Recommended: <b style={{color:T.textSub}}>{PM2_TPL[t].name}</b> — not created{adopted?" (switched off when adopted)":""}</div>)}
+                  {!pols.length&&!recs.length&&<span style={{color:T.rose}}>Nothing covers this article.</span>}
+                </div>
+              </div>
+            </div>);
+        })}
+        {outIdx.length>0&&<>{secLabel(`Outside EDG (${outIdx.length}) — never counted in readiness`)}
+          {outIdx.map(i=>{ const a=fw.arts[i]; return (
+            <div key={i} style={{padding:"10px 14px",border:`1px dashed ${T.border}`,borderRadius:10,marginBottom:6,background:T.bgElevated}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(a.ref)}<span style={{flex:1,fontSize:12.5,fontWeight:600,color:T.textSub}}>{a.t}</span><span style={{fontSize:11,color:T.textMuted}}>Belongs to: {a.out}</span></div>
+              <div style={{fontSize:11.5,color:T.textMuted,marginTop:4}}>{a.ask}</div>
+            </div>); })}
         </>}
       </div>
     );
   };
 
-  // ═════ FRAMEWORKS TAB ═════
-  const renderFrameworks = () => {
-    const ql = q.toLowerCase();
-    const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(f=>!ql||f.name.toLowerCase().includes(ql)||(regMeta(f.id).fullName||"").toLowerCase().includes(ql)||(regMeta(f.id).jurisdiction||"").toLowerCase().includes(ql));
-    const groups = ["Privacy","Healthcare","Financial","Security"];
+  // ═════ POLICIES — list ═════
+  const renderPolicyList = () => {
+    const F = ["All","Active","In review","Draft","Rejected","Retired"];
+    const rows = st.policies.filter(p=>polFilter==="All"?p.status!=="Retired":p.status===polFilter);
     return (
-      <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px"}}>
-        <div style={{fontSize:13,color:T.textSub,maxWidth:760,lineHeight:1.6}}>Start from the regulation. Adopting one maps its articles onto EDG's control library, scopes them to the data it covers, and shows what EDG will <b style={{color:T.green}}>enforce</b>, <b style={{color:T.blue}}>monitor</b> and need you to <b style={{color:T.violet}}>attest</b>. Controls are shared — adopting a second regulation reuses what's already running.</div>
-        {secLabel(`Adopted (${adoptedFws.length})`)}
-        {adoptedFws.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Nothing adopted yet.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-          {adoptedFws.map(fw=>{
-            const s=fwScore(fw); const ins=fw.arts.filter(a=>!a.out);
-            const bad=ins.filter(a=>artState(a,fw)!=="met");
-            const nf=ins.filter(a=>artState(a,fw)==="findings").length, np=ins.filter(a=>artState(a,fw)==="pending").length, ne=ins.filter(a=>artState(a,fw)==="evidence").length;
-            return (
-              <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:15,fontWeight:800,color:T.text}}>{fw.name}</span><Pill c={typeColor(fw.type)}>{fw.type}</Pill>
-                  <span style={{marginLeft:"auto",fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:scoreColor(s)}}>{s}%</span>
-                </div>
-                <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"8px 0"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
-                <div style={{fontSize:11.5,color:T.textSub}}>{ins.length-bad.length} of {ins.length} articles met</div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>
-                  {nf>0&&<Pill c={T.rose}>{nf} with findings</Pill>}{np>0&&<Pill c={T.amber}>{np} awaiting approval</Pill>}{ne>0&&<Pill c={T.violet}>{ne} need evidence</Pill>}
-                  {!bad.length&&<Pill c={T.green}>All in-scope articles met</Pill>}
-                </div>
-              </div>
-            );
-          })}
+      <div style={pad}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:13,color:T.textSub,flex:"1 1 400px"}}>A policy is your commitment that satisfies one or more articles. It has an owner who answers for it, stewards who work it, and rules that run.</div>
+          <SegTabs tabs={F.map(f=>({key:f,label:f,count:f==="All"?st.policies.filter(p=>p.status!=="Retired").length:st.policies.filter(p=>p.status===f).length}))} active={polFilter} onChange={setPolFilter}/>
+          <Btn variant="primary" icon={Ic.plus(12)} onClick={()=>openEditor(null)}>New policy</Btn>
         </div>
-        {secLabel("Available frameworks", <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name or jurisdiction…" style={{marginLeft:"auto",textTransform:"none",letterSpacing:0,fontWeight:400,width:240,padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none"}}/>)}
-        {groups.map(g=>{
-          const list = avail.filter(f=>f.type===g); if(!list.length) return null;
-          return (
-            <div key={g} style={{marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:700,color:typeColor(g),margin:"6px 0 8px"}}>{g}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-                {list.map(fw=>{
-                  const m=regMeta(fw.id); const mix=fwMix(fw);
-                  const reused = pm2FwCtlIds(fw).filter(id=>st.ctl[id]?.on&&PM2_CTL[id].kind!=="attest").length;
-                  return (
-                    <div key={fw.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span onClick={()=>setSelFw(fw.id)} style={{fontSize:14.5,fontWeight:800,color:T.text,cursor:"pointer"}}>{fw.name}</span>
-                        <span style={{fontSize:11,color:T.textMuted}}>{m.jurisdiction}</span>
-                      </div>
-                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.4,minHeight:32}}>{m.fullName}</div>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{fw.covers.map(c=><ClassChip key={c} c={c}/>)}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>
-                        <b style={{color:T.green}}>{mix.enforce}</b> enforce · <b style={{color:T.blue}}>{mix.monitor}</b> monitor · <b style={{color:T.violet}}>{mix.attest}</b> attest · {mix.outside} outside EDG
-                      </div>
-                      {reused>0&&<div style={{fontSize:11,color:T.green}}>{reused} of its controls are already running</div>}
-                      <div style={{display:"flex",gap:6,marginTop:4}}><Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt</Btn><Btn small ghost onClick={()=>setSelFw(fw.id)}>View articles</Btn></div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"minmax(220px,2fr) 150px 110px 150px minmax(160px,1.4fr) 170px",gap:10,padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`}}>
+            <span>Policy</span><span>Does</span><span>Status</span><span>Owner · stewards</span><span>Satisfies</span><span>Now</span>
+          </div>
+          {rows.length===0&&<div style={{padding:30,textAlign:"center",fontSize:12.5,color:T.textMuted}}>No policies here.</div>}
+          {rows.map(p=>{ const h=polHealth(p); const fws=pm2LinkedFws(p);
+            return (
+              <div key={p.id} onClick={()=>setSelPol(p.id)} style={{display:"grid",gridTemplateColumns:"minmax(220px,2fr) 150px 110px 150px minmax(160px,1.4fr) 170px",gap:10,padding:"11px 14px",borderTop:`1px solid ${T.border}`,cursor:"pointer",alignItems:"center"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{p.template?"From template":"Custom"} · v{p.version}{p.draft?` · v${p.draft.version} in review`:""}</div></div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm2Kinds(p).map(k=><span key={k}>{kindPill(k)}</span>)}</div>
+                <div>{pill(statusColor(p.status),p.status)}</div>
+                <div style={{fontSize:11.5,color:T.textSub}}><b>{p.owner}</b><div style={{fontSize:10.5,color:T.textMuted}}>{(p.stewards||[]).join(", ")||"no steward"}</div></div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{fws.map(f=><span key={f.id}>{refTag(`${f.name} · ${p.articles.filter(x=>x.fw===f.id).length}`)}</span>)}{!fws.length&&<span style={{fontSize:11,color:T.textMuted}}>No article yet</span>}</div>
+                <span style={{fontSize:11.5,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{h.label}</span>
+              </div>); })}
+        </div>
       </div>
     );
   };
 
-  // ═════ CONTROLS TAB ═════
-  const renderControls = () => (
-    <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px"}}>
-      <div style={{fontSize:13,color:T.textSub,maxWidth:760,lineHeight:1.6}}>One control, many regulations. This is everything EDG is running on your behalf, and every article each one satisfies.</div>
-      {["enforce","monitor","attest"].map(k=>{
-        const list = PM2_CONTROLS.filter(c=>c.kind===k&&st.ctl[c.id]?.on);
-        return (
-          <div key={k}>
-            {secLabel(`${PM2_KIND_META[k].label} (${list.length})`, <span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— {PM2_KIND_META[k].hint}</span>)}
-            {list.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>None yet — adopt a framework.</div>}
-            {list.map(c=>{
-              const refs = adoptedFws.flatMap(f=>f.arts.filter(a=>(a.c||[]).includes(c.id)).map(a=>({fw:f.name,ref:a.ref})));
-              let status;
-              if(k==="monitor"){ const n=allFindings.filter(f=>f.ctlId===c.id).length; status=<span style={{fontSize:11.5,fontWeight:600,color:n?T.rose:T.green}}>{n?`${n} finding${n>1?"s":""}`:"Passing"}</span>; }
-              else if(k==="enforce"){ const tg=pm2TargetsFor(c.id,adoptedFws); const p=tg.filter(t=>targetStatus(c.id,t.asset.name)!=="approved").length; status=<span style={{fontSize:11.5,fontWeight:600,color:p?T.amber:T.green}}>{p?`${p} of ${tg.length} awaiting approval`:`Running on ${tg.length}`}</span>; }
-              else { const need=adoptedFws.filter(f=>pm2FwCtlIds(f).includes(c.id)&&!st.attest[f.id+":"+c.id]).length; status=<span style={{fontSize:11.5,fontWeight:600,color:need?T.violet:T.green}}>{need?`Evidence needed for ${need}`:"Evidenced"}</span>; }
-              return (
-                <div key={c.id} onClick={()=>setCtlOpen(c.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:6,cursor:"pointer"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{c.name}</div>
-                    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{refs.map((r,i)=><Ref key={i}>{r.fw} {r.ref}</Ref>)}</div>
-                  </div>
-                  {status}<span style={{color:T.textMuted}}>›</span>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  // ═════ FINDINGS TAB ═════
-  const renderFindings = () => {
-    const rows = allFindings.filter(f=>findFilter==="all"||f.refs.some(r=>r.fw===findFilter));
+  // ═════ POLICY DETAIL ═════
+  const renderPolicy = () => {
+    const p = st.policies.find(x=>x.id===selPol); if(!p) return null;
+    const ev = evalOf(p); const h = polHealth(p); const pr = pendingReqOf(p);
+    const myReqs = statusReqs.filter(r=>r.kind==="pm2policy"&&r.targetId===p.id);
+    const kinds = pm2Kinds(p);
     return (
-      <div style={{flex:1,overflowY:"auto",padding:"20px 28px 40px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-          <div style={{fontSize:13,color:T.textSub,flex:1}}>What the monitors found. One finding can break several articles at once — fix it once.</div>
-          <select value={findFilter} onChange={e=>setFindFilter(e.target.value)} style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12}}>
-            <option value="all">All frameworks</option>{adoptedFws.map(f=><option key={f.id} value={f.name}>{f.name}</option>)}
-          </select>
-        </div>
-        {rows.length===0?<div style={{padding:40,textAlign:"center",color:T.textMuted,fontSize:13}}>No open findings.</div>:
-        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-          {rows.map((f,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-              <div style={{width:170,flexShrink:0}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{f.asset.name}</div>
-                <div style={{fontSize:10.5,color:T.textMuted}}>{f.asset.service} · {f.asset.domain} · {f.asset.owner||"no owner"}</div>
-              </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12.5,color:T.text}}>{f.issue}</div>
-                <div onClick={()=>setCtlOpen(f.ctlId)} style={{fontSize:11,color:T.accent,cursor:"pointer",marginTop:2}}>{PM2_CTL[f.ctlId].name}</div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><Ref key={j} c={T.rose}>{r.fw} {r.ref}</Ref>)}</div>
-              </div>
-              <Btn small ghost onClick={()=>{ pushNotif({category:"Policy",type:"policy",event:"policy_violation",asset:f.asset.name,title:`Compliance finding · ${f.asset.name}`,body:`${f.issue} — breaks ${f.refs.map(r=>r.fw+" "+r.ref).join(", ")}`,nav:"policymanager2"}); onToast(`Sent to ${f.asset.owner||"the domain admin"}`,"success"); }}>Notify owner</Btn>
+      <div style={pad}>
+        <button onClick={()=>setSelPol(null)} style={{background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:12}}>‹ All policies</button>
+        {card(<div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 380px",minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:19,fontWeight:800,color:T.text}}>{p.name}</span>{pill(statusColor(p.status),p.status)}<span style={{fontSize:11,color:T.textMuted}}>v{p.version} · {p.template?`from the "${PM2_TPL[p.template].name}" template`:"custom policy"}</span></div>
+            <div style={{fontSize:12.5,color:T.textSub,marginTop:6,lineHeight:1.55}}>{p.purpose}</div>
+            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{kinds.map(k=><span key={k}>{kindPill(k)}</span>)}<span style={{fontSize:11,color:T.textMuted}}>{kinds.includes("enforce")?"Changes data — needs policy approval and each table owner's approval.":kinds.includes("monitor")?"Changes no data — reports findings only.":"Evidence only."}</span></div>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {canEdit(p)&&p.status!=="Retired"&&!p.draft&&p.status!=="In review"&&<Btn small onClick={()=>openEditor(p)}>Edit</Btn>}
+            {(p.status==="Draft"||p.status==="Rejected")&&(canSubmit(p)?<Btn small variant="primary" onClick={()=>submitPolicy(p.id)}>Submit for approval</Btn>:<span style={{fontSize:11,color:T.textMuted,alignSelf:"center"}}>Only the owner ({p.owner}) submits</span>)}
+            {p.status==="Active"&&<Btn small onClick={()=>runNow(p)}>Run now</Btn>}
+            {p.status==="Active"&&canSubmit(p)&&<Btn small ghost onClick={()=>{updPol(p.id,x=>addHist({...x,status:"Retired"},"Retired")); onToast("Policy retired — the articles it covered now read 'No policy'","info");}}>Retire</Btn>}
+          </div>
+        </div>)}
+        {pr&&card(<div style={{fontSize:12,color:T.text}}>{p.draft?<>Version {p.draft.version} is <b>in review with {pr.approver}</b>. Version {p.version} keeps running until it's approved.</>:<>Waiting for <b>{pr.approver}</b> to approve. Nothing runs until then.</>}
+          {canDecide(pr)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></span>}</div>,{marginTop:10,borderColor:T.amber+"60",background:`${T.amber}0c`})}
+        {p.status==="Rejected"&&card(<div style={{fontSize:12,color:T.text}}>Rejected. Edit it and submit again, or retire it.</div>,{marginTop:10,borderColor:T.rose+"50"})}
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:10,marginTop:10}}>
+          {card(<>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Ownership</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:12,color:T.textSub,width:70}}>Owner</span>
+              {(isAdmin||p.owner===me)?userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); onToast(`${v} now owns this policy`,"success");}):<b style={{fontSize:12.5,color:T.text}}>{p.owner}</b>}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:12,color:T.textSub,width:70}}>Stewards</span>
+              {(p.stewards||[]).map(s=><span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{s}{canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==s)},`Removed steward ${s}`))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0}}>×</button>}</span>)}
+              {canSubmit(p)&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`));}} style={selStyle}><option value="">+ add</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}
             </div>
-          ))}
+            <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.55}}>The <b>owner</b> answers for the policy: submits it, changes it, retires it. <b>Stewards</b> edit drafts and work the findings. Approval comes from <b>{ap.activation.approver}</b> (Approval policies).</div>
+          </>)}
+          {card(<>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Scope</div>
+            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{p.scope.map(classChip)}</div>
+            <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{p.scopeBy==="suspect"?"Looks at assets that seem to hold this data but aren't classified.":`Applies to every asset classified with ${p.scope.length>1?"these classes":"this class"} — ${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p)).length} assets today.`}</div>
+            {st.lastRun[p.id]&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Last run {st.lastRun[p.id]}</div>}
+          </>)}
+        </div>
+
+        {secLabel(`Rules (${p.rules.length})`)}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{p.rules.map(r=><div key={r.id}>{ruleView(r,p)}</div>)}</div>
+
+        {secLabel(`Satisfies (${p.articles.length} article${p.articles.length===1?"":"s"})`)}
+        {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not mapped to any article yet — edit the policy to map it.</div>}
+        {artsOfPol(p).map((x,i)=>(
+          <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
+            <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:100,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
+            <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
+            {!st.adopted[x.fw.id]&&<span style={{fontSize:10.5,color:T.textMuted}}>framework not adopted</span>}
+          </div>))}
+
+        {p.status==="Active"&&ev.targets.length>0&&<>{secLabel(`Enforcement (${ev.targets.length} table${ev.targets.length>1?"s":""})`, <span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— each table owner approves before CDP acts</span>)}
+          {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.asset.name); const r=enfReqs.filter(x=>x.policyId==="pm2:"+p.id&&x.table===t.asset.name).slice(-1)[0];
+            return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
+              {pill(T.green, PM2_ACTIONS[t.rule.act.type].verb)}
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.detail}</div></div>
+              <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
+              {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${r?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
+              {ts==="pending"&&r&&canDecide(r)&&<><Btn small variant="primary" onClick={()=>decideEnf(r,true)}>Approve</Btn><Btn small ghost onClick={()=>decideEnf(r,false)}>Reject</Btn></>}
+            </div>); })}
+        </>}
+        {p.status==="Active"&&kinds.includes("monitor")&&<>{secLabel(`Findings (${ev.findings.length})`)}
+          {ev.findings.length===0?<div style={{fontSize:12,color:T.green}}>Nothing found — passing.</div>:ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfPol(p).filter(x=>pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}
+        </>}
+        {p.status==="Active"&&ev.evidence.length>0&&<>{secLabel("Evidence — recorded per regulation")}
+          {pm2LinkedFws(p).map(f=>{ const a=st.attest[f.id+":"+p.id]; return (
+            <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.text,width:110}}>{f.name}</span>
+              <span style={{flex:1,fontSize:11.5,color:a?T.textSub:T.textMuted,fontStyle:a?"italic":"normal"}}>{a?`“${a.evidence}” — ${a.by}, ${a.date}`:ev.evidence[0].act.what}</span>
+              {a?pill(T.green,"Evidenced"):<Btn small onClick={()=>{setSelFw(f.id);setTab("frameworks");setAttestDraft({fwId:f.id,polId:p.id,evidence:""});}}>Add evidence</Btn>}
+            </div>); })}
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>A GDPR impact assessment isn't a HIPAA risk analysis, so each regulation needs its own evidence.</div>
+        </>}
+
+        {secLabel("Approval & history")}
+        {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:T.amber, r.status)}<span>{r.requestedBy} → {r.approver}: “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
+        {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
+      </div>
+    );
+  };
+
+  // ═════ FINDINGS ═════
+  const findingRow = (f, i, compact) => {
+    const open = excDraft&&excDraft.key===f.key; const e = f.exc;
+    return (
+      <div key={f.key+i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none",opacity:e?.status==="accepted"?.6:1}}>
+        <div style={{width:170,flexShrink:0}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{f.asset.name}</div>
+          <div style={{fontSize:10.5,color:T.textMuted}}>{f.asset.service} · {f.asset.domain} · owner {f.asset.owner||"none"}</div>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12.5,color:T.text}}>{f.msg}</div>
+          {!compact&&<div onClick={()=>openPolicy(f.pol.id)} style={{fontSize:11,color:T.accent,cursor:"pointer",marginTop:2}}>{f.pol.name} · steward {(f.pol.stewards||[])[0]||f.pol.owner}</div>}
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`, T.rose)}</span>)}</div>
+          {e&&<div style={{fontSize:11,marginTop:5,color:e.status==="accepted"?T.green:e.status==="rejected"?T.rose:T.amber}}>{e.status==="accepted"?`Exception accepted until ${e.until} by ${e.decidedBy}`:e.status==="rejected"?`Exception rejected by ${e.decidedBy}`:`Exception requested — waiting on ${e.approver}`} · “{e.reason}”</div>}
+          {open&&<div style={{display:"flex",gap:8,marginTop:8}}>
+            <input value={excDraft.reason} onChange={e2=>setExcDraft(d=>({...d,reason:e2.target.value}))} placeholder="Why is this acceptable, and what compensates for it?" style={{...inStyle,flex:1}}/>
+            <Btn small ghost onClick={()=>setExcDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>excDraft.reason.trim()&&requestException(f,excDraft.reason.trim())}>Send</Btn></div>}
+        </div>
+        {!open&&(!e||e.status==="rejected")&&<div style={{display:"flex",gap:6,flexShrink:0}}>
+          <Btn small ghost onClick={()=>{ const s=(f.pol.stewards||[])[0]||f.pol.owner; pushNotif({category:"Policy",type:"policy",event:"policy_violation",asset:f.asset.name,title:`Finding assigned · ${f.asset.name}`,body:`${f.msg} — ${f.refs.map(r=>r.fw+" "+r.ref).join(", ")}`,nav:"policymanager2"}); onToast(`Assigned to ${s}`,"success"); }}>Assign to steward</Btn>
+          <Btn small ghost onClick={()=>setExcDraft({key:f.key,reason:""})}>Request exception</Btn>
         </div>}
       </div>
     );
   };
-
-  // ═════ CONTROL DRAWER ═════
-  const renderCtlDrawer = () => {
-    const c = PM2_CTL[ctlOpen]; const s = st.ctl[c.id]; const on = s?.on;
-    const users = adoptedFws.filter(f=>pm2FwCtlIds(f).includes(c.id));
-    const scope = pm2ScopeFor(c.id, users);
-    const targets = c.kind==="enforce"?pm2TargetsFor(c.id,adoptedFws):[];
-    const findings = allFindings.filter(f=>f.ctlId===c.id);
-    const eff = c.id==="C-RET"&&on ? pm2EffectiveRetention(users, Number(s.params?.months||36)) : null;
-    const recs = c.id==="C-RETREC" ? pm2EffectiveRecords(users) : [];
-    const stc = {approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted};
+  const renderFindings = () => {
+    const rows = allFindings.filter(f=>findFilter==="all"||f.refs.some(r=>r.fw===findFilter));
     return (
-      <>
-        <div onClick={()=>setCtlOpen(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:300}}/>
-        <div style={{position:"fixed",top:0,right:0,bottom:0,width:560,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:301,display:"flex",flexDirection:"column",boxShadow:"-8px 0 30px rgba(0,0,0,.2)"}}>
-          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:10}}>
-            <div style={{flex:1}}><div style={{display:"flex",gap:6,marginBottom:6}}><KindPill k={c.kind}/>{c.verb&&<Pill c={T.textSub}>CDP · {c.verb}</Pill>}{!on&&<Pill c={T.textMuted}>Not adopted</Pill>}</div>
-              <div style={{fontSize:15,fontWeight:700,color:T.text}}>{c.name}</div></div>
-            <button onClick={()=>setCtlOpen(null)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(14)}</button>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"4px 20px 24px"}}>
-            <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginTop:12}}>{c.what}</div>
-            {scope.length>0&&<>{secLabel("Scope")}<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{scope.map(x=><ClassChip key={x} c={x}/>)}</div></>}
-            {on&&(c.params||[]).length>0&&<>{secLabel("Settings")}
-              {c.params.map(p=><div key={p.k} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><span style={{fontSize:12,color:T.textSub,width:170}}>{p.label}</span>{paramInput(p,s.params?.[p.k]??p.def,v=>setParam(c.id,p.k,v))}</div>)}
-            </>}
-            {eff&&<div style={{fontSize:11.5,color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"8px 10px",marginTop:4}}>Effective: dispose after <b>{eff.months} months</b> — {eff.by}. Records also under a mandated minimum keep the longer period (GDPR Art. 17(3)(b) — legal obligation). A legal hold suspends both.</div>}
-            {c.id==="C-RETREC"&&<>{secLabel("Minimum retention — strictest wins")}
-              {recs.length===0?<div style={{fontSize:12,color:T.textMuted}}>No adopted framework sets a number; you define the period.</div>:
-               recs.map((r,i)=><div key={r.fw} style={{fontSize:12,color:i===0?T.text:T.textMuted,marginBottom:4}}>{i===0?"▶ ":""}{r.fw}: {r.y} year{r.y>1?"s":""}{i===0?" — applied":" — covered by the longer period"}</div>)}
-            </>}
-            {secLabel("Satisfies")}
-            {crosswalk(c.id).map((x,i)=>{ const ad=!!st.adopted[x.fw.id]; return (
-              <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,opacity:ad?1:.55}}>
-                <span style={{fontSize:12,fontWeight:700,color:ad?T.text:T.textMuted,width:110}}>{x.fw.name}</span><Ref>{x.ref}</Ref>
-                <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{x.fw.arts.find(a=>a.ref===x.ref&&(a.c||[]).includes(c.id))?.t}</span>
-                {ad?<Pill c={T.green}>Adopted</Pill>:<span style={{fontSize:10.5,color:T.textMuted}}>would also count</span>}
-              </div>); })}
-            {c.kind==="enforce"&&on&&<>{secLabel(`Execution (${targets.length} table${targets.length===1?"":"s"})`)}
-              {targets.length===0&&<div style={{fontSize:12,color:T.textMuted}}>No tables in scope yet.</div>}
-              {targets.map(t=>{ const ts=targetStatus(c.id,t.asset.name); return (
-                <div key={t.asset.name} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.detail}</div></div>
-                  <span style={{fontSize:11,color:T.textMuted}}>{t.asset.owner||"no owner"}</span>
-                  <Pill c={stc[ts]}>{ts==="approved"?"Running":ts==="pending"?"Awaiting owner":ts==="rejected"?"Rejected":"Not requested"}</Pill>
-                </div>); })}
-              {targets.some(t=>targetStatus(c.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Owners approve from their Workspace inbox. Nothing executes until they do.</div>}
-            </>}
-            {c.kind==="monitor"&&on&&<>{secLabel(`Findings (${findings.length})`)}
-              {findings.length===0?<div style={{fontSize:12,color:T.green}}>Passing across every adopted framework.</div>:
-               findings.map((f,i)=><div key={i} style={{padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{f.asset.name}</div><div style={{fontSize:11.5,color:T.textSub}}>{f.issue}</div></div>)}
-            </>}
-            {c.kind==="attest"&&<>{secLabel("Evidence — recorded per framework")}
-              {users.length===0&&<div style={{fontSize:12,color:T.textMuted}}>No adopted framework uses this control.</div>}
-              {users.map(f=>{ const a=st.attest[f.id+":"+c.id]; return (
-                <div key={f.id} style={{padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>{f.name}</span>{a?<Pill c={T.green}>Attested</Pill>:<Pill c={T.violet}>Needs evidence</Pill>}</div>
-                  {a&&<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic",marginTop:3}}>"{a.evidence}" — {a.by}, {a.date}</div>}
-                </div>); })}
-              <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Evidence differs by regulation (a GDPR DPIA isn't a HIPAA risk analysis), so it isn't shared across frameworks. Add it from the framework's page.</div>
-            </>}
-          </div>
+      <div style={pad}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+          <div style={{fontSize:13,color:T.textSub,flex:1}}>What the monitoring rules found, from active policies only. One finding can break several articles at once — fix it once. An accepted exception stops it counting until it expires.</div>
+          <select value={findFilter} onChange={e=>setFindFilter(e.target.value)} style={selStyle}><option value="all">All frameworks</option>{adoptedFws.map(f=><option key={f.id} value={f.name}>{f.name}</option>)}</select>
         </div>
-      </>
+        {rows.length===0?<div style={{padding:40,textAlign:"center",color:T.textMuted,fontSize:13}}>No findings.</div>:
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{rows.map((f,i)=>findingRow(f,i))}</div>}
+      </div>
     );
   };
 
-  // ═════ ADOPT WIZARD (right drawer, section rail) ═════
+  // ═════ APPROVALS — the queue and the approval policies ═════
+  const renderApprovals = () => {
+    const queue = [
+      ...pm2StatusPending.map(r=>({k:"s", r, type:r.kind==="pm2exception"?"Exception":r.name.includes(" change)")?"Policy change":"Policy activation", subject:r.name, note:r.note, by:r.requestedBy, to:r.approver})),
+      ...pm2EnfPending.map(r=>({k:"e", r, type:"Enforcement on a table", subject:`${r.action} on ${r.table}`, note:r.policyName, by:r.requestedBy, to:r.approver})),
+    ];
+    const decided = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.status!=="pending").slice(0,8);
+    const typeC = {"Policy activation":T.accent,"Policy change":T.amber,"Exception":T.violet,"Enforcement on a table":T.green};
+    const apCard = (title, when, body) => card(<>
+      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>
+      <div style={{fontSize:11.5,color:T.textSub,margin:"3px 0 10px",lineHeight:1.5}}>{when}</div>{body}</>);
+    const row = (label, ctrl) => <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,fontSize:12,color:T.textSub}}><span style={{width:150}}>{label}</span>{ctrl}</div>;
+    const ro = !isAdmin;
+    return (
+      <div style={pad}>
+        {secLabel(`Waiting on a decision (${queue.length})`)}
+        {queue.length===0?<div style={{fontSize:12.5,color:T.textMuted}}>Nothing waiting.</div>:
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            {queue.map((x,i)=>(
+              <div key={x.r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <span style={{width:150}}>{pill(typeC[x.type], x.type)}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{x.subject}</div><div style={{fontSize:11,color:T.textMuted}}>“{x.note}” · {x.by} → <b style={{color:T.textSub}}>{x.to}</b></div></div>
+                {canDecide(x.r) ? <><Btn small variant="primary" onClick={()=>x.k==="s"?decideReq(x.r,true):decideEnf(x.r,true)}>Approve</Btn><Btn small ghost onClick={()=>x.k==="s"?decideReq(x.r,false):decideEnf(x.r,false)}>Reject</Btn></>
+                  : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You requested this — someone else decides":`Waiting on ${x.to}`}</span>}
+              </div>))}
+          </div>}
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The same requests appear in each approver's Workspace inbox; deciding in either place updates both.</div>
+
+        {secLabel("Approval policies", ro&&<span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— only an admin can change these</span>)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:10}}>
+          {apCard("Policy activation & changes", "A new policy, or a change to an active one, goes live only after approval. A change runs as a new version; the old one keeps running until it's approved.", <>
+            {row("Approver", ro?<b>{ap.activation.approver}</b>:userSel(ap.activation.approver, v=>setAp(["activation","approver"],v)))}
+            {row("Monitor-only policies", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.activation.autoMonitor} onChange={e=>setAp(["activation","autoMonitor"],e.target.checked)} style={{accentColor:T.accent}}/>activate without approval — they change no data</label>)}
+          </>)}
+          {apCard("Enforcement on a table", "Before a rule masks, retains or disposes of data in a table, that table's owner approves. Nothing executes through CDP until they do.", <>
+            {row("Approver", <b style={{color:T.text}}>The table's owner</b>)}
+            {row("If a table has no owner", ro?<b>{ap.enforcement.fallback}</b>:userSel(ap.enforcement.fallback, v=>setAp(["enforcement","fallback"],v)))}
+          </>)}
+          {apCard("Exceptions", "Accepting a finding as an exception stops it counting against readiness until it expires. The reason is kept with the finding.", <>
+            {row("Approver", ro?<b>{ap.exceptions.approver==="policy owner"?"The policy's owner":ap.exceptions.named}</b>:<select value={ap.exceptions.approver==="policy owner"?"policy owner":ap.exceptions.named} onChange={e=>{const v=e.target.value; if(v==="policy owner") setAp(["exceptions","approver"],"policy owner"); else {setAp(["exceptions","approver"],"named"); setAp(["exceptions","named"],v);}}} style={selStyle}><option value="policy owner">The policy's owner</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select>)}
+            {row("Expires after (days)", <input type="number" disabled={ro} value={ap.exceptions.maxDays} onChange={e=>setAp(["exceptions","maxDays"],Number(e.target.value))} style={{...inStyle,width:70}}/>)}
+          </>)}
+          {apCard("Legal hold release", "Releasing a hold lets retention and erasure act on the records again, so it takes two people.", <>
+            {row("Approvers", <b style={{color:T.text}}>{ap.hold.twoPerson?"The policy owner and the table owner":"The policy owner"}</b>)}
+            {row("Two-person rule", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.hold.twoPerson} onChange={e=>setAp(["hold","twoPerson"],e.target.checked)} style={{accentColor:T.accent}}/>required</label>)}
+          </>)}
+          {apCard("Separation of duties", "Nobody approves their own request. If the approver is the requester, the request goes to the fallback approver instead.", <>
+            {row("Enforced", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.sod} onChange={e=>setAp(["sod"],e.target.checked)} style={{accentColor:T.accent}}/>on</label>)}
+          </>)}
+        </div>
+        {decided.length>0&&<>{secLabel("Recently decided")}
+          {decided.map(r=><div key={r.id} style={{display:"flex",gap:10,alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}>{pill(r.status==="approved"?T.green:T.rose, r.status)}<span style={{color:T.text,flex:1}}>{r.name}</span><span style={{color:T.textMuted}}>{r.requestedBy} → {r.decidedBy||r.approver}</span></div>)}
+        </>}
+      </div>
+    );
+  };
+
+  // ── Right-side drawer with a section rail — the same shape as the other create/edit surfaces.
+  const drawer = ({title, sub, steps, step, onStep, body, footer, onClose}) => (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:300}}/>
+      <div style={{position:"fixed",top:0,right:0,bottom:0,width:960,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:301,display:"flex",flexDirection:"column",boxShadow:"-8px 0 30px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted}}>{sub}</div>}</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(14)}</button>
+        </div>
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{width:200,borderRight:`1px solid ${T.border}`,padding:"14px 10px",flexShrink:0,background:T.bgElevated}}>
+            {steps.map((s,i)=>{ const n=i+1, a=step===n, done=step>n; return (
+              <button key={s} onClick={()=>onStep(n)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:7,border:"none",background:a?T.bgSurface:"transparent",color:a?T.text:T.textSub,fontSize:12.5,fontWeight:a?700:500,cursor:"pointer",textAlign:"left",marginBottom:2}}>
+                <span style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,background:done?T.green:a?T.accent:T.bgHover,color:done||a?"#fff":T.textMuted,flexShrink:0}}>{done?"✓":n}</span>{s}
+              </button>); })}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"18px 24px 24px"}}>{body}</div>
+        </div>
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>{footer}</div>
+      </div>
+    </>
+  );
+  const stewardChips = (list, onChange, exclude) => (
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+      {list.map(s=><span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{s}<button onClick={()=>onChange(list.filter(x=>x!==s))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0}}>×</button></span>)}
+      <select value="" onChange={e=>e.target.value&&onChange([...list,e.target.value])} style={selStyle}><option value="">+ steward</option>{PM2_USERS.filter(u=>!list.includes(u)&&u!==exclude).map(u=><option key={u}>{u}</option>)}</select>
+    </div>
+  );
+  const routeText = (kinds, n) => {
+    if(kinds.every(k=>k==="monitor")&&ap.activation.autoMonitor) return <span style={{color:T.green}}>Activates as soon as it's submitted — monitor-only, it changes no data</span>;
+    const who = pm2Approver(ap.activation.approver, me);
+    return <span>Goes to <b>{who}</b> for approval{kinds.includes("enforce")?<>, then {n!=null?`${n} table owner${n===1?"":"s"}`:"each table owner"} approve before CDP acts</>:""}</span>;
+  };
+
+  // ═════ ADOPT A FRAMEWORK ═════
+  const tplIds = fw => [...new Set(fw.arts.flatMap(a=>a.c||[]))];
+  const existingFor = t => livePols.find(p=>p.template===t);
+  const startAdopt = (fwId, step=1) => {
+    const fw = pm2Fw(fwId); const picks={}, stewards={}, rules={};
+    tplIds(fw).forEach(t=>{ picks[t]=true; stewards[t]=[PM2_TPL_STEWARD[t]||"priya.nair"]; rules[t]=pm2PolicyFromTemplate(t,me).rules; });
+    setWiz({fwId, step, owner:st.adopted[fwId]?.owner||me, picks, owners:{}, stewards, rules, links:{}, editing:!!st.adopted[fwId]});
+  };
+  const previewTplPolicy = (t, fw) => pm2LinkToFw({...pm2PolicyFromTemplate(t, wiz.owners[t]||wiz.owner, wiz.stewards[t]), rules:wiz.rules[t]}, fw);
+  const adoptSubmit = () => {
+    const fw = pm2Fw(wiz.fwId); const when = pm2Today();
+    let pols = [..._pm2.policies]; const created = []; let extended = 0;
+    tplIds(fw).forEach(t=>{
+      const ex = pols.find(p=>p.template===t&&p.status!=="Retired");
+      if(ex){
+        const np = pm2LinkToFw(ex, fw); const wid = np.scope.filter(c=>!ex.scope.includes(c)); const na = np.articles.length-ex.articles.length;
+        if(na||wid.length){ extended++; pols = pols.map(p=>p.id===ex.id?{...np, history:[{when, who:me, what:`Linked to ${fw.name} (${na} article${na===1?"":"s"})${wid.length?` — scope widened to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}`}, ...(np.history||[])]}:p); }
+      } else if(wiz.picks[t]){
+        const np = {...previewTplPolicy(t, fw), history:[{when, who:me, what:`Created from the ${fw.name} template`}]};
+        pols.push(np); created.push(np.id);
+      }
+    });
+    Object.entries(wiz.links).forEach(([i,ids])=>ids.forEach(id=>{ const ii=Number(i);
+      pols = pols.map(p=>p.id===id&&!p.articles.some(x=>x.fw===fw.id&&x.i===ii)?{...p, articles:[...p.articles,{fw:fw.id,i:ii}], history:[{when, who:me, what:`Mapped to ${fw.name} ${fw.arts[ii].ref}`}, ...(p.history||[])]}:p); }));
+    pm2Set(s=>({...s, adopted:{...s.adopted, [fw.id]:s.adopted[fw.id]||{owner:wiz.owner, at:when}}, policies:pols}));
+    created.forEach(id=>submitPolicy(id, `Adopting ${fw.name}`, true));
+    pm2RequestTargets();
+    const auto = created.filter(id=>_pm2.policies.find(p=>p.id===id)?.status==="Active").length;
+    onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${created.length} new polic${created.length===1?"y":"ies"} (${auto} active now, ${created.length-auto} sent for approval), ${extended} existing extended`,"success");
+    setWiz(null); setSelFw(fw.id); setTab("frameworks");
+  };
   const renderWizard = () => {
-    const fw = PM2_FW.find(f=>f.id===wiz.fwId); const m = regMeta(fw.id);
-    const steps = [{n:1,l:"Applicability"},{n:2,l:"Controls"},{n:3,l:"Review & activate"}];
-    const nextAdopted = {...st.adopted,[fw.id]:{owner:wiz.owner}}; const nextFws = PM2_FW.filter(f=>nextAdopted[f.id]);
+    const fw = pm2Fw(wiz.fwId); const m = regMeta(fw.id);
     const inS = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)); const sus = PM2_ASSETS.filter(a=>pm2SuspectIn(a,fw.covers));
-    const ctlIds = pm2FwCtlIds(fw);
-    const sharedWith = id => adoptedFws.filter(f=>f.id!==fw.id&&pm2FwCtlIds(f).includes(id)).map(f=>f.name);
-    const picked = ctlIds.filter(id=>wiz.picks[id]);
-    const newApprovals = picked.filter(id=>PM2_CTL[id].kind==="enforce").flatMap(id=>pm2TargetsFor(id,nextFws).filter(t=>targetStatus(id,t.asset.name)==="none").map(t=>({id,t})));
-    const expFindings = picked.filter(id=>PM2_CTL[id].kind==="monitor").reduce((n,id)=>n+pm2Findings(id,fw.covers,wiz.params[id]).length,0);
-    const attests = picked.filter(id=>PM2_CTL[id].kind==="attest");
-    const setPick = (id,v) => setWiz(w=>({...w,picks:{...w.picks,[id]:v}}));
-    const setWP = (id,k,v) => setWiz(w=>({...w,params:{...w.params,[id]:{...w.params[id],[k]:v}}}));
-    return (
-      <>
-        <div onClick={()=>setWiz(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:300}}/>
-        <div style={{position:"fixed",top:0,right:0,bottom:0,width:900,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:301,display:"flex",flexDirection:"column",boxShadow:"-8px 0 30px rgba(0,0,0,.2)"}}>
-          <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-            <div style={{flex:1}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{wiz.editing?"Manage":"Adopt"} {fw.name}</div><div style={{fontSize:11.5,color:T.textMuted}}>{m.fullName}</div></div>
-            <button onClick={()=>setWiz(null)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(14)}</button>
-          </div>
-          <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-            <div style={{width:190,borderRight:`1px solid ${T.border}`,padding:"14px 10px",flexShrink:0,background:T.bgElevated}}>
-              {steps.map(s=>{ const a=wiz.step===s.n, done=wiz.step>s.n; return (
-                <button key={s.n} onClick={()=>setWiz(w=>({...w,step:s.n}))} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:7,border:"none",background:a?T.bgSurface:"transparent",color:a?T.text:T.textSub,fontSize:12.5,fontWeight:a?700:500,cursor:"pointer",textAlign:"left",marginBottom:2}}>
-                  <span style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,background:done?T.green:a?T.accent:T.bgHover,color:done||a?"#fff":T.textMuted,flexShrink:0}}>{done?"✓":s.n}</span>{s.l}
-                </button>); })}
+    const recs = (fw.recordClasses||[]).length ? PM2_ASSETS.filter(a=>pm2Classes(a).some(c=>fw.recordClasses.includes(c))) : [];
+    const tids = tplIds(fw); const newT = tids.filter(t=>!existingFor(t)&&wiz.picks[t]); const exT = tids.filter(t=>existingFor(t));
+    const setW = (k,v) => setWiz(w=>({...w,[k]:v}));
+    const assetRow = (a, right) => <div key={a.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span><div style={{flex:1,display:"flex",gap:4,flexWrap:"wrap"}}>{right}</div></div>;
+    const tablesAfter = [...newT.map(t=>previewTplPolicy(t,fw)), ...exT.map(t=>pm2LinkToFw(existingFor(t),fw))].filter(p=>pm2Kinds(p).includes("enforce"))
+      .reduce((n,p)=>n+pm2Eval(p).targets.filter(t=>pm2TargetStatus(p.id,t.asset.name)==="none").length,0);
+    let body;
+    if(wiz.step===1) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>{fw.name} applies to the data classes below. EDG uses your classifications to decide what's in scope — nothing is hand-picked, and newly classified data joins automatically.</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>{fw.covers.map(classChip)}</div>
+      {secLabel(`In scope today (${inS.length} assets)`)}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginTop:-1}}>{inS.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)).map(classChip)))}</div>
+      {recs.length>0&&<>{secLabel(`Records ${fw.name} says you must keep (${recs.length})`)}
+        <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>Not personal data in themselves, but {fw.name} sets a minimum retention on them{fw.recordYears?` — ${fw.recordYears} year${fw.recordYears>1?"s":""}`:""}.</div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{recs.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.recordClasses.includes(c)).map(classChip)))}</div></>}
+      {sus.length>0&&<>{secLabel(`Probably in scope, not classified yet (${sus.length})`)}
+        <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>These look like {fw.name} data but no policy would touch them until they're classified. The discovery policy keeps flagging them.</div>
+        {sus.map(a=><div key={a.name} style={{display:"flex",gap:10,padding:"7px 12px",border:`1px dashed ${T.amber}70`,borderRadius:8,marginBottom:5,background:`${T.amber}08`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11.5,color:T.textSub}}>{Object.entries(a.suspect).map(([k,v])=>`${k} → ${v}`).join(", ")}</span></div>)}</>}
+      {secLabel("Framework owner")}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>{userSel(wiz.owner, v=>setW("owner",v))}<span style={{fontSize:11.5,color:T.textMuted}}>Answers for {fw.name} readiness. New policies default to this owner — you can change each one in step 3.</span></div>
+    </>;
+    if(wiz.step===2) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Every article, what it asks, and the policies that would satisfy it. <b>Recommended policies are on</b> — each one's rules are shown as they'll run, and the numbers are editable. Policies you already run are reused, not duplicated.</div>
+      {fw.arts.map((art,i)=>{
+        const covering = livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i)&&!(art.c||[]).includes(p.template));
+        const linked = (wiz.links[i]||[]).map(id=>st.policies.find(p=>p.id===id)).filter(Boolean);
+        const linkable = livePols.filter(p=>!(art.c||[]).includes(p.template)&&!covering.includes(p)&&!linked.includes(p));
+        return (
+          <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface}}>
+            <div style={{padding:"10px 14px",borderBottom:art.out?"none":`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(art.ref, typeColor(fw.type))}<span style={{fontSize:13,fontWeight:700,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>{art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}</div>
+              <div style={{fontSize:12,color:T.textSub,marginTop:4}}><span style={{color:T.textMuted,fontWeight:600}}>The law asks: </span>{art.ask}</div>
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:"18px 24px 24px"}}>
-              {wiz.step===1&&<>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>{fw.name} applies to the data classes below. EDG uses your existing classifications to decide what's in scope — nothing is hand-picked.</div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>{fw.covers.map(c=><ClassChip key={c} c={c}/>)}</div>
-                {secLabel(`In scope (${inS.length} assets)`)}
-                <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-                  {inS.map((a,i)=>{ const cls=pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)); return (
-                    <div key={a.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                      <span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:170}}>{a.name}</span>
-                      <span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span>
-                      <div style={{display:"flex",gap:4,flexWrap:"wrap",flex:1}}>{cls.map(c=><ClassChip key={c} c={c}/>)}</div>
-                      <span style={{fontSize:11,color:T.textMuted}}>{Object.keys(a.cols||{}).length||"—"} cols</span>
-                    </div>); })}
-                </div>
-                {(fw.recordClasses||[]).length>0&&(()=>{ const recs=PM2_ASSETS.filter(a=>pm2Classes(a).some(c=>fw.recordClasses.includes(c))); return recs.length>0&&<>
-                  {secLabel(`Records ${fw.name} requires you to keep (${recs.length})`)}
-                  <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>Not personal data in themselves, but {fw.name} sets a minimum retention on them{fw.recordYears?` (${fw.recordYears} year${fw.recordYears>1?"s":""})`:""}.</div>
-                  {recs.map(a=><div key={a.name} style={{display:"flex",gap:10,alignItems:"center",padding:"7px 12px",border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:170}}>{a.name}</span><span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span>{pm2Classes(a).filter(c=>fw.recordClasses.includes(c)).map(c=><ClassChip key={c} c={c}/>)}</div>)}
-                </>; })()}
-                {sus.length>0&&<>{secLabel(`Probably in scope, not yet classified (${sus.length})`)}
-                  <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>These look like {fw.name} data but aren't classified, so no control would touch them. The discovery control keeps flagging them until someone classifies them in Classifications.</div>
-                  {sus.map(a=><div key={a.name} style={{display:"flex",gap:10,padding:"7px 12px",border:`1px dashed ${T.amber}60`,borderRadius:8,marginBottom:5,background:`${T.amber}08`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:170}}>{a.name}</span><span style={{fontSize:11.5,color:T.textSub}}>{Object.entries(a.suspect).map(([k,v])=>`${k} → ${v}`).join(", ")}</span></div>)}
-                </>}
-                {secLabel("Framework owner")}
-                <select value={wiz.owner} onChange={e=>setWiz(w=>({...w,owner:e.target.value}))} style={{padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5}}>
-                  {[...new Set([me,"maya.chen","lisa.ray","sarah.kim","priya.nair","alex.rivera"])].map(u=><option key={u}>{u}</option>)}
-                </select>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Answers for readiness and collects attestations. Table owners still approve enforcement on their own tables.</div>
-              </>}
-              {wiz.step===2&&<>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Every article, with the controls that cover it. Recommended controls are on. Controls another framework already runs are locked on — they simply count for {fw.name} as well.</div>
-                {fw.arts.map((art,i)=>(
-                  <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:9,background:art.out?T.bgElevated:T.bgSurface}}>
-                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:art.out?"none":`1px solid ${T.border}`}}>
-                      <Ref c={typeColor(fw.type)}>{art.ref}</Ref><span style={{fontSize:12.5,fontWeight:600,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>
-                      {art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}
-                    </div>
-                    {!art.out&&art.c.map(id=>{
-                      const c=PM2_CTL[id]; const sh=sharedWith(id); const locked=sh.length>0; const onV=locked||wiz.picks[id];
-                      return (
-                        <div key={id} style={{padding:"9px 12px 9px 14px",borderTop:`1px dashed ${T.border}`}}>
-                          <div style={{display:"flex",alignItems:"center",gap:10}}>
-                            <input type="checkbox" checked={!!onV} disabled={locked} onChange={e=>setPick(id,e.target.checked)} style={{accentColor:T.accent,cursor:locked?"not-allowed":"pointer"}}/>
-                            <KindPill k={c.kind}/>
-                            <span style={{fontSize:12.5,color:T.text,flex:1}}>{c.name}</span>
-                            {locked&&(()=>{
-                              if(c.kind==="attest") return <span style={{fontSize:10.5,color:T.violet,fontWeight:600}}>On via {sh.join(", ")} — {fw.name} needs its own evidence</span>;
-                              const extra = c.kind==="enforce" ? pm2TargetsFor(id,nextFws).filter(t=>targetStatus(id,t.asset.name)==="none").length : 0;
-                              return <span style={{fontSize:10.5,color:T.green,fontWeight:600}}>Already running via {sh.join(", ")}{extra?` — extends to ${extra} more table${extra>1?"s":""}`:""}</span>;
-                            })()}
-                          </div>
-                          <div style={{fontSize:11.5,color:T.textMuted,margin:"4px 0 0 26px",lineHeight:1.5}}>{c.what}</div>
-                          {onV&&(c.params||[]).length>0&&<div style={{display:"flex",gap:14,flexWrap:"wrap",margin:"8px 0 0 26px"}}>
-                            {c.params.map(p=><label key={p.k} style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{p.label}{paramInput(p,wiz.params[id]?.[p.k]??p.def,v=>setWP(id,p.k,v))}</label>)}
-                          </div>}
-                          {onV&&id==="C-RET"&&fw.retentionCeiling&&<div style={{fontSize:11,color:T.amber,margin:"6px 0 0 26px"}}>{fw.name} caps this at {fw.retentionCeiling} months after last use — the shorter period applies.</div>}
-                          {onV&&id==="C-RETREC"&&fw.recordYears&&<div style={{fontSize:11,color:T.textSub,margin:"6px 0 0 26px"}}>{fw.name} requires {fw.recordYears} year{fw.recordYears>1?"s":""}. {(()=>{const r=pm2EffectiveRecords(nextFws)[0]; return r&&r.fw!==fw.name?`${r.fw}'s ${r.y} years is longer and already applies.`:""})()}</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </>}
-              {wiz.step===3&&<>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>What happens when you activate {fw.name}.</div>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:14}}>
-                  {[{k:"enforce",v:newApprovals.length,s:`approval request${newApprovals.length===1?"":"s"} to table owners`},{k:"monitor",v:expFindings,s:`finding${expFindings===1?"":"s"} expected on first run`},{k:"attest",v:attests.length,s:`attestation${attests.length===1?"":"s"} assigned to ${wiz.owner}`}].map(x=>(
-                    <div key={x.k} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}>
-                      <KindPill k={x.k}/><div style={{fontSize:24,fontWeight:800,color:kindColor(x.k),marginTop:6,fontFamily:"'Geist Mono',monospace"}}>{x.v}</div><div style={{fontSize:11.5,color:T.textSub}}>{x.s}</div>
-                    </div>
-                  ))}
-                </div>
-                {newApprovals.length>0&&<>{secLabel("Enforcement — nothing runs until each owner approves")}
-                  {newApprovals.map(({id,t},i)=><div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}><Pill c={T.green}>{PM2_CTL[id].verb}</Pill><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:170}}>{t.asset.name}</span><span style={{fontSize:11.5,color:T.textMuted,flex:1}}>{t.detail}</span><span style={{fontSize:11,color:T.textSub}}>→ {t.asset.owner||"alex.rivera (no owner)"}</span></div>)}
-                </>}
-                {secLabel("Controls")}
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.7}}>
-                  {picked.length} of {ctlIds.length} controls on · {picked.filter(id=>sharedWith(id).length).length} reused from frameworks you already run · {fw.arts.filter(a=>a.out).length} articles outside EDG, listed but not scored.
-                </div>
-                {ctlIds.filter(id=>!wiz.picks[id]&&!sharedWith(id).length).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:8}}>Switched off: {ctlIds.filter(id=>!wiz.picks[id]&&!sharedWith(id).length).map(id=>PM2_CTL[id].name).join("; ")}. The articles they cover will read "Not covered".</div>}
-              </>}
-            </div>
+            {!art.out&&<div style={{padding:"8px 14px 12px",display:"flex",flexDirection:"column",gap:8}}>
+              {(art.c||[]).map(t=>{ const ex=existingFor(t);
+                if(ex){ const np=pm2LinkToFw(ex,fw); const wid=np.scope.filter(c=>!ex.scope.includes(c));
+                  return (<div key={t}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><input type="checkbox" checked disabled style={{accentColor:T.accent}}/>
+                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{ex.name}</span>{pill(statusColor(ex.status),`Existing · ${ex.status}`)}<span style={{fontSize:11,color:T.textMuted}}>owner {ex.owner}</span>
+                      <span style={{fontSize:11,color:T.green,fontWeight:600}}>Reused — also counts for {fw.name}{wid.length?`; scope widens to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}</span></div>
+                    <div style={{margin:"6px 0 0 24px",display:"flex",flexDirection:"column",gap:4}}>{np.rules.map(r=><div key={r.id}>{ruleView(r,np)}</div>)}</div>
+                  </div>); }
+                const on = wiz.picks[t]; const pv = previewTplPolicy(t,fw);
+                return (<div key={t}>
+                  <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}><input type="checkbox" checked={!!on} onChange={e=>setW("picks",{...wiz.picks,[t]:e.target.checked})} style={{accentColor:T.accent}}/>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{PM2_TPL[t].name}</span>{pill(T.accent,"New policy")}<span style={{fontSize:11.5,color:T.textMuted}}>{PM2_TPL[t].why}</span></label>
+                  {on&&<div style={{margin:"6px 0 0 24px",display:"flex",flexDirection:"column",gap:4}}>{pv.rules.map((r,ri)=><div key={r.id}>{ruleView(r,pv,nr=>setW("rules",{...wiz.rules,[t]:wiz.rules[t].map((x,j)=>j===ri?nr:x)}))}</div>)}</div>}
+                  {!on&&<div style={{margin:"4px 0 0 24px",fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
+                </div>); })}
+              {[...covering, ...linked].map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:8}}>{pill(T.textSub,"Mapped")}<span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span><span style={{fontSize:11,color:T.textMuted}}>{p.template?"":"custom · "}{p.status} · owner {p.owner}</span>{linked.includes(p)&&<button onClick={()=>setW("links",{...wiz.links,[i]:wiz.links[i].filter(x=>x!==p.id)})} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>remove</button>}</div>)}
+              {linkable.length>0&&<select value="" onChange={e=>e.target.value&&setW("links",{...wiz.links,[i]:[...(wiz.links[i]||[]),e.target.value]})} style={{...selStyle,alignSelf:"flex-start"}}><option value="">+ Map one of your other policies to this article</option>{linkable.map(p=><option key={p.id} value={p.id}>{p.name}{p.template?"":" (custom)"}</option>)}</select>}
+            </div>}
+          </div>);
+      })}
+    </>;
+    if(wiz.step===3) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Every policy has one <b>owner</b> — who answers for it, submits it and approves changes to it — and <b>stewards</b> who edit drafts and work the findings. The approval route comes from your Approval policies.</div>
+      {secLabel(`New policies (${newT.length})`)}
+      {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None — everything this framework needs already exists.</div>}
+      {newT.map(t=>{ const pv=previewTplPolicy(t,fw); const k=pm2Kinds(pv); const n=pm2Eval(pv).targets.length;
+        return card(<>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span>{k.map(x=><span key={x}>{kindPill(x)}</span>)}</div>
+          <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Owner {userSel(wiz.owners[t]||wiz.owner, v=>setW("owners",{...wiz.owners,[t]:v}))}</label>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.stewards[t]||[], v=>setW("stewards",{...wiz.stewards,[t]:v}), wiz.owners[t]||wiz.owner)}</div>
           </div>
-          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end"}}>
-            <Btn ghost onClick={()=>wiz.step>1?setWiz(w=>({...w,step:w.step-1})):setWiz(null)}>{wiz.step>1?"Back":"Cancel"}</Btn>
-            {wiz.step<3?<Btn variant="primary" onClick={()=>setWiz(w=>({...w,step:w.step+1}))}>Continue</Btn>:<Btn variant="primary" onClick={activate}>{wiz.editing?"Save changes":`Activate ${fw.name}`}</Btn>}
-          </div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(k, n)}</div>
+        </>,{marginBottom:8,padding:"12px 14px"}); })}
+      {exT.length>0&&<>{secLabel(`Existing policies this reuses (${exT.length})`)}
+        {exT.map(t=>{ const ex=existingFor(t); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}><span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner} · stewards {(ex.stewards||[]).join(", ")||"none"}</span></div>; })}
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Linking a framework widens an active policy's scope without a new approval. Any new table it would change still goes to that table's owner.</div></>}
+    </>;
+    if(wiz.step===4){
+      const pvs = newT.map(t=>previewTplPolicy(t,fw));
+      const autoN = pvs.filter(p=>pm2Kinds(p).every(k=>k==="monitor")&&ap.activation.autoMonitor).length;
+      const attN = [...pvs, ...exT.map(existingFor)].filter(p=>pm2Kinds(p).includes("attest")).length;
+      const stat = (v,l,c) => <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}><div style={{fontSize:24,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:11.5,color:T.textSub}}>{l}</div></div>;
+      body = <>
+        <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>What happens when you submit {fw.name}.</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:14}}>
+          {stat(newT.length, "new policies created", T.accent)}
+          {stat(autoN, "activate at once (monitor-only)", T.blue)}
+          {stat(newT.length-autoN, `go to ${pm2Approver(ap.activation.approver, me)} for approval`, T.amber)}
+          {stat(exT.length, "existing policies reused", T.green)}
+          {stat(tablesAfter, "table-owner approvals once active", T.green)}
+          {stat(attN, `policies needing ${fw.name} evidence`, T.violet)}
         </div>
-      </>
-    );
+        {secLabel("The path to Met")}
+        <div style={{display:"flex",flexDirection:"column",gap:6,fontSize:12.5,color:T.text}}>
+          {["Policies are created with the owners and stewards you chose.", `Monitor-only policies go active${ap.activation.autoMonitor?" immediately":" after approval"}; policies that change data go to ${pm2Approver(ap.activation.approver, me)}.`, "Once a policy is active, each table it would change goes to that table's owner. CDP acts only after they approve.", "Monitoring rules evaluate and raise findings; stewards fix them or request an exception.", `Evidence is added per article on the ${fw.name} page.`].map((s,i)=><div key={i} style={{display:"flex",gap:10}}><span style={{width:20,height:20,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</span>{s}</div>)}
+        </div>
+        {tids.filter(t=>!existingFor(t)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:12}}>Switched off: {tids.filter(t=>!existingFor(t)&&!wiz.picks[t]).map(t=>PM2_TPL[t].name).join("; ")}. The articles they cover will read "No policy".</div>}
+        <div style={{fontSize:11.5,color:T.textMuted,marginTop:12}}>{fw.arts.filter(a=>a.out).length} articles are outside EDG — they stay listed on the {fw.name} page and never count toward readiness.</div>
+      </>;
+    }
+    return drawer({title:`${wiz.editing?"Review":"Adopt"} ${fw.name}`, sub:m.fullName, steps:["Applicability","Articles & policies","Owners & approval","Review & submit"], step:wiz.step, onStep:n=>setW("step",n), body, onClose:()=>setWiz(null),
+      footer:<><Btn ghost onClick={()=>wiz.step>1?setW("step",wiz.step-1):setWiz(null)}>{wiz.step>1?"Back":"Cancel"}</Btn>{wiz.step<4?<Btn variant="primary" onClick={()=>setW("step",wiz.step+1)}>Continue</Btn>:<Btn variant="primary" onClick={adoptSubmit}>{wiz.editing?"Save":"Submit"} {fw.name}</Btn>}</>});
   };
 
-  const TABS = [{key:"frameworks",label:"Frameworks",badge:adoptedFws.length},{key:"controls",label:"Controls",badge:PM2_CONTROLS.filter(c=>st.ctl[c.id]?.on).length},{key:"findings",label:"Findings",badge:allFindings.length||null}];
+  // ═════ CREATE / EDIT A POLICY ═════
+  const newRuleId = () => `r-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  const openEditor = p => {
+    if(p&&!canEdit(p)){ onToast(`Only ${p.owner} or a steward can edit this policy`,"info"); return; }
+    setEd(p ? {id:p.id, step:1, name:p.name, purpose:p.purpose, scope:[...p.scope], scopeBy:p.scopeBy, rules:p.rules.map(r=>({...r,conds:r.conds.map(c=>({...c})),act:{...r.act}})), articles:[...p.articles], owner:p.owner, stewards:[...(p.stewards||[])], isActive:p.status==="Active", version:p.version, template:p.template}
+            : {id:null, step:1, name:"", purpose:"", scope:["PII"], scopeBy:"class", rules:[{id:newRuleId(), conds:[{f:"access",op:"is",v:"Broad"}], act:{type:"flag",msg:"Granted to a broad role"}}], articles:[], owner:me, stewards:[], isActive:false, version:1, template:null});
+  };
+  const saveEditor = submit => {
+    if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
+    if(!ed.rules.length){ onToast("Add at least one rule","info"); setEd(e=>({...e,step:2})); return; }
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), scope:ed.scope, scopeBy:ed.scopeBy, rules:ed.rules, articles:ed.articles, stewards:ed.stewards};
+    let id = ed.id;
+    if(!id){
+      id = "p-cust-"+Date.now();
+      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, ...fields, owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:"Created"}]}]}));
+    } else if(ed.isActive){
+      updPol(id, p=>addHist({...p, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
+    } else {
+      updPol(id, p=>addHist({...p, ...fields, owner:ed.owner, status:"Draft"}, "Edited"));
+    }
+    if(submit) submitPolicy(id, ed.isActive?"Change to an active policy":"New policy");
+    else onToast("Saved as draft","success");
+    setEd(null); setSelFw(null); setTab("policies"); setSelPol(id);
+  };
+  const renderEditor = () => {
+    const setE = (k,v) => setEd(e=>({...e,[k]:v}));
+    const pv = {id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, scopeBy:ed.scopeBy, rules:ed.rules, articles:ed.articles};
+    const ev = pm2Eval(pv); const kinds = pm2Kinds(pv);
+    const ownerSubmits = isAdmin || ed.owner===me;
+    const setRule = (ri, r) => setE("rules", ed.rules.map((x,j)=>j===ri?r:x));
+    let body;
+    if(ed.step===1) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>A policy is a commitment someone answers for. Name it for what it protects, and say why it exists in one sentence — that sentence is what reviewers and auditors read first.</div>
+      {secLabel("Name")}<input value={ed.name} onChange={e=>setE("name",e.target.value)} placeholder="e.g. HR compensation masking" style={{...inStyle,width:"100%",fontSize:13,padding:"8px 10px",boxSizing:"border-box"}}/>
+      {secLabel("Why it exists")}<textarea rows={3} value={ed.purpose} onChange={e=>setE("purpose",e.target.value)} placeholder="e.g. Salary and national ID are visible only to the HR compensation team." style={{...inStyle,width:"100%",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",fontSize:12.5}}/>
+    </>;
+    if(ed.step===2) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Scope picks the data by classification. Each rule then says <b>WHEN</b> an in-scope asset matches these conditions, <b>THEN</b> do this. Raising a finding changes nothing; masking, retention and disposal change data and need approval.</div>
+      {secLabel("Scope — data classes")}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{Object.keys(PM2_CLASS_META).map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={ed.scope.includes(c)} onChange={e=>setE("scope",e.target.checked?[...ed.scope,c]:ed.scope.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{PM2_CLASS_META[c].label}</label>)}</div>
+      {secLabel(`Rules (${ed.rules.length})`)}
+      {ed.rules.map((r,ri)=>(
+        <div key={r.id} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10,background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>Rule {ri+1}</span><button onClick={()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))} style={{fontSize:11,background:"none",border:"none",color:T.rose,cursor:"pointer"}}>Remove</button></div>
+          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:6}}>WHEN an in-scope asset…</div>
+          {r.conds.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No conditions — the rule applies to every in-scope asset.</div>}
+          {r.conds.map((c,ci)=>{ const F=PM2_FIELDS[c.f]; const setC=nc=>setRule(ri,{...r,conds:r.conds.map((x,j)=>j===ci?nc:x)});
+            return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+              <span style={{fontSize:10.5,fontWeight:800,color:T.textMuted,width:30}}>{ci?"AND":""}</span>
+              <select value={c.f} onChange={e=>{const nf=PM2_FIELDS[e.target.value]; setC({f:e.target.value, op:PM2_OPS[nf.type][0], v:nf.type==="enum"?nf.opts[0]:nf.type==="number"?0:nf.type==="list"?"":undefined});}} style={selStyle}>{Object.entries(PM2_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
+              <select value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={selStyle}>{PM2_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
+              {F.type==="enum"&&<select value={c.v} onChange={e=>setC({...c,v:e.target.value})} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
+              {F.type==="number"&&<input type="number" value={c.v} onChange={e=>setC({...c,v:Number(e.target.value)})} style={{...inStyle,width:80}}/>}
+              {F.type==="list"&&<input value={c.v} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={{...inStyle,width:220}}/>}
+              <button onClick={()=>setRule(ri,{...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>×</button>
+            </div>); })}
+          <button onClick={()=>setRule(ri,{...r,conds:[...r.conds,{f:"env",op:"is",v:"prod"}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 8px 36px"}}>+ condition</button>
+          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,margin:"4px 0 6px"}}>THEN</div>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={r.act.type} onChange={e=>setRule(ri,{...r,act:pm2DefaultAct(e.target.value)})} style={selStyle}>{Object.entries(PM2_ACTIONS).map(([k,a])=><option key={k} value={k}>{a.label}</option>)}</select>
+            {kindPill(PM2_ACTIONS[r.act.type].kind)}
+            {r.act.type==="mask"&&<select value={r.act.cols} onChange={e=>setRule(ri,{...r,act:{...r.act,cols:e.target.value}})} style={selStyle}><option value="all">every in-scope column</option><option value="sensitive">sensitive-category columns only</option></select>}
+          </div>
+          <div style={{marginTop:8}}>{ruleView(r, pv, nr=>setRule(ri,nr))}</div>
+        </div>))}
+      <Btn small onClick={()=>setE("rules",[...ed.rules,{id:newRuleId(), conds:[], act:pm2DefaultAct("flag")}])}>+ Add rule</Btn>
+      {secLabel("If it ran now")}
+      {card(<>
+        <div style={{fontSize:12.5,color:T.text}}><b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"} · <b>{ev.targets.length}</b> table{ev.targets.length===1?"":"s"} to enforce on · <b>{ev.evidence.length}</b> evidence requirement{ev.evidence.length===1?"":"s"}</div>
+        <div style={{display:"flex",flexDirection:"column",gap:3,marginTop:8}}>
+          {[...ev.findings.map(f=>({n:f.asset.name,d:f.msg,c:T.blue})), ...ev.targets.map(t=>({n:t.asset.name,d:`${PM2_ACTIONS[t.rule.act.type].verb} — ${t.detail}`,c:T.green}))].slice(0,8).map((x,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}><span style={{fontFamily:"'Geist Mono',monospace",color:x.c}}>{x.n}</span> — {x.d}</div>)}
+        </div>
+      </>)}
+    </>;
+    if(ed.step===3){
+      const fwList = [...adoptedFws, ...PM2_FW.filter(f=>!st.adopted[f.id]&&ed.articles.some(x=>x.fw===f.id))];
+      body = <>
+        <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Which articles does this policy help satisfy? Mapped articles count it toward readiness — and it's held to them: its findings break those articles.</div>
+        {fwList.map(fw=>(
+          <div key={fw.id}>{secLabel(fw.name, !st.adopted[fw.id]&&<span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— not adopted</span>)}
+            {fw.arts.map((a,i)=>a.out?null:(
+              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:`1px dashed ${T.border}`,cursor:"pointer"}}>
+                <input type="checkbox" checked={ed.articles.some(x=>x.fw===fw.id&&x.i===i)} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:fw.id,i}]:ed.articles.filter(x=>!(x.fw===fw.id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
+                {refTag(a.ref)}<div><div style={{fontSize:12.5,color:T.text}}>{a.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{a.ask}</div></div>
+              </label>))}
+          </div>))}
+        {fwList.length===0&&<div style={{fontSize:12,color:T.textMuted,marginTop:10}}>Adopt a framework first to map this policy to its articles.</div>}
+      </>;
+    }
+    if(ed.step===4) body = <>
+      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>One owner answers for the policy. Stewards can edit drafts and work its findings; only the owner submits it.</div>
+      {secLabel("Owner")}{(isAdmin||!ed.id||ed.owner===me)?userSel(ed.owner, v=>setE("owner",v)):<b style={{fontSize:12.5,color:T.text}}>{ed.owner}</b>}
+      {secLabel("Stewards")}{stewardChips(ed.stewards, v=>setE("stewards",v), ed.owner)}
+      {secLabel("Approval route")}
+      <div style={{fontSize:12.5,color:T.text}}>{routeText(kinds, ev.targets.length)}</div>
+      {ed.isActive&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>This policy is active. Your change is saved as v{ed.version+1} and goes for approval; v{ed.version} keeps running until then.</div>}
+    </>;
+    if(ed.step===5) body = <>
+      {card(<>
+        <div style={{fontSize:15,fontWeight:700,color:T.text}}>{ed.name||<i style={{color:T.textMuted}}>Unnamed policy</i>}</div>
+        <div style={{fontSize:12.5,color:T.textSub,marginTop:4}}>{ed.purpose||"—"}</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{ed.scope.map(classChip)}{kinds.map(k=><span key={k}>{kindPill(k)}</span>)}</div>
+        <div style={{fontSize:12,color:T.textSub,marginTop:8}}>Owner <b>{ed.owner}</b> · stewards {ed.stewards.join(", ")||"none"} · {ed.articles.length} article{ed.articles.length===1?"":"s"} mapped</div>
+      </>)}
+      {secLabel("Rules")}<div style={{display:"flex",flexDirection:"column",gap:6}}>{ed.rules.map(r=><div key={r.id}>{ruleView(r,pv)}</div>)}</div>
+      {secLabel("Next")}<div style={{fontSize:12.5,color:T.text}}>{routeText(kinds, ev.targets.length)}</div>
+      {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:6}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
+    </>;
+    return drawer({title:ed.id?`Edit · ${ed.name}`:"New policy", sub:ed.isActive?`Active v${ed.version} — changes become v${ed.version+1}`:"Draft → submit → approval → active", steps:["Basics","Scope & rules","Compliance mapping","Ownership","Review"], step:ed.step, onStep:n=>setE("step",n), body, onClose:()=>setEd(null),
+      footer:<>
+        <Btn ghost onClick={()=>ed.step>1?setE("step",ed.step-1):setEd(null)}>{ed.step>1?"Back":"Cancel"}</Btn>
+        {ed.step<5?<Btn variant="primary" onClick={()=>setE("step",ed.step+1)}>Continue</Btn>:<>
+          {!ed.isActive&&<Btn onClick={()=>saveEditor(false)}>Save as draft</Btn>}
+          {ownerSubmits&&<Btn variant="primary" onClick={()=>saveEditor(true)}>{ed.isActive?"Submit change":"Submit for approval"}</Btn>}
+        </>}
+      </>});
+  };
+
+  // ═════ PAGE ═════
+  const waiting = pm2StatusPending.length + pm2EnfPending.length;
+  const activeN = st.policies.filter(p=>p.status==="Active").length;
+  const summary = [
+    {l:"Frameworks adopted", v:adoptedFws.length, c:T.accent, go:"frameworks"},
+    {l:"Active policies", v:`${activeN}/${livePols.length}`, c:T.green, go:"policies"},
+    {l:"Open findings", v:openFindings.length, c:openFindings.length?T.rose:T.green, go:"findings"},
+    {l:"Waiting on approval", v:waiting, c:waiting?T.amber:T.textMuted, go:"approvals"},
+    {l:"Evidence needed", v:evidenceNeeded.length, c:evidenceNeeded.length?T.violet:T.textMuted, go:"frameworks"},
+  ];
+  const TABS = [{key:"frameworks",label:"Frameworks",badge:adoptedFws.length},{key:"policies",label:"Policies",badge:livePols.length},{key:"findings",label:"Findings",badge:openFindings.length||null},{key:"approvals",label:"Approvals",badge:waiting||null}];
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Policy Manager 2"}]}/>
       <div style={{flexShrink:0,display:"flex",gap:10,padding:"14px 28px 0",flexWrap:"wrap"}}>
         {summary.map(s=>(
-          <div key={s.l} style={{flex:"1 1 150px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px"}}>
+          <div key={s.l} onClick={()=>{setTab(s.go);setSelFw(null);setSelPol(null);}} style={{flex:"1 1 150px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{s.l}</div>
             <div style={{fontSize:22,fontWeight:800,color:s.c,fontFamily:"'Geist Mono',monospace",marginTop:2}}>{s.v}</div>
-          </div>
-        ))}
+          </div>))}
       </div>
       <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,display:"flex",paddingLeft:24,marginTop:10}}>
         {TABS.map(t=>{ const a=tab===t.key; return (
-          <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);}} style={{display:"flex",alignItems:"center",gap:7,padding:"11px 18px",background:"transparent",border:"none",borderBottom:`2.5px solid ${a?T.accent:"transparent"}`,color:a?T.accent:T.textMuted,fontSize:13,fontWeight:a?600:500,cursor:"pointer",marginBottom:-1}}>
+          <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);setSelPol(null);}} style={{display:"flex",alignItems:"center",gap:7,padding:"11px 18px",background:"transparent",border:"none",borderBottom:`2.5px solid ${a?T.accent:"transparent"}`,color:a?T.accent:T.textMuted,fontSize:13,fontWeight:a?600:500,cursor:"pointer",marginBottom:-1}}>
             {t.label}{t.badge!=null&&<span style={{minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:a?T.accent:T.bgElevated,color:a?"#fff":T.textSub}}>{t.badge}</span>}
           </button>); })}
       </div>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {tab==="frameworks"&&(selFw?renderFwDetail():renderFrameworks())}
-        {tab==="controls"&&renderControls()}
+        {tab==="policies"&&(selPol?renderPolicy():renderPolicyList())}
         {tab==="findings"&&renderFindings()}
+        {tab==="approvals"&&renderApprovals()}
       </div>
-      {ctlOpen&&renderCtlDrawer()}
       {wiz&&renderWizard()}
+      {ed&&renderEditor()}
     </div>
   );
 };
@@ -35198,12 +35627,13 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
 // ── Create a semantic model. You pick assets; EDG derives the entity. You declare the
 //    joins; EDG checks them. Nothing about the model is invented on your behalf.
-const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) => {
+const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existingRels, onToast}) => {
+  const isEdit = !!model;
   const SECTIONS = [
     {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
     {k:"assets",   l:"Datasets",  d:"The catalogue assets this model is built from"},
     {k:"joins",    l:"Joins",     d:"How those tables connect"},
-    {k:"review",   l:"Review",    d:"What will be created"},
+    {k:"review",   l:"Review",    d:isEdit?"What will change":"What will be created"},
   ];
   const [sec, setSec] = useState("identity");
   const [d, setD]     = useState(null);
@@ -35212,9 +35642,22 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
   const [domF, setDomF] = useState("all");
   const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
 
-  useEffect(()=>{ if(open){ setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
-    setNj({from:"",fromCol:"",to:"",toCol:""});
-    setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",assetIds:[],joins:[]}); } },[open]);
+  useEffect(()=>{ if(!open) return;
+    setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
+    setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
+    if(!model){
+      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[]});
+      return;
+    }
+    // An existing model is described by the same four things, so it is loaded into the
+    // same shape: its datasets become the assets they came from, and its joins are the
+    // relationships between them.
+    const ids = model.entityIds||[];
+    const assetIds = ids.map(id=>((existingEntities||[]).find(e=>e.id===id)||{}).assetId).filter(x=>x!=null);
+    setD({name:model.name||"", desc:model.desc||"", domain:model.domain||"Finance",
+          owner:model.owner||"", steward:model.steward||"", targets:[...(model.targets||[])],
+          assetIds, joins:(existingRels||[]).filter(r=>ids.includes(r.from)&&ids.includes(r.to)).map(r=>({...r}))});
+  },[open, model]);
   if(!open || !d) return null;
 
   const pool = slModellableAssets();
@@ -35260,7 +35703,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
     onToast&&onToast("Join added","success");
   };
 
-  const noKey = derived.filter(x=>!x.entity.key);
+  const noKey = derived.filter(x=>!slKeys(x.entity).length);
   const ready = d.name.trim() && d.owner && d.assetIds.length>0 && noKey.length===0;
 
   const Field = ({label,hint,children}) => (
@@ -35278,7 +35721,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
 
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>New semantic model</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?`Edit ${model.name}`:"New semantic model"}</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Pick the tables. EDG works out what one row means. You declare how they join.</div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
@@ -35313,6 +35756,19 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 <div style={{flex:1}}><Field label="Owner"><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></Field></div>
               </div>
               <Field label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Select a steward" options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></Field>
+              <Field label="Publishes to" hint="Where it is compiled and sent. Always a reviewed change set, never a live write. Can be left empty until there is something worth publishing.">
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
+                    const on=(d.targets||[]).includes(p.k);
+                    return <button key={p.k} onClick={()=>setD({...d, targets: on?d.targets.filter(x=>x!==p.k):[...(d.targets||[]),p.k]})}
+                      style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
+                      <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
+                    </button>;
+                  })}
+                </div>
+              </Field>
             </>}
 
             {sec==="assets" && <>
@@ -35461,13 +35917,14 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
             </>}
 
             {sec==="review" && <>
-              <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:9}}>WHAT WILL BE CREATED</div>
+              <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:9}}>{isEdit?"WHAT WILL CHANGE":"WHAT WILL BE CREATED"}</div>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
                 {[["Model", d.name||"—"],
                   ["Owner", `${d.owner||"—"} · steward ${d.steward||d.owner||"—"}`],
                   ["Assets", d.assetIds.length ? derived.map(x=>x.asset.name).join(", ") : "none"],
                   ["Datasets", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
                   ["Joins", d.joins.length ? `${d.joins.length} declared` : "none — every metric sits on one table"],
+                  ["Publishes to", (d.targets||[]).length ? d.targets.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ") : "nothing yet"],
                 ].map(([k,v],i,a)=>(
                   <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
                     <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
@@ -35480,7 +35937,9 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{noKey.map(x=>x.entity.table).join(", ")} — remove them, or declare a key before this model can be certified.</div>
               </div>}
               <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-                The model is created as a draft. Add metrics against the grain of the datasets above, then choose where it publishes when there is something worth publishing.
+                {isEdit
+                  ? "Datasets and joins are shared — a dataset added here is available to every model that picks the same table, and a join removed here is removed for all of them. Metrics already defined on this model are untouched."
+                  : "The model is created as a draft. Add metrics against the grain of the datasets above, then publish when there is something worth publishing."}
               </div>
             </>}
           </div>
@@ -35488,19 +35947,25 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
 
         <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
           <span style={{fontSize:11.5,color:ready?T.green:T.textMuted}}>
-            {ready ? "Ready to create." : !d.name.trim() ? "Give the model a name." : !d.owner ? "Pick an owner."
+            {ready ? (isEdit?"Ready to save.":"Ready to create.") : !d.name.trim() ? "Give the model a name." : !d.owner ? "Pick an owner."
               : d.assetIds.length===0 ? "Pick at least one asset." : "Every asset needs a detectable grain."}
           </span>
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
-            <Btn variant="primary" disabled={!ready} onClick={()=>onCreate({
-              model:{id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
-                     steward:d.steward||d.owner, status:"Draft", entityIds:derived.map(x=>x.entity.id),
-                     targets:[], lastPublished:null, created:new Date().toISOString().slice(0,10),
-                     sync:{enabled:false, targets:[], frequency:"daily", onDrift:"flag"}},
+            <Btn variant="primary" disabled={!ready} onClick={()=>onSave({
+              isEdit,
+              model: isEdit
+                ? {...model, name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
+                   steward:d.steward||d.owner, entityIds:derived.map(x=>x.entity.id), targets:d.targets||[]}
+                : {id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
+                   steward:d.steward||d.owner, status:"Draft", entityIds:derived.map(x=>x.entity.id),
+                   targets:d.targets||[], lastPublished:null, created:new Date().toISOString().slice(0,10),
+                   owners:[d.owner], stewards:[d.steward||d.owner], tags:[], terms:[],
+                   sync:{enabled:false, targets:[], frequency:"daily", onDrift:"flag"}},
               newEntities: derived.filter(x=>x.created).map(x=>x.entity),
               joins: d.joins,
-            })}>Create model</Btn>
+              entityIds: derived.map(x=>x.entity.id),
+            })}>{isEdit?"Save changes":"Create model"}</Btn>
           </div>
         </div>
       </div>
@@ -37908,7 +38373,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [q,       setQ]       = useState("");
   const [confFilter, setConfFilter] = useState("all");
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [newMdlOpen,  setNewMdlOpen]  = useState(false);
+  const [mdlDrawer,   setMdlDrawer]   = useState(null);   // {model} — null model = create
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
   const [defTab,      setDefTab]      = useState("dimensions");
@@ -37926,8 +38391,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [renameFor,   setRenameFor]   = useState(null);  // {kind, obj}
   const [tgtDrawer,   setTgtDrawer]   = useState(null);  // platform key
   const [mapFor,  setMapFor]  = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [draft,   setDraft]   = useState(null);
   const [descEdit,setDescEdit]= useState(false);
   const [descVal, setDescVal] = useState("");
   const [syncing, setSyncing] = useState(false);
@@ -37996,13 +38459,24 @@ const SemanticLayerView = ({onToast, onNav}) => {
     setStore(prev=>({...prev, vendor:prev.vendor.map(v=>v.id===vId?{...v, mappedTo:metricId, conformance:"drifted",
       note:"Newly claimed. Differences against the certified definition have not been reviewed yet."}:v)}));
     setMapFor(null); onToast && onToast("Claimed. It stays flagged until someone compares the two definitions.","success"); };
-  const createModel = ({model, newEntities, joins}) => {
-    setStore(prev=>({...prev,
-      models:   [...prev.models, model],
-      entities: [...prev.entities, ...newEntities],
-      rels:     [...prev.rels, ...joins],
-    }));
-    setNewMdlOpen(false); setSelMdl(model.id); setTab("overview");
+  // One save path for both, because they are the same operation: a model is its
+  // identity, its datasets, its joins and where it publishes, whether or not it
+  // existed a moment ago.
+  const saveModel = ({isEdit, model, newEntities, joins, entityIds}) => {
+    setStore(prev=>{
+      const keptIds = new Set(joins.map(j=>j.id));
+      // A join between two datasets this model no longer contains is not this model's
+      // to remove — another model may be built on the same pair.
+      const inScope = (r) => entityIds.includes(r.from) && entityIds.includes(r.to);
+      return {...prev,
+        models:   isEdit ? prev.models.map(m=>m.id===model.id?{...m,...model}:m) : [...prev.models, model],
+        entities: [...prev.entities, ...newEntities],
+        rels:     [...prev.rels.filter(r=>!inScope(r) || keptIds.has(r.id)).map(r=>joins.find(j=>j.id===r.id)||r),
+                   ...joins.filter(j=>!prev.rels.some(r=>r.id===j.id))],
+      };
+    });
+    setMdlDrawer(null); setSelMdl(model.id); setTab("overview");
+    if(isEdit){ onToast && onToast(`${model.name} updated`,"success"); return; }
     const bits = [`${newEntities.length} dataset${newEntities.length===1?"":"s"} derived`];
     if(joins.length) bits.push(`${joins.length} join${joins.length===1?"":"s"}`);
     onToast && onToast(`${model.name} created · ${bits.join(" · ")}`,"success");
@@ -38037,13 +38511,12 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
-    const startEdit = () => { setDraft({...mdl}); setEditing(true); };
-    const saveEdit  = () => { patchModel({name:draft.name,desc:draft.desc,domain:draft.domain,owner:draft.owner,steward:draft.steward,targets:draft.targets,entityIds:draft.entityIds}); setEditing(false); onToast&&onToast("Model updated","success"); };
+    const startEdit = () => setMdlDrawer({model:mdl});
 
     return (
       <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
         <Topbar breadcrumb={[
-          {label:"Semantic Layer", onClick:()=>{setSelMdl(null);setEditing(false);setSelEnt(null);setFindings(null);}},
+          {label:"Semantic Layer", onClick:()=>{setSelMdl(null);setSelEnt(null);setFindings(null);}},
           {label:mdl.name},
         ]}/>
         <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}
@@ -38072,8 +38545,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       {[
                         {icon:"🖊️",label:"Edit Details",sub:"Name, owner, datasets, targets",action:()=>{setMdlMenuOpen(false);startEdit();}},
                         {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setMdlStyleOpen(true);setMdlMenuOpen(false);}},
-                        {icon:"🚀",label:"Publish",sub:mMetrics.length?"Compile and open a change set":"Nothing to publish yet",
-                         disabled:!mMetrics.length, action:()=>{setMdlMenuOpen(false);setPubOpen(true);}},
                       ].map(item=>(
                         <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
                           style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",
@@ -38173,7 +38644,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
 
 
-                  <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."/>
+                  <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."
+                      action={<Btn small variant="primary" disabled={!mMetrics.length}
+                        onClick={()=>setPubOpen(true)}>{mMetrics.length?"Publish":"Nothing to publish"}</Btn>}/>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {(mdl.targets||[]).map(t=>{
                       const p = SL_PLATFORMS[t]||{}; const fileCount = slBuildArtifacts(t,{mdl,ents:mEnts,rels:mRels,mets:mMetrics,dims:mDims,facts:mFacts}).length;
@@ -38753,57 +39226,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
           </div>
         </div>
 
-        {/* Edit the model */}
-        {editing && draft && (
-          <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={()=>setEditing(false)}>
-            <div className="slideInRight" onClick={e=>e.stopPropagation()}
-              style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
-              <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Edit model</div>
-                <button onClick={()=>setEditing(false)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
-              </div>
-              <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
-                <SLField label="Name"><Input2 value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></SLField>
-                <SLField label="What it is for"><Input2 multiline rows={3} value={draft.desc} onChange={e=>setDraft({...draft,desc:e.target.value})}/></SLField>
-                <div style={{display:"flex",gap:12}}>
-                  <div style={{flex:1}}><SLField label="Domain"><SLSelect value={draft.domain} onChange={e=>setDraft({...draft,domain:e.target.value})} options={["Finance","Commerce","Product","Marketing"]}/></SLField></div>
-                  <div style={{flex:1}}><SLField label="Owner"><SLSelect value={draft.owner} onChange={e=>setDraft({...draft,owner:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField></div>
-                </div>
-                <SLField label="Steward"><SLSelect value={draft.steward} onChange={e=>setDraft({...draft,steward:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField>
-                <SLField label="Datasets" hint="What the model is allowed to count and join across.">
-                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    {entities.map(e=>{
-                      const on=(draft.entityIds||[]).includes(e.id);
-                      return <button key={e.id} onClick={()=>setDraft({...draft, entityIds: on?draft.entityIds.filter(x=>x!==e.id):[...(draft.entityIds||[]),e.id]})}
-                        style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{e.name}</span>
-                        <span style={{fontSize:11,color:T.textMuted}}>one row per {e.key}</span>
-                      </button>;
-                    })}
-                  </div>
-                </SLField>
-                <SLField label="Publishes to" hint="Where it is compiled and sent. Always a reviewed change set, never a live write.">
-                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    {SL_PLAT_LIST.filter(p=>p.adapter==="ready").map(p=>{
-                      const on=(draft.targets||[]).includes(p.k);
-                      return <button key={p.k} onClick={()=>setDraft({...draft, targets: on?draft.targets.filter(x=>x!==p.k):[...(draft.targets||[]),p.k]})}
-                        style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:8,cursor:"pointer",textAlign:"left"}}>
-                        <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{p.label}</span>
-                        <span style={{fontSize:11,color:T.textMuted}}>{p.artifact}</span>
-                      </button>;
-                    })}
-                  </div>
-                </SLField>
-              </div>
-              <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:9,background:T.bg}}>
-                <Btn ghost onClick={()=>setEditing(false)}>Cancel</Btn>
-                <Btn variant="primary" onClick={saveEdit}>Save</Btn>
-              </div>
-            </div>
-          </div>
-        )}
 
         <Modal open={!!mapFor} onClose={()=>setMapFor(null)} title="Claim this definition" width={560}>
           {mapFor && <>
@@ -38862,6 +39284,10 @@ const SemanticLayerView = ({onToast, onNav}) => {
             </div>
           </div>
         )}
+        {/* The same drawer the list opens — the detail view has its own return, so it
+            needs its own mount or Edit Details opens nothing. */}
+        <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} onClose={()=>setMdlDrawer(null)}
+          onSave={saveModel} existingEntities={entities} existingRels={rels} onToast={onToast}/>
         <SLJoinDrawer open={!!joinFor} join={joinFor} entities={mEnts}
           onClose={()=>setJoinFor(null)} onSave={saveJoin} onDelete={deleteJoin} onToast={onToast}/>
         <SLTargetDrawer open={!!tgtDrawer} plat={tgtDrawer} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
@@ -38900,7 +39326,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
           <div style={{flex:1}}>
             <Input2 placeholder="Search semantic models, descriptions, owners…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
           </div>
-          <button onClick={()=>setNewMdlOpen(true)}
+          <button onClick={()=>setMdlDrawer({model:null})}
             style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",flexShrink:0}}>
             {Ic.plus(10)} New Semantic Model
           </button>
@@ -38959,7 +39385,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
         </div>
       </div>
 
-      <SLNewModelDrawer open={newMdlOpen} onClose={()=>setNewMdlOpen(false)} onCreate={createModel} existingEntities={entities} onToast={onToast}/>
+      <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} onClose={()=>setMdlDrawer(null)}
+        onSave={saveModel} existingEntities={entities} existingRels={rels} onToast={onToast}/>
     </div>
   );
 };
@@ -44572,9 +44999,9 @@ const InboxView = ({onToast}) => {
   // top-down status-change requests (tag/domain — assets keep their own certification flow) → steward approval items
   const statusReqs = useStatusReqs();
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
-    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":r.kind==="policy"?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":r.kind==="policy"?"Policy":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
-    body:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
+    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||(r.kind||"").startsWith("pm2"))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":r.kind==="policy"?"Policy":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
+    body:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
   // top-down deletion requests (tag/domain) → owner approval items
@@ -44732,6 +45159,11 @@ const InboxView = ({onToast}) => {
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review"){
+      // Policy Manager 2 requests: resolve the shared request — Policy Manager 2 applies the decision.
+      if((item.reqKind||"").startsWith("pm2")&&_pm2.approvalPolicy.sod&&item.requestedBy===meHandle)
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{openIn("Open in Policy Manager 2","policymanager2")}</>;
+      if((item.reqKind||"").startsWith("pm2"))
+        return <>{btn("Approve",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"approved",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"cert",title:`Approved · ${item.asset.name}`,body:`Approved by ${meHandle||"approver"}`,nav:"policymanager2"});ack(item.id,`${item.asset.name} approved — requester notified`);},true)}{btn("Reject",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"rejected",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"field_updated",title:`Rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was rejected`,nav:"policymanager2"});ack(item.id,"Rejected — requester notified");},false,true)}{openIn("Open in Policy Manager 2","policymanager2")}</>;
       if(item.reqKind==="tag")
         return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
@@ -44838,7 +45270,7 @@ const InboxView = ({onToast}) => {
         if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
         pushNotif({category:"Policy",type:"field_updated",title:`Enforcement rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to ${(item.action||"enforce").toLowerCase()} was declined`,nav:"policymanager",navArg:{policyId:item.policyId}});
         ack(item.id,"Enforcement rejected — requester notified");
-      },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
+      },false,true)}{String(item.policyId||"").startsWith("pm2:")?openIn("Open in Policy Manager 2","policymanager2"):openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
     }
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
