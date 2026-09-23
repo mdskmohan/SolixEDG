@@ -33189,9 +33189,9 @@ const slCheckJoin = (fromEnt, fromCol, toEnt, toCol) => {
   if (!fromEnt || !toEnt) return {ok: false, issues: ["Pick both sides."], fanOut: false};
   if (fromEnt.id === toEnt.id) issues.push("Both sides are the same entity.");
   const fp = COL_PROFILES[fromCol] || {}, tp = COL_PROFILES[toCol] || {};
-  const toIsKey = toEnt.key === toCol;
+  const toIsKey = slKeys(toEnt).includes(toCol);
   if (!toIsKey && tp.distinctPct !== 100)
-    issues.push(`${toCol} is not the key of ${toEnt.name} and is not unique — this join will fan out and double-count every measure on ${fromEnt.name}.`);
+    issues.push(`${toCol} is not part of the primary key of ${toEnt.name} and is not unique — this join will fan out and double-count every measure on ${fromEnt.name}.`);
   if (fp.nullPct > 0)
     issues.push(`${fromCol} is ${fp.nullPct}% null — those rows drop out of the join.`);
   const ft = (SCHEMA[fromEnt.table] || []).find(c => c.name === fromCol);
@@ -36254,7 +36254,151 @@ const SLRelNode = ({data}) => {
 };
 const SL_REL_NODE_TYPES = {slRelNode: SLRelNode};
 
-const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, onOpenMetric, onRename}) => {
+// ── Edit a join after the model exists. Declaring one only at creation meant the
+//    single most consequential thing in the model — what joins to what, and whether
+//    that join double-counts — was the one thing you could not go back and correct.
+const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}) => {
+  const [d, setD] = useState(null);
+  useEffect(()=>{
+    if(!open) return;
+    const isNew = join === "new";
+    setD(isNew
+      ? {id:null, from:"", to:"", pairs:[{from:"",to:""}], cardinality:"many_to_one", filterDirection:"single", note:""}
+      : {id:join.id, from:join.from, to:join.to,
+         pairs: slJoinPairs(join).map(([a,b])=>({from:a, to:b})),
+         cardinality: join.cardinality||"many_to_one",
+         filterDirection: join.filterDirection||"single",
+         note: join.note||""});
+  },[open, join]);
+  if(!open || !d) return null;
+
+  const fromEnt = entities.find(e=>e.id===d.from);
+  const toEnt   = entities.find(e=>e.id===d.to);
+  const cols    = (e) => (SCHEMA[(e||{}).table] || []).map(c=>c.name);
+  const full    = d.pairs.filter(p=>p.from && p.to);
+  const setPair = (i, side, v) => setD(p=>({...p, pairs:p.pairs.map((x,j)=>j===i?{...x,[side]:v}:x)}));
+
+  // Every pair is checked, not just the first — a join is only as safe as its weakest
+  // column, and the fan-out one is rarely the one you typed first.
+  const checks  = full.map(p=>({pair:p, r:slCheckJoin(fromEnt, p.from, toEnt, p.to)}));
+  const fanOut  = checks.some(c=>c.r.fanOut);
+  const issues  = checks.flatMap(c=>c.r.issues).filter((s,i,a)=>a.indexOf(s)===i);
+  const ready   = d.from && d.to && d.from!==d.to && full.length===d.pairs.length && d.pairs.length>0;
+
+  const save = () => {
+    if(!ready){ onToast && onToast("Both sides and every column pair have to be filled in.","error"); return; }
+    onSave({
+      id: d.id || "r_"+Date.now(),
+      from: d.from, to: d.to,
+      fromKeys: full.map(x=>x.from), toKeys: full.map(x=>x.to),
+      fromKey: full[0].from, toKey: full[0].to,
+      cardinality: d.cardinality, filterDirection: d.filterDirection,
+      fanOutSafe: !fanOut,
+      note: d.note || `Declared by hand${full.length>1?` on ${full.length} column pairs`:""}. ${fanOut?"Flagged: the right-hand side is not unique.":"Checked against column profiles."}`,
+    });
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{d.id?"Edit join":"Add a join"}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              Which datasets connect, and on which columns. A metric can only be sliced by a dimension it can reach through these.
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <div style={{display:"flex",gap:12,alignItems:"flex-end",marginBottom:16}}>
+            <div style={{flex:1}}>
+              <SLField label="Many side" hint="The dataset with repeated values.">
+                <SLSelect value={d.from} onChange={e=>setD({...d,from:e.target.value,pairs:[{from:"",to:""}]})} placeholder="Select a dataset"
+                  options={entities.map(e=>({v:e.id,l:e.name}))}/>
+              </SLField>
+            </div>
+            <div style={{paddingBottom:18,color:T.textMuted,fontSize:15}}>→</div>
+            <div style={{flex:1}}>
+              <SLField label="One side" hint="The dataset each row points at.">
+                <SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value,pairs:[{from:"",to:""}]})} placeholder="Select a dataset"
+                  options={entities.filter(e=>e.id!==d.from).map(e=>({v:e.id,l:e.name}))}/>
+              </SLField>
+            </div>
+          </div>
+
+          {fromEnt && toEnt && <SLField label="Matching columns"
+            hint={d.pairs.length>1 ? "All of these must match for a row to join. The order of the two sides is the pairing." : "Add another pair when one column is not enough to identify the row."}>
+            {d.pairs.map((p,i)=>(
+              <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:7}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <SLSelect value={p.from} onChange={e=>setPair(i,"from",e.target.value)} placeholder={`column on ${fromEnt.table}`} options={cols(fromEnt)}/>
+                </div>
+                <span style={{color:T.textMuted,fontSize:12}}>=</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <SLSelect value={p.to} onChange={e=>setPair(i,"to",e.target.value)} placeholder={`column on ${toEnt.table}`} options={cols(toEnt)}/>
+                </div>
+                <button onClick={()=>setD(p2=>({...p2, pairs:p2.pairs.length>1?p2.pairs.filter((_,j)=>j!==i):p2.pairs}))}
+                  disabled={d.pairs.length===1}
+                  style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,
+                    cursor:d.pairs.length===1?"not-allowed":"pointer",opacity:d.pairs.length===1?.4:1,flexShrink:0}}>×</button>
+              </div>
+            ))}
+            <Btn small icon={Ic.plus(11)} onClick={()=>setD(p=>({...p, pairs:[...p.pairs,{from:"",to:""}]}))}>Match another column</Btn>
+          </SLField>}
+
+          {full.length>0 && <div style={{marginTop:4,marginBottom:16,padding:"11px 13px",borderRadius:9,
+            background: issues.length?T.amberDim:"rgba(22,163,74,.07)",
+            border:`1px solid ${issues.length?T.amber+"35":T.green+"35"}`}}>
+            <div style={{fontSize:11.5,fontFamily:"ui-monospace,monospace",color:T.textSub,marginBottom:issues.length?7:0}}>
+              {full.map(p=>`${fromEnt.table}.${p.from} = ${toEnt.table}.${p.to}`).join("  AND  ")}
+            </div>
+            {issues.length===0
+              ? <div style={{fontSize:11.5,color:T.green,fontWeight:600}}>✓ Checked against the column profiles — this join cannot fan out.</div>
+              : issues.map((s,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:2}}>· {s}</div>)}
+          </div>}
+
+          <div style={{display:"flex",gap:12}}>
+            <div style={{flex:1}}>
+              <SLField label="Cardinality" hint="What the join promises about row counts.">
+                <SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})}
+                  options={[{v:"many_to_one",l:"Many to one"},{v:"one_to_one",l:"One to one"}]}/>
+              </SLField>
+            </div>
+            <div style={{flex:1}}>
+              <SLField label="Filter direction" hint="Power BI needs this on every relationship. Both directions is slower and can create ambiguity.">
+                <SLSelect value={d.filterDirection} onChange={e=>setD({...d,filterDirection:e.target.value})}
+                  options={[{v:"single",l:"Single — one side filters many"},{v:"both",l:"Both directions"}]}/>
+              </SLField>
+            </div>
+          </div>
+
+          <SLField label="Note" hint="Why this join exists, for whoever reads it next.">
+            <Input2 multiline rows={2} value={d.note} onChange={e=>setD({...d,note:e.target.value})}
+              placeholder="Every order belongs to one customer. Safe to join — cannot fan out."/>
+          </SLField>
+        </div>
+
+        <div style={{flexShrink:0,padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          {d.id
+            ? <button onClick={()=>onDelete(d.id)}
+                style={{background:"transparent",border:"none",color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",padding:0,fontFamily:"inherit"}}>
+                Remove this join
+              </button>
+            : <span style={{fontSize:11.5,color:T.textMuted}}>{ready?"Ready.":"Pick both sides and a column pair."}</span>}
+          <div style={{display:"flex",gap:9}}>
+            <Btn ghost onClick={onClose}>Cancel</Btn>
+            <Btn variant="primary" disabled={!ready} onClick={save}>{d.id?"Save join":"Add join"}</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, onOpenMetric, onRename, onEditJoin}) => {
   const [rf, setRf] = useState(null);
 
   const layout = useMemo(()=>{
@@ -36328,6 +36472,10 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
           style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
           Fit
         </button>
+        {onEditJoin && <button onClick={()=>onEditJoin("new")}
+          style={{padding:"4px 12px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+          Add join
+        </button>}
       </div>
 
       {/* Canvas + info panel row */}
@@ -36390,7 +36538,13 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                     const other = entities.find(e=>e.id===(r.from===sel.id?r.to:r.from));
                     return (
                       <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
-                        <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a"}}>{r.from===sel.id?"→":"←"} {other?other.name:"—"}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a",flex:1}}>{r.from===sel.id?"→":"←"} {other?other.name:"—"}</div>
+                          {onEditJoin && <button onClick={()=>onEditJoin(r)} title="Edit this join"
+                            style={{width:22,height:22,borderRadius:5,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            {Ic.edit(11)}
+                          </button>}
+                        </div>
                         <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{slJoinText(r)}</div>
                         <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>{r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}</div>
                       </div>
@@ -36807,6 +36961,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [defQ,        setDefQ]        = useState("");
   const [cfgTab,      setCfgTab]      = useState("source");
   const [yamlDraft,   setYamlDraft]   = useState(null);
+  const [joinFor,     setJoinFor]     = useState(null);
   const [pullText,    setPullText]    = useState("");
   const [pullResult,  setPullResult]  = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
@@ -36850,6 +37005,20 @@ const SemanticLayerView = ({onToast, onNav}) => {
     }));
     setYamlResult({ok:true, errors:[], warnings:res.warnings, changes:res.changes});
     onToast && onToast(res.changes.length ? `${res.changes.length} change${res.changes.length===1?"":"s"} applied` : "No changes to apply","success");
+  };
+
+  // A join is shared by every model whose datasets it connects, the same way a dataset
+  // is — so saving one here saves it everywhere, and removing one removes it.
+  const saveJoin = (r) => {
+    setStore(prev=>({...prev,
+      rels: prev.rels.some(x=>x.id===r.id) ? prev.rels.map(x=>x.id===r.id?r:x) : [...prev.rels, r]}));
+    setJoinFor(null);
+    onToast && onToast(r.fanOutSafe ? "Join saved" : "Join saved — flagged as able to fan out","success");
+  };
+  const deleteJoin = (id) => {
+    setStore(prev=>({...prev, rels: prev.rels.filter(x=>x.id!==id)}));
+    setJoinFor(null);
+    onToast && onToast("Join removed. Metrics that relied on it can no longer be sliced across it.","success");
   };
 
   const saveRename = (kind, obj, patch) => {
@@ -37043,7 +37212,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   sub="Datasets are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
               <SLRelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} dims={mDims} facts={mFacts}
                 models={models} selected={selEnt} onSelect={setSelEnt} onOpenMetric={(id)=>setSelId(id)}
-                onRename={(k,o)=>setRenameFor({kind:k,obj:o})}/>
+                onRename={(k,o)=>setRenameFor({kind:k,obj:o})} onEditJoin={setJoinFor}/>
 
             </>}
 
@@ -37648,6 +37817,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
         <SLRenameDrawer open={!!renameFor} kind={renameFor&&renameFor.kind} obj={renameFor&&renameFor.obj}
           term={renameFor&&renameFor.obj&&renameFor.obj.termId ? gTerms.find(t=>t.id===renameFor.obj.termId) : null}
           onClose={()=>setRenameFor(null)} onSave={saveRename} onToast={onToast}/>
+        <SLJoinDrawer open={!!joinFor} join={joinFor} entities={mEnts}
+          onClose={()=>setJoinFor(null)} onSave={saveJoin} onDelete={deleteJoin} onToast={onToast}/>
         <SLTargetDrawer open={!!tgtDrawer} plat={tgtDrawer} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
           dims={mDims} facts={mFacts} onClose={()=>setTgtDrawer(null)}/>
         <SLDimFactDrawer open={!!dfKind} kind={dfKind} entities={mEnts} dims={dims} facts={facts} gTerms={gTerms}
