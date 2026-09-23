@@ -33330,114 +33330,6 @@ const slBroaderChain = (c, all) => {
 
 // A focused reader for the document we ourselves emit — not a general YAML parser.
 // Anything it does not recognise is reported rather than guessed at.
-const slParseESM = (text) => {
-  const errors = [], warnings = [];
-  const lines = String(text).split("\n");
-  const out = {model:{}, dims:[], facts:[], metrics:[]};
-  let section = null, cur = null;
-
-  const indent = (l) => l.length - l.replace(/^ +/, "").length;
-  const kv = (l) => {
-    const m = l.match(/^\s*-?\s*([a-z_]+):\s*(.*)$/i);
-    return m ? [m[1], m[2].trim()] : null;
-  };
-  const unq = (v) => String(v).replace(/^["']|["']$/g, "");
-  const list = (v) => unq(v).replace(/^\[|\]$/g, "").split(",").map(s => unq(s.trim())).filter(Boolean);
-
-  lines.forEach((raw, i) => {
-    const l = raw.replace(/\s+$/, "");
-    if (!l.trim() || l.trim().startsWith("#")) return;
-    const ind = indent(l);
-
-    if (ind === 0) {
-      const p = kv(l);
-      if (!p) { errors.push(`Line ${i+1}: could not read "${l.trim()}"`); return; }
-      const [k, v] = p;
-      if (["concepts","entities","relationships","measures","metrics","dimensions","facts","governance"].includes(k) && v === "") {
-        section = k; cur = null; return;
-      }
-      section = null; cur = null;
-      if (k === "esm_version" && unq(v) !== ESM_VERSION)
-        warnings.push(`Document says ESM ${unq(v)}; this build writes ${ESM_VERSION}.`);
-      if (k === "label")       out.model.name  = unq(v);
-      if (k === "description") out.model.desc  = unq(v);
-      if (k === "owner")       out.model.owner = unq(v);
-      if (k === "steward")     out.model.steward = unq(v);
-      if (k === "domain")      out.model.domain = unq(v);
-      if (k === "targets")     out.model.targets = list(v);
-      return;
-    }
-
-    if (!section) return;
-    const isItem = /^\s*-\s/.test(l);
-    if (isItem) {
-      cur = {};
-      if (section === "dimensions") out.dims.push(cur);
-      else if (section === "facts") out.facts.push(cur);
-      else if (section === "metrics") out.metrics.push(cur);
-    }
-    const p = kv(l);
-    if (!p || !cur) return;
-    const [k, v] = p;
-    if (v === "") return;
-    if (["dimensions"].includes(k) && section === "metrics") { cur.dims = list(v); return; }
-    cur[k] = /^\[/.test(v.trim()) ? list(v) : unq(v);
-  });
-
-  if (!out.model.name) errors.push("No `label:` found — the model needs a name.");
-  return {...out, errors, warnings};
-};
-
-// Apply a parsed document: patch the model, and update dimensions, facts and metrics that
-// the document actually names. Objects it does not mention are left alone rather than
-// deleted — an editor that silently drops what you did not retype is a data-loss bug.
-const slApplyESM = (parsed, ctx) => {
-  const changes = [];
-  const modelPatch = {};
-  ["name","desc","owner","steward","domain","targets"].forEach(k => {
-    if (parsed.model[k] !== undefined && String(parsed.model[k]) !== String(ctx.mdl[k] || "")) {
-      modelPatch[k] = parsed.model[k];
-      changes.push(`Model ${k}: "${ctx.mdl[k] || "—"}" → "${parsed.model[k]}"`);
-    }
-  });
-
-  const dims = ctx.dims.map(d => {
-    const p = parsed.dims.find(x => x.name === slSlug(d.name) || x.name === d.column || x.label === d.name);
-    if (!p) return d;
-    const next = {...d};
-    if (p.label && p.label !== d.name)       { changes.push(`Dimension ${d.name} renamed to ${p.label}`); next.name = p.label; }
-    if (p.type && p.type !== d.type && SL_DIM_TYPES[p.type]) { changes.push(`Dimension ${next.name} type → ${p.type}`); next.type = p.type; }
-    return next;
-  });
-
-  const facts = ctx.facts.map(x => {
-    const p = parsed.facts.find(y => y.name === slSlug(x.name) || y.column === x.column);
-    if (!p) return x;
-    const next = {...x};
-    if (p.additive !== undefined) {
-      const add = String(p.additive) === "true";
-      if (add !== x.additive) { changes.push(`Fact ${x.name} additive → ${add}`); next.additive = add; }
-    }
-    return next;
-  });
-
-  const metrics = ctx.metrics.map(m => {
-    const p = parsed.metrics.find(x => x.name === slSlug(m.name) || x.label === m.name);
-    if (!p) return m;
-    const next = {...m};
-    if (p.label && p.label !== m.name)      { changes.push(`Metric ${m.name} renamed to ${p.label}`); next.name = p.label; }
-    if (p.grain && p.grain !== m.timeGrain) { changes.push(`Metric ${next.name} grain → ${p.grain}`); next.timeGrain = p.grain; }
-    if (p.unit && p.unit !== m.unit)        { changes.push(`Metric ${next.name} unit → ${p.unit}`); next.unit = p.unit; }
-    if (p.dims && p.dims.join(",") !== (m.dims || []).join(",")) {
-      changes.push(`Metric ${next.name} dimensions → ${p.dims.join(", ") || "none"}`);
-      next.dims = p.dims;
-    }
-    return next;
-  });
-
-  return {modelPatch, dims, facts, metrics, changes};
-};
-
 const slConceptLayout = (concepts, crels) => {
   const NW=168, NH=64, GAPX=54, GAPY=78, PADX=24, PADY=22;
   const depth = (c) => slBroaderChain(c, concepts).length;
@@ -33635,32 +33527,36 @@ const SL_VENDOR = [
    mappedTo:null, conformance:"unmanaged", note:"Looks like Customer Lifetime Value but is an average, not a prediction. Unmapped."},
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ESM — THE EDG SEMANTIC MODEL FORMAT
-// ───────────────────────────────────────────────────────────────────────────
-// The format has to outlive the five platforms we start with, so it is built in
-// three layers and only the bottom one is code:
+// ═══════════════════════════════════════
+// THE FORMAT IS APACHE OSSIE. EDG DOES NOT HAVE ONE.
+// ───────────────────────────────────────
+// A model IS an Ossie core-spec document. EDG authors it, validates it, compiles every
+// platform artifact from it, and reads it back — it does not translate into a house
+// format on the way. An in-house format would have been one more dialect for the
+// industry to reconcile, which is the problem Ossie exists to end.
 //
-//   1. CORE SPEC        — entities, relationships, dimensions, measures, metrics,
-//                         governance. Contains NO vendor concept whatsoever. Semver'd.
-//   2. CAPABILITY PROFILE — each platform declares what it can express, as DATA.
+// What sits ON TOP of the standard, and only on top:
+//
+//   1. CAPABILITY PROFILE — each platform declares what it can express, as DATA.
 //                         Compilability is computed by diffing a model against a
 //                         profile, so adding a platform means adding one object here
 //                         and every badge, warning and matrix in the UI works at once.
-//   3. ADAPTER          — renders the IR into that platform's syntax. The only code.
+//   2. ADAPTER          — renders the document into that platform's syntax. The only
+//                         code. Where Ossie already names a dialect for a platform,
+//                         the document carries the expression in that dialect too, so
+//                         a reader needs no adapter at all.
 //
-// The proof that this is genuinely extensible and not just claimed: `cube` below has a
-// full capability profile and NO adapter. The UI already reports what would and would
-// not survive a compile to it. Tomorrow's platform costs one profile plus one adapter.
+// The proof that this is genuinely extensible and not just claimed: `gooddata` below
+// has a full capability profile and NO adapter. The UI already reports what would and
+// would not survive a compile to it. Tomorrow's platform costs one profile.
 //
-// Two further rules that keep it portable:
-//   · STRUCTURED DESCRIPTORS ONLY. No free-form SQL is ever stored. Stored SQL is both
-//     an injection vector and unportable — each adapter renders its own dialect.
+// Two rules that keep it portable:
+//   · The core spec carries meaning; everything EDG knows that the spec does not goes
+//     into custom_extensions, under the vendor names the spec itself expects.
 //   · PHYSICAL NAMES ARE PER-PLATFORM. The same logical Order is a different object in
 //     every system, so bindings are an open map keyed by platform id.
-// ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════
 
-const ESM_VERSION = "1.0";
 
 
 const SL_PLATFORMS = {
@@ -33709,13 +33605,13 @@ const SL_PLATFORMS = {
 
   // ── No adapter. Present to prove the format is extensible by DATA, not by code:
   //    every compilability badge and warning below already works for it.
-  cube: {
-    label:"Cube", family:"declarative", adapter:"none", order:6,
-    artifact:"cube.js schema",
-    caps:{joins:"explicit", timeIntelligence:"window", semiAdditive:true,
+  gooddata: {
+    label:"GoodData", family:"declarative", adapter:"none", order:6,
+    artifact:"MAQL metrics + logical data model",
+    caps:{joins:"explicit", timeIntelligence:"native", semiAdditive:true,
           metricTypes:["simple","ratio","derived"], filterDirection:false,
           governanceCarry:"meta block"},
-    note:"Profile only, no adapter yet. Listed to show what adding a platform costs: one capability profile, and the whole product already reports against it."},
+    note:"Profile only, no adapter yet — and one Ossie already knows, with MAQL in its dialect list and a converter in the standard's own repository. Listed to show what adding a platform costs: one capability profile, and the whole product already reports against it."},
 };
 const SL_PLAT_LIST = Object.entries(SL_PLATFORMS).sort((a,b)=>a[1].order-b[1].order).map(([k,v])=>({k,...v}));
 
@@ -33763,129 +33659,6 @@ const SL_LEVELS = {
   partial:     {l:"Partial",         c:"#d97706", bg:"rgba(217,119,6,.1)"},
   unsupported: {l:"Not supported",   c:"#9090a8", bg:"rgba(144,144,168,.12)"},
 };
-
-// ── Serialise to the portable format. Shown in the UI so the format is a thing people
-//    can read and review, not an implementation detail buried in a compiler.
-const slModelToESM = (mdl, ents, rels, mets) => {
-  const L = [];
-  L.push(`esm_version: "${ESM_VERSION}"`);
-  L.push(`model: ${slSlug(mdl.name)}`);
-  L.push(`label: ${mdl.name}`);
-  L.push(`description: "${mdl.desc}"`);
-  L.push(`owner: ${mdl.owner}`, `steward: ${mdl.steward}`, `domain: ${mdl.domain}`);
-  L.push(`targets: [${(mdl.targets||[]).join(", ")}]`, "");
-
-  const usedConcepts = ents.map(e=>_slState.concepts.find(c=>c.id===e.concept)).filter(Boolean)
-                            .filter((c,i,a)=>a.indexOf(c)===i);
-  if(usedConcepts.length){
-    L.push("concepts:");
-    usedConcepts.forEach(c=>{
-      L.push(`  - name: ${slSlug(c.name)}`);
-      L.push(`    label: ${c.name}`);
-      L.push(`    definition: "${c.definition}"`);
-      L.push(`    synonyms: [${(c.synonyms||[]).map(s=>`"${s}"`).join(", ")}]`);
-      const br = _slState.concepts.find(x=>x.id===c.broader);
-      if(br) L.push(`    broader: ${slSlug(br.name)}`);
-      const rl = _slState.crels.filter(r=>r.from===c.id && r.type!=="part_of");
-      if(rl.length){
-        L.push(`    relationships:`);
-        rl.forEach(r=>{
-          const t=_slState.concepts.find(x=>x.id===r.to); if(!t) return;
-          L.push(`      - { ${(SL_REL_TYPES[r.type]||{}).l||r.type}: ${slSlug(t.name)} }`);
-        });
-      }
-    });
-    L.push("");
-  }
-  L.push("entities:");
-  ents.forEach(e=>{
-    L.push(`  - name: ${e.name.toLowerCase()}`);
-    L.push(`    primary_key: ${e.key}`);
-    const rc = _slState.concepts.find(c=>c.id===e.concept);
-    if(rc) L.push(`    realises: ${slSlug(rc.name)}`);
-    L.push(`    time_dimension: ${e.timeDims[0]}`);
-    L.push(`    description: "${e.desc}"`);
-    L.push(`    bindings:`);
-    Object.entries(e.bindings||{}).forEach(([k,v])=>L.push(`      ${k}: ${v}`));
-  });
-  L.push("");
-
-  if(rels.length){
-    L.push("relationships:");
-    rels.forEach(r=>{
-      const f=ents.find(x=>x.id===r.from), t=ents.find(x=>x.id===r.to);
-      L.push(`  - from: ${f?f.name.toLowerCase():r.from}`);
-      L.push(`    to: ${t?t.name.toLowerCase():r.to}`);
-      L.push(`    from_key: ${r.fromKey}`);
-      L.push(`    to_key: ${r.toKey}`);
-      L.push(`    cardinality: ${r.cardinality}`);
-      L.push(`    filter_direction: ${r.filterDirection}`);
-      L.push(`    fan_out_safe: ${r.fanOutSafe}`);
-    });
-    L.push("");
-  }
-
-  const simple = mets.filter(m=>m.type==="simple");
-  if(simple.length){
-    L.push("measures:");
-    simple.forEach(m=>{
-      const e = ents.find(x=>x.id===m.entity);
-      L.push(`  - name: ${slMeasureName(m)}`);
-      L.push(`    entity: ${e?e.name.toLowerCase():"—"}`);
-      L.push(`    column: ${m.col}`);
-      L.push(`    agg: ${m.agg}`);
-      L.push(`    additive: ${m.additive!==false}`);
-    });
-    L.push("");
-  }
-
-  L.push("metrics:");
-  mets.forEach(m=>{
-    const e = ents.find(x=>x.id===m.entity);
-    L.push(`  - name: ${slSlug(m.name)}`);
-    L.push(`    label: "${m.name}"`);
-    L.push(`    type: ${m.type}`);
-    L.push(`    entity: ${e?e.name.toLowerCase():"—"}`);
-    if(m.type==="simple")     L.push(`    measure: ${slMeasureName(m)}`);
-    if(m.type==="ratio")      { L.push(`    numerator: "${m.numerator?m.numerator.label:"—"}"`); L.push(`    denominator: "${m.denominator?m.denominator.label:"—"}"`); }
-    if(m.formula)             L.push(`    formula: "${m.formula}"`);
-    if(m.window)              L.push(`    window: ${m.window}`);
-    if((m.basedOn||[]).length)L.push(`    based_on: [${m.basedOn.map(id=>{const b=mets.find(x=>x.id===id)||_slState.metrics.find(x=>x.id===id);return b?slSlug(b.name):id;}).join(", ")}]`);
-    L.push(`    grain: ${m.timeGrain}`);
-    L.push(`    time_dimension: ${m.timeDim}`);
-    L.push(`    unit: ${m.unit}`);
-    if((m.filters||[]).length){
-      L.push("    filters:");
-      m.filters.forEach(x=>L.push(`      - { dimension: ${x.col}, op: ${String(x.op).replace(/ /g,"_")}, value: ${x.val} }`));
-    }
-    if((m.dims||[]).length) L.push(`    dimensions: [${m.dims.join(", ")}]`);
-    L.push(`    governance:`);
-    L.push(`      glossary_term: ${m.termId||"— not registered —"}`);
-    L.push(`      certification: ${String(m.status).toLowerCase().replace(/ /g,"_")}`);
-    L.push(`      owner: ${m.owner}`);
-  });
-  return L.join("\n");
-};
-
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DIMENSIONS AND FACTS — the middle of the modelling flow
-// ───────────────────────────────────────────────────────────────────────────
-// The order a semantic model is actually built in is: tables, then joins, then the
-// things each table exposes — the dimensions you can slice by and the facts you can
-// aggregate — and only then the metrics built out of them. It is also the order
-// Snowflake's CREATE SEMANTIC VIEW expects: TABLES, RELATIONSHIPS, FACTS, DIMENSIONS,
-// METRICS.
-//
-// Until now dimensions were loose strings typed inside a metric and facts were inferred
-// from whichever metrics happened to be simple. That has two costs: a dimension defined
-// for one metric cannot be reused by the next, and nothing can be declared before a
-// metric exists — so the model has no shape until someone writes a number.
-//
-// Declared instead. A dimension belongs to an entity, carries a type, and can point at
-// the Glossary Dimension term that names it. A fact is the row-level number a metric
-// aggregates. Both exist whether or not a metric uses them yet.
-// ═══════════════════════════════════════════════════════════════════════════
 
 const SL_DIM_TYPES = {
   categorical: {l:"Categorical", c:"#d97706", d:"A finite set of values you group by."},
@@ -34080,7 +33853,7 @@ const SLTypeChip = ({type}) => {
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}30`,whiteSpace:"nowrap"}}>{t.l}</span>;
 };
 const SL_SYS_COLOUR = {dbt:"#ff694b", powerbi:"#f2c811", tableau:"#4e79a7",
-                       snowflake:"#29b5e8", databricks:"#ff3621", cube:"#a259ff", ossie:"#d22128"};
+                       snowflake:"#29b5e8", databricks:"#ff3621", gooddata:"#14b2c9", ossie:"#d22128"};
 const SLSysChip = ({system}) => {
   const s = {l:(SL_PLATFORMS[system]||{}).label || system, c:SL_SYS_COLOUR[system] || T.textMuted};
   return <span style={{fontSize:10.5,fontWeight:600,padding:"2px 7px",borderRadius:4,background:`${s.c}18`,color:s.c,border:`1px solid ${s.c}35`,whiteSpace:"nowrap"}}>{s.l}</span>;
@@ -34764,7 +34537,7 @@ const slSynList    = (e) => {
 //    emitted as foreign entities rather than join clauses.
 const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
   const L = [];
-  L.push(`# Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
+  L.push(`# Compiled by EDG from Apache Ossie core-spec ${OSSIE_VERSION}`);
   L.push(`# Model: ${mdl.name} · owner ${mdl.owner} · do not edit by hand`);
   L.push("");
   L.push("semantic_models:");
@@ -34850,7 +34623,7 @@ const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
 const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
   const L = [];
   const view = slSlug(mdl.name).toUpperCase();
-  L.push(`-- Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
+  L.push(`-- Compiled by EDG from Apache Ossie core-spec ${OSSIE_VERSION}`);
   L.push(`-- Model: ${mdl.name} · owner ${mdl.owner}`);
   L.push("");
   L.push(`CREATE OR REPLACE SEMANTIC VIEW ${view}`);
@@ -34923,7 +34696,7 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
 const slAdaptDatabricks = ({mdl, ents, rels, mets}) => {
   const base = ents[0];
   const L = [];
-  L.push(`# Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
+  L.push(`# Compiled by EDG from Apache Ossie core-spec ${OSSIE_VERSION}`);
   L.push(`# Model: ${mdl.name} · owner ${mdl.owner}`);
   L.push(`version: 0.1`);
   L.push(`source: ${base?(base.bindings||{}).databricks||base.table:"—"}`);
@@ -34962,7 +34735,7 @@ const slAdaptDatabricks = ({mdl, ents, rels, mets}) => {
 //    is safe; reading arbitrary DAX back into a declaration is not.
 const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
   const L = [];
-  L.push(`// Generated by EDG · Semantic Layer · ESM v${ESM_VERSION}`);
+  L.push(`// Compiled by EDG from Apache Ossie core-spec ${OSSIE_VERSION}`);
   L.push(`// Model: ${mdl.name} · owner ${mdl.owner}`);
   L.push("");
   ents.forEach(e=>{
@@ -35147,29 +34920,44 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
     const eFacts = (facts||[]).filter(x=>x.entity===e.id);
     const concept = slEntConcept(e);
     const ds = slSlug(e.table);
-    const fields = [];
-    const push = (name, label, description, isTime, synonyms, solix) => {
-      if(fields.some(f=>f.name===name)) return;
+    // One column, one field — a column can be the key AND the thing a metric counts,
+    // and emitting whichever role was seen first would silently drop the other one's
+    // name and description on the way back in.
+    const cols = {}; const order = [];
+    const col = (name) => {
+      if(!cols[name]){ cols[name] = {name, roles:[], syn:[], solix:{}}; order.push(name); }
+      return cols[name];
+    };
+    if(e.key){ const c = col(e.key); c.roles.push("key"); c.keyDesc = `Primary key of ${e.name}.`; }
+    eFacts.forEach(x=>{
+      const c = col(x.column); c.roles.push("fact");
+      if(!c.label){ c.label = x.name; c.labelOf = "fact"; }
+      if(!c.desc) c.desc = x.desc;
+      c.syn.push(x.name); c.solix.additive = x.additive!==false;
+    });
+    eDims.forEach(d=>{
+      const c = col(d.column); c.roles.push("dimension");
+      if(!c.label){ c.label = d.name; c.labelOf = "dimension"; }
+      if(!c.desc) c.desc = d.desc;
+      c.isTime = c.isTime || d.type==="time";
+      c.syn.push(d.name, term(d.termId));
+      c.solix.dimension_type = d.type; c.solix.glossary_term = term(d.termId)||null;
+    });
+
+    const fields = order.map(name=>{
+      const c = cols[name];
       const dt = slOssieType(slColPhysType(e.table, name));
-      fields.push({
+      return {
         name,
         expression: {dialects:[{dialect:"ANSI_SQL", expression:`${ds}.${name}`}]},
-        dimension: {is_time: !!isTime},
-        label: label || undefined,
-        description: description || undefined,
+        dimension: {is_time: !!c.isTime},
+        label: c.label || undefined,
+        description: c.desc || c.keyDesc || undefined,
         datatype: dt || undefined,
-        ai_context: ai(null, synonyms),
-        custom_extensions: ext(solix),
-      });
-    };
-
-    // The key first, then what the model measures, then what it slices by — the same
-    // order the Relationships canvas labels a node's columns in.
-    if(e.key) push(e.key, null, `Primary key of ${e.name}.`, false, null, {role:"key"});
-    eFacts.forEach(x=>push(x.column, x.name, x.desc, false, [x.name],
-      {role:"fact", additive:x.additive!==false}));
-    eDims.forEach(d=>push(d.column, d.name, d.desc, d.type==="time", [d.name, term(d.termId)],
-      {role:"dimension", dimension_type:d.type, glossary_term:term(d.termId)||null}));
+        ai_context: ai(null, c.syn),
+        custom_extensions: ext({role:c.roles[0], roles:c.roles, label_of:c.labelOf||null, ...c.solix}),
+      };
+    });
 
     doc.datasets.push({
       name: ds,
@@ -35178,14 +34966,17 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       description: e.desc || undefined,
       ai_context: ai(e.desc, [e.name, ...(concept ? slConceptNames(concept) : [])]),
       fields: fields.length ? fields : undefined,
-      custom_extensions: ext({
-        label: e.name,
-        concept: concept ? slSlug(concept.name) : null,
-        domain: e.domain, owner: e.owner,
-        grain_evidence: e.evidence || null,
-        time_dimensions: e.timeDims || [],
-        bindings: e.bindings || {},
-      }),
+      custom_extensions: [
+        ...ext({
+          label: e.name,
+          concept: concept ? slSlug(concept.name) : null,
+          domain: e.domain, owner: e.owner,
+          grain_evidence: e.evidence || null,
+          time_dimensions: e.timeDims || [],
+        }),
+        ...Object.entries(e.bindings||{}).filter(([k])=>SL_VENDOR_OF[k]).map(([k,v])=>
+          ({vendor_name: SL_VENDOR_OF[k], data: JSON.stringify({object: v}, null, 2)})),
+      ],
     });
   });
 
@@ -35210,10 +35001,10 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
 
   if((mets||[]).length) doc.metrics = mets.map(m=>{
     const e = ents.find(x=>x.id===m.entity);
-    const {sql} = slOssieExpr({...m, _table:e?e.table:null}, ents, mets);
+    const dialects = slOssieDialects({...m, _table:e?e.table:null}, ents, mets, mdl.targets);
     return {
       name: slSlug(m.name),
-      expression: {dialects: sql ? [{dialect:"ANSI_SQL", expression: sql}] : []},
+      expression: {dialects},
       description: m.definition || undefined,
       datatype: slOssieMetricType({...m, _table:e?e.table:null}) || undefined,
       ai_context: ai(m.definition, [m.name, term(m.termId)]),
@@ -35239,7 +35030,6 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
   });
 
   doc.custom_extensions = ext({
-    esm_version: ESM_VERSION,
     model_id: mdl.id, label: mdl.name, domain: mdl.domain, status: mdl.status,
     owners: mdl.owners||[], stewards: mdl.stewards||[], tags: mdl.tags||[], terms: mdl.terms||[],
     publish_targets: mdl.targets||[], last_published: mdl.lastPublished||null,
@@ -35358,6 +35148,261 @@ const slOssieValidate = (doc) => {
     shape(m, "metric", p); expr(m, p); dtype(m, p); exts(m, p);
   });
   return out;
+};
+
+// ── DIALECTS. The multi-vendor surface, in Ossie's own vocabulary: one document
+//    carries the same metric written for every platform that will read it. A dialect
+//    is only emitted where the expression genuinely differs — the same string repeated
+//    under three headings is padding, not portability.
+const SL_DIALECT_OF = {snowflake:"SNOWFLAKE", databricks:"DATABRICKS", powerbi:"DAX",
+                       tableau:"TABLEAU", dbt:"ANSI_SQL", gooddata:"MAQL", ossie:"ANSI_SQL"};
+// Ossie names the vendors it expects in custom_extensions. Using its names rather than
+// ours is what makes a binding addressable by the tool the binding is for.
+const SL_VENDOR_OF  = {snowflake:"SNOWFLAKE", databricks:"DATABRICKS", powerbi:"POWER_BI",
+                       tableau:"SALESFORCE", dbt:"DBT", gooddata:"GOODDATA"};
+
+// DAX, shared with the Power BI adapter so the document and the artifact cannot drift.
+const slDax = (m, ents, mets) => {
+  const e = ents.find(x=>x.id===m.entity);
+  const tbl = e ? ((e.bindings||{}).powerbi || e.name) : "Table";
+  const base = () => (m.basedOn||[]).map(b=>{
+    const x = (mets||[]).find(y=>y.id===b) || _slState.metrics.find(y=>y.id===b); return x ? x.name : b;
+  })[0] || "Base";
+  if(m.type==="simple"){
+    const fn = m.agg==="count distinct" ? "DISTINCTCOUNT" : String(m.agg).toUpperCase();
+    return (m.filters||[]).length
+      ? `CALCULATE(${fn}('${tbl}'[${m.col}]), ${m.filters.map(f=>`'${tbl}'[${f.col}] ${f.op==="is not"?"<>":"="} "${f.val}"`).join(", ")})`
+      : `${fn}('${tbl}'[${m.col}])`;
+  }
+  if(m.type==="ratio")      return `DIVIDE([${m.numerator?m.numerator.label:"Numerator"}], [${m.denominator?m.denominator.label:"Denominator"}])`;
+  if(m.type==="cumulative") return `CALCULATE([${base()}], DATESQTD('Date'[Date]))`;
+  return `VAR __curr = [${base()}] VAR __prior = CALCULATE(__curr, SAMEPERIODLASTYEAR('Date'[Date])) RETURN DIVIDE(__curr - __prior, __prior)`;
+};
+
+// Tableau calculated-field syntax. Square-bracket fields, IF rather than CASE.
+const slTableauCalc = (m, ents) => {
+  const e = ents.find(x=>x.id===m.entity);
+  const F = (c) => `[${c}]`;
+  if(m.type==="simple"){
+    const fn = m.agg==="count distinct" ? "COUNTD" : String(m.agg).toUpperCase();
+    return (m.filters||[]).length
+      ? `${fn}(IF ${m.filters.map(f=>`${F(f.col)} ${f.op==="is not"?"<>":"="} '${f.val}'`).join(" AND ")} THEN ${F(m.col)} END)`
+      : `${fn}(${F(m.col)})`;
+  }
+  if(m.type==="ratio" && m.numerator && m.denominator){
+    const g = (x) => `${String(x.agg)==="count distinct"?"COUNTD":String(x.agg).toUpperCase()}(${F(x.col)})`;
+    return `${g(m.numerator)} / ${g(m.denominator)}`;
+  }
+  return null;   // Tableau has no portable form for derived or cumulative here
+};
+
+// Every dialect this model can honestly be read in, given where it publishes.
+const slOssieDialects = (m, ents, mets, targets) => {
+  const out = [];
+  const {sql} = slOssieExpr(m, ents, mets);
+  if(sql) out.push({dialect:"ANSI_SQL", expression: sql});
+  const t = targets || [];
+  if(t.includes("powerbi")){ const d = slDax(m, ents, mets); if(d) out.push({dialect:"DAX", expression:d}); }
+  if(t.includes("tableau")){ const d = slTableauCalc(m, ents); if(d) out.push({dialect:"TABLEAU", expression:d}); }
+  return out;
+};
+
+// ══════════════════════════════════════════════════════════════════════════════════
+// READING OSSIE BACK IN. The document is the source of truth, so it has to be
+// parseable, not just printable — otherwise "Ossie is our format" means "Ossie is our
+// export", and an export is not a format.
+// ══════════════════════════════════════════════════════════════════════════════════
+const slParseYaml = (text) => {
+  const errors = [];
+  const raw = String(text).replace(/\r/g,"").replace(/\t/g,"  ").split("\n");
+  const indOf = (l) => l.length - l.replace(/^ +/,"").length;
+
+  // Block scalars first: `key: |` swallows everything indented under it, comments and
+  // blank lines included, because inside a block they are content.
+  const rows = [];
+  for(let i=0;i<raw.length;i++){
+    const l = raw[i], t = l.trim();
+    if(!t || t.startsWith("#")) continue;
+    const m = t.match(/^(-\s+)?([A-Za-z_][\w]*):\s*\|\s*$/);
+    if(m){
+      const ind = indOf(l), body = [];
+      let j = i+1, bodyInd = null;
+      while(j<raw.length && (raw[j].trim()==="" || indOf(raw[j])>ind)){
+        if(raw[j].trim()!=="" && bodyInd===null) bodyInd = indOf(raw[j]);
+        body.push(raw[j]); j++;
+      }
+      while(body.length && body[body.length-1].trim()==="") body.pop();
+      rows.push({n:i+1, ind, key:m[2], dash:!!m[1], block:body.map(x=>x.slice(bodyInd||0)).join("\n")});
+      i = j-1; continue;
+    }
+    rows.push({n:i+1, ind:indOf(l), t});
+  }
+
+  const scalar = (v) => {
+    const s = String(v).trim();
+    if(s==="[]") return [];
+    if(s==="" || s==="null" || s==="~") return null;
+    if(s==="true")  return true;
+    if(s==="false") return false;
+    if(/^-?\d+(\.\d+)?$/.test(s) && !/^0\d/.test(s)) return Number(s);
+    if(/^\[.*\]$/.test(s)) return s.slice(1,-1).split(",").map(x=>scalar(x)).filter(x=>x!==null);
+    if(/^"(.*)"$/.test(s)) return s.slice(1,-1).replace(/\\"/g,'"').replace(/\\\\/g,"\\");
+    if(/^'(.*)'$/.test(s)) return s.slice(1,-1);
+    return s;
+  };
+
+  const parse = (rs, ind) => {
+    if(!rs.length) return null;
+    if(rs[0].t && rs[0].t.startsWith("- ")){
+      const arr = [];
+      let i = 0;
+      while(i<rs.length){
+        if(rs[i].ind!==ind || !rs[i].t || !rs[i].t.startsWith("- ")){ i++; continue; }
+        const inner = rs[i].t.slice(2).trim();
+        let j = i+1; const sub = [];
+        while(j<rs.length && rs[j].ind>ind){ sub.push(rs[j]); j++; }
+        if(/^[A-Za-z_][\w]*:/.test(inner)){
+          // A map item: the first key rides on the dash, the rest sit under it.
+          arr.push(parse([{n:rs[i].n, ind:ind+2, t:inner}, ...sub], ind+2));
+        } else {
+          arr.push(scalar(inner));
+        }
+        i = j;
+      }
+      return arr;
+    }
+    const obj = {};
+    let i = 0;
+    while(i<rs.length){
+      const r = rs[i];
+      if(r.ind!==ind){ i++; continue; }
+      if(r.block!==undefined){ obj[r.key] = r.block; i++; continue; }
+      const m = r.t.match(/^([A-Za-z_][\w]*):\s*(.*)$/);
+      if(!m){ errors.push(`Line ${r.n}: could not read "${r.t}"`); i++; continue; }
+      const [,k,rest] = m;
+      let j = i+1; const sub = [];
+      while(j<rs.length && rs[j].ind>ind){ sub.push(rs[j]); j++; }
+      obj[k] = (rest.trim()==="" && sub.length) ? parse(sub, sub[0].ind) : scalar(rest);
+      i = j;
+    }
+    return obj;
+  };
+
+  const doc = rows.length ? parse(rows, rows[0].ind) : {};
+  return {doc: doc||{}, errors};
+};
+
+// Apply an Ossie document back onto the model. Objects the document does not mention
+// are left alone rather than deleted — an editor that silently drops what you did not
+// retype is a data-loss bug, not a feature.
+const slApplyOssie = (doc, ctx) => {
+  const changes = [];
+  const ext = (o, vendor) => {
+    const hit = (o && o.custom_extensions || []).find(x=>x.vendor_name===(vendor||OSSIE_VENDOR));
+    if(!hit) return {};
+    try { return JSON.parse(hit.data); } catch(e){ return {}; }
+  };
+
+  const mx = ext(doc);
+  const modelPatch = {};
+  const set = (k, v, what) => {
+    if(v===undefined || v===null || v==="") return;
+    if(String(v)===String(ctx.mdl[k]||"")) return;
+    modelPatch[k] = v; changes.push(`Model ${what}: "${ctx.mdl[k]||"—"}" → "${v}"`);
+  };
+  set("name", mx.label, "name");
+  set("desc", doc.description, "description");
+  set("domain", mx.domain, "domain");
+  set("status", mx.status, "status");
+  if(Array.isArray(mx.publish_targets) && mx.publish_targets.join(",")!==(ctx.mdl.targets||[]).join(",")){
+    modelPatch.targets = mx.publish_targets;
+    changes.push(`Model publishes to: ${mx.publish_targets.join(", ")||"nothing"}`);
+  }
+
+  // Datasets are addressed by name, which is the physical table — the one identifier
+  // the document and the model are guaranteed to agree on.
+  const dsFor = (e) => (doc.datasets||[]).find(d=>d.name===slSlug(e.table));
+  const fieldFor = (e, col) => { const d = dsFor(e); return d && (d.fields||[]).find(f=>f.name===col); };
+
+  const dims = ctx.dims.map(d=>{
+    const e = ctx.ents.find(x=>x.id===d.entity); if(!e) return d;
+    const f = fieldFor(e, d.column); if(!f) return d;
+    const fx = ext(f); const next = {...d};
+    if(fx.label_of==="dimension"){
+      if(f.label && f.label!==d.name){ changes.push(`Dimension ${d.name} renamed to ${f.label}`); next.name = f.label; }
+      if(f.description && f.description!==d.desc){ changes.push(`Dimension ${next.name} description updated`); next.desc = f.description; }
+    }
+    const ty = fx.dimension_type || (f.dimension && f.dimension.is_time ? "time" : null);
+    if(ty && SL_DIM_TYPES[ty] && ty!==d.type){ changes.push(`Dimension ${next.name} type → ${ty}`); next.type = ty; }
+    return next;
+  });
+
+  const facts = ctx.facts.map(x=>{
+    const e = ctx.ents.find(y=>y.id===x.entity); if(!e) return x;
+    const f = fieldFor(e, x.column); if(!f) return x;
+    const fx = ext(f); const next = {...x};
+    if(fx.label_of==="fact"){
+      if(f.label && f.label!==x.name){ changes.push(`Fact ${x.name} renamed to ${f.label}`); next.name = f.label; }
+      if(f.description && f.description!==x.desc){ changes.push(`Fact ${next.name} description updated`); next.desc = f.description; }
+    }
+    if(fx.additive!==undefined && !!fx.additive!==x.additive){ changes.push(`Fact ${next.name} additive → ${!!fx.additive}`); next.additive = !!fx.additive; }
+    return next;
+  });
+
+  const metrics = ctx.metrics.map(m=>{
+    const om = (doc.metrics||[]).find(x=>x.name===slSlug(m.name));
+    if(!om) return m;
+    const ox = ext(om); const g = ox.governance || {}; const next = {...m};
+    if(ox.label && ox.label!==m.name){ changes.push(`Metric ${m.name} renamed to ${ox.label}`); next.name = ox.label; }
+    if(om.description && om.description!==m.definition){ changes.push(`Metric ${next.name} definition updated`); next.definition = om.description; }
+    if(ox.unit && ox.unit!==m.unit){ changes.push(`Metric ${next.name} unit → ${ox.unit}`); next.unit = ox.unit; }
+    if(ox.time_grain && ox.time_grain!==m.timeGrain){ changes.push(`Metric ${next.name} grain → ${ox.time_grain}`); next.timeGrain = ox.time_grain; }
+    if(ox.time_dimension && ox.time_dimension!==m.timeDim){ changes.push(`Metric ${next.name} time dimension → ${ox.time_dimension}`); next.timeDim = ox.time_dimension; }
+    if(Array.isArray(ox.dimensions) && ox.dimensions.join(",")!==(m.dims||[]).join(",")){
+      changes.push(`Metric ${next.name} dimensions → ${ox.dimensions.join(", ")||"none"}`); next.dims = ox.dimensions;
+    }
+    if(g.owner && g.owner!==m.owner){ changes.push(`Metric ${next.name} owner → ${g.owner}`); next.owner = g.owner; }
+    const cert = {approved:"Approved", in_review:"In Review", draft:"Draft", deprecated:"Deprecated"}[g.certification];
+    if(cert && cert!==m.status){ changes.push(`Metric ${next.name} certification → ${cert}`); next.status = cert; }
+    return next;
+  });
+
+  return {modelPatch, dims, facts, metrics, changes};
+};
+
+// Parse, validate, and only then say what it would change. A document that does not
+// validate is never half-applied.
+const slReadOssie = (text, ctx) => {
+  const {doc, errors} = slParseYaml(text);
+  if(errors.length) return {ok:false, errors, warnings:[], changes:[]};
+  const bad = slOssieValidate(doc);
+  const hard = bad.filter(e=>e.level==="error").map(e=>`${e.path} — ${e.msg}`);
+  if(hard.length) return {ok:false, errors:hard, warnings:[], changes:[]};
+  const applied = slApplyOssie(doc, ctx);
+  return {ok:true, errors:[], warnings:bad.filter(e=>e.level==="warning").map(e=>`${e.path} — ${e.msg}`),
+          ...applied};
+};
+
+// What a platform would hand back if you asked it for its model, as an Ossie document.
+// Built from the definitions EDG has already harvested from that platform, so the diff
+// it produces is a real disagreement rather than an invented one.
+const slVendorOssie = (platKey, ctx, vendorAll) => {
+  const doc = slOssieDoc(ctx);
+  const mine = (vendorAll||[]).filter(v=>v.system===platKey && v.mappedTo);
+  (doc.metrics||[]).forEach(m=>{
+    const target = (ctx.mets||[]).find(x=>slSlug(x.name)===m.name); if(!target) return;
+    const v = mine.find(x=>x.mappedTo===target.id);
+    if(!v || v.conformance==="conformant") return;
+    if(v.note) m.description = v.note;
+    const x = (m.custom_extensions||[]).find(c=>c.vendor_name===OSSIE_VENDOR);
+    if(x){
+      const d = JSON.parse(x.data);
+      d.governance = {...(d.governance||{}), certification:"draft",
+                      owner: (v.owner && v.owner!=="—") ? v.owner : (d.governance||{}).owner};
+      x.data = JSON.stringify(d, null, 2);
+    }
+  });
+  return slYaml(doc);
 };
 
 // Ossie is an artifact like any other target, so it goes through the same adapter
@@ -35685,7 +35730,20 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
   );
 
   return (
-    <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto",alignSelf:"stretch"}}>
+    <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+      <Sec>
+        <SLMetaLabel>Details</SLMetaLabel>
+        {[["Domain",mdl.domain],["Entities",String(ents.length)],["Dimensions",String(dims.length)],
+          ["Facts",String(facts.length)],["Metrics",String(mets.length)],
+          ["Created",mdl.created],["Published",mdl.lastPublished||"Never"],["Synced",mdl.lastSynced||"Never"],
+          ["Format",`Ossie ${OSSIE_VERSION}`]].map(([k,v])=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
+            <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
+            <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </Sec>
+
       <Sec>
         <SLMetaLabel onEdit={()=>setOpenPane(p=>p==="status"?null:"status")}>Status</SLMetaLabel>
         <SLStatusChip status={mdl.status}/>
@@ -35759,19 +35817,6 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
         </div>
         <SLPicker open={openPane==="terms"} items={TERMS} selected={terms} placeholder="Search terms…" accent={T.violet}
           onToggle={t=>toggle("terms", terms, t)} onDone={()=>setOpenPane(null)}/>
-      </Sec>
-
-      <Sec>
-        <SLMetaLabel>Details</SLMetaLabel>
-        {[["Domain",mdl.domain],["Entities",String(ents.length)],["Dimensions",String(dims.length)],
-          ["Facts",String(facts.length)],["Metrics",String(mets.length)],
-          ["Created",mdl.created],["Published",mdl.lastPublished||"Never"],["Synced",mdl.lastSynced||"Never"],
-          ["Format",`ESM v${ESM_VERSION}`]].map(([k,v])=>(
-          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
-            <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
-            <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
-          </div>
-        ))}
       </Sec>
 
       <Sec last>
@@ -36392,12 +36437,12 @@ const SLMetricDrawer = ({metric, metrics, entities, rels, vendor, gTerms, onClos
 // ── Publish. Runs the adapters and shows exactly what they produce.
 const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onPublish, onToast}) => {
   const targets = (mdl && mdl.targets || []).filter(t=>(SL_PLATFORMS[t]||{}).adapter==="ready");
-  const [plat, setPlat] = useState("__esm");
-  useEffect(()=>{ if(open) setPlat("__esm"); },[open]);
+  const [plat, setPlat] = useState("__src");
+  useEffect(()=>{ if(open) setPlat("__src"); },[open]);
   if(!open || !mdl) return null;
-  const isSource = plat==="__esm";
+  const isSource = plat==="__src";
   const files = isSource
-    ? [{path:`${slSlug(mdl.name)}.esm.yaml`, lang:"esm", body:slModelToESM(mdl, ents, rels, mets)}]
+    ? slBuildArtifacts("ossie", {mdl, ents, rels, mets, dims, facts})
     : slBuildArtifacts(plat, {mdl, ents, rels, mets, dims, facts});
   const warns = isSource ? [] : mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
   return (
@@ -36412,7 +36457,7 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onP
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
         <div style={{flexShrink:0,padding:"12px 22px 0"}}>
-          <Tabs2 tabs={[{key:"__esm",label:`ESM source · v${ESM_VERSION}`}, ...targets.map(t=>({key:t,label:SL_PLATFORMS[t].label}))]} active={plat} onChange={setPlat}/>
+          <Tabs2 tabs={[{key:"__src",label:`Ossie source · ${OSSIE_VERSION}`}, ...targets.filter(t=>t!=="ossie").map(t=>({key:t,label:SL_PLATFORMS[t].label}))]} active={plat} onChange={setPlat}/>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"0 22px 20px"}}>
           {isSource && targets.length===0 && <div style={{margin:"14px 0",padding:"12px 14px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
@@ -36420,7 +36465,7 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onP
             <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>The model compiles to the source below, but nothing has been chosen to compile it into. Pick targets with Edit on the model header.</div>
           </div>}
           {isSource && <div style={{margin:"14px 0",fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-            The platform-neutral document EDG stores. Every tab to the right is compiled from exactly this — the adapters read it and nothing else, which is why adding a platform never changes the model.
+            The Apache Ossie document EDG stores. Every tab to the right is compiled from exactly this — the adapters read it and nothing else, which is why adding a platform never changes the model.
           </div>}
           {warns.length>0 && <div style={{margin:"14px 0",padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
             <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:6}}>{warns.length} metric{warns.length===1?"":"s"} lose something on {SL_PLATFORMS[plat].label}</div>
@@ -36478,6 +36523,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [defQ,        setDefQ]        = useState("");
   const [cfgTab,      setCfgTab]      = useState("source");
   const [yamlDraft,   setYamlDraft]   = useState(null);
+  const [pullText,    setPullText]    = useState("");
+  const [pullResult,  setPullResult]  = useState(null);
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
   const [renameFor,   setRenameFor]   = useState(null);  // {kind, obj}
@@ -36507,16 +36554,15 @@ const SemanticLayerView = ({onToast, onNav}) => {
   };
   const patchModel = (patch) => setStore(prev=>({...prev, models:prev.models.map(m=>m.id===selMdl?{...m,...patch}:m)}));
   const applyYaml = () => {
-    const parsed = slParseESM(yamlDraft);
-    if(parsed.errors.length){ setYamlResult({ok:false, ...parsed}); return; }
-    const res = slApplyESM(parsed, {mdl, dims:mDims, facts:mFacts, metrics:mMetrics});
+    const res = slReadOssie(yamlDraft, {mdl, ents:mEnts, dims:mDims, facts:mFacts, metrics:mMetrics});
+    if(!res.ok){ setYamlResult(res); return; }
     setStore(prev=>({...prev,
       models:   prev.models.map(m=>m.id===selMdl?{...m,...res.modelPatch}:m),
       dims:     prev.dims.map(d=>res.dims.find(x=>x.id===d.id)||d),
       facts:    prev.facts.map(x=>res.facts.find(y=>y.id===x.id)||x),
       metrics:  prev.metrics.map(m=>res.metrics.find(x=>x.id===m.id)||m),
     }));
-    setYamlResult({ok:true, ...parsed, changes:res.changes});
+    setYamlResult({ok:true, errors:[], warnings:res.warnings, changes:res.changes});
     onToast && onToast(res.changes.length ? `${res.changes.length} change${res.changes.length===1?"":"s"} applied` : "No changes to apply","success");
   };
 
@@ -36588,8 +36634,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
           {label:"Semantic Layer", onClick:()=>{setSelMdl(null);setEditing(false);setSelEnt(null);setFindings(null);}},
           {label:mdl.name},
         ]}/>
-        <div style={{flex:1,overflowY:"auto"}}>
-          <div style={{padding:"24px 28px 0"}}>
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{padding:"24px 28px 0",flexShrink:0}}>
             <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
               <div style={{width:64,height:64,borderRadius:18,background:T.accentDim,border:`2.5px solid ${T.accent}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.accent}}>{Ic.semantic(30)}</div>
               <div style={{flex:1,minWidth:0}}>
@@ -36614,11 +36660,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
             <Tabs2 tabs={TABS.map(t=>({key:t.k,label:t.l}))} active={tab} onChange={k=>{setTab(k);setQ("");}}/>
           </div>
 
-          <div style={{padding:"0 28px 28px"}}>
-
-            {tab==="overview" && (
-              <div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:0,alignItems:"stretch",margin:"0 -28px 0 0"}}>
-                <div style={{paddingRight:24}}>
+          {tab==="overview" && (
+            <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+              <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
                     {!descEdit&&<button onClick={()=>{setDescVal(mdl.desc);setDescEdit(true);}}
@@ -36661,41 +36705,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     })}
                   </div>
 
-                  <SH title="Reverse sync"
-                      sub="Read the model back out of each platform and report what has changed since the last publish."
-                      action={<Btn small icon={Ic.refresh(12)} onClick={runSync} disabled={syncing}>{syncing?"Reading…":"Run reverse sync"}</Btn>}/>
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:findings||syncing?"0":"16px 18px",marginBottom:24,overflow:"hidden"}}>
-                    {syncing && <div style={{padding:"22px 18px",fontSize:12,color:T.textMuted}}>Reading {(mdl.targets||[]).map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")}…</div>}
-                    {!syncing && !findings && <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>
-                      {mdl.lastSynced ? `Last read ${mdl.lastSynced}. Run again to check for changes.` : "Never run. A reverse sync reads every definition back out of your tools and compares it with this model."}
-                    </div>}
-                    {!syncing && findings && <>
-                      <div style={{display:"flex",gap:14,padding:"12px 16px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,flexWrap:"wrap"}}>
-                        {Object.entries(SL_FINDING).map(([k,cfg])=>{
-                          const n = findings.filter(f=>f.kind===k).length;
-                          return <span key={k} style={{fontSize:11.5,color:n?cfg.c:T.textMuted,fontWeight:n?700:400}}>{n} {cfg.l.toLowerCase()}</span>;
-                        })}
-                      </div>
-                      {findings.map((f,i)=>{
-                        const cfg = SL_FINDING[f.kind];
-                        return (
-                          <div key={f.vendorId} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"11px 16px",borderBottom:i<findings.length-1?`1px solid ${T.border}`:"none"}}>
-                            <span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,background:cfg.bg,color:cfg.c,border:`1px solid ${cfg.c}33`,whiteSpace:"nowrap",flexShrink:0}}>{cfg.l}</span>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                                <SLSysChip system={f.system}/>
-                                <span style={{fontSize:12,fontWeight:600,color:T.text}}>{f.object}</span>
-                                {f.metric && <span style={{fontSize:11,color:T.textMuted}}>→ {f.metric}</span>}
-                              </div>
-                              <div style={{fontSize:11,color:T.textMuted,marginTop:3,lineHeight:1.5}}>{f.detail}</div>
-                            </div>
-                            {f.kind==="unclaimed" && <Btn small onClick={()=>setMapFor(vendor.find(v=>v.id===f.vendorId))}>Claim</Btn>}
-                            {f.kind==="drift" && <Btn small ghost onClick={()=>{const v=vendor.find(x=>x.id===f.vendorId); if(v) setSelId(v.mappedTo);}}>Compare</Btn>}
-                          </div>
-                        );
-                      })}
-                    </>}
-                  </div>
 
                   <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."/>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -36735,12 +36744,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       ))}
                     </div>
                   </>}
-                </div>
-
-                <SLModelSidebar mdl={mdl} ents={mEnts} dims={mDims} facts={mFacts} mets={mMetrics}
-                  gTerms={gTerms} onPatch={patchModel} onToast={onToast}/>
               </div>
-            )}
+              <SLModelSidebar mdl={mdl} ents={mEnts} dims={mDims} facts={mFacts} mets={mMetrics}
+                gTerms={gTerms} onPatch={patchModel} onToast={onToast}/>
+            </div>
+          )}
+
+          <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",display:tab==="overview"?"none":"block"}}>
 
             {tab==="erd" && <>
               <SH title="Relationships"
@@ -36760,64 +36770,30 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 {v:"notify",    l:"Notify the owner",    d:"The model owner gets a notification when a definition drifts."},
                 {v:"work_item", l:"Open a work item",    d:"A task lands in the steward's Inbox and stays open until someone resolves it."},
               ];
-              const curYaml = yamlDraft!==null ? yamlDraft : slModelToESM(mdl, mEnts, mRels, mMetrics);
+              const srcFile = (slBuildArtifacts("ossie", {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts})||[])[0] || {path:"—", body:""};
+              const curYaml = yamlDraft!==null ? yamlDraft : srcFile.body;
               const outFiles = slBuildArtifacts(outPlat, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts});
               return (
                 <div>
                 <div style={{marginBottom:20}}>
-                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"ossie",label:"Ossie"},{key:"sync",label:"Sync"}]}
+                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Sync"}]}
                     active={cfgTab} onChange={setCfgTab}/>
                 </div>
 
-                {cfgTab==="source" && <div style={{maxWidth:900}}>
-                  <SH title={`Semantic model source · ESM v${ESM_VERSION}`}
-                      sub="The one document everything else is built from. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
-                  <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
-                    style={{width:"100%",minHeight:420,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
-                      color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
-                    <Btn variant="primary" onClick={applyYaml} disabled={yamlDraft===null}>Apply changes</Btn>
-                    <Btn ghost onClick={()=>{setYamlDraft(null);setYamlResult(null);}} disabled={yamlDraft===null}>Revert</Btn>
-                    <span style={{fontSize:11.5,color:T.textMuted}}>
-                      {yamlDraft===null ? "Generated from the model as it stands." : "Edited — not applied yet."}
-                    </span>
-                  </div>
-
-                  {yamlResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
-                    background:yamlResult.ok?"rgba(22,163,74,.07)":T.roseDim,
-                    border:`1px solid ${yamlResult.ok?T.green+"35":T.rose+"35"}`}}>
-                    {!yamlResult.ok && <>
-                      <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not applied — {yamlResult.errors.length} problem{yamlResult.errors.length===1?"":"s"}</div>
-                      {yamlResult.errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
-                    </>}
-                    {yamlResult.ok && <>
-                      <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
-                        {yamlResult.changes.length ? `${yamlResult.changes.length} change${yamlResult.changes.length===1?"":"s"} applied` : "Parsed cleanly — nothing differed"}
-                      </div>
-                      {yamlResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
-                      {yamlResult.warnings.map((w,i)=><div key={"w"+i} style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>· {w}</div>)}
-                    </>}
-                  </div>}
-
-                  <div style={{marginTop:16,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
-                    Objects the document does not mention are left alone rather than deleted — an editor that silently drops what you did not retype is a data-loss bug, not a feature.
-                  </div>
-                </div>}
-
-                {cfgTab==="ossie" && (()=>{
+                {cfgTab==="source" && (()=>{
                   const octx = {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts};
                   const odoc = slOssieDoc(octx);
                   const oerr = slOssieValidate(odoc);
                   const bad  = oerr.filter(e=>e.level==="error");
                   const warn = oerr.filter(e=>e.level==="warning");
                   const gaps = slOssieGaps(octx);
-                  const file = (slBuildArtifacts("ossie", octx)||[])[0] || {path:"—", body:""};
                   const nFields = (odoc.datasets||[]).reduce((n,d)=>n+(d.fields||[]).length, 0);
+                  const dialects = [...new Set((odoc.metrics||[]).flatMap(m=>m.expression.dialects.map(d=>d.dialect)))];
                   const carried = [
                     ["datasets",      `${(odoc.datasets||[]).length} — one per entity, bound to its physical source`],
-                    ["fields",        `${nFields} — keys, facts and dimensions, each with an ANSI_SQL expression`],
+                    ["fields",        `${nFields} — keys, facts and dimensions, each an expression`],
                     ["relationships", `${(odoc.relationships||[]).length} — declared joins, many side to one side`],
-                    ["metrics",       `${(odoc.metrics||[]).length} — one expression each, because the spec has no metric typology`],
+                    ["metrics",       `${(odoc.metrics||[]).length} — written in ${dialects.length} dialect${dialects.length===1?"":"s"}: ${dialects.join(", ")||"none"}`],
                     ["ai_context",    "descriptions and every synonym the concepts declare"],
                   ];
                   const extended = [
@@ -36828,13 +36804,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   ];
                   return (
                   <div style={{maxWidth:900}}>
-                    <SH title={`Apache Ossie · core-spec ${OSSIE_VERSION}`}
-                        sub="The interchange standard, formerly Open Semantic Interchange. This is the document EDG hands to anything that is not EDG, so it is generated against the published JSON Schema rather than made to resemble it."/>
+                    <SH title={`${srcFile.path} · Apache Ossie core-spec ${OSSIE_VERSION}`}
+                        sub="The one document this model is. EDG authors it, every platform artifact is compiled from it, and a tool that speaks the standard reads it without EDG in the middle. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
 
                     <div style={{padding:"13px 16px",borderRadius:10,marginBottom:20,
                       background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
                       border:`1px solid ${bad.length?T.rose+"35":T.green+"35"}`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:bad.length||warn.length?7:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:bad.length||warn.length?7:0}}>
                         <span style={{fontSize:13,fontWeight:700,color:bad.length?T.rose:T.green}}>
                           {bad.length
                             ? `Does not validate — ${bad.length} problem${bad.length===1?"":"s"}`
@@ -36868,7 +36844,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                           <div key={t} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:4}}>· {t}</div>
                         ))}
                         <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
-                          The escape hatch the spec defines, under one vendor name. Nothing is invented alongside the standard, and a reader that ignores it still gets a working model.
+                          The escape hatch the spec defines, under the vendor names it expects. Nothing is invented alongside the standard, and a reader that ignores it still gets a working model.
                         </div>
                       </div>
                     </div>
@@ -36895,13 +36871,35 @@ const SemanticLayerView = ({onToast, onNav}) => {
                       </div>
                     </div>}
 
-                    <SH title={file.path}
-                        sub="Generated from the model as it stands. Ossie is a publish target like any other, so this is also what the Alignment tab sends."/>
-                    <textarea value={file.body} readOnly spellCheck={false}
+                    <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
                       style={{width:"100%",minHeight:420,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
-                        color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
-                    <div style={{marginTop:12,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
-                      Read-only, because the model is authored on the Source tab and this is what it compiles to. Editing the output and not the source is how two versions of a definition start.
+                        color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
+                      <Btn variant="primary" onClick={applyYaml} disabled={yamlDraft===null}>Apply changes</Btn>
+                      <Btn ghost onClick={()=>{setYamlDraft(null);setYamlResult(null);}} disabled={yamlDraft===null}>Revert</Btn>
+                      <span style={{fontSize:11.5,color:T.textMuted}}>
+                        {yamlDraft===null ? "Generated from the model as it stands." : "Edited — not applied yet."}
+                      </span>
+                    </div>
+
+                    {yamlResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
+                      background:yamlResult.ok?"rgba(22,163,74,.07)":T.roseDim,
+                      border:`1px solid ${yamlResult.ok?T.green+"35":T.rose+"35"}`}}>
+                      {!yamlResult.ok && <>
+                        <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not applied — {yamlResult.errors.length} problem{yamlResult.errors.length===1?"":"s"}</div>
+                        {yamlResult.errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
+                      </>}
+                      {yamlResult.ok && <>
+                        <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
+                          {yamlResult.changes.length ? `${yamlResult.changes.length} change${yamlResult.changes.length===1?"":"s"} applied` : "Parsed clean — nothing to change"}
+                        </div>
+                        {yamlResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
+                        {yamlResult.warnings.map((w,i)=><div key={"w"+i} style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>· {w}</div>)}
+                      </>}
+                    </div>}
+
+                    <div style={{marginTop:16,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
+                      An edit is parsed and validated before anything is touched, so a document that does not validate is never half-applied. Objects the document does not mention are left alone rather than deleted — an editor that silently drops what you did not retype is a data-loss bug, not a feature.
                     </div>
                   </div>);
                 })()}
@@ -36973,14 +36971,96 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
 
                   <SH title="Run it now" sub="A manual run does not change the schedule."/>
-                  <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                    <Btn icon={Ic.refresh(12)} onClick={()=>{setTab("overview");runSync();}} disabled={!sync.enabled||syncing}>
+                  <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:14}}>
+                    <Btn icon={Ic.refresh(12)} onClick={runSync} disabled={!sync.enabled||syncing}>
                       {syncing?"Reading…":"Run reverse sync"}
                     </Btn>
                     <span style={{fontSize:11.5,color:T.textMuted}}>
-                      {sync.enabled?"Results appear on Overview.":"Turn reverse sync on first."}
+                      {sync.enabled
+                        ? (mdl.lastSynced ? `Last read ${mdl.lastSynced}.` : "Never run.")
+                        : "Turn reverse sync on first."}
                     </span>
                   </div>
+                  {(syncing || findings) && <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:30}}>
+                    {syncing && <div style={{padding:"22px 18px",fontSize:12,color:T.textMuted}}>
+                      Reading {(mdl.targets||[]).filter(t=>t!=="ossie").map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")}…
+                    </div>}
+                    {!syncing && findings && <>
+                      <div style={{display:"flex",gap:14,padding:"12px 16px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,flexWrap:"wrap"}}>
+                        {Object.entries(SL_FINDING).map(([k,cfg])=>{
+                          const n = findings.filter(f=>f.kind===k).length;
+                          return <span key={k} style={{fontSize:11.5,color:n?cfg.c:T.textMuted,fontWeight:n?700:400}}>{n} {cfg.l.toLowerCase()}</span>;
+                        })}
+                      </div>
+                      {findings.length===0 && <div style={{padding:"18px",fontSize:12,color:T.textMuted}}>Everything is in step.</div>}
+                      {findings.map((f,i)=>{
+                        const cfg = SL_FINDING[f.kind];
+                        return (
+                          <div key={f.vendorId} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"11px 16px",borderBottom:i<findings.length-1?`1px solid ${T.border}`:"none"}}>
+                            <span style={{fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,background:cfg.bg,color:cfg.c,flexShrink:0,marginTop:1}}>{cfg.l}</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                                <SLSysChip system={f.system}/>
+                                <span style={{fontSize:12,fontWeight:600,color:T.text}}>{f.object}</span>
+                                {f.metric && <span style={{fontSize:11,color:T.textMuted}}>→ {f.metric}</span>}
+                              </div>
+                              <div style={{fontSize:11,color:T.textMuted,marginTop:3,lineHeight:1.5}}>{f.detail}</div>
+                            </div>
+                            {f.kind==="unclaimed" && <Btn small onClick={()=>setMapFor(vendor.find(v=>v.id===f.vendorId))}>Claim</Btn>}
+                          </div>
+                        );
+                      })}
+                    </>}
+                  </div>}
+
+                  {/* ── The other direction. A standard nobody can hand you a document in is
+                         a export format, so this is the half that makes it an interchange. */}
+                  <div style={{height:1,background:T.border,margin:"4px 0 26px"}}/>
+                  <SH title="Pull a document in"
+                      sub="Any tool that speaks Apache Ossie can hand you its model. Paste it here and EDG validates it, says exactly what it would change, and changes nothing until you say so."/>
+                  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+                    {(mdl.targets||[]).filter(t=>t!=="ossie" && (SL_PLATFORMS[t]||{}).adapter==="ready").map(t=>(
+                      <Btn key={t} small onClick={()=>{ setPullText(slVendorOssie(t, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts}, vendor)); setPullResult(null); }}>
+                        Load what {(SL_PLATFORMS[t]||{}).label} publishes
+                      </Btn>
+                    ))}
+                    {pullText!=="" && <Btn small ghost onClick={()=>{setPullText("");setPullResult(null);}}>Clear</Btn>}
+                  </div>
+                  <textarea value={pullText} onChange={e=>{setPullText(e.target.value);setPullResult(null);}} spellCheck={false}
+                    placeholder={`# Paste an Apache Ossie ${OSSIE_VERSION} document`}
+                    style={{width:"100%",minHeight:190,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
+                      color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
+                    <Btn onClick={()=>setPullResult(slReadOssie(pullText, {mdl, ents:mEnts, dims:mDims, facts:mFacts, metrics:mMetrics}))}
+                      disabled={!pullText.trim()}>Check it</Btn>
+                    <Btn variant="primary" disabled={!pullResult || !pullResult.ok || !pullResult.changes.length}
+                      onClick={()=>{
+                        setStore(prev=>({...prev,
+                          models:  prev.models.map(m=>m.id===selMdl?{...m,...pullResult.modelPatch}:m),
+                          dims:    prev.dims.map(d=>pullResult.dims.find(x=>x.id===d.id)||d),
+                          facts:   prev.facts.map(x=>pullResult.facts.find(y=>y.id===x.id)||x),
+                          metrics: prev.metrics.map(m=>pullResult.metrics.find(x=>x.id===m.id)||m),
+                        }));
+                        onToast && onToast(`${pullResult.changes.length} change${pullResult.changes.length===1?"":"s"} pulled in`,"success");
+                        setPullResult(null); setPullText("");
+                      }}>
+                      Accept {pullResult && pullResult.ok ? `${pullResult.changes.length} change${pullResult.changes.length===1?"":"s"}` : "changes"}
+                    </Btn>
+                  </div>
+                  {pullResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
+                    background:pullResult.ok?"rgba(22,163,74,.07)":T.roseDim,
+                    border:`1px solid ${pullResult.ok?T.green+"35":T.rose+"35"}`}}>
+                    {!pullResult.ok && <>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not a valid Ossie document — {pullResult.errors.length} problem{pullResult.errors.length===1?"":"s"}</div>
+                      {pullResult.errors.slice(0,12).map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
+                    </>}
+                    {pullResult.ok && <>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
+                        {pullResult.changes.length ? `${pullResult.changes.length} change${pullResult.changes.length===1?"":"s"} to accept` : "Validates, and says the same as this model"}
+                      </div>
+                      {pullResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
+                    </>}
+                  </div>}
                 </div>}
                 </div>
               );

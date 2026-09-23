@@ -57,7 +57,6 @@ const block = [
   "const SL_DIMENSIONS = ",
   "const SL_FACTS = ",
   "const SL_DIM_TYPES = ",
-  "const ESM_VERSION = ",
 ].map(grab).join("\n\n")
   // SCHEMA is declared holding one table and extended by Object.assign blocks. Without
   // them the sandbox sees a catalogue with almost no columns, and every datatype the
@@ -71,7 +70,8 @@ const block = [
 
 const M = new Function(block + `
   return {slOssieDoc, slOssieValidate, slAdaptOssie, slOssieGaps, slOssieExpr, slYaml,
-          slOssieType, OSSIE_VERSION, OSSIE_DATATYPES,
+          slOssieType, OSSIE_VERSION, OSSIE_DATATYPES, slParseYaml, slApplyOssie, slReadOssie,
+          slOssieDialects, slDax, slTableauCalc,
           SL_MODELS, SL_ENTITIES, SL_RELATIONSHIPS, SL_DIMENSIONS, SL_FACTS, SL_METRICS};
 `)();
 
@@ -180,6 +180,15 @@ M.SL_MODELS.forEach(mdl => {
 
   // OSSIE_PRINT=<model id> prints the document itself, for reading by eye.
   if (process.env.OSSIE_PRINT === mdl.id) console.log("\n" + body + "\n");
+
+  const {doc: reparsed, errors: perr} = M.slParseYaml(body);
+  ok(`${mdl.name}: the emitted YAML parses back`, perr.length === 0, perr);
+  ok(`${mdl.name}: re-parsed document still validates`,
+     M.slOssieValidate(reparsed).filter(e => e.level === "error").length === 0,
+     M.slOssieValidate(reparsed).filter(e => e.level === "error"));
+  const round = M.slReadOssie(body, { mdl, ents, dims, facts, metrics: mets });
+  ok(`${mdl.name}: round trip is a no-op — emit, read back, nothing changed`,
+     round.ok && round.changes.length === 0, round.ok ? round.changes : round.errors);
 
   const gaps = M.slOssieGaps(ctx);
   if (gaps.length) gaps.forEach(g => console.log(`        gap · ${g.level.padEnd(7)} ${g.metric.name} — ${g.why}`));
