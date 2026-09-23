@@ -33444,6 +33444,7 @@ const SL_METRICS = [
    domain:"Finance", owner:"sarah.kim", steward:"alex.wu", unit:"%",
    entity:"e_order", timeDim:"created_at", timeGrain:"month",
    formula:"(this period − same period last year) ÷ same period last year", basedOn:["m_rev"],
+   expr:"(daily_revenue - LAG(daily_revenue) OVER (ORDER BY orders.created_at)) / NULLIF(LAG(daily_revenue) OVER (ORDER BY orders.created_at), 0)",
    filters:[], dims:["region"],
    definition:"Year-over-year growth in Daily Revenue, compared against the equivalent period one year earlier.",
    bindings:[{id:"b5", system:"snowflake", object:"derived from Daily Revenue", expr:"see formula", confirmed:true,
@@ -33756,8 +33757,8 @@ const slGates = (m, metrics, opts) => {
   const derived = m.type==="derived" || m.type==="cumulative";
   const base = (m.basedOn||[]).map(id=>(metrics||_slState.metrics).find(x=>x.id===id)).filter(Boolean);
   return [
-    {k:"entity",  ok:!!ent,                       l:"Entity and grain declared",
-     detail: ent ? `${ent.name} · one row per ${ent.key}` : "No entity selected — the metric has no grain."},
+    {k:"entity",  ok:!!ent,                       l:"Dataset and grain declared",
+     detail: ent ? `${ent.name} · one row per ${ent.key}` : "No dataset selected — the metric has no grain."},
     {k:"time",    ok:!!m.timeDim && !!m.timeGrain, l:"Time dimension declared",
      detail: m.timeDim ? `${m.timeDim} at ${m.timeGrain} grain` : "No time dimension — the metric cannot be trended."},
     {k:"binding", ok:(m.bindings||[]).some(b=>b.confirmed), l:"At least one confirmed binding",
@@ -33937,7 +33938,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
     setM({id:"m_new_"+Date.now(), name:"", type:"simple", status:"Draft", termId:null,
           domain:"Finance", owner:"", steward:"", unit:"USD",
           entity:"", agg:"sum", col:"", timeDim:"", timeGrain:"day",
-          filters:[], dims:[], definition:"", bindings:[], basedOn:[], formula:"", window:"quarter to date",
+          filters:[], dims:[], definition:"", bindings:[], basedOn:[], formula:"", expr:"", window:"quarter to date",
           numerator:{agg:"count distinct", col:"", label:""}, denominator:{agg:"count distinct", col:"", label:""}});
   },[open]);
 
@@ -33951,7 +33952,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
   // AI proposes against the chosen entity's table, using profiling + classification.
   const runPropose = () => {
-    if(!ent) { onToast && onToast("Pick an entity first — a binding needs a table to look in.","error"); return; }
+    if(!ent) { onToast && onToast("Pick a dataset first — a binding needs a table to look in.","error"); return; }
     setThinking(true);
     setTimeout(()=>{ setProposed(slPropose(ent.table, m.name.split(" ").pop())); setThinking(false); },650);
   };
@@ -34027,8 +34028,8 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                   <SLSelect value={m.type} onChange={e=>patch({type:e.target.value})} options={Object.entries(SL_TYPES).map(([v,t])=>({v,l:t.l}))}/>
                 </SLField>
 
-                <SLField label="Entity" hint={ent ? `Grain: one row per ${ent.key} in ${ent.table}. ${ent.evidence}` : "The grain the metric resolves to. A metric with no grain cannot be certified."}>
-                  <SLSelect value={m.entity} onChange={e=>patch({entity:e.target.value, col:"", timeDim:"", dims:[]})} placeholder="Select an entity"
+                <SLField label="Dataset" hint={ent ? `One row per ${ent.key} in ${ent.table}. ${ent.evidence}` : "The grain the metric resolves to. A metric with no grain cannot be certified."}>
+                  <SLSelect value={m.entity} onChange={e=>patch({entity:e.target.value, col:"", timeDim:"", dims:[]})} placeholder="Select a dataset"
                     options={_slState.entities.map(x=>({v:x.id,l:`${x.name} — one row per ${x.key}`}))}/>
                 </SLField>
 
@@ -34039,7 +34040,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                       ? `No facts declared on ${ent.name}. Declare one on the Model tab first — a metric aggregates a fact.`
                       : "The row-level number this metric aggregates."}>
                     <SLSelect value={m.col} onChange={e=>patch({col:e.target.value})}
-                      placeholder={ent?(entFacts.length?"Select a fact":"No facts on this entity"):"Pick an entity first"}
+                      placeholder={ent?(entFacts.length?"Select a fact":"No facts on this dataset"):"Pick a dataset first"}
                       options={entFacts.map(x=>({v:x.column,l:`${x.name} — ${x.column}${x.additive?"":" · not additive"}`}))}/></SLField></div>
                 </div>}
 
@@ -34075,9 +34076,32 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                       })}
                     </div>
                   </SLField>
-                  {m.type==="derived" && <SLField label="Formula" hint="Stated in business terms, not SQL.">
-                    <Input2 value={m.formula} onChange={e=>patch({formula:e.target.value})} placeholder="(this period − same period last year) ÷ same period last year"/>
-                  </SLField>}
+                  {m.type==="derived" && <>
+                    <SLField label="Formula" hint="Stated in business terms, not SQL. This is what the definition reads like.">
+                      <Input2 value={m.formula} onChange={e=>patch({formula:e.target.value})} placeholder="(this period − same period last year) ÷ same period last year"/>
+                    </SLField>
+                    <SLField label="Expression"
+                      hint="What it computes. Refer to the metrics above by name and EDG inlines them — Apache Ossie has no metric-to-metric reference, so what leaves here has to stand on its own. A metric with no expression is carried, but cannot cross into another tool.">
+                      <Input2 value={m.expr||""} onChange={e=>patch({expr:e.target.value})}
+                        placeholder="(daily_revenue - LAG(daily_revenue) OVER (ORDER BY orders.created_at)) / NULLIF(LAG(daily_revenue) OVER (ORDER BY orders.created_at), 0)"/>
+                      {(()=>{
+                        if(!(m.expr||"").trim()) return null;
+                        const r = slInlineMetrics(m.expr, _slState.entities, metrics, 0);
+                        return (
+                          <div style={{marginTop:7,padding:"9px 11px",borderRadius:8,
+                            background:r.issues.length?T.roseDim:T.bgElevated,
+                            border:`1px solid ${r.issues.length?T.rose+"35":T.border}`}}>
+                            {r.issues.length
+                              ? r.issues.map((x,i)=><div key={i} style={{fontSize:11,color:T.rose,lineHeight:1.55}}>· {x}</div>)
+                              : <>
+                                  <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Compiles to</div>
+                                  <div style={{fontSize:11,fontFamily:"ui-monospace,monospace",color:T.textSub,lineHeight:1.6,wordBreak:"break-word"}}>{r.sql}</div>
+                                </>}
+                          </div>
+                        );
+                      })()}
+                    </SLField>
+                  </>}
                   {m.type==="cumulative" && <SLField label="Accumulation window">
                     <SLSelect value={m.window} onChange={e=>patch({window:e.target.value})} options={SL_WINDOWS}/>
                   </SLField>}
@@ -34085,7 +34109,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
                 <div style={{display:"flex",gap:14}}>
                   <div style={{flex:1}}><SLField label="Time dimension" hint="Required. A metric that cannot be trended cannot be certified.">
-                    <SLSelect value={m.timeDim} onChange={e=>patch({timeDim:e.target.value})} placeholder={ent?"Select a time column":"Pick an entity first"}
+                    <SLSelect value={m.timeDim} onChange={e=>patch({timeDim:e.target.value})} placeholder={ent?"Select a time column":"Pick a dataset first"}
                       options={ent?ent.timeDims:[]}/></SLField></div>
                   <div style={{flex:1}}><SLField label="Time grain"><SLSelect value={m.timeGrain} onChange={e=>patch({timeGrain:e.target.value})} options={SL_GRAINS}/></SLField></div>
                   <div style={{flex:1}}><SLField label="Unit"><SLSelect value={m.unit} onChange={e=>patch({unit:e.target.value})} options={["USD","EUR","GBP","%","users","orders","count"]}/></SLField></div>
@@ -34111,7 +34135,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
               <SLSection title="Bindings"
                 note="The business user never picks the column. EDG proposes candidates from what it already holds — column profiling, classifications and schema — and shows the evidence. A steward confirms. This keeps meaning, binding and code review as three jobs done by three people."
                 right={<Btn small variant="primary" icon={Ic.bot(12)} onClick={runPropose} disabled={thinking}>{thinking?"Looking…":"Propose bindings"}</Btn>}>
-                {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick an entity in Definition first — a binding needs a table to look in.</div>}
+                {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick a dataset in Definition first — a binding needs a table to look in.</div>}
                 {ent && proposed.length===0 && !thinking &&
                   <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
                     Nothing proposed yet. EDG will read the profile of every column in <b style={{color:T.textSub}}>{ent.table}</b> and rank the candidates.
@@ -34150,7 +34174,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
             {sec==="dims" && <>
               <SLSection title="Dimensions" note="Chosen from what this model declares, so a dimension means the same thing on every metric that uses it. To slice by something not listed, declare it on the Model tab first.">
-                {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick an entity in Definition first.</div>}
+                {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick a dataset in Definition first.</div>}
                 {ent && entDims.length===0 && <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
                   <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginBottom:4}}>No dimensions declared on {ent.name}</div>
                   <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55}}>The metric will still compute — it just cannot be broken down by anything.</div>
@@ -34230,7 +34254,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) => {
   const SECTIONS = [
     {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
-    {k:"assets",   l:"Assets",    d:"The tables this model is built from"},
+    {k:"assets",   l:"Datasets",  d:"The catalogue assets this model is built from"},
     {k:"joins",    l:"Joins",     d:"How those tables connect"},
     {k:"review",   l:"Review",    d:"What will be created"},
   ];
@@ -34362,7 +34386,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                         <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
                           <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{a.name}</span>
                           <TypeBadge type={a.type}/>
-                          {reused && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}33`}}>already an entity</span>}
+                          {reused && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}33`}}>already a dataset</span>}
                         </div>
                         <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{a.db}</div>
                       </div>
@@ -34377,7 +34401,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
               </div>
 
               {derived.length>0 && <div style={{marginTop:16}}>
-                <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:8}}>ENTITIES EDG WILL CREATE</div>
+                <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:8}}>DATASETS EDG WILL CREATE</div>
                 {derived.map(({asset,entity,created})=>(
                   <div key={entity.id} style={{background:T.bgSurface,border:`1px solid ${entity.key?T.border:T.amber+"55"}`,borderRadius:9,padding:"11px 13px",marginBottom:7}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
@@ -34386,7 +34410,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                       {!created && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.blueDim,color:T.blue,border:`1px solid ${T.blue}33`}}>reused — shared with other models</span>}
                     </div>
                     <div style={{fontSize:11.5,color:entity.key?T.textSub:T.amber}}>
-                      {entity.key ? `one row per ${entity.key}` : "No key detected — this model cannot be certified until a grain is declared."}
+                      {entity.key ? `one row per ${entity.key}` : "No primary key detected — this model cannot be certified until one is declared."}
                     </div>
                     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{entity.evidence}</div>
                   </div>
@@ -34409,7 +34433,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                     <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
                       <div style={{flex:1,minWidth:130}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Many side</div>
-                        <SLSelect value={nj.from} onChange={e=>setNj({...nj,from:e.target.value,fromCol:""})} placeholder="entity"
+                        <SLSelect value={nj.from} onChange={e=>setNj({...nj,from:e.target.value,fromCol:""})} placeholder="dataset"
                           options={derived.map(x=>({v:x.entity.id,l:x.entity.name}))}/>
                       </div>
                       <div style={{flex:1,minWidth:130}}>
@@ -34420,7 +34444,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                       <div style={{paddingBottom:8,color:T.textMuted,fontSize:14}}>→</div>
                       <div style={{flex:1,minWidth:130}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>One side</div>
-                        <SLSelect value={nj.to} onChange={e=>setNj({...nj,to:e.target.value,toCol:""})} placeholder="entity"
+                        <SLSelect value={nj.to} onChange={e=>setNj({...nj,to:e.target.value,toCol:""})} placeholder="dataset"
                           options={derived.filter(x=>x.entity.id!==nj.from).map(x=>({v:x.entity.id,l:x.entity.name}))}/>
                       </div>
                       <div style={{flex:1,minWidth:130}}>
@@ -34470,7 +34494,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 {[["Model", d.name||"—"],
                   ["Owner", `${d.owner||"—"} · steward ${d.steward||d.owner||"—"}`],
                   ["Assets", d.assetIds.length ? derived.map(x=>x.asset.name).join(", ") : "none"],
-                  ["Entities", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
+                  ["Datasets", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
                   ["Joins", d.joins.length ? `${d.joins.length} declared` : "none — every metric sits on one table"],
                 ].map(([k,v],i,a)=>(
                   <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
@@ -34484,7 +34508,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                 <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{noKey.map(x=>x.entity.table).join(", ")} — remove them, or declare a key before this model can be certified.</div>
               </div>}
               <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-                The model is created as a draft. Add metrics against the grain of the entities above, then choose where it publishes when there is something worth publishing.
+                The model is created as a draft. Add metrics against the grain of the datasets above, then choose where it publishes when there is something worth publishing.
               </div>
             </>}
           </div>
@@ -34795,7 +34819,12 @@ const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
 // ══════════════════════════════════════════════════════════════════════════════════
 const OSSIE_VERSION   = "0.2.0.dev0";
 const OSSIE_VENDOR    = "SOLIX";
-const OSSIE_DIALECTS  = ["ANSI_SQL","SNOWFLAKE","MDX","TABLEAU","DATABRICKS","MAQL","BIGQUERY","SIGMA","THOUGHTSPOT","DAX"];
+const OSSIE_DIALECTS  = ["ANSI_SQL","SNOWFLAKE","MDX","TABLEAU","DATABRICKS","MAQL","BIGQUERY","SIGMA","THOUGHTSPOT","DAX",
+                         "OSSIE_SQL_2026"];   // the spec's own portable language, and its default
+// Every vendor the spec and the converter guide name. Used to decide which extensions
+// EDG regenerates and which it is merely carrying for somebody else.
+const OSSIE_VENDORS = ["COMMON","SNOWFLAKE","SALESFORCE","DBT","DATABRICKS","GOODDATA","HONEYDEW",
+                       "WISDOM","POWER_BI","SIGMA","OMNI","NVIDIA_GSF"];
 const OSSIE_DATATYPES = ["String","Integer","Decimal","Float","Boolean","Date","Time","DateTime","DateTimeTz","Opaque"];
 
 // Every object in the schema sets additionalProperties:false, so an unrecognised key
@@ -34845,7 +34874,7 @@ const slOssieMetricType = (m) => {
 //    metric and a running total are all just expressions to it. Whatever cannot be
 //    written as one is reported, never faked — a plausible expression that does not
 //    compute the metric is the worst thing this file could produce.
-const slOssieExpr = (m, ents, allMets) => {
+const slOssieExpr = (m, ents, allMets, depth) => {
   const e  = ents.find(x=>x.id===m.entity);
   const ds = e ? slSlug(e.table) : "t";
   const issues = [];
@@ -34870,35 +34899,62 @@ const slOssieExpr = (m, ents, allMets) => {
   if(m.type==="cumulative"){
     const base = (m.basedOn||[]).map(id=>(allMets||[]).find(x=>x.id===id) || _slState.metrics.find(x=>x.id===id)).filter(Boolean)[0];
     if(!base){ issues.push("no base metric to accumulate"); return {sql:null, issues}; }
-    const inner = slOssieExpr(base, ents, allMets);
+    const inner = slOssieExpr(base, ents, allMets, (depth||0)+1);
     if(!inner.sql){ issues.push(`base metric ${base.name} has no expression of its own`); return {sql:null, issues}; }
     return {sql:`SUM(${inner.sql}) OVER (ORDER BY ${col(m.timeDim)} ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)`, issues};
   }
 
-  // Derived. The formula is authored for people, so the mathematical symbols have to
-  // become operators and every name in it has to resolve to a metric in this document.
   if(m.type==="derived"){
-    if(!m.formula){ issues.push("no formula"); return {sql:null, issues}; }
-    const known = {};
-    (allMets||[]).forEach(x=>{ known[slSlug(x.name)] = true; });
-    let f = String(m.formula).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–—]/g,"-");
-    (allMets||[]).forEach(x=>{ f = f.split(x.name).join(slSlug(x.name)); });
-    const unresolved = (f.match(/[A-Za-z_][A-Za-z0-9_]*/g)||[])
-      .filter((w,i,a)=>a.indexOf(w)===i)
-      .filter(w=>!known[w] && !/^(and|or|not|case|when|then|else|end|null|sum|count|avg|min|max|distinct|over|partition|by|order|rows|between|unbounded|preceding|current|row|nullif)$/i.test(w));
-    if(unresolved.length)
-      issues.push(`formula names ${unresolved.map(w=>`\`${w}\``).join(", ")}, which ${unresolved.length===1?"is not a metric":"are not metrics"} in this document`);
-    return {sql:f, issues};
+    const authored = (m.expr||"").trim();
+    if(!authored){
+      issues.push(m.formula
+        ? `only a plain-English formula ("${m.formula}") — Ossie needs one expression per metric`
+        : "no expression");
+      return {sql:null, issues};
+    }
+    const out = slInlineMetrics(authored, ents, allMets, depth||0);
+    return {sql: out.issues.length ? null : out.sql, issues: out.issues};
   }
 
   issues.push(`metric type \`${m.type}\` has no expression form`);
   return {sql:null, issues};
 };
 
+// Substitute every metric name in an expression with that metric's own expression, so
+// what leaves EDG is self-contained. Recursive, with a depth guard: a metric defined in
+// terms of itself is a modelling error, not something to render as infinite SQL.
+const SL_SQL_WORDS = /^(and|or|not|is|null|case|when|then|else|end|distinct|over|partition|by|order|rows|range|between|unbounded|preceding|following|current|row|asc|desc|in|like|ilike|as|cast|interval)$/i;
+const slInlineMetrics = (expr, ents, allMets, depth) => {
+  const issues = [];
+  if(depth > 6){ issues.push("expression refers back to itself"); return {sql:null, issues}; }
+  const byName = {};
+  (allMets||[]).forEach(x=>{ byName[slSlug(x.name)] = x; });
+  const datasets = new Set((ents||[]).map(e=>slSlug(e.table)));
+  let out = String(expr).replace(/×/g,"*").replace(/÷/g,"/").replace(/[−–—]/g,"-");
+
+  // dataset.field references and function names are legitimate; a bare word that is
+  // neither those nor a declared metric is a name nobody can resolve.
+  const bare = (out.match(/(?:[A-Za-z_][A-Za-z0-9_]*\s*\.\s*)?[A-Za-z_][A-Za-z0-9_]*(?:\s*\()?/g)||[])
+    .map(t=>t.trim()).filter(t=>!t.endsWith("(") && !t.includes("."))
+    .filter((w,i,a)=>a.indexOf(w)===i)
+    .filter(w=>!SL_SQL_WORDS.test(w) && !byName[w] && !datasets.has(w));
+  if(bare.length)
+    issues.push(`names ${bare.map(w=>`\`${w}\``).join(", ")}, which ${bare.length===1?"is neither a metric nor a dataset field":"are neither metrics nor dataset fields"} here`);
+
+  Object.keys(byName).sort((a,b)=>b.length-a.length).forEach(slug=>{
+    if(!new RegExp("\\b" + slug + "\\b").test(out)) return;
+    const inner = slOssieExpr({...byName[slug], _table:(ents.find(e=>e.id===byName[slug].entity)||{}).table}, ents, allMets, depth+1);
+    if(!inner.sql){ issues.push(`${byName[slug].name} has no expression of its own to inline`); return; }
+    out = out.replace(new RegExp("\\b" + slug + "\\b", "g"), `(${inner.sql})`);
+  });
+  return {sql: out, issues};
+};
+
 // ── BUILD THE DOCUMENT. A plain object, not text, so the validator below checks the
 //    same thing the serialiser writes rather than a second guess at it.
 const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
   const ext  = (o) => [{vendor_name: OSSIE_VENDOR, data: JSON.stringify(o, null, 2)}];
+  const carried = (path) => ((mdl.ossieExt||{})[path]||[]);
   const term = (id) => { const t = GLOSSARY_TERMS.find(x=>x.id===id); return t ? t.term : null; };
   const ai   = (instructions, synonyms) => {
     const syn = (synonyms||[]).filter(Boolean).filter((s,i,a)=>a.indexOf(s)===i);
@@ -34976,6 +35032,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
         }),
         ...Object.entries(e.bindings||{}).filter(([k])=>SL_VENDOR_OF[k]).map(([k,v])=>
           ({vendor_name: SL_VENDOR_OF[k], data: JSON.stringify({object: v}, null, 2)})),
+        ...carried(`datasets.${ds}`),
       ],
     });
   });
@@ -35008,7 +35065,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       description: m.definition || undefined,
       datatype: slOssieMetricType({...m, _table:e?e.table:null}) || undefined,
       ai_context: ai(m.definition, [m.name, term(m.termId)]),
-      custom_extensions: ext({
+      custom_extensions: [...ext({
         label: m.name,
         metric_type: m.type,
         dataset: e ? slSlug(e.table) : null,
@@ -35025,7 +35082,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
           certified_by: m.certifiedBy || null, certified_at: m.certifiedAt || null,
           glossary_term: term(m.termId) || null,
         },
-      }),
+      }), ...carried(`metrics.${slSlug(m.name)}`)],
     };
   });
 
@@ -35033,7 +35090,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
     model_id: mdl.id, label: mdl.name, domain: mdl.domain, status: mdl.status,
     owners: mdl.owners||[], stewards: mdl.stewards||[], tags: mdl.tags||[], terms: mdl.terms||[],
     publish_targets: mdl.targets||[], last_published: mdl.lastPublished||null,
-  });
+  }).concat(carried("document"));
 
   // undefined keys must not reach the serialiser — the schema forbids nulls where it
   // expects a type, and an empty key is not the same as an absent one.
@@ -35305,6 +35362,25 @@ const slApplyOssie = (doc, ctx) => {
 
   const mx = ext(doc);
   const modelPatch = {};
+
+  const OURS = new Set([OSSIE_VENDOR, ...Object.values(SL_VENDOR_OF)]);
+  const keep = {};
+  const foreign = (o, path) => {
+    const xs = (o && o.custom_extensions || []).filter(x=>!OURS.has(x.vendor_name));
+    if(xs.length) keep[path] = xs;
+  };
+  foreign(doc, "document");
+  (doc.datasets||[]).forEach(d=>foreign(d, `datasets.${d.name}`));
+  (doc.metrics ||[]).forEach(m=>foreign(m, `metrics.${m.name}`));
+  const before = JSON.stringify(ctx.mdl.ossieExt||{});
+  if(JSON.stringify(keep)!==before){
+    modelPatch.ossieExt = keep;
+    const n = Object.values(keep).reduce((a,x)=>a+x.length,0);
+    const was = Object.values(ctx.mdl.ossieExt||{}).reduce((a,x)=>a+x.length,0);
+    if(n!==was) changes.push(n
+      ? `Carrying ${n} extension${n===1?"":"s"} for ${[...new Set(Object.values(keep).flat().map(x=>x.vendor_name))].join(", ")}`
+      : "No longer carrying any third-party extensions");
+  }
   const set = (k, v, what) => {
     if(v===undefined || v===null || v==="") return;
     if(String(v)===String(ctx.mdl[k]||"")) return;
@@ -35512,7 +35588,7 @@ const SLConceptCanvas = ({concepts, crels, entities, metrics, selected, onSelect
                 {(n.synonyms||[]).slice(0,2).join(" · ")||"no synonyms"}
               </text>
               <text x={n.x+12} y={n.y+52} style={{fontSize:9.5,fill:cfg.c,fontWeight:600}}>
-                {cov.realised.length ? `${cov.realised.length} entity · ${cov.metrics.length} metric${cov.metrics.length===1?"":"s"}` : "not realised"}
+                {cov.realised.length ? `${cov.realised.length} dataset · ${cov.metrics.length} metric${cov.metrics.length===1?"":"s"}` : "not realised"}
               </text>
             </g>
           );
@@ -35601,7 +35677,7 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
           <Head>What implements it</Head>
           {cov.realised.length===0
             ? <div style={{padding:"13px 15px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:10,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
-                <b style={{color:T.text}}>Nothing implements this concept.</b> It is agreed and named, but no entity carries its grain, so nothing can be measured or asked of it. This is the gap a glossary alone cannot show you.
+                <b style={{color:T.text}}>Nothing implements this concept.</b> It is agreed and named, but no dataset carries its grain, so nothing can be measured or asked of it. This is the gap a glossary alone cannot show you.
               </div>
             : cov.realised.map(e=>{
                 const em = metrics.filter(m=>m.entity===e.id);
@@ -35733,7 +35809,7 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
     <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
       <Sec>
         <SLMetaLabel>Details</SLMetaLabel>
-        {[["Domain",mdl.domain],["Entities",String(ents.length)],["Dimensions",String(dims.length)],
+        {[["Domain",mdl.domain],["Datasets",String(ents.length)],["Dimensions",String(dims.length)],
           ["Facts",String(facts.length)],["Metrics",String(mets.length)],
           ["Created",mdl.created],["Published",mdl.lastPublished||"Never"],["Synced",mdl.lastSynced||"Never"],
           ["Format",`Ossie ${OSSIE_VERSION}`]].map(([k,v])=>(
@@ -35841,7 +35917,7 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
 //    meta.synonyms in dbt, the description in Power BI — which is what lets somebody ask
 //    for "buyers" and land on the certified Customer metric.
 const SL_RENAME_KINDS = {
-  entity:    {l:"entity",    physical:"table"},
+  entity:    {l:"dataset",   physical:"source"},
   dimension: {l:"dimension", physical:"column"},
   fact:      {l:"fact",      physical:"column"},
   metric:    {l:"metric",    physical:"fact"},
@@ -36130,7 +36206,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
           {!sel
             ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b",lineHeight:1.65}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:8}}>{entities.length} entities · {rels.length} join{rels.length===1?"":"s"}</div>
-                Click an entity to see its grain, its joins, what is declared against it and where it lives on each platform.
+                Click a dataset to see its grain, its joins, what is declared against it and where it lives on each platform.
                 {rels.length===0 && <div style={{marginTop:12,padding:"10px 12px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,color:"#92400e"}}>
                   No joins declared — every metric in this model sits on a single table.
                 </div>}
@@ -36231,7 +36307,7 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
           <div>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isDim?"Add a dimension":"Add a fact"}</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
-              {isDim ? "Something a metric can be sliced by. Declared once, reusable by every metric on this entity."
+              {isDim ? "Something a metric can be sliced by. Declared once, reusable by every metric on this dataset."
                      : "A row-level number a metric aggregates. The SUM lives on the metric, not here."}
             </div>
           </div>
@@ -36239,12 +36315,12 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
-          <Field label="Entity" hint="Which table this belongs to.">
-            <SLSelect value={d.entity} onChange={e=>setD({...d,entity:e.target.value,column:""})} placeholder="Select an entity"
+          <Field label="Dataset" hint="Which dataset this field belongs to.">
+            <SLSelect value={d.entity} onChange={e=>setD({...d,entity:e.target.value,column:""})} placeholder="Select a dataset"
               options={entities.map(e=>({v:e.id,l:`${e.name} — ${e.table}`}))}/>
           </Field>
 
-          {ent && <Field label="Column" hint={spare.length?`${spare.length} column${spare.length===1?"":"s"} on ${ent.table} not yet declared.`:"Every column on this entity is already declared."}>
+          {ent && <Field label="Column" hint={spare.length?`${spare.length} column${spare.length===1?"":"s"} on ${ent.table} not yet declared.`:"Every column on this dataset is already declared."}>
             <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:230,overflowY:"auto"}}>
               {spare.map(c=>{
                 const on = d.column===c.name;
@@ -36349,7 +36425,7 @@ const SLMetricDrawer = ({metric, metrics, entities, rels, vendor, gTerms, onClos
 
           <Head>How it is calculated</Head>
           <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-            {[["Grain", ent?`one row per ${ent.key} in ${ent.table}`:"—"],
+            {[["Primary key", ent?`${ent.key} — one row per ${ent.key} in ${ent.table}`:"—"],
               ["Time", m.timeDim?`${m.timeDim}, by ${m.timeGrain}`:"—"],
               ...(m.type==="simple"?[["Aggregation",`${m.agg} of ${m.col}`]]:[]),
               ...(m.formula?[["Formula",m.formula]]:[]),
@@ -36591,7 +36667,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
       rels:     [...prev.rels, ...joins],
     }));
     setNewMdlOpen(false); setSelMdl(model.id); setTab("overview");
-    const bits = [`${newEntities.length} entit${newEntities.length===1?"y":"ies"} derived`];
+    const bits = [`${newEntities.length} dataset${newEntities.length===1?"":"s"} derived`];
     if(joins.length) bits.push(`${joins.length} join${joins.length===1?"":"s"}`);
     onToast && onToast(`${model.name} created · ${bits.join(" · ")}`,"success");
   };
@@ -36643,7 +36719,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <SLStatusChip status={mdl.status}/>
                   <span style={{fontSize:11,color:T.textMuted}}>{mdl.domain} · {mdl.owner}</span>
-                  <span style={{fontSize:11,color:T.textMuted}}>· {st.entities} {st.entities===1?"entity":"entities"} · {st.metrics} metric{st.metrics===1?"":"s"}</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>· {st.entities} dataset{st.entities===1?"":"s"} · {st.metrics} metric{st.metrics===1?"":"s"}</span>
                   {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} out of step</span>}
                 </div>
               </div>
@@ -36681,7 +36757,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,marginBottom:24}}>{mdl.desc||"No description yet."}</div>}
 
                   <SH title="Concepts this model realises"
-                      sub="The business meaning behind each entity. Synonyms declared here compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
+                      sub="The business meaning behind each dataset. Synonyms declared here compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
                   <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:24}}>
                     {mEnts.map(e=>{
                       const c = concepts.find(x=>x.id===e.concept);
@@ -36754,7 +36830,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
             {tab==="erd" && <>
               <SH title="Relationships"
-                  sub="Entities are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
+                  sub="Datasets are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
               <SLRelCanvas entities={mEnts} rels={mRels} metrics={mMetrics} dims={mDims} facts={mFacts}
                 models={models} selected={selEnt} onSelect={setSelEnt} onOpenMetric={(id)=>setSelId(id)}
                 onRename={(k,o)=>setRenameFor({kind:k,obj:o})}/>
@@ -36790,7 +36866,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   const nFields = (odoc.datasets||[]).reduce((n,d)=>n+(d.fields||[]).length, 0);
                   const dialects = [...new Set((odoc.metrics||[]).flatMap(m=>m.expression.dialects.map(d=>d.dialect)))];
                   const carried = [
-                    ["datasets",      `${(odoc.datasets||[]).length} — one per entity, bound to its physical source`],
+                    ["datasets",      `${(odoc.datasets||[]).length} — one per dataset, bound to its physical source`],
                     ["fields",        `${nFields} — keys, facts and dimensions, each an expression`],
                     ["relationships", `${(odoc.relationships||[]).length} — declared joins, many side to one side`],
                     ["metrics",       `${(odoc.metrics||[]).length} — written in ${dialects.length} dialect${dialects.length===1?"":"s"}: ${dialects.join(", ")||"none"}`],
@@ -36805,7 +36881,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   return (
                   <div style={{maxWidth:900}}>
                     <SH title={`${srcFile.path} · Apache Ossie core-spec ${OSSIE_VERSION}`}
-                        sub="The one document this model is. EDG authors it, every platform artifact is compiled from it, and a tool that speaks the standard reads it without EDG in the middle. Edit it and apply, and the entities, dimensions, facts and metrics behind every other tab change with it."/>
+                        sub="The one document this model is. EDG authors it, every platform artifact is compiled from it, and a tool that speaks the standard reads it without EDG in the middle. Edit it and apply, and the datasets, fields and metrics behind every other tab change with it."/>
 
                     <div style={{padding:"13px 16px",borderRadius:10,marginBottom:20,
                       background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
@@ -37095,9 +37171,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
               </div>
 
               <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,maxWidth:820,marginBottom:20}}>
-                {defTab==="dimensions" && "What a metric can be sliced by. Declared once against an entity and reused by every metric — a dimension typed inside one metric is invisible to the next."}
+                {defTab==="dimensions" && "What a metric can be sliced by. Declared once against a dataset and reused by every metric — a dimension typed inside one metric is invisible to the next."}
                 {defTab==="facts"      && "The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric, which is what lets several metrics share one fact."}
-                {defTab==="metrics"    && "The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension on the same entity."}
+                {defTab==="metrics"    && "The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension on the same dataset."}
               </div>
 
               {defTab==="dimensions" && <div>
@@ -37301,7 +37377,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   <div style={{flex:1}}><SLField label="Owner"><SLSelect value={draft.owner} onChange={e=>setDraft({...draft,owner:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField></div>
                 </div>
                 <SLField label="Steward"><SLSelect value={draft.steward} onChange={e=>setDraft({...draft,steward:e.target.value})} options={["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh"]}/></SLField>
-                <SLField label="Entities" hint="What the model is allowed to count and join across.">
+                <SLField label="Datasets" hint="What the model is allowed to count and join across.">
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {entities.map(e=>{
                       const on=(draft.entityIds||[]).includes(e.id);
@@ -37429,7 +37505,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
                   <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:12,minHeight:36}}>{m.desc}</div>
                   <div style={{display:"flex",gap:18,flexWrap:"wrap",alignItems:"baseline",paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
-                    {[["Entities",st.entities],["Metrics",st.metrics],["Certified",st.certified]].map(([k,v])=>(
+                    {[["Datasets",st.entities],["Metrics",st.metrics],["Certified",st.certified]].map(([k,v])=>(
                       <div key={k}>
                         <div style={{fontSize:17,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
                         <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{k}</div>

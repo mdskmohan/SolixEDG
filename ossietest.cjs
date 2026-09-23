@@ -204,5 +204,42 @@ console.log("── Datatype mapping");
  ["STRING","String"],["SOMETHING_ELSE",null]].forEach(([phys, want]) =>
   ok(`${phys} → ${want}`, M.slOssieType(phys) === want, M.slOssieType(phys)));
 
+// ── Conformance details that only bite on the way IN.
+console.log("\n── Reading other people's documents");
+{
+  const mdl   = M.SL_MODELS[0];
+  const ents  = M.SL_ENTITIES.filter(e => (mdl.entityIds || []).includes(e.id));
+  const rels  = M.SL_RELATIONSHIPS.filter(r => ents.some(e => e.id === r.from) && ents.some(e => e.id === r.to));
+  const mets  = M.SL_METRICS.filter(m => m.model === mdl.id);
+  const dims  = M.SL_DIMENSIONS.filter(d => ents.some(e => e.id === d.entity));
+  const facts = M.SL_FACTS.filter(x => ents.some(e => e.id === x.entity));
+  const body  = M.slAdaptOssie({ mdl, ents, rels, mets, dims, facts })[0].body;
+
+  // OSSIE_SQL_2026 is the spec's own portable language and its default dialect. It was
+  // added to the enum after the first build here, so a document using it was rejected.
+  const withOssieSql = body.replace("dialect: ANSI_SQL", "dialect: OSSIE_SQL_2026");
+  const r1 = M.slReadOssie(withOssieSql, { mdl, ents, dims, facts, metrics: mets });
+  ok("a document written in OSSIE_SQL_2026 is accepted", r1.ok, r1.errors);
+
+  // "Custom extensions with unknown vendor: Ignore (do not discard) — preserve for
+  // round-tripping." — converters/README.md
+  const foreign = "custom_extensions:\n  - vendor_name: WISDOM\n    data: |\n      {\n        \"domain_id\": \"wz-88\"\n      }";
+  const withForeign = body.replace(/^custom_extensions:$/m, foreign);
+  const r2 = M.slReadOssie(withForeign, { mdl, ents, dims, facts, metrics: mets });
+  ok("a third-party extension is kept, not dropped",
+     r2.ok && r2.modelPatch.ossieExt && (r2.modelPatch.ossieExt.document || []).some(x => x.vendor_name === "WISDOM"),
+     r2.ok ? r2.modelPatch.ossieExt : r2.errors);
+
+  const reEmitted = M.slAdaptOssie({ mdl: { ...mdl, ...r2.modelPatch }, ents, rels, mets, dims, facts })[0].body;
+  ok("and comes back out on the next emit", reEmitted.includes("WISDOM") && reEmitted.includes("wz-88"));
+
+  // A derived metric now carries a self-contained expression, because Ossie has no
+  // metric-to-metric reference to point at.
+  const yoy = M.slOssieDoc({ mdl, ents, rels, mets, dims, facts }).metrics.find(m => m.name === "revenue_yoy_growth");
+  const sql = yoy.expression.dialects.find(d => d.dialect === "ANSI_SQL").expression;
+  ok("a derived metric inlines its base rather than naming it",
+     sql.includes("SUM(") && sql.includes("LAG(") && !/\bdaily_revenue\b/.test(sql), sql);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
