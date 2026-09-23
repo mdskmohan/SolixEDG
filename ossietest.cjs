@@ -64,14 +64,17 @@ const block = [
   + "\n\n" + lines.map((l, i) => l.startsWith("Object.assign(SCHEMA,{") ? grabFrom(i) : null)
                   .filter(Boolean).join("\n\n")
   + "\n\n" + grab("let _slState = ")
-  + "\n\n" + ["const slSlug ", "const slPK ", "const slQ ", "const slMeasureName ",
+  + "\n\n" + ["const slSlug ", "const slKeys ", "const slPK ", "const slPKText ",
+              "const slUniqueKeys ", "const slFromCols ", "const slToCols ", "const slJoinPairs ",
+              "const slJoinText ", "const slIsComputed ", "const slFieldSql ", "const slFieldRaw ",
+              "const slQ ", "const slMeasureName ",
               "const slEntConcept ", "const slConceptNames ", "const slSynList "].map(grab).join("\n\n")
   + "\n\n" + span("const OSSIE_VERSION", "const SL_ADAPTERS");
 
 const M = new Function(block + `
   return {slOssieDoc, slOssieValidate, slAdaptOssie, slOssieGaps, slOssieExpr, slYaml,
           slOssieType, OSSIE_VERSION, OSSIE_DATATYPES, slParseYaml, slApplyOssie, slReadOssie,
-          slOssieDialects, slDax, slTableauCalc,
+          slOssieDialects, slDax, slTableauCalc, slKeys, slFromCols, slToCols, slIsComputed,
           SL_MODELS, SL_ENTITIES, SL_RELATIONSHIPS, SL_DIMENSIONS, SL_FACTS, SL_METRICS};
 `)();
 
@@ -239,6 +242,66 @@ console.log("\n── Reading other people's documents");
   const sql = yoy.expression.dialects.find(d => d.dialect === "ANSI_SQL").expression;
   ok("a derived metric inlines its base rather than naming it",
      sql.includes("SUM(") && sql.includes("LAG(") && !/\bdaily_revenue\b/.test(sql), sql);
+}
+
+// ── The three things Ossie can express that the authoring flows could not.
+console.log("\n── Composite keys, composite joins, computed fields");
+{
+  const base = M.SL_ENTITIES.find(e => e.id === "e_order");
+  const cust = M.SL_ENTITIES.find(e => e.id === "e_customer");
+  // A line-item grain: no single column identifies a row, and the join has to match on
+  // both of them or it matches on less than it was told to.
+  const ents = [
+    { ...base, keys: ["order_id", "customer_id"], key: "order_id",
+      uniqueKeys: [["order_id"], ["order_id", "customer_id"]] },
+    cust,
+  ];
+  const rels = [{ id: "rx", from: "e_order", to: "e_customer",
+                  fromKeys: ["customer_id", "order_id"], toKeys: ["user_id", "user_id"],
+                  fromKey: "customer_id", toKey: "user_id",
+                  cardinality: "many_to_one", filterDirection: "single", fanOutSafe: true }];
+  const dims = [
+    ...M.SL_DIMENSIONS.filter(d => d.entity === "e_order"),
+    { id: "d_band", entity: "e_order", name: "Order Size Band", column: "order_size_band",
+      expr: "CASE WHEN orders.amount > 500 THEN 'high' ELSE 'low' END",
+      type: "categorical", termId: null, desc: "Coarse banding of order value." },
+  ];
+  const facts = [
+    ...M.SL_FACTS.filter(x => x.entity === "e_order"),
+    { id: "f_net", entity: "e_order", name: "Net Amount", column: "net_amount",
+      expr: "orders.amount - COALESCE(orders.discount, 0)", additive: true,
+      desc: "Order value after the discount." },
+  ];
+  const mdl  = { ...M.SL_MODELS[0], entityIds: ["e_order", "e_customer"] };
+  const mets = M.SL_METRICS.filter(m => m.model === mdl.id && m.entity !== "e_txn");
+  const ctx  = { mdl, ents, rels, mets, dims, facts };
+  const doc  = M.slOssieDoc(ctx);
+
+  ok("a composite primary key survives",
+     JSON.stringify(doc.datasets[0].primary_key) === '["order_id","customer_id"]', doc.datasets[0].primary_key);
+  ok("unique keys survive",
+     JSON.stringify(doc.datasets[0].unique_keys) === '[["order_id"],["order_id","customer_id"]]', doc.datasets[0].unique_keys);
+  ok("a composite join keeps both column pairs, in order",
+     JSON.stringify(doc.relationships[0].from_columns) === '["customer_id","order_id"]' &&
+     JSON.stringify(doc.relationships[0].to_columns) === '["user_id","user_id"]', doc.relationships[0]);
+
+  const band = doc.datasets[0].fields.find(f => f.name === "order_size_band");
+  ok("a computed dimension is an expression, not a column reference",
+     !!band && band.expression.dialects[0].expression.startsWith("CASE WHEN"), band);
+  ok("and carries no invented datatype", !!band && band.datatype === undefined, band && band.datatype);
+
+  const net = doc.datasets[0].fields.find(f => f.name === "net_amount");
+  ok("a computed fact is an expression too",
+     !!net && net.expression.dialects[0].expression.includes("COALESCE"), net);
+
+  if (validateAgainstSpec) {
+    const errs = validateAgainstSpec(doc);
+    ok("all three still validate against apache/ossie", errs.length === 0, errs);
+  }
+
+  const body = M.slAdaptOssie(ctx)[0].body;
+  const round = M.slReadOssie(body, { mdl, ents, rels, dims, facts, metrics: mets });
+  ok("and round trip unchanged", round.ok && round.changes.length === 0, round.ok ? round.changes : round.errors);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

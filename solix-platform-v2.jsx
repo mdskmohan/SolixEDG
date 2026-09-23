@@ -34263,7 +34263,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
   const [q, setQ]     = useState("");
   const [srcF, setSrcF] = useState("all");
   const [domF, setDomF] = useState("all");
-  const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:""});
+  const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
 
   useEffect(()=>{ if(open){ setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
     setNj({from:"",fromCol:"",to:"",toCol:""});
@@ -34294,13 +34294,22 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
     }) : p.joins,
   }));
 
-  const jCheck = nj.from && nj.to ? slCheckJoin(entOf(nj.from), nj.fromCol, entOf(nj.to), nj.toCol) : null;
+  const njPairs = nj.pairs || [{from:nj.fromCol||"", to:nj.toCol||""}];
+  const setPair = (i, side, v) => setD2(p=>({...p, pairs: njPairs.map((x,j)=>j===i?{...x,[side]:v}:x)}));
+  const setD2 = (fn) => setNj(p=>fn({...p, pairs:p.pairs||[{from:p.fromCol||"", to:p.toCol||""}]}));
+  const full = njPairs.filter(p=>p.from && p.to);
+  // Fan-out is decided by the LAST pair that completes the key, so the check runs on
+  // the whole set rather than on whichever pair happened to be typed first.
+  const jCheck = nj.from && nj.to && full.length
+    ? slCheckJoin(entOf(nj.from), full[full.length-1].from, entOf(nj.to), full[full.length-1].to) : null;
   const addJoin = () => {
-    if(!nj.from||!nj.to||!nj.fromCol||!nj.toCol){ onToast&&onToast("Pick both sides of the join.","error"); return; }
-    setD(p=>({...p, joins:[...p.joins, {id:"r_"+Date.now(), from:nj.from, to:nj.to, fromKey:nj.fromCol, toKey:nj.toCol,
+    if(!nj.from||!nj.to||!full.length){ onToast&&onToast("Pick both sides of the join.","error"); return; }
+    setD(p=>({...p, joins:[...p.joins, {id:"r_"+Date.now(), from:nj.from, to:nj.to,
+      fromKeys:full.map(x=>x.from), toKeys:full.map(x=>x.to),
+      fromKey:full[0].from, toKey:full[0].to,
       cardinality:"many_to_one", filterDirection:"single", fanOutSafe:!(jCheck&&jCheck.fanOut),
-      note:`Declared by hand. ${jCheck&&jCheck.fanOut?"Flagged: the right-hand column is not unique.":"Checked against column profiles."}`}]}));
-    setNj({from:"",fromCol:"",to:"",toCol:""});
+      note:`Declared by hand${full.length>1?` on ${full.length} column pairs`:""}. ${jCheck&&jCheck.fanOut?"Flagged: the right-hand column is not unique.":"Checked against column profiles."}`}]}));
+    setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
     onToast&&onToast("Join added","success");
   };
 
@@ -34433,31 +34442,47 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                     <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
                       <div style={{flex:1,minWidth:130}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Many side</div>
-                        <SLSelect value={nj.from} onChange={e=>setNj({...nj,from:e.target.value,fromCol:""})} placeholder="dataset"
+                        <SLSelect value={nj.from} onChange={e=>setNj({...nj,from:e.target.value,fromCol:"",pairs:[{from:"",to:""}]})} placeholder="dataset"
                           options={derived.map(x=>({v:x.entity.id,l:x.entity.name}))}/>
-                      </div>
-                      <div style={{flex:1,minWidth:130}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Column</div>
-                        <SLSelect value={nj.fromCol} onChange={e=>setNj({...nj,fromCol:e.target.value})} placeholder="column"
-                          options={(SCHEMA[(entOf(nj.from)||{}).table]||[]).map(c=>c.name)}/>
                       </div>
                       <div style={{paddingBottom:8,color:T.textMuted,fontSize:14}}>→</div>
                       <div style={{flex:1,minWidth:130}}>
                         <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>One side</div>
-                        <SLSelect value={nj.to} onChange={e=>setNj({...nj,to:e.target.value,toCol:""})} placeholder="dataset"
+                        <SLSelect value={nj.to} onChange={e=>setNj({...nj,to:e.target.value,toCol:"",pairs:[{from:"",to:""}]})} placeholder="dataset"
                           options={derived.filter(x=>x.entity.id!==nj.from).map(x=>({v:x.entity.id,l:x.entity.name}))}/>
-                      </div>
-                      <div style={{flex:1,minWidth:130}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Column</div>
-                        <SLSelect value={nj.toCol} onChange={e=>setNj({...nj,toCol:e.target.value})} placeholder="column"
-                          options={(SCHEMA[(entOf(nj.to)||{}).table]||[]).map(c=>c.name)}/>
                       </div>
                     </div>
 
-                    {jCheck && nj.fromCol && nj.toCol && <div style={{marginTop:12,padding:"10px 12px",borderRadius:8,
+                    {nj.from && nj.to && <div style={{marginTop:12}}>
+                      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>
+                        Matching columns{njPairs.length>1?" — all of these must match for a row to join":""}
+                      </div>
+                      {njPairs.map((p,i)=>(
+                        <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                          <div style={{flex:1,minWidth:110}}>
+                            <SLSelect value={p.from} onChange={e=>setPair(i,"from",e.target.value)} placeholder="column"
+                              options={(SCHEMA[(entOf(nj.from)||{}).table]||[]).map(c=>c.name)}/>
+                          </div>
+                          <span style={{color:T.textMuted,fontSize:12}}>=</span>
+                          <div style={{flex:1,minWidth:110}}>
+                            <SLSelect value={p.to} onChange={e=>setPair(i,"to",e.target.value)} placeholder="column"
+                              options={(SCHEMA[(entOf(nj.to)||{}).table]||[]).map(c=>c.name)}/>
+                          </div>
+                          <button onClick={()=>setD2(x=>({...x, pairs: x.pairs.length>1 ? x.pairs.filter((_,j)=>j!==i) : x.pairs}))}
+                            disabled={njPairs.length===1}
+                            style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,
+                              color:T.textMuted,cursor:njPairs.length===1?"not-allowed":"pointer",opacity:njPairs.length===1?.4:1,flexShrink:0}}>×</button>
+                        </div>
+                      ))}
+                      <Btn small icon={Ic.plus(11)} onClick={()=>setD2(x=>({...x, pairs:[...x.pairs, {from:"",to:""}]}))}>
+                        Match another column
+                      </Btn>
+                    </div>}
+
+                    {jCheck && full.length>0 && <div style={{marginTop:12,padding:"10px 12px",borderRadius:8,
                       background:jCheck.ok?"rgba(22,163,74,.07)":T.amberDim, border:`1px solid ${jCheck.ok?T.green+"35":T.amber+"35"}`}}>
                       {jCheck.ok
-                        ? <div style={{fontSize:11.5,color:T.green,fontWeight:600}}>✓ Checked — {entOf(nj.toCol?nj.to:"")&&""}the right-hand column is the key, so this join cannot fan out.</div>
+                        ? <div style={{fontSize:11.5,color:T.green,fontWeight:600}}>✓ Checked — the right-hand side is the key, so this join cannot fan out.</div>
                         : jCheck.issues.map((s,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:2}}>· {s}</div>)}
                     </div>}
 
@@ -34473,7 +34498,7 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
                             <div key={j.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<d.joins.length-1?`1px solid ${T.border}`:"none"}}>
                               <div style={{flex:1,minWidth:0}}>
                                 <div style={{fontSize:12,fontWeight:600,color:T.text}}>
-                                  {f&&f.name} → {t&&t.name} <span style={{color:T.textMuted,fontWeight:400,fontFamily:"ui-monospace,monospace"}}>{j.fromKey} = {j.toKey}</span>
+                                  {f&&f.name} → {t&&t.name} <span style={{color:T.textMuted,fontWeight:400,fontFamily:"ui-monospace,monospace"}}>{slJoinText(j)}</span>
                                 </div>
                                 <div style={{fontSize:11,color:j.fanOutSafe?T.textMuted:T.amber,marginTop:2}}>
                                   {j.fanOutSafe?"many to one · cannot fan out":"many to one · flagged: may fan out"}
@@ -34543,7 +34568,25 @@ const SLNewModelDrawer = ({open, onClose, onCreate, existingEntities, onToast}) 
 // is the same text that would land in the change set.
 // ═══════════════════════════════════════════════════════════════════════════
 const slSlug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"");
-const slPK   = (e) => e.key;
+// A dataset is identified by one column or several. `key` is the single-column form
+// every seed and screen started with; `keys` is the general one.
+const slKeys = (e) => (e && e.keys && e.keys.length) ? e.keys : (e && e.key ? [e.key] : []);
+const slPK   = (e) => slKeys(e);
+const slPKText = (e) => slKeys(e).join(" + ") || "—";
+const slUniqueKeys = (e) => ((e && e.uniqueKeys) || []).filter(k => Array.isArray(k) && k.length);
+
+// A join matches one column pair or several. The order of the two lists is the pairing,
+// which is why they are read together and never separately.
+const slFromCols = (r) => (r.fromKeys && r.fromKeys.length) ? r.fromKeys : (r.fromKey ? [r.fromKey] : []);
+const slToCols   = (r) => (r.toKeys   && r.toKeys.length)   ? r.toKeys   : (r.toKey   ? [r.toKey]   : []);
+const slJoinPairs = (r) => slFromCols(r).map((c,i) => [c, slToCols(r)[i]]);
+const slJoinText = (r) => slJoinPairs(r).map(([a,b]) => `${a} = ${b||"?"}`).join(" AND ") || "—";
+
+// A field is a column on the dataset or a calculation over it. Ossie draws no
+// distinction — both are just an expression — so neither does anything downstream.
+const slIsComputed = (f) => !!(f && f.expr && String(f.expr).trim());
+const slFieldSql   = (f, ds) => slIsComputed(f) ? f.expr : `${ds}.${f.column}`;
+const slFieldRaw   = (f) => slIsComputed(f) ? f.expr : f.column;
 // "order" is reserved in every SQL dialect targeted here, so a logical table name is
 // always quoted rather than hoping no entity is ever called something reserved.
 const slQ    = (n) => `"${n}"`;
@@ -34581,12 +34624,12 @@ const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
     L.push(`    entities:`);
     L.push(`      - name: ${e.name.toLowerCase()}`);
     L.push(`        type: primary`);
-    L.push(`        expr: ${slPK(e)}`);
+    L.push(`        expr: ${slPK(e).join(" || '-' || ")}`);
     rels.filter(r=>r.from===e.id).forEach(r=>{
       const t = ents.find(x=>x.id===r.to); if(!t) return;
       L.push(`      - name: ${t.name.toLowerCase()}`);
       L.push(`        type: foreign`);
-      L.push(`        expr: ${r.fromKey}`);
+      L.push(`        expr: ${slFromCols(r).join(" || '-' || ")}`);
     });
     const eDims = (dims||[]).filter(d=>d.entity===e.id);
     L.push(`    dimensions:`);
@@ -34594,6 +34637,7 @@ const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
       eDims.forEach(d=>{
         L.push(`      - name: ${d.column}`);
         L.push(`        label: "${d.name}"`);
+        if(slIsComputed(d)) L.push(`        expr: ${d.expr}`);
         L.push(`        type: ${d.type==="time"?"time":"categorical"}`);
         if(d.type==="time"){ L.push(`        type_params:`); L.push(`          time_granularity: day`); }
       });
@@ -34656,14 +34700,14 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
     const syn = slSynList(e).filter(s=>s!==e.name);
     return `    ${slQ(e.name.toLowerCase())} AS ${(e.bindings||{}).snowflake||e.table}`
       + (syn.length ? `\n      WITH SYNONYMS = (${syn.map(s=>`'${s}'`).join(", ")})` : "")
-      + `\n      PRIMARY KEY (${slPK(e)})\n      COMMENT = '${e.desc}'`;
+      + `\n      PRIMARY KEY (${slPK(e).join(", ")})\n      COMMENT = '${e.desc}'`;
   }).join(",\n"));
   L.push(`  )`);
   if(rels.length){
     L.push(`  RELATIONSHIPS (`);
     L.push(rels.map(r=>{
       const f=ents.find(x=>x.id===r.from), t=ents.find(x=>x.id===r.to);
-      return `    ${slQ(f.name.toLowerCase())} (${r.fromKey}) REFERENCES ${slQ(t.name.toLowerCase())} (${r.toKey})`;
+      return `    ${slQ(f.name.toLowerCase())} (${slFromCols(r).join(", ")}) REFERENCES ${slQ(t.name.toLowerCase())} (${slToCols(r).join(", ")})`;
     }).join(",\n"));
     L.push(`  )`);
   }
@@ -34672,7 +34716,7 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
     L.push(`  FACTS (`);
     L.push(mFacts.map(x=>{
       const e=ents.find(y=>y.id===x.entity);
-      return `    ${slQ(e.name.toLowerCase())}.${x.column} AS ${slSlug(x.name)}`
+      return `    ${slIsComputed(x) ? x.expr : `${slQ(e.name.toLowerCase())}.${x.column}`} AS ${slSlug(x.name)}`
         + `\n      COMMENT = '${x.desc}${x.additive?"":" [not additive]"}'`;
     }).join(",\n"));
     L.push(`  )`);
@@ -34683,7 +34727,7 @@ const slAdaptSnowflake = ({mdl, ents, rels, mets, dims, facts}) => {
     L.push(mDims.map(d=>{
       const e=ents.find(y=>y.id===d.entity);
       const syn=[d.name, ...(d.synonyms||[])].filter(s=>s!==d.column).filter((v,i,a)=>a.indexOf(v)===i);
-      return `    ${slQ(e.name.toLowerCase())}.${d.column} AS ${slSlug(d.name)}`
+      return `    ${slIsComputed(d) ? d.expr : `${slQ(e.name.toLowerCase())}.${d.column}`} AS ${slSlug(d.name)}`
         + (syn.length?`\n      WITH SYNONYMS = (${syn.map(s=>`'${s}'`).join(", ")})`:"")
         + `\n      COMMENT = '${d.desc}'`;
     }).join(",\n"));
@@ -34730,7 +34774,7 @@ const slAdaptDatabricks = ({mdl, ents, rels, mets}) => {
       const f=ents.find(x=>x.id===r.from), t=ents.find(x=>x.id===r.to); if(!f||!t) return;
       L.push(`  - name: ${t.name.toLowerCase()}`);
       L.push(`    source: ${(t.bindings||{}).databricks||t.table}`);
-      L.push(`    on: source.${r.fromKey} = ${t.name.toLowerCase()}.${r.toKey}`);
+      L.push(`    on: ${slJoinPairs(r).map(([a,b])=>`source.${a} = ${t.name.toLowerCase()}.${b}`).join(" AND ")}`);
     });
   }
   L.push(`dimensions:`);
@@ -34767,9 +34811,11 @@ const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
     const pc = slEntConcept(e);
     L.push(`table ${(e.bindings||{}).powerbi||e.name}`);
     if(pc) L.push(`\tdescription: "${pc.definition} [concept: ${pc.name}; also known as ${(pc.synonyms||[]).join(", ")}]"`);
-    L.push(`\tcolumn ${slPK(e)}`);
-    L.push(`\t\tdataType: int64`);
-    L.push(`\t\tisKey`);
+    slPK(e).forEach(k=>{
+      L.push(`\tcolumn ${k}`);
+      L.push(`\t\tdataType: int64`);
+      L.push(`\t\tisKey`);
+    });
     L.push(`\tcolumn ${e.timeDims[0]}`);
     L.push(`\t\tdataType: dateTime`);
     eMets.forEach(m=>{
@@ -34797,8 +34843,14 @@ const slAdaptPowerBI = ({mdl, ents, rels, mets}) => {
   rels.forEach(r=>{
     const f=ents.find(x=>x.id===r.from), t=ents.find(x=>x.id===r.to); if(!f||!t) return;
     L.push(`relationship ${f.name}_${t.name}`);
-    L.push(`\tfromColumn: ${(f.bindings||{}).powerbi||f.name}.${r.fromKey}`);
-    L.push(`\ttoColumn: ${(t.bindings||{}).powerbi||t.name}.${r.toKey}`);
+    // Power BI relationships are single-column. The extra pairs are named rather than
+    // dropped in silence — a join that quietly matches on less than it was told to is
+    // how a number comes back wrong with nobody able to say why.
+    const pairs = slJoinPairs(r);
+    L.push(`\tfromColumn: ${(f.bindings||{}).powerbi||f.name}.${pairs[0][0]}`);
+    L.push(`\ttoColumn: ${(t.bindings||{}).powerbi||t.name}.${pairs[0][1]}`);
+    if(pairs.length>1)
+      L.push(`\t// UNSUPPORTED: ${pairs.slice(1).map(([a,b])=>`${a} = ${b}`).join(", ")} — Power BI cannot express a composite relationship. Enforce it with a composite key column.`);
     L.push(`\tcrossFilteringBehavior: ${r.filterDirection==="single"?"oneDirection":"bothDirections"}`);
     L.push("");
   });
@@ -34984,15 +35036,16 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       if(!cols[name]){ cols[name] = {name, roles:[], syn:[], solix:{}}; order.push(name); }
       return cols[name];
     };
-    if(e.key){ const c = col(e.key); c.roles.push("key"); c.keyDesc = `Primary key of ${e.name}.`; }
+    slKeys(e).forEach(k=>{ const c = col(k); c.roles.push("key"); c.keyDesc = `Part of the primary key of ${e.name}.`; });
+    if(slKeys(e).length===1) cols[slKeys(e)[0]].keyDesc = `Primary key of ${e.name}.`;
     eFacts.forEach(x=>{
-      const c = col(x.column); c.roles.push("fact");
+      const c = col(x.column); c.roles.push("fact"); if(slIsComputed(x)) c.expr = x.expr;
       if(!c.label){ c.label = x.name; c.labelOf = "fact"; }
       if(!c.desc) c.desc = x.desc;
       c.syn.push(x.name); c.solix.additive = x.additive!==false;
     });
     eDims.forEach(d=>{
-      const c = col(d.column); c.roles.push("dimension");
+      const c = col(d.column); c.roles.push("dimension"); if(slIsComputed(d)) c.expr = d.expr;
       if(!c.label){ c.label = d.name; c.labelOf = "dimension"; }
       if(!c.desc) c.desc = d.desc;
       c.isTime = c.isTime || d.type==="time";
@@ -35002,23 +35055,27 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
 
     const fields = order.map(name=>{
       const c = cols[name];
-      const dt = slOssieType(slColPhysType(e.table, name));
+      // A computed field has no physical column to read a type from, and guessing one
+      // would be worse than leaving it out — which is what the spec asks for anyway.
+      const dt = c.expr ? null : slOssieType(slColPhysType(e.table, name));
       return {
         name,
-        expression: {dialects:[{dialect:"ANSI_SQL", expression:`${ds}.${name}`}]},
+        expression: {dialects:[{dialect:"ANSI_SQL", expression: c.expr || `${ds}.${name}`}]},
         dimension: {is_time: !!c.isTime},
         label: c.label || undefined,
         description: c.desc || c.keyDesc || undefined,
         datatype: dt || undefined,
         ai_context: ai(null, c.syn),
-        custom_extensions: ext({role:c.roles[0], roles:c.roles, label_of:c.labelOf||null, ...c.solix}),
+        custom_extensions: ext({role:c.roles[0], roles:c.roles, label_of:c.labelOf||null,
+                                computed:!!c.expr, ...c.solix}),
       };
     });
 
     doc.datasets.push({
       name: ds,
       source: (e.bindings||{}).snowflake || (e.bindings||{}).databricks || e.table,
-      primary_key: e.key ? [e.key] : undefined,
+      primary_key: slKeys(e).length ? slKeys(e) : undefined,
+      unique_keys: slUniqueKeys(e).length ? slUniqueKeys(e) : undefined,
       description: e.desc || undefined,
       ai_context: ai(e.desc, [e.name, ...(concept ? slConceptNames(concept) : [])]),
       fields: fields.length ? fields : undefined,
@@ -35043,8 +35100,8 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       name: `${f?slSlug(f.table):r.from}_to_${t?slSlug(t.table):r.to}`,
       from: f ? slSlug(f.table) : r.from,   // many side
       to:   t ? slSlug(t.table) : r.to,     // one side
-      from_columns: [r.fromKey],
-      to_columns:   [r.toKey],
+      from_columns: slFromCols(r),
+      to_columns:   slToCols(r),
       ai_context: ai(r.note, null),
       // Cardinality, filter direction and fan-out safety are EDG's answer to the
       // question Ossie does not ask. Power BI and Snowflake both need them.
@@ -35119,6 +35176,9 @@ const slYaml = (v, ind=0) => {
     return `"${t.replace(/\\/g,"\\\\").replace(/"/g,'\\"')}"`;
   };
   if(Array.isArray(v)) return v.map(item=>{
+    // A list inside a list — unique_keys is the one place the spec asks for it — reads
+    // far better in flow style than as a dash under a dash.
+    if(Array.isArray(item)) return `${pad}- [${item.map(x=>scalar(x)).join(", ")}]`;
     if(item && typeof item === "object" && !Array.isArray(item)){
       const body = slYaml(item, ind+2);
       return `${pad}-${body.slice(ind+1)}`;                           // hoist the first key onto the dash
@@ -35349,6 +35409,15 @@ const slParseYaml = (text) => {
   return {doc: doc||{}, errors};
 };
 
+// A field's expression is either the bare column, which means it is a column, or
+// something else, which means it is a calculation. There is no third answer.
+const slOssieFieldExpr = (f, ds) => {
+  const d = ((f.expression||{}).dialects||[]).find(x=>x.dialect==="ANSI_SQL" || x.dialect==="OSSIE_SQL_2026");
+  const e = d ? String(d.expression).trim() : "";
+  if(!e || e===`${ds}.${f.name}` || e===f.name) return "";
+  return e;
+};
+
 // Apply an Ossie document back onto the model. Objects the document does not mention
 // are left alone rather than deleted — an editor that silently drops what you did not
 // retype is a data-loss bug, not a feature.
@@ -35400,6 +35469,37 @@ const slApplyOssie = (doc, ctx) => {
   const dsFor = (e) => (doc.datasets||[]).find(d=>d.name===slSlug(e.table));
   const fieldFor = (e, col) => { const d = dsFor(e); return d && (d.fields||[]).find(f=>f.name===col); };
 
+  const ents = (ctx.ents||[]).map(e=>{
+    const d = dsFor(e); if(!d) return e;
+    const next = {...e};
+    const pk = (d.primary_key||[]).filter(Boolean);
+    if(pk.length && pk.join(",")!==slKeys(e).join(",")){
+      changes.push(`${e.name} primary key: ${slPKText(e)} → ${pk.join(" + ")}`);
+      next.keys = pk; next.key = pk[0];
+    }
+    const uk = (d.unique_keys||[]).filter(k=>Array.isArray(k)&&k.length);
+    if(JSON.stringify(uk)!==JSON.stringify(slUniqueKeys(e))){
+      changes.push(uk.length
+        ? `${e.name} unique keys: ${uk.map(k=>k.join(" + ")).join(", ")}`
+        : `${e.name} unique keys cleared`);
+      next.uniqueKeys = uk;
+    }
+    if(d.description && d.description!==e.desc){ changes.push(`${e.name} description updated`); next.desc = d.description; }
+    return next;
+  });
+
+  const rels = (ctx.rels||[]).map(r=>{
+    const f = ctx.ents.find(x=>x.id===r.from), t = ctx.ents.find(x=>x.id===r.to);
+    if(!f||!t) return r;
+    const or = (doc.relationships||[]).find(x=>x.from===slSlug(f.table) && x.to===slSlug(t.table));
+    if(!or) return r;
+    const fc = (or.from_columns||[]).filter(Boolean), tc = (or.to_columns||[]).filter(Boolean);
+    if(!fc.length || fc.length!==tc.length) return r;
+    if(fc.join(",")===slFromCols(r).join(",") && tc.join(",")===slToCols(r).join(",")) return r;
+    changes.push(`Join ${f.name} → ${t.name}: ${fc.map((c,i)=>`${c} = ${tc[i]}`).join(" AND ")}`);
+    return {...r, fromKeys:fc, toKeys:tc, fromKey:fc[0], toKey:tc[0]};
+  });
+
   const dims = ctx.dims.map(d=>{
     const e = ctx.ents.find(x=>x.id===d.entity); if(!e) return d;
     const f = fieldFor(e, d.column); if(!f) return d;
@@ -35410,6 +35510,8 @@ const slApplyOssie = (doc, ctx) => {
     }
     const ty = fx.dimension_type || (f.dimension && f.dimension.is_time ? "time" : null);
     if(ty && SL_DIM_TYPES[ty] && ty!==d.type){ changes.push(`Dimension ${next.name} type → ${ty}`); next.type = ty; }
+    const fe = slOssieFieldExpr(f, slSlug(e.table));
+    if(fe!==(d.expr||"")){ changes.push(fe ? `Dimension ${next.name} is now computed` : `Dimension ${next.name} is a plain column again`); next.expr = fe; }
     return next;
   });
 
@@ -35422,6 +35524,8 @@ const slApplyOssie = (doc, ctx) => {
       if(f.description && f.description!==x.desc){ changes.push(`Fact ${next.name} description updated`); next.desc = f.description; }
     }
     if(fx.additive!==undefined && !!fx.additive!==x.additive){ changes.push(`Fact ${next.name} additive → ${!!fx.additive}`); next.additive = !!fx.additive; }
+    const fe = slOssieFieldExpr(f, slSlug(e.table));
+    if(fe!==(x.expr||"")){ changes.push(fe ? `Fact ${next.name} is now computed` : `Fact ${next.name} is a plain column again`); next.expr = fe; }
     return next;
   });
 
@@ -35443,7 +35547,7 @@ const slApplyOssie = (doc, ctx) => {
     return next;
   });
 
-  return {modelPatch, dims, facts, metrics, changes};
+  return {modelPatch, ents, rels, dims, facts, metrics, changes};
 };
 
 // Parse, validate, and only then say what it would change. A document that does not
@@ -35926,7 +36030,8 @@ const SL_RENAME_KINDS = {
 const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
   const [syn, setSyn] = useState("");
-  useEffect(()=>{ if(open && obj) { setD({name:obj.name||"", synonyms:[...(obj.synonyms||[])]}); setSyn(""); } },[open,obj]);
+  useEffect(()=>{ if(open && obj) { setD({name:obj.name||"", synonyms:[...(obj.synonyms||[])],
+    keys:[...slKeys(obj)], uniqueKeys:slUniqueKeys(obj).map(k=>[...k])}); setSyn(""); } },[open,obj]);
   if(!open || !obj || !d) return null;
   const meta = SL_RENAME_KINDS[kind] || SL_RENAME_KINDS.entity;
   const locked = !!term;
@@ -35943,8 +36048,10 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
         style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Rename {meta.l}</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>The business name and the other names it answers to.</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{kind==="entity"?"Edit dataset":`Rename ${meta.l}`}</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
+              {kind==="entity" ? "What it is called, and which columns identify a row." : "The business name and the other names it answers to."}
+            </div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
@@ -35961,6 +36068,49 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
                 </div>
               : <Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})}/>}
           </SLField>
+
+          {kind==="entity" && (()=>{
+            const cols = (SCHEMA[obj.table]||[]).map(c=>c.name);
+            const toggleKey = (c) => setD(p=>({...p, keys: p.keys.includes(c) ? p.keys.filter(x=>x!==c) : [...p.keys, c]}));
+            const pill = (k, c, on, onClick) => (
+              <button key={k} onClick={onClick}
+                style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:7,cursor:"pointer",
+                  background:on?T.accentDim:T.bgElevated, border:`1px solid ${on?T.accent+"55":T.border}`,
+                  color:on?T.accent:T.textSub, fontSize:11.5, fontWeight:on?700:500, fontFamily:"ui-monospace,monospace"}}>
+                {on && <span style={{fontSize:9}}>✓</span>}{c}
+              </button>
+            );
+            return (
+              <>
+                <SLField label="Primary key"
+                  hint={d.keys.length>1
+                    ? `Composite — a row is identified by ${d.keys.join(" + ")} together. Power BI cannot join on more than one column, so a model that relies on this will say so when it compiles.`
+                    : "Which column identifies one row. Pick more than one for a line-item table, where no single column is unique."}>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {cols.map(c=>pill(c, c, d.keys.includes(c), ()=>toggleKey(c)))}
+                  </div>
+                  {d.keys.length===0 && <div style={{fontSize:11,color:T.amber,marginTop:6}}>
+                    No primary key — nothing can be counted at this grain and the model cannot be certified.
+                  </div>}
+                </SLField>
+
+                <SLField label="Unique keys"
+                  hint="Other column sets that also identify a row — a natural key alongside a surrogate one, say. A join may point at any of them.">
+                  {d.uniqueKeys.map((uk,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                      <div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {cols.map(c=>pill(c+"-"+i, c, uk.includes(c), ()=>setD(p=>({...p,
+                          uniqueKeys: p.uniqueKeys.map((k,j)=> j!==i ? k : (k.includes(c) ? k.filter(x=>x!==c) : [...k, c]))}))))}
+                      </div>
+                      <button onClick={()=>setD(p=>({...p, uniqueKeys:p.uniqueKeys.filter((_,j)=>j!==i)}))}
+                        style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>×</button>
+                    </div>
+                  ))}
+                  <Btn small icon={Ic.plus(11)} onClick={()=>setD(p=>({...p, uniqueKeys:[...p.uniqueKeys, []]}))}>Add a unique key</Btn>
+                </SLField>
+              </>
+            );
+          })()}
 
           <SLField label={`Physical ${meta.physical}`} hint="Not editable — this is the binding. Point it somewhere else and it is a different object, not a rename.">
             <div style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,
@@ -35995,7 +36145,8 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
         <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:9,background:T.bg}}>
           <Btn ghost onClick={onClose}>Cancel</Btn>
           <Btn variant="primary" disabled={!locked && !d.name.trim()}
-            onClick={()=>{ onSave(kind, obj, {name: locked ? obj.name : d.name.trim(), synonyms:d.synonyms});
+            onClick={()=>{ onSave(kind, obj, {name: locked ? obj.name : d.name.trim(), synonyms:d.synonyms,
+              ...(kind==="entity" ? {keys:d.keys, key:d.keys[0]||null, uniqueKeys:d.uniqueKeys.filter(k=>k.length)} : {})});
                            onToast && onToast("Saved","success"); }}>Save</Btn>
         </div>
       </div>
@@ -36139,7 +36290,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 
   const rfEdges = useMemo(()=>rels.map(r=>({
     id: r.id, source: r.from, target: r.to,
-    label: `${r.fromKey} → ${r.toKey}`,
+    label: slJoinPairs(r).map(([a,b])=>`${a} → ${b}`).join(" · "),
     type: "smoothstep", animated: false,
     style: {stroke: selected && r.from!==selected && r.to!==selected ? "#e2e8f0" : "#94a3b8", strokeWidth: 1.6},
     labelStyle: {fontSize: 9.5, fill: "#64748b", fontWeight: 600},
@@ -36225,8 +36376,12 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                 </div>}
 
                 <div style={{padding:"9px 11px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,marginBottom:14}}>
-                  <div style={{fontSize:10,fontWeight:700,color:"#15803d",letterSpacing:"0.06em",marginBottom:2}}>GRAIN</div>
-                  <div style={{fontSize:11.5,color:"#166534"}}>one row per {sel.key||"—"}</div>
+                  <div style={{fontSize:10,fontWeight:700,color:"#15803d",letterSpacing:"0.06em",marginBottom:2}}>PRIMARY KEY</div>
+                  <div style={{fontSize:11.5,color:"#166534",fontFamily:"ui-monospace,monospace"}}>{slPKText(sel)}</div>
+                  <div style={{fontSize:10.5,color:"#166534",marginTop:2}}>one row per {slKeys(sel).join(" + ")||"—"}</div>
+                  {slUniqueKeys(sel).length>0 && <div style={{fontSize:10.5,color:"#16a34a",marginTop:4}}>
+                    also unique: {slUniqueKeys(sel).map(k=>k.join(" + ")).join(" · ")}
+                  </div>}
                   <div style={{fontSize:10.5,color:"#16a34a",marginTop:3}}>{sel.evidence}</div>
                 </div>
 
@@ -36236,7 +36391,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                     return (
                       <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
                         <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a"}}>{r.from===sel.id?"→":"←"} {other?other.name:"—"}</div>
-                        <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{r.fromKey} = {r.toKey}</div>
+                        <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{slJoinText(r)}</div>
                         <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>{r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}</div>
                       </div>
                     );
@@ -36278,13 +36433,14 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 //    what the column is for: slicing, or being aggregated.
 const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
-  useEffect(()=>{ if(open) setD({entity:"", name:"", column:"", type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
+  useEffect(()=>{ if(open) setD({entity:"", name:"", column:"", expr:"", mode:"column", type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
   if(!open || !d) return null;
   const isDim = kind === "dimension";
   const ent = entities.find(e=>e.id===d.entity);
   const spare = slSpareColumns(ent, dims, facts);
   const dimTerms = (gTerms||[]).filter(t=>t.termType==="Dimension");
-  const ready = d.entity && d.column && d.name.trim();
+  const computed = d.mode==="calculation";
+  const ready = d.entity && d.column && d.name.trim() && (!computed || d.expr.trim());
 
   const pickColumn = (col) => {
     const pretty = col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
@@ -36320,7 +36476,58 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
               options={entities.map(e=>({v:e.id,l:`${e.name} — ${e.table}`}))}/>
           </Field>
 
-          {ent && <Field label="Column" hint={spare.length?`${spare.length} column${spare.length===1?"":"s"} on ${ent.table} not yet declared.`:"Every column on this dataset is already declared."}>
+          {ent && <Field label="Where the value comes from"
+            hint="Ossie stores both the same way — as an expression — so a calculation is a first-class field, not a workaround.">
+            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,width:"fit-content"}}>
+              {[["column","A column"],["calculation","A calculation"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setD(p=>({...p, mode:v, column:"", expr:"", name:""}))}
+                  style={{padding:"5px 14px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,
+                    fontWeight:d.mode===v?700:500, background:d.mode===v?T.bgSurface:"transparent",
+                    color:d.mode===v?T.text:T.textMuted, boxShadow:d.mode===v?"0 1px 2px rgba(0,0,0,.06)":"none"}}>{l}</button>
+              ))}
+            </div>
+          </Field>}
+
+          {ent && computed && <>
+            <Field label="Expression"
+              hint={`Scalar SQL over ${ent.table} — no aggregation, that belongs on a metric. Columns are referenced bare: first_name || ' ' || last_name.`}>
+              <Input2 value={d.expr} onChange={e=>setD({...d,expr:e.target.value})}
+                placeholder={isDim?"CASE WHEN amount > 500 THEN 'high' ELSE 'low' END":"amount - COALESCE(discount, 0)"}/>
+              {(()=>{
+                const raw = (d.expr||"").trim();
+                if(!raw) return null;
+                // String literals are content, not identifiers, and a name followed by
+                // an opening bracket is a function call rather than a column.
+                const stripped = raw.replace(/'[^']*'/g, "''");
+                const tokens = stripped.match(/[A-Za-z_][A-Za-z0-9_]*\s*\(?/g) || [];
+                const calls = tokens.filter(t=>t.endsWith("(")).map(t=>t.replace(/\s*\($/,"").toUpperCase());
+                const AGGS = ["SUM","COUNT","AVG","MIN","MAX","MEDIAN","STDDEV","STDDEV_POP","STDDEV_SAMP",
+                              "VARIANCE","VAR_POP","VAR_SAMP","PERCENTILE_CONT","PERCENTILE_DISC",
+                              "APPROX_COUNT_DISTINCT","APPROX_PERCENTILE"];
+                const agg = calls.find(c=>AGGS.includes(c));
+                if(agg) return <div style={{fontSize:11,color:T.rose,marginTop:6,lineHeight:1.55}}>
+                  · {agg} aggregates. A field is row-level — the aggregation belongs on a metric, and it is the one rule the spec is strict about here.
+                </div>;
+
+                const cols = (SCHEMA[ent.table]||[]).map(c=>c.name);
+                const KEYWORDS = /^(CASE|WHEN|THEN|ELSE|END|AND|OR|NOT|NULL|IS|IN|LIKE|ILIKE|BETWEEN|AS|ASC|DESC|INTERVAL|TRUE|FALSE)$/i;
+                const unknown = tokens.filter(t=>!t.endsWith("("))
+                  .map(t=>t.trim())
+                  .filter((w,i,a)=>a.indexOf(w)===i)
+                  .filter(w=>!cols.includes(w) && !KEYWORDS.test(w) && !w.includes("."));
+                if(unknown.length) return <div style={{fontSize:11,color:T.amber,marginTop:6,lineHeight:1.55}}>
+                  · {unknown.map(w=>`\`${w}\``).join(", ")} {unknown.length===1?"is not a column":"are not columns"} on {ent.table}. Qualified names like {ent.table}.column are fine.
+                </div>;
+                return <div style={{fontSize:11,color:T.green,marginTop:6}}>· Row-level, and every name resolves against {ent.table}.</div>;
+              })()}
+            </Field>
+            <Field label="Field name" hint="The identifier this gets in the document and in every generated artifact. Lower case, no spaces.">
+              <Input2 value={d.column} onChange={e=>setD({...d,column:e.target.value.replace(/[^a-zA-Z0-9_]/g,"_").toLowerCase()})}
+                placeholder={isDim?"order_size_band":"net_amount"}/>
+            </Field>
+          </>}
+
+          {ent && !computed && <Field label="Column" hint={spare.length?`${spare.length} column${spare.length===1?"":"s"} on ${ent.table} not yet declared.`:"Every column on this dataset is already declared."}>
             <div style={{display:"flex",flexDirection:"column",gap:5,maxHeight:230,overflowY:"auto"}}>
               {spare.map(c=>{
                 const on = d.column===c.name;
@@ -36379,9 +36586,10 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
             <Btn variant="primary" disabled={!ready} onClick={()=>{
+              const expr = computed ? d.expr.trim() : "";
               onSave(kind, isDim
-                ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, type:d.type, termId:d.termId||null, desc:d.desc}
-                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, additive:d.additive, desc:d.desc});
+                ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, type:d.type, termId:d.termId||null, desc:d.desc}
+                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive, desc:d.desc});
               onToast && onToast(`${d.name.trim()} added`,"success");
             }}>Add {isDim?"dimension":"fact"}</Btn>
           </div>
@@ -36630,10 +36838,12 @@ const SemanticLayerView = ({onToast, onNav}) => {
   };
   const patchModel = (patch) => setStore(prev=>({...prev, models:prev.models.map(m=>m.id===selMdl?{...m,...patch}:m)}));
   const applyYaml = () => {
-    const res = slReadOssie(yamlDraft, {mdl, ents:mEnts, dims:mDims, facts:mFacts, metrics:mMetrics});
+    const res = slReadOssie(yamlDraft, {mdl, ents:mEnts, rels:mRels, dims:mDims, facts:mFacts, metrics:mMetrics});
     if(!res.ok){ setYamlResult(res); return; }
     setStore(prev=>({...prev,
       models:   prev.models.map(m=>m.id===selMdl?{...m,...res.modelPatch}:m),
+      entities: prev.entities.map(e=>res.ents.find(x=>x.id===e.id)||e),
+      rels:     prev.rels.map(r=>res.rels.find(x=>x.id===r.id)||r),
       dims:     prev.dims.map(d=>res.dims.find(x=>x.id===d.id)||d),
       facts:    prev.facts.map(x=>res.facts.find(y=>y.id===x.id)||x),
       metrics:  prev.metrics.map(m=>res.metrics.find(x=>x.id===m.id)||m),
@@ -37107,12 +37317,14 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     style={{width:"100%",minHeight:190,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
                       color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
-                    <Btn onClick={()=>setPullResult(slReadOssie(pullText, {mdl, ents:mEnts, dims:mDims, facts:mFacts, metrics:mMetrics}))}
+                    <Btn onClick={()=>setPullResult(slReadOssie(pullText, {mdl, ents:mEnts, rels:mRels, dims:mDims, facts:mFacts, metrics:mMetrics}))}
                       disabled={!pullText.trim()}>Check it</Btn>
                     <Btn variant="primary" disabled={!pullResult || !pullResult.ok || !pullResult.changes.length}
                       onClick={()=>{
                         setStore(prev=>({...prev,
                           models:  prev.models.map(m=>m.id===selMdl?{...m,...pullResult.modelPatch}:m),
+                          entities:prev.entities.map(e=>pullResult.ents.find(x=>x.id===e.id)||e),
+                          rels:    prev.rels.map(r=>pullResult.rels.find(x=>x.id===r.id)||r),
                           dims:    prev.dims.map(d=>pullResult.dims.find(x=>x.id===d.id)||d),
                           facts:   prev.facts.map(x=>pullResult.facts.find(y=>y.id===x.id)||x),
                           metrics: prev.metrics.map(m=>pullResult.metrics.find(x=>x.id===m.id)||m),
