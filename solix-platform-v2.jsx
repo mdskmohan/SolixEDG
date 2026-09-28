@@ -12912,16 +12912,17 @@ const AccessView = ({onToast}) => {
 
 // ═════════════════════════════════════════════════════════════════════════
 // POLICY MANAGER 2 — framework-first compliance, end to end
-//   Article  — what the law asks, in plain language.
-//   Policy   — your organisation's commitment that satisfies one or more articles.
-//              Owned (owner + stewards), versioned, approved: Draft → In review → Active.
-//   Rule     — the part that runs: WHEN conditions hold THEN an action. One vocabulary for
-//              template policies and hand-built ones, so every rule reads the same way.
-//   Approval policies — who approves activation, changes, enforcement on a table,
-//              exceptions and hold releases. Requests land in the one Workspace inbox.
-// Enforce actions (mask / dispose / retain / hold) execute through CDP only after the policy
-// is Active AND each target table's owner approves. Monitor rules raise findings. Evidence
-// rules need a person to attest, per framework. "Outside EDG" articles are never scored.
+//   Framework — a built-in regulation (22 of them) or a custom framework you define.
+//   Article   — what the framework asks, in plain language.
+//   Policy    — your commitment that satisfies articles. Exactly ONE type:
+//                 Validation  — EDG checks catalog metadata and raises findings.
+//                 Enforcement — EDG executes through CDP: retention or legal hold only.
+//                 Attestation — a person fills in a form; a reviewer approves; it recurs.
+//               Source is Regulation (shipped with a framework, rules locked) or Custom.
+//               Owned (owner + stewards), versioned, approved: Draft → In review → Active.
+//   Approval policies — who approves activation, changes, enforcement per table,
+//               attestations, custom mappings to regulation articles, exceptions, holds.
+//               Every request lands in the one Workspace inbox.
 // ═════════════════════════════════════════════════════════════════════════
 const PM2_CLASS_META = {
   PII:  {label:"Personal data",               color:"#8b5cf6"},
@@ -12931,17 +12932,19 @@ const PM2_CLASS_META = {
   FIN:  {label:"Financial records",           color:"#0ea5e9"},
   AUDIT:{label:"Audit & access logs",         color:"#64748b"},
 };
-const PM2_KIND_META = {
-  enforce:{label:"Enforce", hint:"Changes data through CDP — only after the policy is approved and each table owner approves"},
-  monitor:{label:"Monitor", hint:"Checks catalog metadata continuously and raises findings. Changes nothing."},
-  attest: {label:"Attest",  hint:"A procedure EDG can't observe — a person records evidence for each framework"},
-  outside:{label:"Outside EDG", hint:"Another system's job — listed so nothing is hidden, never scored"},
+const PM2_TYPE_META = {
+  validation: {label:"Validation",  color:"#2563eb", hint:"EDG checks catalog metadata continuously and raises findings. Changes no data."},
+  enforcement:{label:"Enforcement", color:"#16a34a", hint:"EDG executes it through CDP — retention or legal hold — after approval and each table owner's sign-off."},
+  attestation:{label:"Attestation", color:"#7c3aed", hint:"EDG can't observe it. A person fills in a form you design; a reviewer approves; it comes due again."},
+  outside:    {label:"Outside EDG", color:"#64748b", hint:"Another system's job — listed so nothing is hidden, never scored."},
 };
 
-// ── Rule vocabulary. Every field is something the catalog actually knows about an asset.
+// ── Validation vocabulary: every field is something the catalog or a connector knows.
 const PM2_FIELDS = {
   env:     {label:"Environment",          type:"enum", opts:["prod","dev"], get:a=>a.env},
   access:  {label:"Access",               type:"enum", opts:["Broad","Restricted"], get:a=>a.access},
+  masking: {label:"Masking (reported by source)", type:"enum", opts:["Applied","Not applied"], get:a=>a.masking},
+  sens:    {label:"Has sensitive-category columns", type:"bool", get:a=>Object.values(a.cols||{}).some(c=>["SPI","PHI","PCI"].includes(c))},
   enc:     {label:"Encrypted at rest",    type:"bool", get:a=>!!a.enc},
   hold:    {label:"Under legal hold",     type:"bool", get:a=>!!a.hold},
   suspect: {label:"Unclassified sensitive-looking columns", type:"bool", get:a=>!!a.suspect},
@@ -12966,78 +12969,85 @@ const pm2CondTest = (c,a) => {
     default: return false;
   }
 };
-const PM2_ACTIONS = {
-  flag:    {label:"Raise a finding",                 kind:"monitor"},
-  mask:    {label:"Mask columns",                    kind:"enforce", verb:"Mask"},
-  dispose: {label:"Dispose of records after a period",kind:"enforce", verb:"Set disposition"},
-  retain:  {label:"Retain records for a minimum",    kind:"enforce", verb:"Retain"},
-  hold:    {label:"Suspend disposition (legal hold)",kind:"enforce", verb:"Legal hold"},
-  evidence:{label:"Require evidence",                kind:"attest"},
-};
-const PM2_MASK_STYLES = ["Partial","Redact","Hash (join-safe)","Tokenize"];
-const pm2DefaultAct = type => ({
-  flag:{type,msg:""}, mask:{type,cols:"all",style:"Partial",unmasked:"nobody"}, dispose:{type,months:36},
-  retain:{type,years:3}, hold:{type}, evidence:{type,what:"",every:12},
-}[type]);
+const pm2CondText = c => { const F=PM2_FIELDS[c.f]; if(!F) return "?"; return F.type==="bool"||F.type==="presence" ? `${F.label} ${c.op}` : `${F.label} ${c.op} ${c.v}`; };
 
-// ── Policy templates — what EDG recommends for each article. Adopting a framework turns
-// the templates you keep into real policies (one per template, shared across frameworks).
+// ── Attestation form field types
+const PM2_FORM_TYPES = {text:"Short text", long:"Long text", date:"Date", yesno:"Yes / no", select:"Dropdown", person:"Person", doc:"Document link"};
+const pm2Field = (label, type, required, help, opts) => ({id:"f-"+label.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,24), label, type, required:!!required, help:help||"", opts:opts||[]});
+
+// ── Regulation policy templates — each exactly one type. Adopting a framework turns the
+// templates you keep into Regulation policies. Validation and enforcement policies are shared
+// across frameworks; attestation policies are per framework (a GDPR DPIA isn't a HIPAA risk analysis).
+// `edit` lists the values the law leaves to you; everything else is locked.
 const PM2_TEMPLATES = [
-  {id:"C-INV", name:"Sensitive data discovery", scopeBy:"suspect",
+  {id:"C-INV", type:"validation", name:"Sensitive data discovery", scopeBy:"suspect", severity:"High",
     why:"You can't protect data you haven't found. Flags assets whose columns look like regulated data but carry no classification yet.",
-    rules:[{conds:[{f:"suspect",op:"is yes"}], act:{type:"flag",msg:"Sensitive-looking columns are unclassified"}}]},
-  {id:"C-OWN", name:"Ownership & stewardship",
+    rules:[{conds:[{f:"suspect",op:"is yes"}], msg:"Sensitive-looking columns are unclassified"}]},
+  {id:"C-OWN", type:"validation", name:"Ownership & stewardship", severity:"Medium",
     why:"Every in-scope asset needs an owner (who approves enforcement on it) and a steward (who fixes what's found).",
-    rules:[{conds:[{f:"owner",op:"is not set"}], act:{type:"flag",msg:"No owner"}},{conds:[{f:"steward",op:"is not set"}], act:{type:"flag",msg:"No steward"}}]},
-  {id:"C-ROPA", name:"Processing purpose on record",
+    rules:[{conds:[{f:"owner",op:"is not set"}], msg:"No owner"},{conds:[{f:"steward",op:"is not set"}], msg:"No steward"}]},
+  {id:"C-ROPA", type:"validation", name:"Processing purpose on record", severity:"Medium",
     why:"The catalog doubles as your record of processing: every personal-data asset states why it's processed.",
-    rules:[{conds:[{f:"purpose",op:"is not set"}], act:{type:"flag",msg:"No processing purpose recorded"}}]},
-  {id:"C-ENC", name:"Encryption at rest",
+    rules:[{conds:[{f:"purpose",op:"is not set"}], msg:"No processing purpose recorded"}]},
+  {id:"C-ENC", type:"validation", name:"Encryption at rest", severity:"Critical",
     why:"EDG reads encryption status from the source connector. It reports the gap; the source system closes it.",
-    rules:[{conds:[{f:"enc",op:"is no"}], act:{type:"flag",msg:"Not encrypted at rest"}}]},
-  {id:"C-ACC", name:"Need-to-know access",
+    rules:[{conds:[{f:"enc",op:"is no"}], msg:"Not encrypted at rest"}]},
+  {id:"C-ACC", type:"validation", name:"Need-to-know access", severity:"High",
     why:"Regulated data is granted to a need-to-know group — never to a broad role such as all-employees or analysts-all.",
-    rules:[{conds:[{f:"access",op:"is",v:"Broad"}], act:{type:"flag",msg:"Granted to a broad role"}}]},
-  {id:"C-XB", name:"Cross-border transfers",
+    rules:[{conds:[{f:"access",op:"is",v:"Broad"}], msg:"Granted to a broad role"}]},
+  {id:"C-XB", type:"validation", name:"Cross-border transfers", severity:"High", version:2,
     why:"Personal data stored outside your approved regions must have a transfer mechanism on record (SCCs, adequacy, BCRs, security assessment).",
-    rules:[{conds:[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1"},{f:"transfer",op:"is not set"}], act:{type:"flag",msg:"Outside approved regions with no transfer mechanism"}}]},
-  {id:"C-MIN", name:"Minimisation review",
+    rules:[{conds:[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1, eu-north-1",edit:true},{f:"transfer",op:"is not set"}], msg:"Outside approved regions with no transfer mechanism"}],
+    changelog:"v2 adds eu-north-1 (Stockholm) to the default approved regions."},
+  {id:"C-MIN", type:"validation", name:"Minimisation review", severity:"Medium",
     why:"Data nobody reads is a signal it may no longer be needed. A person reviews it — EDG never deletes on this signal alone.",
-    rules:[{conds:[{f:"idle",op:"greater than",v:180},{f:"hold",op:"is no"}], act:{type:"flag",msg:"Not read in a long time — confirm it's still needed"}}]},
-  {id:"C-DQ", name:"Data quality bar",
+    rules:[{conds:[{f:"idle",op:"greater than",v:180,edit:true},{f:"hold",op:"is no"}], msg:"Not read in a long time — confirm it's still needed"}]},
+  {id:"C-DQ", type:"validation", name:"Data quality bar", severity:"Medium",
     why:"Accuracy obligations and reporting integrity: in-scope data must meet the quality threshold.",
-    rules:[{conds:[{f:"quality",op:"less than",v:85}], act:{type:"flag",msg:"Below the quality bar"}}]},
-  {id:"C-MASKNP", name:"Masking outside production",
-    why:"Dev, test and analytics copies never show real identifiers. Hashing keeps joins working across masked tables.",
-    rules:[{conds:[{f:"env",op:"is not",v:"prod"}], act:{type:"mask",cols:"all",style:"Hash (join-safe)",unmasked:"nobody"}}]},
-  {id:"C-MASKENT", name:"Masking for non-entitled users",
-    why:"In production, sensitive-category columns are masked for everyone outside the entitled group — minimum necessary, by default.",
-    rules:[{conds:[{f:"env",op:"is",v:"prod"}], act:{type:"mask",cols:"sensitive",style:"Partial",unmasked:"entitled roles (phi_read, pci_read, hr_sensitive)"}}]},
-  {id:"C-RET", name:"Retention & disposal",
+    rules:[{conds:[{f:"quality",op:"less than",v:85,edit:true}], msg:"Below the quality bar"}]},
+  {id:"C-MASKNP", type:"validation", name:"Masking outside production", severity:"High",
+    why:"Dev, test and analytics copies must not show real identifiers. EDG reads masking status from the source and flags copies that aren't masked.",
+    rules:[{conds:[{f:"env",op:"is not",v:"prod"},{f:"masking",op:"is",v:"Not applied"}], msg:"Non-production copy is not masked"}]},
+  {id:"C-MASKENT", type:"validation", name:"Masking for non-entitled users", severity:"High",
+    why:"In production, sensitive-category columns must be masked for everyone outside the entitled group. EDG verifies masking is applied at the source.",
+    rules:[{conds:[{f:"env",op:"is",v:"prod"},{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], msg:"Sensitive columns are not masked"}]},
+  {id:"C-RET", type:"enforcement", name:"Retention & disposal",
     why:"Personal data is disposed of when its retention period ends. Records under a mandated minimum keep the longer period, and a legal hold suspends both.",
-    rules:[{conds:[{f:"env",op:"is",v:"prod"},{f:"hold",op:"is no"}], act:{type:"dispose",months:36}}]},
-  {id:"C-RETREC", name:"Mandated records retention", scopeFrom:"records",
+    enf:{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently"}},
+  {id:"C-RETREC", type:"enforcement", name:"Mandated records retention", scopeFrom:"records",
     why:"Records a regulation says you must keep are locked for the minimum period so nothing disposes of them early. The longest requirement wins.",
-    rules:[{conds:[], act:{type:"retain",years:3}}]},
-  {id:"C-HOLD", name:"Legal hold",
-    why:"Records under a legal matter are frozen: retention and erasure can't touch them until the hold is released through two-person approval.",
-    rules:[{conds:[{f:"hold",op:"is yes"}], act:{type:"hold"}}]},
-  {id:"C-DSR", name:"Individual rights requests",
-    why:"Access and deletion requests are fulfilled across every system holding the person's data. EDG supplies the map; the request log is the evidence.",
-    rules:[{conds:[], act:{type:"evidence",what:"Request log showing access and deletion requests completed within the deadline",every:12}}]},
-  {id:"C-AUDIT", name:"Access logging",
-    why:"Source systems log reads of sensitive data. EDG has no canonical audit-logging field yet, so this is evidenced by attestation.",
-    rules:[{conds:[], act:{type:"evidence",what:"Source-system audit-log configuration covering the in-scope tables",every:12}}]},
-  {id:"C-RISK", name:"Risk / impact assessment",
-    why:"The regulation's own assessment (DPIA, HIPAA risk analysis, PIA…) is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
-    rules:[{conds:[], act:{type:"evidence",what:"Signed assessment covering the in-scope assets",every:12}}]},
+    enf:{action:"retention", mode:"minimum", period:3, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete"}},
+  {id:"C-HOLD", type:"enforcement", name:"Legal hold",
+    why:"Records under a legal matter are frozen: retention and erasure can't touch them until the hold is released by two people.",
+    enf:{action:"hold", matter:"LIT-2026-014 · Vendor dispute", select:"flag", assets:[]}},
+  {id:"C-DSR", type:"attestation", perFramework:true, name:"Individual rights requests",
+    why:"Access and deletion requests are fulfilled across every system that holds the person's data. EDG supplies the map; this form is the evidence.",
+    att:{every:3, remind:14, assignee:"owner", reviewer:"approver", form:[
+      pm2Field("Reporting period","text",true,"e.g. Q3 2026"),
+      pm2Field("Requests received","text",true,"Access, deletion and correction requests, by count"),
+      pm2Field("All completed within the statutory deadline","yesno",true),
+      pm2Field("Late or partial requests and why","long",false,"Required if the answer above is no"),
+      pm2Field("Request log","doc",true,"Link to the log or ticket export")]}},
+  {id:"C-AUDIT", type:"attestation", perFramework:true, name:"Access logging",
+    why:"Source systems log reads of sensitive data. EDG has no canonical audit-logging field yet, so each source's logging is attested.",
+    att:{every:12, remind:30, assignee:"steward", reviewer:"approver", form:[
+      pm2Field("Systems covered","long",true,"Every source system holding in-scope data"),
+      pm2Field("Read access is logged on every in-scope table","yesno",true),
+      pm2Field("Log retention period","select",true,"",["90 days","12 months","6 years","7 years"]),
+      pm2Field("Configuration evidence","doc",true,"Screenshot or config export"),
+      pm2Field("Verified by","person",true)]}},
+  {id:"C-RISK", type:"attestation", perFramework:true, name:"Risk / impact assessment",
+    why:"The framework's own assessment (DPIA, HIPAA risk analysis, PIA…) is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
+    att:{every:12, remind:30, assignee:"owner", reviewer:"approver", form:[
+      pm2Field("Assessment date","date",true),
+      pm2Field("Processing or systems assessed","long",true,"EDG's in-scope asset list is a starting point"),
+      pm2Field("High risks identified","long",false),
+      pm2Field("Residual risk accepted","select",true,"",["Low","Medium","High"]),
+      pm2Field("Signed off by","person",true,"DPO, privacy officer or security officer"),
+      pm2Field("Assessment document","doc",true)]}},
 ];
 const PM2_TPL = Object.fromEntries(PM2_TEMPLATES.map(t=>[t.id,t]));
 
-// ── Frameworks → articles. `ask` = what the law requires, plainly. `c` = recommended
-// template policies. `out` = belongs to another system. covers = data classes it applies
-// to ("ALL" = every classified asset). recordClasses/recordYears drive records retention;
-// retentionCeiling is a legal maximum in months where one exists.
 const PM2_FW = [
   {id:"gdpr", name:"GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
     {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need for the purpose.", c:["C-MIN"]},
@@ -13234,11 +13244,6 @@ const PM2_FW = [
     {ref:"IA-2",  t:"Identification and authentication", ask:"Uniquely identify and authenticate users, with MFA.", out:"Identity provider"},
     {ref:"IR-4",  t:"Incident handling", ask:"Prepare, detect, contain and recover from incidents.", out:"Incident response"}]},
 ];
-const pm2Fw = id => PM2_FW.find(f=>f.id===id);
-
-// ── Governed metadata the rules evaluate. Real catalog asset names; the governance
-// attributes (env, region, encryption, access breadth, purpose) are what connectors and
-// custom properties supply. cols = classified columns; suspect = looks sensitive, unclassified.
 const PM2_ASSETS = [
   {name:"customers",        service:"snowflake", domain:"Commerce", owner:"dev.patel", steward:"maya.chen", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:1,   quality:91, purpose:true,  transfer:"SCCs", cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",date_of_birth:"PII",address:"PII"}},
   {name:"users",            service:"postgres",  domain:"Platform", owner:"james.oh",  steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:3,   quality:88, purpose:false, transfer:"",     cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII"}},
@@ -13259,168 +13264,300 @@ const PM2_ASSETS = [
   {name:"user_events",      service:"databricks",domain:"Product",  owner:"alex.wu",   steward:"alex.wu",   env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:1,   quality:82, purpose:false, transfer:"",     cols:{}, suspect:{properties:"PII"}},
   {name:"claims_staging",   service:"glue",      domain:"Finance",  owner:"sarah.kim", steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:6,   quality:77, purpose:false, transfer:"",     cols:{}, suspect:{member_id:"PHI",date_of_birth:"PHI"}},
 ];
+// ── Custom frameworks: your own standards, same shape as a regulation. `expect` says how
+// each article is meant to be met; custom frameworks are yours, so mapping to them needs no approval.
+const PM2_CUSTOM_FW = [
+  {id:"cf-ids", custom:true, name:"Internal Data Standard", type:"Internal", jurisdiction:"Company-wide", owner:"maya.chen", covers:["ALL"], created:"2026-08-01",
+    fullName:"J&J Internal Data Handling Standard v3", arts:[
+    {ref:"IDS-1", t:"Every production table has an owner", ask:"No production table exists without a named owner and steward.", expect:"validation"},
+    {ref:"IDS-2", t:"HR compensation data is visible only to HR", ask:"Salary and national ID are masked for everyone outside the HR compensation team.", expect:"validation"},
+    {ref:"IDS-3", t:"Finance records are kept for 7 years", ask:"Ledger and transaction records are retained at least 7 years for audit.", expect:"enforcement"},
+    {ref:"IDS-4", t:"Quarterly access review", ask:"Access to sensitive systems is reviewed and signed off every quarter.", expect:"attestation"},
+    {ref:"IDS-5", t:"Vendor security questionnaires", ask:"Every data vendor completes the security questionnaire before onboarding.", out:"Vendor risk"}]},
+];
+const pm2AllFw = () => [...PM2_FW, ...PM2_CUSTOM_FW];
+const pm2Fw = id => pm2AllFw().find(f=>f.id===id);
+
+// Masking status as each source reports it (a governance attribute, like encryption).
+const PM2_MASKING = {customers:"Applied", orders:"Applied", patient_events:"Applied", payments:"Applied", customers_archive:"Applied"};
+PM2_ASSETS.forEach(a=>{ a.masking = PM2_MASKING[a.name]||"Not applied"; });
 const PM2_PERSONAL = ["PII","SPI","PHI","PCI"];
 const PM2_USERS = ["alex.rivera","maya.chen","lisa.ray","sarah.kim","priya.nair","james.oh","dev.patel","alex.wu"];
+const PM2_DOMAINS = [...new Set(PM2_ASSETS.map(a=>a.domain))];
+const PM2_CATEGORIES = ["Privacy","Security","Retention","Access","Quality","Governance"];
+const pm2Vals = (form, arr) => Object.fromEntries(form.map((f,i)=>[f.id, arr[i]]));
 const pm2Today = () => new Date().toISOString().slice(0,10);
+const pm2AddMonths = (d, m) => { const x=new Date(d+"T00:00:00Z"); x.setUTCMonth(x.getUTCMonth()+Number(m||0)); return x.toISOString().slice(0,10); };
+const pm2AddDays = (d, n) => { const x=new Date(d+"T00:00:00Z"); x.setUTCDate(x.getUTCDate()+Number(n||0)); return x.toISOString().slice(0,10); };
 const pm2Classes = a => [...new Set([...(a.classes||[]),...Object.values(a.cols||{})])];
 const pm2InScope = (a, covers) => covers.includes("ALL") ? pm2Classes(a).length>0 : pm2Classes(a).some(c=>covers.includes(c));
 const pm2SuspectIn = (a, covers) => !!a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
-const pm2AssetInPolicy = (a, p) => p.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
+const pm2AssetInPolicy = (a, p) => {
+  if((p.domains||[]).length && !p.domains.includes(a.domain)) return false;
+  return p.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
+};
 const pm2AssetInFw = (a, p, fw) => p.scopeBy==="suspect" ? pm2SuspectIn(a,fw.covers)
   : pm2InScope(a, p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers);
-const pm2Kinds = p => [...new Set((p.rules||[]).map(r=>PM2_ACTIONS[r.act.type]?.kind).filter(Boolean))];
-const pm2PrimaryKind = p => { const k=pm2Kinds(p); return k.includes("enforce")?"enforce":k.includes("monitor")?"monitor":"attest"; };
+const pm2LinkedFws = (p, all) => [...new Set((p.articles||[]).filter(x=>all||x.ok!==false).map(x=>x.fw))].map(pm2Fw).filter(Boolean);
 
-// The strictest requirement wins when frameworks overlap.
-const pm2LinkedFws = p => [...new Set((p.articles||[]).map(x=>x.fw))].map(pm2Fw).filter(Boolean);
-function pm2EffectiveMonths(p, act){
-  const caps = pm2LinkedFws(p).filter(f=>f.retentionCeiling).map(f=>({fw:f.name,m:f.retentionCeiling})).sort((a,b)=>a.m-b.m);
-  const own = Number(act.months||36);
-  return caps[0]&&caps[0].m<own ? {months:caps[0].m, why:`${caps[0].fw} caps disposal at ${caps[0].m} months after last use`} : {months:own, why:"your retention schedule — the linked regulations set no fixed number"};
-}
-function pm2EffectiveYears(p, act){
-  const reqs = pm2LinkedFws(p).filter(f=>f.recordYears).map(f=>({fw:f.name,y:f.recordYears})).sort((a,b)=>b.y-a.y);
-  return reqs[0] ? {years:reqs[0].y, why:`${reqs[0].fw} requires ${reqs[0].y} year${reqs[0].y>1?"s":""}`, all:reqs} : {years:Number(act.years||3), why:"your schedule — no linked regulation sets a number", all:[]};
+// Enforcement periods — the strictest requirement wins when frameworks overlap.
+const pm2Months = e => e.unit==="years" ? Number(e.period)*12 : Number(e.period);
+function pm2EffectivePeriod(p){
+  const e = p.enf; if(!e||e.action!=="retention") return null;
+  const fws = pm2LinkedFws(p);
+  if(e.mode==="dispose"){
+    const caps = fws.filter(f=>f.retentionCeiling).map(f=>({fw:f.name,m:f.retentionCeiling})).sort((a,b)=>a.m-b.m);
+    const own = pm2Months(e);
+    return caps[0]&&caps[0].m<own ? {months:caps[0].m, label:`${caps[0].m} months`, why:`${caps[0].fw} caps disposal at ${caps[0].m} months after last use`}
+                                  : {months:own, label:`${e.period} ${e.unit}`, why:"your retention schedule — the linked regulations set no fixed number"};
+  }
+  const reqs = fws.filter(f=>f.recordYears).map(f=>({fw:f.name,y:f.recordYears})).sort((a,b)=>b.y-a.y);
+  const ownY = e.unit==="years" ? Number(e.period) : Number(e.period)/12;
+  if(reqs[0]&&reqs[0].y>ownY) return {years:reqs[0].y, label:`${reqs[0].y} years`, why:`${reqs[0].fw} requires ${reqs[0].y} years — longer than the ${e.period} ${e.unit} you set`, floor:reqs[0].y};
+  return {years:ownY, label:`${e.period} ${e.unit}`, why:reqs[0]?`meets ${reqs[0].fw}'s ${reqs[0].y}-year minimum`:"your schedule — no linked regulation sets a number", floor:reqs[0]?.y||0};
 }
 
-// ── Rule engine: one evaluator for every policy, template-built or hand-built.
+// ── One evaluator for every policy, whatever its source.
 function pm2Eval(p){
-  const out = {findings:[], targets:[], evidence:[]};
-  (p.rules||[]).forEach(r=>{
-    const kind = PM2_ACTIONS[r.act.type]?.kind;
-    if(kind==="attest"){ out.evidence.push(r); return; }
+  const out = {findings:[], targets:[], held:[]};
+  if(p.type==="validation"){
+    (p.rules||[]).forEach(r=>PM2_ASSETS.forEach(a=>{
+      if(pm2AssetInPolicy(a,p) && (r.conds||[]).every(c=>pm2CondTest(c,a))) out.findings.push({asset:a, rule:r, msg:r.msg||"Matches the rule", severity:p.severity||"Medium"});
+    }));
+  } else if(p.type==="enforcement" && p.enf){
+    const e = p.enf; const eff = pm2EffectivePeriod(p);
     PM2_ASSETS.forEach(a=>{
+      if(e.action==="hold"){
+        const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm2AssetInPolicy(a,p));
+        if(pick) out.targets.push({asset:a, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
+        return;
+      }
       if(!pm2AssetInPolicy(a,p)) return;
-      if(!(r.conds||[]).every(c=>pm2CondTest(c,a))) return;
-      const scopeCols = Object.entries(a.cols||{}).filter(([,c])=>p.scope.includes("ALL")?PM2_PERSONAL.includes(c):p.scope.includes(c));
-      if(kind==="monitor") out.findings.push({asset:a, rule:r, msg:r.act.msg||"Matches the rule"});
-      else if(r.act.type==="mask"){
-        const cols = scopeCols.filter(([,c])=>r.act.cols!=="sensitive"||["SPI","PHI","PCI"].includes(c)).map(([k])=>k);
-        if(cols.length) out.targets.push({asset:a, rule:r, detail:`${cols.length} column${cols.length>1?"s":""}: ${cols.join(", ")}`});
-      } else if(r.act.type==="dispose"){
-        if(!scopeCols.length) return;
+      if(e.mode==="dispose"){
+        if(a.env!=="prod") return;
+        // Disposal is about personal data; a policy scoped only to non-personal classes applies to all of it.
+        const personalScope = p.scope.includes("ALL")||p.scope.some(c=>PM2_PERSONAL.includes(c));
+        if(personalScope && !pm2Classes(a).some(c=>PM2_PERSONAL.includes(c))) return;
+        if(a.hold){ out.held.push(a); return; }
         const longer = pm2Classes(a).some(c=>["FIN","AUDIT"].includes(c));
-        out.targets.push({asset:a, rule:r, detail:longer?"Keeps the longer mandated period":`Disposed ${pm2EffectiveMonths(p,r.act).months} months after last use`});
-      } else if(r.act.type==="retain"){
-        out.targets.push({asset:a, rule:r, detail:`Locked for ${pm2EffectiveYears(p,r.act).years} years · ${pm2Classes(a).filter(c=>p.scope.includes(c)).map(c=>PM2_CLASS_META[c].label).join(", ")}`});
-      } else if(r.act.type==="hold"){
-        out.targets.push({asset:a, rule:r, detail:"Matter LIT-2026-014 — disposition suspended"});
+        out.targets.push({asset:a, verb:"Set disposition", detail:longer?"Keeps the longer mandated period, then disposal applies":`${e.disposal} ${eff.label} after ${e.trigger.toLowerCase()}`});
+      } else {
+        out.targets.push({asset:a, verb:"Retain", detail:`Locked for at least ${eff.label} from ${e.trigger.toLowerCase()} · ${pm2Classes(a).filter(c=>p.scope.includes(c)||p.scope.includes("ALL")).map(c=>PM2_CLASS_META[c].label).join(", ")}`});
       }
     });
-  });
+  }
   return out;
 }
 
-// ── Store: adopted frameworks, policies, evidence, exceptions and the approval policies.
+// ── Attestation schedule: current / due soon / due / overdue / in review.
+function pm2AttState(p){
+  const subs = p.submissions||[]; const a = p.att||{};
+  const pending = subs.find(s=>s.status==="pending");
+  const lastOk = subs.filter(s=>s.status==="approved").sort((x,y)=>y.decidedAt.localeCompare(x.decidedAt))[0];
+  const lastRej = subs.filter(s=>s.status==="rejected").sort((x,y)=>y.at.localeCompare(x.at))[0];
+  const today = pm2Today();
+  const due = lastOk ? pm2AddMonths(lastOk.decidedAt, a.every||12) : (p.activatedAt||p.created||today);
+  if(pending) return {state:"review", label:`Submitted — awaiting ${pending.reviewer}`, due, pending, lastOk};
+  if(lastOk && due>today){
+    const soon = pm2AddDays(today, a.remind||14) >= due;
+    return {state:soon?"soon":"current", label:soon?`Due ${due}`:`Current until ${due}`, due, lastOk};
+  }
+  if(lastRej && (!lastOk || lastRej.at>lastOk.decidedAt)) return {state:"rejected", label:`Rejected by ${lastRej.decidedBy} — resubmit`, due, lastOk, lastRej};
+  return {state:lastOk?"overdue":"due", label:lastOk?`Overdue since ${due}`:"Due now — never submitted", due, lastOk};
+}
+const pm2Assignee = p => { const x=p.att?.assignee||"owner"; return x==="owner"?p.owner : x==="steward"?((p.stewards||[])[0]||p.owner) : x; };
+
+// ── Build a Regulation policy from a template for a framework.
 const PM2_TPL_OWNER = {"C-INV":"maya.chen","C-OWN":"maya.chen","C-ROPA":"maya.chen","C-ENC":"james.oh","C-ACC":"james.oh","C-XB":"maya.chen","C-MIN":"maya.chen","C-DQ":"sarah.kim","C-MASKNP":"james.oh","C-MASKENT":"maya.chen","C-RET":"dev.patel","C-RETREC":"sarah.kim","C-HOLD":"sarah.kim","C-DSR":"maya.chen","C-AUDIT":"james.oh","C-RISK":"maya.chen"};
 const PM2_TPL_STEWARD = {"C-ENC":"alex.wu","C-ACC":"alex.wu","C-AUDIT":"alex.wu","C-MASKNP":"alex.wu","C-DQ":"dev.patel","C-RETREC":"dev.patel","C-HOLD":"dev.patel","C-RET":"sarah.kim"};
-function pm2PolicyFromTemplate(tid, owner, stewards){
+const pm2TplPolicyId = (tid, fw) => PM2_TPL[tid].perFramework ? `p-${tid}-${fw.id}` : `p-${tid}`;
+function pm2PolicyFromTemplate(tid, fw, owner, stewards){
   const t = PM2_TPL[tid];
-  return {id:"p-"+tid, template:tid, name:t.name, purpose:t.why, scopeBy:t.scopeBy||"class", scope:[], articles:[],
-    rules:t.rules.map((r,i)=>({id:`${tid}-r${i+1}`, conds:r.conds.map(c=>({...c})), act:{...r.act}})),
-    owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm2Today()};
+  return {id:pm2TplPolicyId(tid,fw), template:tid, tplVersion:t.version||1, source:"regulation", type:t.type,
+    name: t.perFramework ? `${fw.name} · ${t.name}` : t.name, purpose:t.why, category:t.type==="enforcement"?"Retention":t.type==="attestation"?"Governance":"Privacy",
+    scopeBy:t.scopeBy||"class", scope:[], domains:[], articles:[], severity:t.severity||"Medium",
+    rules:(t.rules||[]).map((r,i)=>({id:`${tid}-r${i+1}`, conds:r.conds.map(c=>({...c})), msg:r.msg})),
+    enf:t.enf?{...t.enf, assets:[...(t.enf.assets||[])]}:null,
+    att:t.att?{...t.att, form:t.att.form.map(f=>({...f, opts:[...f.opts]}))}:null,
+    submissions:[], owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm2Today()};
 }
 // Link a policy to every article of `fw` that recommends its template, and widen its scope.
 function pm2LinkToFw(p, fw){
-  const arts = fw.arts.map((a,i)=>({a,i})).filter(({a})=>(a.c||[]).includes(p.template)).map(({i})=>({fw:fw.id,i}));
+  const arts = fw.arts.map((a,i)=>({a,i})).filter(({a})=>(a.c||[]).includes(p.template)).map(({i})=>({fw:fw.id,i,ok:true}));
   const add = p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers;
-  const scope = [...new Set([...p.scope, ...add])];
-  const articles = [...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))];
-  return {...p, scope, articles};
+  return {...p, scope:[...new Set([...p.scope, ...add])], articles:[...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))]};
 }
+
 let _pm2 = (()=>{
   const adopted = {gdpr:{owner:"maya.chen", at:"2026-06-02"}, soc2:{owner:"james.oh", at:"2026-06-20"}};
-  const byTpl = {};
+  const byId = {};
   Object.keys(adopted).forEach(fid=>{
     const fw = pm2Fw(fid);
     [...new Set(fw.arts.flatMap(a=>a.c||[]))].forEach(tid=>{
-      if(!byTpl[tid]) byTpl[tid] = pm2PolicyFromTemplate(tid, PM2_TPL_OWNER[tid], [PM2_TPL_STEWARD[tid]||"priya.nair"]);
-      byTpl[tid] = pm2LinkToFw(byTpl[tid], fw);
+      const id = pm2TplPolicyId(tid, fw);
+      if(!byId[id]) byId[id] = pm2PolicyFromTemplate(tid, fw, PM2_TPL_OWNER[tid], [PM2_TPL_STEWARD[tid]||"priya.nair"]);
+      byId[id] = pm2LinkToFw(byId[id], fw);
     });
   });
-  const policies = Object.values(byTpl).map(p=>({...p, status:"Active", history:[
+  const policies = Object.values(byId).map(p=>({...p, status:"Active", activatedAt:"2026-06-20", history:[
     {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
-    {when:"2026-06-02", who:p.owner, what:"Created from the GDPR / SOC 2 templates"}]}));
-  // A hand-built policy still in Draft — shows the lifecycle from the start.
-  policies.push({id:"p-cust-hr", template:null, name:"HR compensation masking", purpose:"Salary and national ID are visible only to the HR compensation team, in every environment.",
-    scopeBy:"class", scope:["SPI"], articles:[{fw:"gdpr", i:8}],
-    rules:[{id:"p-cust-hr-r1", conds:[], act:{type:"mask", cols:"sensitive", style:"Redact", unmasked:"hr_compensation role"}}],
-    owner:"james.oh", stewards:["maya.chen"], status:"Draft", version:1, reqId:null, draft:null, created:"2026-09-12",
-    history:[{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
+    {when:"2026-06-02", who:p.owner, what:`Created from the ${pm2LinkedFws(p).map(f=>f.name).join(" / ")} template`}]}));
+  // Seeded one template version behind, to show "update available".
+  const xb = policies.find(p=>p.template==="C-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
+  // GDPR's DPIA is attested and current; SOC 2's logging attestation is waiting for review.
+  const risk = policies.find(p=>p.id==="p-C-RISK-gdpr");
+  if(risk) risk.submissions=[{id:"sub-seed-1", by:"maya.chen", at:"2026-06-08", status:"approved", reviewer:"alex.rivera", decidedBy:"alex.rivera", decidedAt:"2026-06-10",
+    values:pm2Vals(risk.att.form,["2026-06-05","Customer analytics: customers, orders, customers_archive","Re-identification through joins in analytics copies","Low","maya.chen","https://sharepoint/privacy/DPIA-2026-03.pdf"])}];
+  const aud = policies.find(p=>p.id==="p-C-AUDIT-soc2");
+  if(aud) aud.submissions=[{id:"sub-seed-2", by:"alex.wu", at:"2026-09-21", status:"pending", reviewer:"maya.chen",
+    values:pm2Vals(aud.att.form,["Snowflake, Postgres, Oracle, MySQL, Databricks","yes","12 months","https://confluence/sec/audit-logging-2026","alex.wu"])}];
+  // Your framework reuses a regulation policy for IDS-1 — no approval needed, it's your standard.
+  const own = policies.find(p=>p.id==="p-C-OWN"); if(own) own.articles.push({fw:"cf-ids", i:0, ok:true});
+  // Custom policies — one of each type.
+  policies.push({id:"p-cust-hr", template:null, source:"custom", type:"validation", name:"HR compensation masking check", category:"Privacy",
+    purpose:"Salary and national ID are masked for everyone outside the HR compensation team, in every environment.",
+    scopeBy:"class", scope:["SPI"], domains:[], severity:"High",
+    rules:[{id:"p-cust-hr-r1", conds:[{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], msg:"HR sensitive columns are not masked"}],
+    articles:[{fw:"cf-ids", i:1, ok:true},{fw:"gdpr", i:8, ok:false}], submissions:[], enf:null, att:null,
+    owner:"james.oh", stewards:["maya.chen"], status:"Active", activatedAt:"2026-09-12", version:1, reqId:null, draft:null, created:"2026-09-12",
+    history:[{when:"2026-09-12", who:"EDG", what:"Activated without approval — validation policies change no data"},{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
+  policies.push({id:"p-cust-fin", template:null, source:"custom", type:"enforcement", name:"Finance records 7-year retention", category:"Retention",
+    purpose:"Ledger and transaction records are locked for 7 years so audit evidence can't be disposed of early.",
+    scopeBy:"class", scope:["FIN"], domains:["Finance"], severity:"High", rules:[],
+    enf:{action:"retention", mode:"minimum", period:7, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete"},
+    articles:[{fw:"cf-ids", i:2, ok:true}], submissions:[], att:null,
+    owner:"sarah.kim", stewards:["dev.patel"], status:"Draft", version:1, reqId:null, draft:null, created:"2026-09-20",
+    history:[{when:"2026-09-20", who:"sarah.kim", what:"Created (custom policy)"}]});
+  policies.push({id:"p-cust-acr", template:null, source:"custom", type:"attestation", name:"Quarterly access review", category:"Access",
+    purpose:"Access to every system holding sensitive data is reviewed by its owner and signed off each quarter.",
+    scopeBy:"class", scope:["ALL"], domains:[], severity:"Medium", rules:[], enf:null,
+    att:{every:3, remind:14, assignee:"sarah.kim", reviewer:"owner", form:[
+      pm2Field("Quarter reviewed","select",true,"",["Q1 2026","Q2 2026","Q3 2026","Q4 2026"]),
+      pm2Field("Systems reviewed","long",true,"List every system and the number of accounts reviewed"),
+      pm2Field("Access removed","text",false,"Number of accounts or grants revoked"),
+      pm2Field("Exceptions approved","long",false),
+      pm2Field("Review evidence","doc",true,"Export or ticket link")]},
+    articles:[{fw:"cf-ids", i:3, ok:true}], submissions:[],
+    owner:"maya.chen", stewards:["sarah.kim"], status:"Active", activatedAt:"2026-09-01", version:1, reqId:null, draft:null, created:"2026-09-01",
+    history:[{when:"2026-09-01", who:"alex.rivera", what:"Approved — v1 active"},{when:"2026-08-28", who:"maya.chen", what:"Created (custom policy)"}]});
   const approved = {};
   policies.filter(p=>p.status==="Active").forEach(p=>pm2Eval(p).targets.forEach(t=>{ approved[p.id+":"+t.asset.name]=true; }));
   return {
-    adopted, policies, approved,
-    attest:{"gdpr:p-C-RISK":{by:"maya.chen", date:"2026-06-10", evidence:"DPIA-2026-03 for customer analytics, signed off by the DPO"}},
-    exceptions:{},
+    adopted:{...adopted, "cf-ids":{owner:"maya.chen", at:"2026-08-01"}}, policies, approved, exceptions:{}, lastRun:{}, fwVer:0,
     approvalPolicy:{
-      activation:{approver:"maya.chen", autoMonitor:true},
+      activation:{approver:"maya.chen", autoValidation:true},
       enforcement:{fallback:"alex.rivera"},
+      attest:{reviewer:"maya.chen"},
+      mapping:{approver:"maya.chen"},
       exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90},
       hold:{twoPerson:true},
       sod:true,
     },
-    lastRun:{},
   };
 })();
 const _pm2Subs = new Set();
 const pm2Set = (u)=>{ _pm2 = typeof u==="function"?u(_pm2):u; _pm2Subs.forEach(f=>f()); };
 const usePM2 = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_pm2Subs.add(fn);return()=>{_pm2Subs.delete(fn);};},[]); return _pm2; };
 
-// Enforcement target status: approved before this session, or the live request.
 const pm2TargetStatus = (polId, asset) => {
   if(_pm2.approved[polId+":"+asset]) return "approved";
-  const r = (typeof _enfReqs!=="undefined"?_enfReqs:[]).filter(x=>x.policyId==="pm2:"+polId&&x.table===asset).slice(-1)[0];
+  const r = _enfReqs.filter(x=>x.policyId==="pm2:"+polId&&x.table===asset).slice(-1)[0];
   return r ? r.status : "none";
 };
+// Separation of duties: if the named approver is the requester, route to the fallback.
 const pm2Approver = (named, requester) => {
   const ap = _pm2.approvalPolicy;
   if(ap.sod && named===requester) return named===ap.enforcement.fallback ? "maya.chen" : ap.enforcement.fallback;
   return named;
 };
+const pm2Reviewer = p => { const r=p.att?.reviewer||"approver"; return r==="approver"?_pm2.approvalPolicy.attest.reviewer : r==="owner"?p.owner : r; };
+const pm2Req = (req) => requestStatusChange({id:`sr-pm2-${req.kind}-${Math.random().toString(36).slice(2,8)}-${Date.now()}`, ...req});
+
 // Once a policy is Active, every enforcement target without a decision goes to its table owner.
-// A table owned by the requester is recorded as approved — the owner is consenting.
 function pm2RequestTargets(){
   const ap = _pm2.approvalPolicy; let approved = null;
-  _pm2.policies.filter(p=>p.status==="Active").forEach(p=>{
+  _pm2.policies.filter(p=>p.status==="Active"&&p.type==="enforcement").forEach(p=>{
     pm2Eval(p).targets.forEach(t=>{
       if(pm2TargetStatus(p.id,t.asset.name)!=="none") return;
       const owner = t.asset.owner;
       if(owner && owner===p.owner){ approved = approved||{..._pm2.approved}; approved[p.id+":"+t.asset.name]=true; return; }
       const approver = owner || ap.enforcement.fallback;
-      const verb = PM2_ACTIONS[t.rule.act.type].verb;
-      addEnfApproval({id:`er-pm2-${p.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+p.id, policyName:p.name, ruleId:`pm2:${t.rule.id}:${t.asset.name}`, action:verb, table:t.asset.name, approver, requestedBy:p.owner});
-      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${p.name}" needs ${approver} to approve "${verb}" on ${t.asset.name}`, nav:"stewardship"});
+      addEnfApproval({id:`er-pm2-${p.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+p.id, policyName:p.name, ruleId:`pm2:${p.id}:${t.asset.name}`, action:t.verb, table:t.asset.name, approver, requestedBy:p.owner});
+      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${p.name}" needs ${approver} to approve "${t.verb}" on ${t.asset.name}`, nav:"stewardship"});
     });
   });
   if(approved) pm2Set(s=>({...s, approved}));
 }
-// Apply decisions made anywhere (Workspace inbox or here) back onto the policies.
+// Apply decisions made anywhere (Workspace inbox or here), then open whatever work is now due.
+let _pm2Syncing = false;
 function pm2Sync(){
-  if(typeof _statusReqs==="undefined") return;
-  let changed = false;
-  const reqOf = id => _statusReqs.find(r=>r.id===id);
-  const policies = _pm2.policies.map(p=>{
-    const rid = p.draft ? p.draft.reqId : p.reqId; if(!rid) return p;
-    const r = reqOf(rid); if(!r || r.status==="pending") return p;
-    changed = true;
-    const who = r.decidedBy || r.approver || "approver";
-    if(r.status==="approved"){
-      const base = p.draft ? {...p, ...p.draft.fields, version:p.draft.version, draft:null} : {...p};
-      return {...base, status:"Active", reqId:null, history:[{when:pm2Today(), who, what:`Approved — v${base.version} active`}, ...(p.history||[])]};
-    }
-    if(p.draft) return {...p, draft:null, history:[{when:pm2Today(), who, what:`Change to v${p.draft.version} rejected — v${p.version} keeps running`}, ...(p.history||[])]};
-    return {...p, status:"Rejected", reqId:null, history:[{when:pm2Today(), who, what:"Rejected — back to the owner"}, ...(p.history||[])]};
-  });
-  const exceptions = {..._pm2.exceptions};
-  Object.entries(exceptions).forEach(([k,e])=>{
-    if(e.status!=="pending") return; const r = reqOf(e.reqId); if(!r||r.status==="pending") return;
-    changed = true;
-    const until = new Date(Date.now()+Number(_pm2.approvalPolicy.exceptions.maxDays||90)*86400000).toISOString().slice(0,10);
-    exceptions[k] = r.status==="approved" ? {...e, status:"accepted", until, decidedBy:r.decidedBy||r.approver} : {...e, status:"rejected", decidedBy:r.decidedBy||r.approver};
-  });
-  if(changed) pm2Set(s=>({...s, policies, exceptions}));
-  pm2RequestTargets();
+  if(_pm2Syncing) return; _pm2Syncing = true;
+  try{
+    const reqOf = id => id && _statusReqs.find(r=>r.id===id);
+    const decided = r => r && r.status!=="pending";
+    const who = r => r.decidedBy || r.approver || "approver";
+    let changed = false;
+    let policies = _pm2.policies.map(p=>{
+      let q = p;
+      // activation or a change
+      const rid = q.draft ? q.draft.reqId : q.reqId; const r = reqOf(rid);
+      if(decided(r)){
+        changed = true;
+        if(r.status==="approved"){
+          const base = q.draft ? {...q, ...q.draft.fields, version:q.draft.version, draft:null} : {...q};
+          q = {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm2Today(), history:[{when:pm2Today(), who:who(r), what:`Approved — v${base.version} active`}, ...(q.history||[])]};
+        } else if(q.draft) q = {...q, draft:null, history:[{when:pm2Today(), who:who(r), what:`Change to v${q.draft.version} rejected — v${q.version} keeps running`}, ...(q.history||[])]};
+        else q = {...q, status:"Rejected", reqId:null, history:[{when:pm2Today(), who:who(r), what:"Rejected — back to the owner"}, ...(q.history||[])]};
+      }
+      // custom mappings to regulation articles
+      const mr = reqOf(q.mapReqId);
+      if(decided(mr)){
+        changed = true;
+        const ok = mr.status==="approved";
+        const n = q.articles.filter(x=>x.ok===false).length;
+        q = {...q, mapReqId:null, articles: ok ? q.articles.map(x=>({...x, ok:true})) : q.articles.filter(x=>x.ok!==false),
+             history:[{when:pm2Today(), who:who(mr), what: ok?`Approved ${n} regulation article mapping${n>1?"s":""} — they now count toward readiness`:"Regulation article mapping rejected — removed"}, ...(q.history||[])]};
+      }
+      // attestation reviews
+      if((q.submissions||[]).some(s=>s.status==="pending"&&decided(reqOf(s.reqId)))){
+        changed = true;
+        q = {...q, submissions:q.submissions.map(s=>{ const sr=reqOf(s.reqId); if(s.status!=="pending"||!decided(sr)) return s;
+          return {...s, status:sr.status, decidedBy:who(sr), decidedAt:pm2Today(), comment:sr.comment||s.comment}; })};
+        const last = q.submissions.find(s=>s.decidedAt===pm2Today());
+        q = {...q, history:[{when:pm2Today(), who:last?.decidedBy||"reviewer", what:last?.status==="approved"?`Attestation approved — next due ${pm2AddMonths(pm2Today(), q.att?.every||12)}`:"Attestation rejected — back to the assignee"}, ...(q.history||[])]};
+      }
+      return q;
+    });
+    const exceptions = {..._pm2.exceptions};
+    Object.entries(exceptions).forEach(([k,e])=>{
+      const r = reqOf(e.reqId); if(e.status!=="pending"||!decided(r)) return;
+      changed = true;
+      exceptions[k] = r.status==="approved" ? {...e, status:"accepted", until:pm2AddDays(pm2Today(), _pm2.approvalPolicy.exceptions.maxDays||90), decidedBy:who(r)} : {...e, status:"rejected", decidedBy:who(r)};
+    });
+    // open the requests that are now owed
+    policies = policies.map(p=>{
+      let q = p;
+      (q.submissions||[]).forEach((s,i)=>{ if(s.status==="pending"&&!s.reqId){
+        const reviewer = pm2Approver(s.reviewer||pm2Reviewer(q), s.by); const id = `sr-pm2-att-${q.id}-${i}-${Date.now()}`;
+        requestStatusChange({id, kind:"pm2attest", targetId:q.id, name:`Attestation · ${q.name}`, requestedStatus:"Approved", requestedBy:s.by, approver:reviewer, note:"Review the submitted evidence"});
+        q = {...q, submissions:q.submissions.map((x,j)=>j===i?{...x, reqId:id, reviewer}:x)}; changed = true; } });
+      if(q.status!=="Draft" && q.articles.some(x=>x.ok===false) && !q.mapReqId){
+        const n = q.articles.filter(x=>x.ok===false).length; const approver = pm2Approver(_pm2.approvalPolicy.mapping.approver, q.owner);
+        const id = `sr-pm2-map-${q.id}-${Date.now()}`;
+        requestStatusChange({id, kind:"pm2mapping", targetId:q.id, name:`Article mapping · ${q.name}`, requestedStatus:"Approved", requestedBy:q.owner, approver, note:`${n} regulation article${n>1?"s":""} this custom policy claims to satisfy`});
+        q = {...q, mapReqId:id}; changed = true;
+      }
+      if(q.status==="Active" && q.type==="attestation"){
+        const s = pm2AttState(q); const owed = ["due","overdue","rejected"].includes(s.state);
+        const open = _statusReqs.find(r=>r.kind==="pm2attestdue"&&r.targetId===q.id&&r.status==="pending");
+        if(owed && !open){ requestStatusChange({id:`sr-pm2-due-${q.id}-${Date.now()}`, kind:"pm2attestdue", targetId:q.id, name:`Submit attestation · ${q.name}`, requestedStatus:"Submitted", requestedBy:"EDG", approver:pm2Assignee(q), note:s.label}); }
+        if(!owed && open) srSet(prev=>prev.map(r=>r.id===open.id?{...r, status:"approved", decidedBy:"EDG"}:r));
+      }
+      return q;
+    });
+    if(changed) pm2Set(s=>({...s, policies, exceptions}));
+    pm2RequestTargets();
+  } finally { _pm2Syncing = false; }
 }
 let _pm2Hooked = false;
 
@@ -13438,13 +13575,20 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const [tab, setTab]         = useState("frameworks");
   const [selFw, setSelFw]     = useState(null);
   const [selPol, setSelPol]   = useState(null);
-  const [wiz, setWiz]         = useState(null);
-  const [ed, setEd]           = useState(null);
+  const [pdTab, setPdTab]     = useState("overview");
+  const [wiz, setWiz]         = useState(null);   // adopt a built-in framework
+  const [ed, setEd]           = useState(null);   // create / edit a policy
+  const [fwEd, setFwEd]       = useState(null);   // create / edit a custom framework
   const [q, setQ]             = useState("");
-  const [polFilter, setPolFilter] = useState("All");
+  const [polQ, setPolQ]       = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [expGrp, setExpGrp]   = useState({regulation:true, custom:true});
+  const [plusOpen, setPlusOpen] = useState(false);
   const [findFilter, setFindFilter] = useState("all");
-  const [attestDraft, setAttestDraft] = useState(null); // {fwId, polId, evidence}
-  const [excDraft, setExcDraft] = useState(null);       // {key, reason}
+  const [excDraft, setExcDraft] = useState(null);   // {key, reason}
+  const [fill, setFill]       = useState(null);     // {polId, values}
+  const [review, setReview]   = useState(null);     // {reqId, comment}
+  const [openSub, setOpenSub] = useState(null);
 
   // ── permissions ──
   const canEdit   = p => isAdmin || p.owner===me || (p.stewards||[]).includes(me);
@@ -13452,39 +13596,41 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const canDecide = r => (r.approver===me || isAdmin) && !(ap.sod && r.requestedBy===me);
 
   // ── derived ──
-  const adoptedFws = PM2_FW.filter(f=>st.adopted[f.id]);
+  const allFws     = pm2AllFw();
+  const adoptedFws = allFws.filter(f=>st.adopted[f.id]);
   const livePols   = st.policies.filter(p=>p.status!=="Retired");
   const evalOf     = p => pm2Eval(p);
   const excKey     = (p,r,a) => `${p.id}|${r.id}|${a.name}`;
   const excOf      = (p,r,a) => st.exceptions[excKey(p,r,a)];
   const isExcepted = (p,r,a) => excOf(p,r,a)?.status==="accepted";
-  const polsForArt = (fw,i) => livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i));
-  const artsOfPol  = p => p.articles.map(x=>{ const fw=pm2Fw(x.fw); return fw&&{fw, i:x.i, art:fw.arts[x.i]}; }).filter(Boolean);
+  const polsForArt = (fw,i,incPending) => livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i&&(incPending||x.ok!==false)));
+  const artsOfPol  = (p,incPending) => p.articles.filter(x=>incPending||x.ok!==false).map(x=>{ const fw=pm2Fw(x.fw); return fw&&{fw, i:x.i, ok:x.ok!==false, art:fw.arts[x.i]}; }).filter(x=>x&&x.art);
   const reqById    = id => statusReqs.find(r=>r.id===id);
   const pendingReqOf = p => { const r = reqById(p.draft?p.draft.reqId:p.reqId); return r&&r.status==="pending"?r:null; };
+  const tplUpdate  = p => p.source==="regulation" && p.template && (PM2_TPL[p.template].version||1) > (p.tplVersion||1) ? PM2_TPL[p.template] : null;
 
   const polHealth = (p, fw) => {
     if(p.status==="Draft")    return {state:"draft", label:"Draft — not submitted"};
     if(p.status==="Rejected") return {state:"rejected", label:"Rejected"};
+    if(p.status==="Retired")  return {state:"draft", label:"Retired"};
     if(p.status==="In review"){ const r=pendingReqOf(p); return {state:"review", label:`In review with ${r?.approver||"approver"}`}; }
-    const ev = evalOf(p);
-    const inFw = a => !fw || pm2AssetInFw(a,p,fw);
-    const f = ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,x.rule,x.asset));
-    if(f.length) return {state:"findings", label:`${f.length} finding${f.length>1?"s":""}`, n:f.length};
-    const tg = ev.targets.filter(t=>inFw(t.asset));
-    const ts = tg.map(t=>pm2TargetStatus(p.id,t.asset.name));
-    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected enforcement"};
-    const pend = ts.filter(s=>s!=="approved").length;
-    if(pend) return {state:"pending", label:`${pend} table${pend>1?"s":""} awaiting owner approval`};
-    if(ev.evidence.length){
-      const fws = fw ? [fw] : pm2LinkedFws(p);
-      const miss = fws.filter(f2=>!st.attest[f2.id+":"+p.id]);
-      if(miss.length) return {state:"evidence", label:fw?"Needs evidence":`Evidence needed for ${miss.map(x=>x.name).join(", ")}`};
+    if(p.type==="attestation"){
+      const s = pm2AttState(p);
+      return {state:{current:"met",soon:"met",review:"review2",due:"evidence",overdue:"findings",rejected:"findings"}[s.state], label:s.label};
     }
-    return {state:"met", label: tg.length?`Running on ${tg.length} table${tg.length>1?"s":""}`:ev.evidence.length?"Evidenced":"Passing"};
+    const ev = evalOf(p); const inFw = a => !fw || pm2AssetInFw(a,p,fw);
+    if(p.type==="validation"){
+      const f = ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,x.rule,x.asset));
+      return f.length ? {state:"findings", label:`${f.length} finding${f.length>1?"s":""}`} : {state:"met", label:"Passing"};
+    }
+    const tg = ev.targets.filter(t=>inFw(t.asset)); const ts = tg.map(t=>pm2TargetStatus(p.id,t.asset.name));
+    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected it"};
+    const pend = ts.filter(s=>s!=="approved").length;
+    return pend ? {state:"pending", label:`${pend} of ${tg.length} table${tg.length>1?"s":""} awaiting owner`} : {state:"met", label:`Running on ${tg.length} table${tg.length===1?"":"s"}`};
   };
-  const ART_ORDER = ["uncovered","rejected","findings","draft","review","pending","evidence","met"];
-  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted}, review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, evidence:{l:"Needs evidence",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
+  const ART_ORDER = ["uncovered","rejected","findings","draft","review","pending","review2","evidence","met"];
+  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted},
+    review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, review2:{l:"Evidence in review",c:T.amber}, evidence:{l:"Evidence due",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
   const artState = (fw,i) => {
     const art = fw.arts[i]; if(art.out) return "outside";
     const pols = polsForArt(fw,i); if(!pols.length) return "uncovered";
@@ -13493,47 +13639,43 @@ const PolicyManager2View = ({onToast, onNav}) => {
   };
   const fwScore = fw => { const ins=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out); return ins.length?Math.round(ins.filter(i=>artState(fw,i)==="met").length/ins.length*100):0; };
   const scoreColor = s => s>=80?T.green:s>=50?T.amber:T.rose;
-  const kindColor = k => ({enforce:T.green, monitor:T.blue, attest:T.violet, outside:T.textMuted}[k]||T.textMuted);
-  const typeColor = t => ({Privacy:T.violet, Healthcare:T.rose, Financial:T.amber, Security:T.blue}[t]||T.accent);
+  const typeColor  = k => PM2_TYPE_META[k]?.color||T.textMuted;
+  const fwTypeColor = t => ({Privacy:T.violet, Healthcare:T.rose, Financial:T.amber, Security:T.blue, Internal:T.accent}[t]||T.accent);
   const statusColor = s => ({Active:T.green, "In review":T.amber, Draft:T.textMuted, Rejected:T.rose, Retired:T.textMuted}[s]||T.textMuted);
-  const regMeta = id => REGS_META.find(r=>r.id===id)||{};
+  const regMeta = id => { const f=pm2Fw(id); return f&&f.custom ? {fullName:f.fullName, jurisdiction:f.jurisdiction} : (REGS_META.find(r=>r.id===id)||{}); };
 
-  // All open findings, de-duplicated by policy + rule + asset, carrying every article they break.
-  const allFindings = livePols.filter(p=>p.status==="Active").flatMap(p=>evalOf(p).findings.map(f=>({
+  const allFindings = livePols.filter(p=>p.status==="Active"&&p.type==="validation").flatMap(p=>evalOf(p).findings.map(f=>({
     ...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset),
     refs: artsOfPol(p).filter(x=>st.adopted[x.fw.id]&&pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name, ref:x.art.ref})),
-  }))).filter(f=>f.refs.length);
+  })));
   const openFindings = allFindings.filter(f=>f.exc?.status!=="accepted");
   const pm2StatusPending = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.status==="pending");
   const pm2EnfPending    = enfReqs.filter(r=>(r.policyId||"").startsWith("pm2:")&&r.status==="pending");
-  const evidenceNeeded   = livePols.filter(p=>p.status==="Active"&&evalOf(p).evidence.length).flatMap(p=>pm2LinkedFws(p).filter(f=>st.adopted[f.id]&&!st.attest[f.id+":"+p.id]).map(f=>({p,f})));
+  const attDue = livePols.filter(p=>p.status==="Active"&&p.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p).state));
 
   // ── actions ──
   const addHist = (p, what) => ({...p, history:[{when:pm2Today(), who:me, what}, ...(p.history||[])]});
   const updPol  = (id, fn) => pm2Set(s=>({...s, policies:s.policies.map(p=>p.id===id?fn(p):p)}));
   const submitPolicy = (id, note, quiet) => {
     const p = _pm2.policies.find(x=>x.id===id); if(!p) return;
-    const fields = p.draft ? {...p, ...p.draft.fields} : p;
-    const monitorOnly = pm2Kinds(fields).every(k=>k==="monitor");
-    if(monitorOnly && _pm2.approvalPolicy.activation.autoMonitor){
+    if(p.type==="validation" && _pm2.approvalPolicy.activation.autoValidation){
       updPol(id, x=>{ const base = x.draft?{...x, ...x.draft.fields, version:x.draft.version, draft:null}:x;
-        return {...base, status:"Active", reqId:null, history:[{when:pm2Today(), who:"EDG", what:`Activated v${base.version} without approval — monitor-only policies change no data (approval policy)`}, ...(x.history||[])]}; });
-      if(!quiet) onToast(`"${p.name}" is active — monitor-only, so no approval needed`,"success");
-      setTimeout(pm2RequestTargets,0); return;
+        return {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm2Today(), history:[{when:pm2Today(), who:"EDG", what:`v${base.version} active without approval — validation policies change no data (approval policy)`}, ...(x.history||[])]}; });
+      if(!quiet) onToast(`"${p.name}" is active — validation changes no data, so no approval needed`,"success");
+      setTimeout(pm2Sync,0); return;
     }
     const approver = pm2Approver(_pm2.approvalPolicy.activation.approver, me);
-    const reqId = `sr-pm2-${p.id}-${Date.now()}`;
-    const isChange = !!p.draft;
+    const reqId = `sr-pm2-${p.id}-${Date.now()}`; const isChange = !!p.draft;
     requestStatusChange({id:reqId, kind:"pm2policy", targetId:p.id, name:isChange?`${p.name} (v${p.draft.version} change)`:p.name, requestedStatus:"Active", requestedBy:me, note:note||(isChange?"Change to an active policy":"New policy"), approver});
-    pushNotif({category:"Policy", type:"policy", event:"policy_review", title:`Policy approval requested · ${p.name}`, body:`${me} asks ${approver} to approve ${isChange?`v${p.draft.version} of`:""} "${p.name}"`, nav:"stewardship"});
+    pushNotif({category:"Policy", type:"policy", event:"policy_review", title:`Policy approval requested · ${p.name}`, body:`${me} asks ${approver} to approve ${isChange?`v${p.draft.version} of `:""}"${p.name}"`, nav:"stewardship"});
     updPol(id, x=> isChange ? addHist({...x, draft:{...x.draft, reqId}}, `v${x.draft.version} submitted to ${approver} — v${x.version} keeps running meanwhile`)
                             : addHist({...x, status:"In review", reqId}, `Submitted to ${approver} for approval`));
     if(!quiet) onToast(`Sent to ${approver} for approval`,"success");
   };
-  const decideReq = (r, ok) => {
-    srSet(prev=>prev.map(x=>x.id===r.id?{...x, status:ok?"approved":"rejected", decidedBy:me}:x));
-    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`${ok?"Approved":"Rejected"} · ${r.name}`, body:`${me} ${ok?"approved":"rejected"} ${r.requestedBy}'s request`, nav:"policymanager2"});
-    onToast(ok?"Approved":"Rejected — the requester is notified", ok?"success":"info");
+  const decideReq = (r, ok, comment) => {
+    srSet(prev=>prev.map(x=>x.id===r.id?{...x, status:ok?"approved":"rejected", decidedBy:me, comment:comment||x.comment}:x));
+    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`${ok?"Approved":"Rejected"} · ${r.name}`, body:`${me} ${ok?"approved":"rejected"} ${r.requestedBy}'s request${comment?` — "${comment}"`:""}`, nav:"policymanager2"});
+    setReview(null); onToast(ok?"Approved":"Rejected — the requester is notified", ok?"success":"info");
   };
   const decideEnf = (r, ok) => {
     resolveEnfApproval(r.id, ok?"approved":"rejected");
@@ -13542,130 +13684,173 @@ const PolicyManager2View = ({onToast, onNav}) => {
   };
   const requestException = (f, reason) => {
     const named = ap.exceptions.approver==="policy owner" ? f.pol.owner : ap.exceptions.named;
-    const approver = pm2Approver(named, me);
-    const reqId = `sr-pm2x-${Date.now()}`;
+    const approver = pm2Approver(named, me); const reqId = `sr-pm2x-${Date.now()}`;
     requestStatusChange({id:reqId, kind:"pm2exception", targetId:f.key, name:`Exception · ${f.asset.name} · ${f.pol.name}`, requestedStatus:"Exception", requestedBy:me, note:reason, approver});
     pushNotif({category:"Policy", type:"policy", title:`Exception requested · ${f.asset.name}`, body:`${me}: "${reason}"`, nav:"stewardship"});
     pm2Set(s=>({...s, exceptions:{...s.exceptions, [f.key]:{status:"pending", reqId, reason, by:me, approver}}}));
     setExcDraft(null); onToast(`Exception sent to ${approver}`,"success");
   };
-  const saveAttest = () => {
-    if(!attestDraft.evidence.trim()) return;
-    pm2Set(s=>({...s, attest:{...s.attest, [attestDraft.fwId+":"+attestDraft.polId]:{by:me, date:pm2Today(), evidence:attestDraft.evidence.trim()}}}));
-    updPol(attestDraft.polId, p=>addHist(p, `Evidence recorded for ${pm2Fw(attestDraft.fwId).name}`));
-    setAttestDraft(null); onToast("Evidence recorded","success");
+  const submitAttestation = () => {
+    const p = st.policies.find(x=>x.id===fill.polId); const miss = p.att.form.filter(f=>f.required&&!String(fill.values[f.id]||"").trim());
+    if(miss.length){ onToast(`Fill in: ${miss.map(f=>f.label).join(", ")}`,"info"); return; }
+    const reviewer = pm2Approver(pm2Reviewer(p), me);
+    updPol(p.id, x=>addHist({...x, submissions:[{id:`sub-${Date.now()}`, by:me, at:pm2Today(), status:"pending", reviewer, values:{...fill.values}}, ...(x.submissions||[])]}, `Attestation submitted to ${reviewer}`));
+    setFill(null); setTimeout(pm2Sync,0); onToast(`Submitted — ${reviewer} reviews it`,"success");
   };
   const runNow = p => {
     const ev = evalOf(p);
     pm2Set(s=>({...s, lastRun:{...s.lastRun, [p.id]:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}}));
     pm2RequestTargets();
-    onToast(`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}, ${ev.targets.length} enforcement target${ev.targets.length===1?"":"s"}`,"success");
+    onToast(p.type==="validation"?`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}`:`Ran "${p.name}" — ${ev.targets.length} table${ev.targets.length===1?"":"s"} in scope`,"success");
+  };
+  const duplicateAsCustom = p => {
+    const id = "p-cust-"+Date.now();
+    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (custom)`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null, submissions:[],
+      articles:p.articles.map(x=>({...x, ok:!!pm2Fw(x.fw)?.custom})), created:pm2Today(), owner:me, stewards:[...(p.stewards||[])],
+      rules:(p.rules||[]).map((r,i)=>({...r, id:`${id}-r${i+1}`, conds:r.conds.map(c=>{ const {edit, ...rest}=c; return rest; })})),
+      enf:p.enf?{...p.enf, assets:[...(p.enf.assets||[])]}:null, att:p.att?{...p.att, form:p.att.form.map(f=>({...f}))}:null,
+      history:[{when:pm2Today(), who:me, what:`Duplicated from the regulation policy "${p.name}" — regulation mappings need approval before they count`}]};
+    pm2Set(s=>({...s, policies:[...s.policies, copy]}));
+    onToast("Duplicated as a custom policy — edit it, then submit","success");
+    setSelPol(id); setPdTab("overview"); setTimeout(()=>openEditor(copy),0);
+  };
+  const applyTplUpdate = p => {
+    const t = PM2_TPL[p.template];
+    updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{tplVersion:t.version, rules:t.rules.map((r,i)=>({id:`${t.id}-r${i+1}`, conds:r.conds.map(c=>({...c})), msg:r.msg}))}}}, `Template v${t.version} drafted for review: ${t.changelog}`));
+    setTimeout(()=>submitPolicy(p.id, `Template update to v${t.version}: ${t.changelog}`),0);
   };
   const setAp = (path, v) => pm2Set(s=>{ const a={...s.approvalPolicy}; const [k1,k2]=path; a[k1]= k2?{...a[k1],[k2]:v}:v; return {...s, approvalPolicy:a}; });
+  const openPolicy = id => { setTab("policies"); setSelFw(null); setSelPol(id); setPdTab("overview"); };
 
-  // ── small render helpers (plain functions — no remounting) ──
+  // ── small render helpers (plain functions — nothing remounts) ──
   const pill = (c, text, title) => <span title={title} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${c}15`,color:c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{text}</span>;
-  const kindPill = k => pill(kindColor(k), PM2_KIND_META[k].label, PM2_KIND_META[k].hint);
+  const typePill = k => pill(typeColor(k), PM2_TYPE_META[k].label, PM2_TYPE_META[k].hint);
+  const srcPill = p => p.source==="regulation" ? pill(T.textSub, `Regulation · ${pm2LinkedFws(p).filter(f=>!f.custom).map(f=>f.name).join(", ")||"—"}`, "Shipped with the regulation — rules are locked") : pill(T.accent, "Custom", "Built by your organisation");
   const classChip = c => <span key={c}>{pill(c==="ALL"?T.textSub:PM2_CLASS_META[c].color, c==="ALL"?"All classified data":PM2_CLASS_META[c].label)}</span>;
   const refTag = (text, c) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{text}</span>;
   const secLabel = (t, extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"20px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
   const selStyle = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12};
   const inStyle  = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"};
+  const inp = {width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
+  const secHead = (title, desc) => <div style={{marginBottom:14}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>{desc&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:3,lineHeight:1.6}}>{desc}</div>}</div>;
   const userSel = (v, on, opts) => <select value={v} onChange={e=>on(e.target.value)} style={selStyle}>{(opts||PM2_USERS).map(u=><option key={u} value={u}>{u}</option>)}</select>;
   const card = (children, extra) => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",...extra}}>{children}</div>;
   const scopePhrase = p => p.scopeBy==="suspect"
     ? <>an asset that <b>looks like</b> {p.scope.includes("ALL")?"regulated":p.scope.map(c=>PM2_CLASS_META[c]?.label.toLowerCase()).join(" / ")} data but <b>isn't classified</b></>
-    : <>an asset holding {p.scope.length?p.scope.map((c,i)=><React.Fragment key={c}>{i>0&&" or "}<b>{c==="ALL"?"any classified data":PM2_CLASS_META[c]?.label.toLowerCase()}</b></React.Fragment>):<i>no data class yet</i>}</>;
-  const condText = c => { const F=PM2_FIELDS[c.f]; if(!F) return "?"; return F.type==="bool"||F.type==="presence" ? `${F.label} ${c.op}` : `${F.label} ${c.op} ${c.v}`; };
-  // A rule, read as a sentence: WHEN … AND … THEN …  (onChange makes the values editable in place)
-  const ruleView = (r, p, onChange) => {
+    : <>an asset holding {p.scope.length?p.scope.map((c,i)=><React.Fragment key={c}>{i>0&&" or "}<b>{c==="ALL"?"any classified data":PM2_CLASS_META[c]?.label.toLowerCase()}</b></React.Fragment>):<i>no data class yet</i>}{(p.domains||[]).length>0&&<> in <b>{p.domains.join(" / ")}</b></>}</>;
+  // A validation rule read as a sentence. `canEditCond(c)` decides which values are editable in place.
+  const ruleView = (r, p, onChange, canEditCond) => {
     const kw = t => <span style={{fontSize:10,fontWeight:800,color:T.textMuted,letterSpacing:"0.06em",marginRight:6}}>{t}</span>;
     const chip = (content, i) => <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,padding:"2px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{content}</span>;
     const setCond = (i, v) => onChange({...r, conds:r.conds.map((c,j)=>j===i?{...c,v}:c)});
-    const setAct  = (k, v) => onChange({...r, act:{...r.act, [k]:v}});
-    const a = r.act; const kind = PM2_ACTIONS[a.type]?.kind;
-    let then;
-    if(a.type==="flag") then = <>raise a finding{onChange?<> — <input value={a.msg||""} onChange={e=>setAct("msg",e.target.value)} style={{...inStyle,width:260}}/></>:a.msg?<> — <i>“{a.msg}”</i></>:null}</>;
-    else if(a.type==="mask") then = <>mask {a.cols==="sensitive"?"sensitive-category":"all in-scope"} columns as {onChange?<select value={a.style} onChange={e=>setAct("style",e.target.value)} style={selStyle}>{PM2_MASK_STYLES.map(s=><option key={s}>{s}</option>)}</select>:<b>{a.style}</b>}; unmasked for {onChange?<input value={a.unmasked||""} onChange={e=>setAct("unmasked",e.target.value)} style={{...inStyle,width:220}}/>:<b>{a.unmasked||"nobody"}</b>}</>;
-    else if(a.type==="dispose"){ const eff=p&&pm2EffectiveMonths(p,a); then = <>dispose of records {onChange?<input type="number" value={a.months} onChange={e=>setAct("months",Number(e.target.value))} style={{...inStyle,width:64}}/>:<b>{eff?eff.months:a.months}</b>} months after last use{eff&&!onChange&&<span style={{color:T.textMuted}}> — {eff.why}</span>}</>; }
-    else if(a.type==="retain"){ const eff=p&&pm2EffectiveYears(p,a); then = <>retain records for at least <b>{eff?eff.years:a.years}</b> years{eff&&<span style={{color:T.textMuted}}> — {eff.why}</span>}</>; }
-    else if(a.type==="hold") then = <>suspend retention and erasure until the hold is released</>;
-    else if(a.type==="evidence") then = <>require evidence: {onChange?<input value={a.what} onChange={e=>setAct("what",e.target.value)} style={{...inStyle,width:320}}/>:<b>{a.what}</b>}, reviewed every {onChange?<input type="number" value={a.every} onChange={e=>setAct("every",Number(e.target.value))} style={{...inStyle,width:56}}/>:a.every} months</>;
     return (
-      <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${kindColor(kind)}`,borderRadius:8}}>
+      <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("validation")}`,borderRadius:8}}>
         <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.textSub}}>
-          {kw("WHEN")}<span>{p?scopePhrase(p):"an in-scope asset"}</span>
-          {(r.conds||[]).map((c,i)=>{ const F=PM2_FIELDS[c.f]; const editable = onChange && (F.type==="number"||F.type==="list"||F.type==="enum");
+          {kw("WHEN")}<span>{scopePhrase(p)}</span>
+          {(r.conds||[]).map((c,i)=>{ const F=PM2_FIELDS[c.f]; const editable = onChange && (!canEditCond||canEditCond(c)) && ["number","list","enum"].includes(F?.type);
             return <React.Fragment key={i}>{kw("AND")}{chip(editable
               ? <>{F.label} {c.op} {F.type==="enum"?<select value={c.v} onChange={e=>setCond(i,e.target.value)} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>
-                                   :<input type={F.type==="number"?"number":"text"} value={c.v} onChange={e=>setCond(i,F.type==="number"?Number(e.target.value):e.target.value)} style={{...inStyle,width:F.type==="number"?64:190}}/>}</>
-              : condText(c), i)}</React.Fragment>; })}
+                  :<input type={F.type==="number"?"number":"text"} value={c.v} onChange={e=>setCond(i,F.type==="number"?Number(e.target.value):e.target.value)} style={{...inStyle,width:F.type==="number"?64:220}}/>}</>
+              : pm2CondText(c), i)}</React.Fragment>; })}
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.text}}>{kw("THEN")}{kindPill(kind)}<span>{then}</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.text}}>{kw("THEN")}{typePill("validation")}<span>raise a finding — <i>“{r.msg||"Matches the rule"}”</i></span></div>
       </div>
     );
   };
+  // An enforcement policy read as a sentence.
+  const enfText = p => {
+    const e = p.enf; if(!e) return "—";
+    if(e.action==="hold") return <>Place a <b>legal hold</b> for <b>{e.matter||"a matter"}</b> on {e.select==="assets"?<b>{(e.assets||[]).join(", ")||"no assets yet"}</b>:<>every in-scope asset flagged under legal hold</>}. Retention and erasure can't act on held records; releasing the hold takes {ap.hold.twoPerson?"two people":"the policy owner"}.</>;
+    const eff = pm2EffectivePeriod(p);
+    return e.mode==="dispose"
+      ? <>For {scopePhrase(p)} in production, <b>{e.disposal.toLowerCase()}</b> <b>{eff.label}</b> after <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Records under a mandated minimum keep the longer period; a legal hold suspends disposal.</>
+      : <>For {scopePhrase(p)}, <b>keep records for at least {eff.label}</b> from <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Nothing can dispose of them earlier. Then: {e.disposal.toLowerCase()}.</>;
+  };
+  // An attestation form rendered — read-only preview, or live inputs when `vals` + `setVal` are given.
+  const formView = (form, vals, setVal) => (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {form.map(f=>{ const v = vals?.[f.id]??""; const dis = !setVal; const on = x=>setVal&&setVal(f.id,x);
+        return (<div key={f.id}>
+          <label style={lbl}>{f.label}{f.required&&<span style={{color:T.rose}}> *</span>}</label>
+          {f.type==="long" ? <textarea rows={3} disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...inp,resize:"vertical"}}/>
+          : f.type==="date" ? <input type="date" disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...inp,width:180}}/>
+          : f.type==="yesno" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,width:140}}><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select>
+          : f.type==="select" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,minWidth:180}}><option value="">Choose…</option>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+          : f.type==="person" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,minWidth:180}}><option value="">Choose a person…</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select>
+          : <input disabled={dis} value={v} onChange={e=>on(e.target.value)} placeholder={f.type==="doc"?"https://…":""} style={inp}/>}
+          {f.help&&<div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{f.help}</div>}
+        </div>); })}
+    </div>
+  );
+  const valText = (f, v) => f.type==="yesno" ? (v==="yes"?"Yes":v==="no"?"No":"—") : (v||"—");
 
   const pad = {flex:1,overflowY:"auto",padding:"20px 28px 48px"};
-  const openPolicy = id => { setTab("policies"); setSelFw(null); setSelPol(id); };
-  const policyRow = (p, fw) => {
+  const policyRow = (p, fw, mark) => {
     const h = polHealth(p, fw); const hc = ART_META[h.state]?.c||T.textMuted;
     return (
       <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-        <div style={{display:"flex",gap:4}}>{pm2Kinds(p).map(k=><span key={k}>{kindPill(k)}</span>)}</div>
-        <span onClick={()=>openPolicy(p.id)} style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:T.text,cursor:"pointer"}}>{p.name}{!p.template&&<span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}> · custom</span>}</span>
+        {typePill(p.type)}
+        <span onClick={()=>openPolicy(p.id)} style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:600,color:T.text,cursor:"pointer"}}>{p.name}</span>
+        {mark}
         <span style={{fontSize:11,color:T.textMuted}}>owner <b style={{color:T.textSub}}>{p.owner}</b></span>
         {pill(statusColor(p.status), p.status)}
-        <span style={{fontSize:11,fontWeight:600,color:hc,minWidth:130,textAlign:"right"}}>{p.status==="Active"?h.label:""}</span>
+        <span style={{fontSize:11,fontWeight:600,color:hc,minWidth:140,textAlign:"right"}}>{p.status==="Active"?h.label:""}</span>
       </div>
     );
   };
 
   // ═════ FRAMEWORKS ═════
+  const fwCard = fw => {
+    const s=fwScore(fw); const idx=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
+    const cnt={}; idx.forEach(i=>{const k=artState(fw,i); cnt[k]=(cnt[k]||0)+1;});
+    return (
+      <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:15,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(fwTypeColor(fw.type), fw.custom?"Custom":fw.type)}
+          <span style={{marginLeft:"auto",fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:scoreColor(s)}}>{s}%</span>
+        </div>
+        <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"8px 0"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
+        <div style={{fontSize:11.5,color:T.textSub}}>{cnt.met||0} of {idx.length} articles met · owner {st.adopted[fw.id]?.owner||fw.owner}</div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>{ART_ORDER.filter(k=>k!=="met"&&cnt[k]).map(k=><span key={k}>{pill(ART_META[k].c, `${cnt[k]} · ${ART_META[k].l.toLowerCase()}`)}</span>)}</div>
+      </div>);
+  };
   const renderFrameworks = () => {
     const ql = q.toLowerCase();
     const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(f=>!ql||[f.name,regMeta(f.id).fullName,regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql));
+    const builtIn = adoptedFws.filter(f=>!f.custom); const mine = PM2_CUSTOM_FW;
     return (
       <div style={pad}>
         {card(<div style={{display:"flex",gap:18,flexWrap:"wrap"}}>
-          {[["1","Adopt a regulation","Its articles are listed in plain language, scoped to the data it covers."],["2","Keep the recommended policies","Each is a set of WHEN → THEN rules. Assign an owner and stewards."],["3","Approve","Policies go Active after approval; table owners approve anything that changes data."],["4","Run & prove","Monitors raise findings, enforcement runs through CDP, evidence is recorded per regulation."]].map(([n,t,d])=>(
+          {[["1","Adopt a regulation — or define your own","Each article says in plain language what it asks."],["2","Keep its policies, add your own","Regulation policies ship with it; custom policies are yours."],["3","One type per policy","Validation checks, Enforcement retains or holds, Attestation asks a person to fill in a form."],["4","Approve, run, prove","Nothing goes live or changes data without the approvals you set."]].map(([n,t,d])=>(
             <div key={n} style={{flex:"1 1 200px",display:"flex",gap:10}}>
               <span style={{width:22,height:22,borderRadius:"50%",background:T.accent,color:"#fff",fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{n}</span>
               <div><div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{t}</div><div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5}}>{d}</div></div>
             </div>))}
         </div>)}
-        {secLabel(`Adopted (${adoptedFws.length})`)}
+        {secLabel(`Adopted regulations (${builtIn.length})`)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>{builtIn.map(fwCard)}</div>
+        {secLabel(`Your frameworks (${mine.length})`, <span style={{marginLeft:"auto",textTransform:"none",letterSpacing:0}}><Btn small icon={Ic.plus(11)} onClick={()=>openFwEditor(null)}>New framework</Btn></span>)}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
-          {adoptedFws.map(fw=>{
-            const s=fwScore(fw); const idx=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
-            const cnt={}; idx.forEach(i=>{const k=artState(fw,i); cnt[k]=(cnt[k]||0)+1;});
-            return (
-              <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span style={{fontSize:15,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(typeColor(fw.type), fw.type)}
-                  <span style={{marginLeft:"auto",fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:scoreColor(s)}}>{s}%</span>
-                </div>
-                <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"8px 0"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
-                <div style={{fontSize:11.5,color:T.textSub}}>{cnt.met||0} of {idx.length} articles met · owner {st.adopted[fw.id].owner}</div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:8}}>{ART_ORDER.filter(k=>k!=="met"&&cnt[k]).map(k=><span key={k}>{pill(ART_META[k].c, `${cnt[k]} · ${ART_META[k].l.toLowerCase()}`)}</span>)}</div>
-              </div>);
-          })}
+          {mine.map(fwCard)}
+          {mine.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Internal standards, contractual obligations or industry codes the built-in list doesn't have.</div>}
         </div>
-        {secLabel("Available", <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name or jurisdiction…" style={{...inStyle,marginLeft:"auto",textTransform:"none",letterSpacing:0,fontWeight:400,width:240}}/>)}
+        {secLabel("Available regulations", <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search by name or jurisdiction…" style={{...inStyle,marginLeft:"auto",textTransform:"none",letterSpacing:0,fontWeight:400,width:240}}/>)}
         {["Privacy","Healthcare","Financial","Security"].map(g=>{
           const list=avail.filter(f=>f.type===g); if(!list.length) return null;
           return (<div key={g} style={{marginBottom:14}}>
-            <div style={{fontSize:12,fontWeight:700,color:typeColor(g),margin:"6px 0 8px"}}>{g}</div>
+            <div style={{fontSize:12,fontWeight:700,color:fwTypeColor(g),margin:"6px 0 8px"}}>{g}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}}>
               {list.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>a.c||[]))];
-                const reused=tids.filter(t=>livePols.some(p=>p.template===t)).length;
+                const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
+                const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>k[PM2_TPL[t].type]++);
                 return (<div key={fw.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
                   <div style={{display:"flex",alignItems:"baseline",gap:8}}><span onClick={()=>setSelFw(fw.id)} style={{fontSize:14.5,fontWeight:800,color:T.text,cursor:"pointer"}}>{fw.name}</span><span style={{fontSize:11,color:T.textMuted}}>{m.jurisdiction}</span></div>
                   <div style={{fontSize:11.5,color:T.textSub,minHeight:30}}>{m.fullName}</div>
                   <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{fw.covers.map(classChip)}</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>{fw.arts.filter(a=>!a.out).length} articles EDG can act on · {fw.arts.filter(a=>a.out).length} outside · {tids.length} recommended policies</div>
-                  {reused>0&&<div style={{fontSize:11,color:T.green}}>{reused} of those policies already exist — they'd simply count for {fw.name} too</div>}
+                  <div style={{fontSize:11,color:T.textMuted}}>Policies: <b style={{color:typeColor("validation")}}>{k.validation}</b> validation · <b style={{color:typeColor("enforcement")}}>{k.enforcement}</b> enforcement · <b style={{color:typeColor("attestation")}}>{k.attestation}</b> attestation · {fw.arts.filter(a=>a.out).length} outside EDG</div>
+                  {reused>0&&<div style={{fontSize:11,color:T.green}}>{reused} of those policies already exist — they'd count for {fw.name} too</div>}
                   <div style={{display:"flex",gap:6,marginTop:4}}><Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt</Btn><Btn small ghost onClick={()=>setSelFw(fw.id)}>Read the articles</Btn></div>
                 </div>); })}
             </div></div>);
@@ -13683,54 +13868,53 @@ const PolicyManager2View = ({onToast, onNav}) => {
         <button onClick={()=>setSelFw(null)} style={{background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:12}}>‹ All frameworks</button>
         {card(<div style={{display:"flex",gap:18,alignItems:"flex-start",flexWrap:"wrap"}}>
           <div style={{flex:"1 1 360px",minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(typeColor(fw.type),fw.type)}{m.jurisdiction&&pill(T.textSub,m.jurisdiction)}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(fwTypeColor(fw.type),fw.custom?`Custom · ${fw.type}`:fw.type)}{m.jurisdiction&&pill(T.textSub,m.jurisdiction)}</div>
             <div style={{fontSize:12.5,color:T.textSub,marginTop:4}}>{m.fullName}{m.penalty?` · penalties up to ${m.penalty}`:""}</div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10,alignItems:"center"}}><span style={{fontSize:11,color:T.textMuted}}>Applies to</span>{fw.covers.map(classChip)}<span style={{fontSize:11,color:T.textMuted}}>· {PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)).length} assets in scope</span></div>
-            {adopted&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Adopted {st.adopted[fw.id].at} · framework owner <b style={{color:T.textSub}}>{st.adopted[fw.id].owner}</b></div>}
+            {adopted&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>{fw.custom?"Created":"Adopted"} {st.adopted[fw.id].at} · framework owner <b style={{color:T.textSub}}>{st.adopted[fw.id].owner}</b></div>}
           </div>
-          {adopted ? <div style={{width:220}}>
+          {adopted ? <div style={{width:230}}>
             <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:28,fontWeight:800,color:scoreColor(s),fontFamily:"'Geist Mono',monospace"}}>{s}%</span><span style={{fontSize:11,color:T.textMuted}}>readiness</span></div>
             <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"4px 0 6px"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
-            <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{inIdx.filter(i=>artState(fw,i)==="met").length} of {inIdx.length} articles met. Data-governance readiness — not a {fw.name} certification.</div>
-            <div style={{marginTop:10}}><Btn small onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn></div>
+            <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{inIdx.filter(i=>artState(fw,i)==="met").length} of {inIdx.length} articles met. Data-governance readiness — not a certification.</div>
+            <div style={{marginTop:10,display:"flex",gap:6}}>{fw.custom?<Btn small onClick={()=>openFwEditor(fw)}>Edit framework</Btn>:<Btn small onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn>}</div>
           </div> : <Btn variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt {fw.name}</Btn>}
         </div>)}
-        {card(<div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:11.5,color:T.textSub}}>
-          <b style={{color:T.text}}>How to read this page</b>
-          <span>Each article says what the law asks. Under it, the <b>policies</b> that satisfy it, and each policy's <b>rules</b>. An article is <span style={{color:T.green,fontWeight:700}}>met</span> when every policy under it is active, has no open findings, runs on every table it targets, and has its evidence.</span>
+        {card(<div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+          <b style={{color:T.text}}>How to read this page. </b>Each article says what it asks. Under it are the policies that satisfy it — {fw.custom?"any policy you map here counts":<><b>regulation policies</b> ship with {fw.name}; <b>your interpretation</b> is a custom policy you mapped, and it counts once approved</>}. An article is <span style={{color:T.green,fontWeight:700}}>met</span> when every policy under it is: validation — no open findings; enforcement — running on every table; attestation — an approved form that hasn't expired.
         </div>,{marginTop:10,background:T.bgElevated})}
         {secLabel(`Articles EDG can act on (${inIdx.length})`)}
         {inIdx.map(i=>{
-          const art=fw.arts[i]; const stt=adopted?artState(fw,i):null; const pols=polsForArt(fw,i);
-          const recs=(art.c||[]).filter(t=>!pols.some(p=>p.template===t));
+          const art=fw.arts[i]; const stt=adopted?artState(fw,i):null; const pols=polsForArt(fw,i,true);
+          const recs=(art.c||[]).filter(t=>!pols.some(p=>p.id===pm2TplPolicyId(t,fw)));
+          const mappable = fw.custom ? livePols.filter(p=>!pols.includes(p)) : [];
           return (
             <div key={i} style={{background:T.bgSurface,border:`1px solid ${stt==="met"?T.green+"50":T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                {refTag(art.ref, typeColor(fw.type))}<span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{art.t}</span>
+                {refTag(art.ref, fwTypeColor(fw.type))}<span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{art.t}</span>
+                {art.expect&&<span title="How this article is meant to be met">{typePill(art.expect)}</span>}
                 {stt&&pill(ART_META[stt].c, ART_META[stt].l)}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"110px 1fr",gap:"6px 10px",marginTop:8,fontSize:12}}>
-                <span style={{color:T.textMuted,fontWeight:600}}>The law asks</span><span style={{color:T.text}}>{art.ask}</span>
+                <span style={{color:T.textMuted,fontWeight:600}}>{fw.custom?"It asks":"The law asks"}</span><span style={{color:T.text}}>{art.ask}</span>
                 <span style={{color:T.textMuted,fontWeight:600}}>Satisfied by</span>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {pols.map(p=>{
-                    const h=polHealth(p,fw); const ev=evalOf(p);
+                  {pols.map(p=>{ const link=p.articles.find(x=>x.fw===fw.id&&x.i===i); const mine=p.source==="custom"&&!fw.custom;
                     return (<div key={p.id}>
-                      {policyRow(p,fw)}
-                      <div style={{margin:"4px 0 0 10px",fontSize:11.5,color:T.textSub}}>{p.purpose}</div>
-                      {adopted&&p.status==="Active"&&ev.evidence.length>0&&(()=>{ const a=st.attest[fw.id+":"+p.id]; const open=attestDraft&&attestDraft.fwId===fw.id&&attestDraft.polId===p.id;
-                        return <div style={{margin:"6px 0 0 10px"}}>
-                          {a?<div style={{fontSize:11,color:T.textMuted,fontStyle:"italic"}}>Evidence for {fw.name}: “{a.evidence}” — {a.by}, {a.date}</div>
-                            :!open&&<Btn small onClick={()=>setAttestDraft({fwId:fw.id,polId:p.id,evidence:""})}>Add {fw.name} evidence</Btn>}
-                          {open&&<div style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:4}}>
-                            <textarea rows={2} value={attestDraft.evidence} onChange={e=>setAttestDraft(d=>({...d,evidence:e.target.value}))} placeholder={`${ev.evidence[0].act.what} — where does it live?`} style={{...inStyle,flex:1,fontFamily:"inherit",resize:"vertical"}}/>
-                            <Btn small ghost onClick={()=>setAttestDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={saveAttest}>Save</Btn></div>}
+                      {policyRow(p,fw, mine ? (link.ok ? pill(T.accent,"Your interpretation","A custom policy mapped to this article — approved") : pill(T.amber,"Mapping awaiting approval","Doesn't count until the mapping is approved")) : null)}
+                      <div style={{margin:"4px 0 0 10px",fontSize:11.5,color:T.textSub}}>{p.type==="enforcement"?enfText(p):p.purpose}</div>
+                      {p.type==="attestation"&&p.status==="Active"&&(()=>{ const as=pm2AttState(p); const who=pm2Assignee(p);
+                        return <div style={{margin:"6px 0 0 10px",display:"flex",gap:8,alignItems:"center",fontSize:11.5,color:T.textSub}}>
+                          <span>Filled in by <b>{who}</b> · every {p.att.every} months · {as.label}</span>
+                          {["due","overdue","rejected","soon"].includes(as.state)&&(who===me||isAdmin)&&<Btn small variant="primary" onClick={()=>{openPolicy(p.id);setPdTab("activity");setFill({polId:p.id,values:{}});}}>Fill in the form</Btn>}
                         </div>; })()}
-                      {h.state==="findings"&&<div style={{margin:"4px 0 0 10px"}}><button onClick={()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}} style={{fontSize:11,color:T.rose,background:"none",border:"none",cursor:"pointer",padding:0}}>See the findings ›</button></div>}
-                    </div>);
-                  })}
-                  {recs.map(t=><div key={t} style={{fontSize:11.5,color:T.textMuted,padding:"6px 10px",border:`1px dashed ${T.border}`,borderRadius:8}}>Recommended: <b style={{color:T.textSub}}>{PM2_TPL[t].name}</b> — not created{adopted?" (switched off when adopted)":""}</div>)}
-                  {!pols.length&&!recs.length&&<span style={{color:T.rose}}>Nothing covers this article.</span>}
+                    </div>); })}
+                  {recs.map(t=><div key={t} style={{fontSize:11.5,color:T.textMuted,padding:"6px 10px",border:`1px dashed ${T.border}`,borderRadius:8}}>Recommended {PM2_TYPE_META[PM2_TPL[t].type].label.toLowerCase()} policy: <b style={{color:T.textSub}}>{PM2_TPL[t].name}</b> — {adopted?"switched off when adopted":"created when you adopt"}</div>)}
+                  {fw.custom&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                    <Btn small onClick={()=>openEditor(null,{type:art.expect||"validation", articles:[{fw:fw.id,i,ok:true}], name:art.t})}>+ Create a policy for this article</Btn>
+                    {mappable.length>0&&<select value="" onChange={e=>{const id=e.target.value; if(id){ updPol(id,p=>addHist({...p,articles:[...p.articles,{fw:fw.id,i,ok:true}]},`Mapped to ${fw.name} ${art.ref}`)); onToast("Mapped","success"); }}} style={selStyle}><option value="">Map an existing policy…</option>{mappable.map(p=><option key={p.id} value={p.id}>{p.name} ({PM2_TYPE_META[p.type].label})</option>)}</select>}
+                  </div>}
+                  {!pols.length&&!recs.length&&!fw.custom&&<span style={{color:T.rose}}>Nothing covers this article.</span>}
                 </div>
               </div>
             </div>);
@@ -13746,121 +13930,213 @@ const PolicyManager2View = ({onToast, onNav}) => {
     );
   };
 
-  // ═════ POLICIES — list ═════
-  const renderPolicyList = () => {
-    const F = ["All","Active","In review","Draft","Rejected","Retired"];
-    const rows = st.policies.filter(p=>polFilter==="All"?p.status!=="Retired":p.status===polFilter);
+  // ═════ POLICIES — the original Policy Manager layout: tree on the left, detail on the right ═════
+  const renderPolicies = () => {
+    const ql = polQ.toLowerCase();
+    const list = st.policies.filter(p=>p.status!=="Retired"||typeFilter==="retired")
+      .filter(p=>typeFilter==="all"||typeFilter==="retired"?true:p.type===typeFilter)
+      .filter(p=>!ql||p.name.toLowerCase().includes(ql));
+    const groups = [{k:"regulation", l:"Regulation policies", hint:"Shipped with a regulation — rules locked"}, {k:"custom", l:"Custom policies", hint:"Built by your organisation"}];
+    const sel = st.policies.find(p=>p.id===selPol);
     return (
-      <div style={pad}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-          <div style={{fontSize:13,color:T.textSub,flex:"1 1 400px"}}>A policy is your commitment that satisfies one or more articles. It has an owner who answers for it, stewards who work it, and rules that run.</div>
-          <SegTabs tabs={F.map(f=>({key:f,label:f,count:f==="All"?st.policies.filter(p=>p.status!=="Retired").length:st.policies.filter(p=>p.status===f).length}))} active={polFilter} onChange={setPolFilter}/>
-          <Btn variant="primary" icon={Ic.plus(12)} onClick={()=>openEditor(null)}>New policy</Btn>
-        </div>
-        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"minmax(220px,2fr) 150px 110px 150px minmax(160px,1.4fr) 170px",gap:10,padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",borderBottom:`1px solid ${T.border}`}}>
-            <span>Policy</span><span>Does</span><span>Status</span><span>Owner · stewards</span><span>Satisfies</span><span>Now</span>
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        <div style={{width:258,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,background:T.bgSurface}}>
+          <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Policies</span>
+              <div style={{position:"relative"}}>
+                <button onClick={()=>setPlusOpen(o=>!o)} title="New policy or framework" style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>{Ic.plus(10)}</button>
+                {plusOpen&&<div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:190,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:50,overflow:"hidden"}}>
+                  {[["New policy",()=>openEditor(null)],["New framework",()=>openFwEditor(null)]].map(([l,fn])=>(
+                    <button key={l} onClick={()=>{setPlusOpen(false);fn();}} style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",fontSize:12.5,color:T.text,display:"flex",alignItems:"center",gap:8}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{Ic.shield(12)} {l}</button>))}
+                </div>}
+              </div>
+            </div>
+            <input value={polQ} onChange={e=>setPolQ(e.target.value)} placeholder="Search policies…" style={{width:"100%",padding:"7px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box",marginBottom:7}}/>
+            <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{...selStyle,width:"100%"}}>
+              <option value="all">All types</option><option value="validation">Validation</option><option value="enforcement">Enforcement</option><option value="attestation">Attestation</option><option value="retired">Include retired</option>
+            </select>
           </div>
-          {rows.length===0&&<div style={{padding:30,textAlign:"center",fontSize:12.5,color:T.textMuted}}>No policies here.</div>}
-          {rows.map(p=>{ const h=polHealth(p); const fws=pm2LinkedFws(p);
-            return (
-              <div key={p.id} onClick={()=>setSelPol(p.id)} style={{display:"grid",gridTemplateColumns:"minmax(220px,2fr) 150px 110px 150px minmax(160px,1.4fr) 170px",gap:10,padding:"11px 14px",borderTop:`1px solid ${T.border}`,cursor:"pointer",alignItems:"center"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{p.template?"From template":"Custom"} · v{p.version}{p.draft?` · v${p.draft.version} in review`:""}</div></div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm2Kinds(p).map(k=><span key={k}>{kindPill(k)}</span>)}</div>
-                <div>{pill(statusColor(p.status),p.status)}</div>
-                <div style={{fontSize:11.5,color:T.textSub}}><b>{p.owner}</b><div style={{fontSize:10.5,color:T.textMuted}}>{(p.stewards||[]).join(", ")||"no steward"}</div></div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{fws.map(f=><span key={f.id}>{refTag(`${f.name} · ${p.articles.filter(x=>x.fw===f.id).length}`)}</span>)}{!fws.length&&<span style={{fontSize:11,color:T.textMuted}}>No article yet</span>}</div>
-                <span style={{fontSize:11.5,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{h.label}</span>
+          <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+            {groups.map(g=>{ const rows=list.filter(p=>p.source===g.k); const exp=expGrp[g.k];
+              return (<div key={g.k}>
+                <button onClick={()=>setExpGrp(x=>({...x,[g.k]:!exp}))} title={g.hint} style={{width:"100%",display:"flex",alignItems:"center",gap:6,padding:"8px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <span style={{fontSize:9,color:T.textMuted,transform:exp?"rotate(90deg)":"none",display:"inline-block",transition:"transform .12s"}}>▶</span>
+                  <svg width="13" height="12" viewBox="0 0 16 14" fill="none" style={{color:g.k==="regulation"?T.textSub:T.accent}}><path d="M1 3a1 1 0 011-1h4.5L8 4h7a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.2"/></svg>
+                  <span style={{flex:1,fontSize:12,fontWeight:600,color:T.textSub}}>{g.l}</span>
+                  <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{rows.length}</span>
+                </button>
+                {exp&&rows.map(p=>{ const on=selPol===p.id; const h=polHealth(p);
+                  return (<button key={p.id} onClick={()=>{setSelPol(p.id);setPdTab("overview");setFill(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"6px 8px 6px 28px",background:on?T.accentDim:"transparent",border:"none",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`,cursor:"pointer",textAlign:"left"}}
+                    onMouseEnter={e=>{if(!on)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!on)e.currentTarget.style.background="transparent";}}>
+                    <span title={PM2_TYPE_META[p.type].label} style={{width:8,height:8,borderRadius:"50%",background:typeColor(p.type),flexShrink:0}}/>
+                    <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                    {p.status!=="Active"?<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700}}>{p.status}</span>:["findings","pending","evidence","review2"].includes(h.state)&&<span style={{width:6,height:6,borderRadius:"50%",background:ART_META[h.state].c}}/>}
+                  </button>); })}
               </div>); })}
+          </div>
+          <div style={{padding:"8px 12px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap"}}>
+            {["validation","enforcement","attestation"].map(k=><span key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>{PM2_TYPE_META[k].label}</span>)}
+          </div>
         </div>
+        {sel ? renderPolicy(sel) : (
+          <div style={{flex:1,overflowY:"auto",padding:"28px"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.text}}>Select a policy</div>
+            <div style={{fontSize:12.5,color:T.textSub,marginTop:4,maxWidth:620,lineHeight:1.6}}>Every policy is exactly one type. <b style={{color:typeColor("validation")}}>Validation</b> checks catalog metadata and raises findings. <b style={{color:typeColor("enforcement")}}>Enforcement</b> retains data or holds it, through CDP. <b style={{color:typeColor("attestation")}}>Attestation</b> asks a person to fill in a form, reviewed on a schedule.</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(160px,1fr))",gap:10,marginTop:16,maxWidth:720}}>
+              {["validation","enforcement","attestation"].map(k=>{ const ps=livePols.filter(p=>p.type===k);
+                return <div key={k}>{card(<><div style={{display:"flex",alignItems:"center",gap:6}}>{typePill(k)}</div>
+                  <div style={{fontSize:24,fontWeight:800,color:typeColor(k),fontFamily:"'Geist Mono',monospace",marginTop:6}}>{ps.length}</div>
+                  <div style={{fontSize:11.5,color:T.textSub}}>{ps.filter(p=>p.source==="regulation").length} regulation · {ps.filter(p=>p.source==="custom").length} custom</div></>,{padding:"12px 14px"})}</div>; })}
+            </div>
+            <div style={{marginTop:16}}><Btn variant="primary" icon={Ic.plus(12)} onClick={()=>openEditor(null)}>New policy</Btn></div>
+          </div>
+        )}
       </div>
     );
   };
 
   // ═════ POLICY DETAIL ═════
-  const renderPolicy = () => {
-    const p = st.policies.find(x=>x.id===selPol); if(!p) return null;
-    const ev = evalOf(p); const h = polHealth(p); const pr = pendingReqOf(p);
-    const myReqs = statusReqs.filter(r=>r.kind==="pm2policy"&&r.targetId===p.id);
-    const kinds = pm2Kinds(p);
+  const renderPolicy = p => {
+    const ev = evalOf(p); const h = polHealth(p); const pr = pendingReqOf(p); const upd = tplUpdate(p);
+    const pendMaps = p.articles.filter(x=>x.ok===false).length;
+    const mapReq = reqById(p.mapReqId);
+    const cfgLabel = {validation:"Rules", enforcement:"Enforcement", attestation:"Form"}[p.type];
+    const actLabel = {validation:`Findings (${ev.findings.length})`, enforcement:`Execution (${ev.targets.length})`, attestation:`Submissions (${(p.submissions||[]).length})`}[p.type];
+    const tabs = [{key:"overview",label:"Overview"},{key:"config",label:cfgLabel},{key:"satisfies",label:`Satisfies (${p.articles.length})`},{key:"activity",label:actLabel},{key:"history",label:"History"}];
+    const as = p.type==="attestation" ? pm2AttState(p) : null;
+    const canFill = p.type==="attestation" && p.status==="Active" && (pm2Assignee(p)===me||isAdmin) && as.state!=="review";
+    const myReqs = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.targetId===p.id);
+    let body;
+    if(pdTab==="overview") body = <>
+      <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{p.purpose||<i>No purpose written yet.</i>}</div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:10,marginTop:14}}>
+        {card(<>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Ownership</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:12,color:T.textSub,width:70}}>Owner</span>
+            {(isAdmin||p.owner===me)?userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); onToast(`${v} now owns this policy`,"success");}):<b style={{fontSize:12.5,color:T.text}}>{p.owner}</b>}</div>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:12,color:T.textSub,width:70}}>Stewards</span>
+            {(p.stewards||[]).map(s=><span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{s}{canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==s)},`Removed steward ${s}`))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0}}>×</button>}</span>)}
+            {canSubmit(p)&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`));}} style={selStyle}><option value="">+ add</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.55}}>The <b>owner</b> submits, changes and retires the policy. <b>Stewards</b> edit drafts and work {p.type==="validation"?"the findings":p.type==="attestation"?"the submissions":"the rollout"}. Activation is approved by <b>{ap.activation.approver}</b>.</div>
+        </>)}
+        {card(<>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Scope</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{p.scope.map(classChip)}{(p.domains||[]).map(d=><span key={d}>{pill(T.textSub,d)}</span>)}</div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{p.scopeBy==="suspect"?"Looks at assets that seem to hold this data but aren't classified.":`${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p)).length} assets in scope today.`}</div>
+          {st.lastRun[p.id]&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Last run {st.lastRun[p.id]}</div>}
+        </>)}
+        {card(<>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Now</div>
+          <div style={{fontSize:13,fontWeight:700,color:ART_META[h.state]?.c||T.text}}>{h.label}</div>
+          {p.type==="attestation"&&<div style={{fontSize:11.5,color:T.textSub,marginTop:6}}>Filled in by <b>{pm2Assignee(p)}</b>, reviewed by <b>{pm2Reviewer(p)}</b>, every {p.att.every} months (reminder {p.att.remind} days before).</div>}
+          {p.type==="enforcement"&&<div style={{fontSize:11.5,color:T.textSub,marginTop:6}}>Each table owner approves before CDP acts. {ev.held.length>0&&`${ev.held.length} table${ev.held.length>1?"s are":" is"} under legal hold, so disposal is suspended there.`}</div>}
+          {p.type==="validation"&&<div style={{fontSize:11.5,color:T.textSub,marginTop:6}}>Severity {p.severity}. Reports only — changes no data.</div>}
+        </>)}
+      </div>
+    </>;
+    if(pdTab==="config") body = <>
+      {p.source==="regulation"&&card(<div style={{fontSize:11.5,color:T.textSub}}>🔒 This is a regulation policy, so its {cfgLabel.toLowerCase()} are locked to what the regulation says. You can change the owner, stewards, a narrower scope and the values the law leaves to you. To change anything else, <button onClick={()=>duplicateAsCustom(p)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>duplicate it as a custom policy</button>.</div>,{marginBottom:12,background:T.bgElevated})}
+      {p.type==="validation"&&<><div style={{fontSize:12,color:T.textSub,marginBottom:8}}>Severity <b>{p.severity}</b> · runs continuously against catalog metadata.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{p.rules.map(r=><div key={r.id}>{ruleView(r,p)}</div>)}</div></>}
+      {p.type==="enforcement"&&<>{card(<div style={{fontSize:12.5,color:T.text,lineHeight:1.7}}>{enfText(p)}</div>)}
+        {p.enf?.action==="retention"&&(()=>{ const eff=pm2EffectivePeriod(p); return <div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:"6px 10px",fontSize:12,marginTop:12}}>
+          {[["Action","Retention"],["Mode",p.enf.mode==="dispose"?"Dispose after a period":"Keep for at least a period"],["Period you set",`${p.enf.period} ${p.enf.unit}`],["Effective period",`${eff.label} — ${eff.why}`],["Starts from",p.enf.trigger],["At the end",p.enf.disposal]].map(([k,v])=><React.Fragment key={k}><span style={{color:T.textMuted,fontWeight:600}}>{k}</span><span style={{color:T.text}}>{v}</span></React.Fragment>)}
+        </div>; })()}
+        {p.enf?.action==="hold"&&<div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:"6px 10px",fontSize:12,marginTop:12}}>
+          {[["Action","Legal hold"],["Matter",p.enf.matter],["What's held",p.enf.select==="assets"?(p.enf.assets||[]).join(", "):"In-scope assets flagged under legal hold"],["Release",ap.hold.twoPerson?"Two people: the policy owner and the table owner":"The policy owner"]].map(([k,v])=><React.Fragment key={k}><span style={{color:T.textMuted,fontWeight:600}}>{k}</span><span style={{color:T.text}}>{v}</span></React.Fragment>)}
+        </div>}</>}
+      {p.type==="attestation"&&<>
+        <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>{p.att.form.length} fields · filled in by <b>{pm2Assignee(p)}</b> · reviewed by <b>{pm2Reviewer(p)}</b> · every <b>{p.att.every} months</b>, reminder {p.att.remind} days before it's due.</div>
+        {card(formView(p.att.form),{maxWidth:620})}
+      </>}
+    </>;
+    if(pdTab==="satisfies") body = <>
+      {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not attached to any article — it's an internal policy. Edit it to attach it to a regulation or your own framework.</div>}
+      {artsOfPol(p,true).map((x,i)=>(
+        <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
+          <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:130,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
+          <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
+          {!x.ok?pill(T.amber,"Awaiting approval"):p.source==="custom"&&!x.fw.custom?pill(T.accent,"Your interpretation"):null}
+          {!st.adopted[x.fw.id]&&<span style={{fontSize:10.5,color:T.textMuted}}>not adopted</span>}
+        </div>))}
+    </>;
+    if(pdTab==="activity"){
+      if(p.status!=="Active") body = <div style={{fontSize:12.5,color:T.textMuted}}>Nothing runs until the policy is active.</div>;
+      else if(p.type==="validation") body = ev.findings.length===0 ? <div style={{fontSize:12.5,color:T.green}}>Nothing found — passing.</div>
+        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfPol(p).filter(x=>pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div>;
+      else if(p.type==="enforcement") body = <>
+        {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.asset.name); const r=enfReqs.filter(x=>x.policyId==="pm2:"+p.id&&x.table===t.asset.name).slice(-1)[0];
+          return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
+            {pill(typeColor("enforcement"), t.verb)}
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.detail}</div></div>
+            <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
+            {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${r?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
+            {ts==="pending"&&r&&canDecide(r)&&<><Btn small variant="primary" onClick={()=>decideEnf(r,true)}>Approve</Btn><Btn small ghost onClick={()=>decideEnf(r,false)}>Reject</Btn></>}
+          </div>); })}
+        {ev.targets.length===0&&<div style={{fontSize:12.5,color:T.textMuted}}>No tables in scope yet.</div>}
+        {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Disposal suspended by legal hold on: {ev.held.map(a=>a.name).join(", ")}.</div>}
+      </>;
+      else body = <>
+        {card(<div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:ART_META[h.state]?.c||T.text}}>{as.label}</div><div style={{fontSize:11.5,color:T.textSub}}>Filled in by {pm2Assignee(p)} · reviewed by {pm2Reviewer(p)} · every {p.att.every} months</div></div>
+          {canFill&&!fill&&<Btn variant="primary" onClick={()=>setFill({polId:p.id, values:{}})}>Fill in the form</Btn>}
+        </div>)}
+        {fill&&fill.polId===p.id&&card(<>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>{p.name}</div>
+          {formView(p.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
+        </>,{marginTop:10,maxWidth:640})}
+        {secLabel(`Submissions (${(p.submissions||[]).length})`)}
+        {(p.submissions||[]).length===0&&<div style={{fontSize:12,color:T.textMuted}}>Nothing submitted yet.</div>}
+        {(p.submissions||[]).map(sb=>{ const r=reqById(sb.reqId); const open=openSub===sb.id;
+          return (<div key={sb.id} style={{border:`1px solid ${T.border}`,borderRadius:9,marginBottom:6,background:T.bgSurface}}>
+            <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer"}}>
+              <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
+              <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
+              {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+            </div>
+            {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
+              {p.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
+              {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}
+            </div>}
+            {sb.status==="pending"&&r&&r.status==="pending"&&canDecide(r)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
+              <input value={review?.reqId===r.id?review.comment:""} onChange={e=>setReview({reqId:r.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
+              <Btn small variant="primary" onClick={()=>decideReq(r,true,review?.reqId===r.id?review.comment:"")}>Approve</Btn>
+              <Btn small ghost onClick={()=>{ const c=review?.reqId===r.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(r,false,c); }}>Reject</Btn>
+            </div>}
+          </div>); })}
+      </>;
+    }
+    if(pdTab==="history") body = <>
+      {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
+      {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
+    </>;
     return (
-      <div style={pad}>
-        <button onClick={()=>setSelPol(null)} style={{background:"none",border:"none",color:T.textMuted,fontSize:12,cursor:"pointer",padding:0,marginBottom:12}}>‹ All policies</button>
-        {card(<div style={{display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
+      <div style={{flex:1,overflowY:"auto",padding:"20px 26px 48px"}}>
+        <div style={{display:"flex",gap:14,alignItems:"flex-start",flexWrap:"wrap"}}>
           <div style={{flex:"1 1 380px",minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:19,fontWeight:800,color:T.text}}>{p.name}</span>{pill(statusColor(p.status),p.status)}<span style={{fontSize:11,color:T.textMuted}}>v{p.version} · {p.template?`from the "${PM2_TPL[p.template].name}" template`:"custom policy"}</span></div>
-            <div style={{fontSize:12.5,color:T.textSub,marginTop:6,lineHeight:1.55}}>{p.purpose}</div>
-            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>{kinds.map(k=><span key={k}>{kindPill(k)}</span>)}<span style={{fontSize:11,color:T.textMuted}}>{kinds.includes("enforce")?"Changes data — needs policy approval and each table owner's approval.":kinds.includes("monitor")?"Changes no data — reports findings only.":"Evidence only."}</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:19,fontWeight:800,color:T.text}}>{p.name}</span>{pill(statusColor(p.status),p.status)}{typePill(p.type)}{srcPill(p)}</div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>v{p.version}{p.draft?` · v${p.draft.version} in review`:""} · {p.category||"No category"} · {p.source==="regulation"?`from the "${PM2_TPL[p.template].name}" template`:p.basedOn?`duplicated from ${st.policies.find(x=>x.id===p.basedOn)?.name||"a regulation policy"}`:"custom policy"}</div>
           </div>
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {canEdit(p)&&p.status!=="Retired"&&!p.draft&&p.status!=="In review"&&<Btn small onClick={()=>openEditor(p)}>Edit</Btn>}
+            {p.source==="regulation"&&<Btn small ghost onClick={()=>duplicateAsCustom(p)}>Duplicate as custom</Btn>}
             {(p.status==="Draft"||p.status==="Rejected")&&(canSubmit(p)?<Btn small variant="primary" onClick={()=>submitPolicy(p.id)}>Submit for approval</Btn>:<span style={{fontSize:11,color:T.textMuted,alignSelf:"center"}}>Only the owner ({p.owner}) submits</span>)}
-            {p.status==="Active"&&<Btn small onClick={()=>runNow(p)}>Run now</Btn>}
-            {p.status==="Active"&&canSubmit(p)&&<Btn small ghost onClick={()=>{updPol(p.id,x=>addHist({...x,status:"Retired"},"Retired")); onToast("Policy retired — the articles it covered now read 'No policy'","info");}}>Retire</Btn>}
+            {p.status==="Active"&&p.type!=="attestation"&&<Btn small onClick={()=>runNow(p)}>Run now</Btn>}
+            {canFill&&!fill&&<Btn small variant="primary" onClick={()=>{setPdTab("activity");setFill({polId:p.id,values:{}});}}>Fill in the form</Btn>}
+            {p.status==="Active"&&canSubmit(p)&&<Btn small ghost onClick={()=>{updPol(p.id,x=>addHist({...x,status:"Retired"},"Retired")); setSelPol(null); onToast("Policy retired — the articles it covered now read 'No policy'","info");}}>Retire</Btn>}
           </div>
-        </div>)}
-        {pr&&card(<div style={{fontSize:12,color:T.text}}>{p.draft?<>Version {p.draft.version} is <b>in review with {pr.approver}</b>. Version {p.version} keeps running until it's approved.</>:<>Waiting for <b>{pr.approver}</b> to approve. Nothing runs until then.</>}
-          {canDecide(pr)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></span>}</div>,{marginTop:10,borderColor:T.amber+"60",background:`${T.amber}0c`})}
-        {p.status==="Rejected"&&card(<div style={{fontSize:12,color:T.text}}>Rejected. Edit it and submit again, or retire it.</div>,{marginTop:10,borderColor:T.rose+"50"})}
-
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:10,marginTop:10}}>
-          {card(<>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Ownership</div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:12,color:T.textSub,width:70}}>Owner</span>
-              {(isAdmin||p.owner===me)?userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); onToast(`${v} now owns this policy`,"success");}):<b style={{fontSize:12.5,color:T.text}}>{p.owner}</b>}</div>
-            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}><span style={{fontSize:12,color:T.textSub,width:70}}>Stewards</span>
-              {(p.stewards||[]).map(s=><span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{s}{canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==s)},`Removed steward ${s}`))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0}}>×</button>}</span>)}
-              {canSubmit(p)&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`));}} style={selStyle}><option value="">+ add</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}
-            </div>
-            <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.55}}>The <b>owner</b> answers for the policy: submits it, changes it, retires it. <b>Stewards</b> edit drafts and work the findings. Approval comes from <b>{ap.activation.approver}</b> (Approval policies).</div>
-          </>)}
-          {card(<>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Scope</div>
-            <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{p.scope.map(classChip)}</div>
-            <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{p.scopeBy==="suspect"?"Looks at assets that seem to hold this data but aren't classified.":`Applies to every asset classified with ${p.scope.length>1?"these classes":"this class"} — ${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p)).length} assets today.`}</div>
-            {st.lastRun[p.id]&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Last run {st.lastRun[p.id]}</div>}
-          </>)}
         </div>
-
-        {secLabel(`Rules (${p.rules.length})`)}
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>{p.rules.map(r=><div key={r.id}>{ruleView(r,p)}</div>)}</div>
-
-        {secLabel(`Satisfies (${p.articles.length} article${p.articles.length===1?"":"s"})`)}
-        {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not mapped to any article yet — edit the policy to map it.</div>}
-        {artsOfPol(p).map((x,i)=>(
-          <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
-            <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:100,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
-            <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
-            {!st.adopted[x.fw.id]&&<span style={{fontSize:10.5,color:T.textMuted}}>framework not adopted</span>}
-          </div>))}
-
-        {p.status==="Active"&&ev.targets.length>0&&<>{secLabel(`Enforcement (${ev.targets.length} table${ev.targets.length>1?"s":""})`, <span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— each table owner approves before CDP acts</span>)}
-          {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.asset.name); const r=enfReqs.filter(x=>x.policyId==="pm2:"+p.id&&x.table===t.asset.name).slice(-1)[0];
-            return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
-              {pill(T.green, PM2_ACTIONS[t.rule.act.type].verb)}
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.detail}</div></div>
-              <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
-              {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${r?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
-              {ts==="pending"&&r&&canDecide(r)&&<><Btn small variant="primary" onClick={()=>decideEnf(r,true)}>Approve</Btn><Btn small ghost onClick={()=>decideEnf(r,false)}>Reject</Btn></>}
-            </div>); })}
-        </>}
-        {p.status==="Active"&&kinds.includes("monitor")&&<>{secLabel(`Findings (${ev.findings.length})`)}
-          {ev.findings.length===0?<div style={{fontSize:12,color:T.green}}>Nothing found — passing.</div>:ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfPol(p).filter(x=>pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}
-        </>}
-        {p.status==="Active"&&ev.evidence.length>0&&<>{secLabel("Evidence — recorded per regulation")}
-          {pm2LinkedFws(p).map(f=>{ const a=st.attest[f.id+":"+p.id]; return (
-            <div key={f.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${T.border}`}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.text,width:110}}>{f.name}</span>
-              <span style={{flex:1,fontSize:11.5,color:a?T.textSub:T.textMuted,fontStyle:a?"italic":"normal"}}>{a?`“${a.evidence}” — ${a.by}, ${a.date}`:ev.evidence[0].act.what}</span>
-              {a?pill(T.green,"Evidenced"):<Btn small onClick={()=>{setSelFw(f.id);setTab("frameworks");setAttestDraft({fwId:f.id,polId:p.id,evidence:""});}}>Add evidence</Btn>}
-            </div>); })}
-          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>A GDPR impact assessment isn't a HIPAA risk analysis, so each regulation needs its own evidence.</div>
-        </>}
-
-        {secLabel("Approval & history")}
-        {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:T.amber, r.status)}<span>{r.requestedBy} → {r.approver}: “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
-        {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
+        {pr&&card(<div style={{fontSize:12,color:T.text}}>{p.draft?<>Version {p.draft.version} is <b>in review with {pr.approver}</b>. Version {p.version} keeps running until it's approved.</>:<>Waiting for <b>{pr.approver}</b> to approve. Nothing runs until then.</>}
+          {canDecide(pr)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></span>}</div>,{marginTop:12,borderColor:T.amber+"60",background:`${T.amber}0c`})}
+        {upd&&!p.draft&&card(<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,color:T.text}}><span style={{flex:1}}><b>Update available — template v{upd.version}.</b> {upd.changelog} Nothing changes until you review and apply it.</span>{canSubmit(p)&&<Btn small variant="primary" onClick={()=>applyTplUpdate(p)}>Review & apply</Btn>}</div>,{marginTop:12,borderColor:T.blue+"60",background:`${T.blue}0c`})}
+        {pendMaps>0&&card(<div style={{fontSize:12,color:T.text}}>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq?.approver||ap.mapping.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>,{marginTop:12,borderColor:T.amber+"60",background:`${T.amber}0c`})}
+        {p.status==="Rejected"&&card(<div style={{fontSize:12,color:T.text}}>Rejected. Edit it and submit again, or retire it.</div>,{marginTop:12,borderColor:T.rose+"50"})}
+        <div style={{margin:"16px 0 14px"}}><Tabs2 pill tabs={tabs} active={pdTab} onChange={setPdTab}/></div>
+        {body}
       </div>
     );
   };
@@ -13875,9 +14151,9 @@ const PolicyManager2View = ({onToast, onNav}) => {
           <div style={{fontSize:10.5,color:T.textMuted}}>{f.asset.service} · {f.asset.domain} · owner {f.asset.owner||"none"}</div>
         </div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:12.5,color:T.text}}>{f.msg}</div>
+          <div style={{fontSize:12.5,color:T.text}}>{f.msg} <span style={{fontSize:10.5,color:T.textMuted}}>· {f.severity}</span></div>
           {!compact&&<div onClick={()=>openPolicy(f.pol.id)} style={{fontSize:11,color:T.accent,cursor:"pointer",marginTop:2}}>{f.pol.name} · steward {(f.pol.stewards||[])[0]||f.pol.owner}</div>}
-          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`, T.rose)}</span>)}</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`, T.rose)}</span>)}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>Internal policy — no article</span>}</div>
           {e&&<div style={{fontSize:11,marginTop:5,color:e.status==="accepted"?T.green:e.status==="rejected"?T.rose:T.amber}}>{e.status==="accepted"?`Exception accepted until ${e.until} by ${e.decidedBy}`:e.status==="rejected"?`Exception rejected by ${e.decidedBy}`:`Exception requested — waiting on ${e.approver}`} · “{e.reason}”</div>}
           {open&&<div style={{display:"flex",gap:8,marginTop:8}}>
             <input value={excDraft.reason} onChange={e2=>setExcDraft(d=>({...d,reason:e2.target.value}))} placeholder="Why is this acceptable, and what compensates for it?" style={{...inStyle,flex:1}}/>
@@ -13895,7 +14171,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
     return (
       <div style={pad}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-          <div style={{fontSize:13,color:T.textSub,flex:1}}>What the monitoring rules found, from active policies only. One finding can break several articles at once — fix it once. An accepted exception stops it counting until it expires.</div>
+          <div style={{fontSize:13,color:T.textSub,flex:1}}>What active validation policies found. One finding can break several articles at once — fix it once. An accepted exception stops it counting until it expires.</div>
           <select value={findFilter} onChange={e=>setFindFilter(e.target.value)} style={selStyle}><option value="all">All frameworks</option>{adoptedFws.map(f=><option key={f.id} value={f.name}>{f.name}</option>)}</select>
         </div>
         {rows.length===0?<div style={{padding:40,textAlign:"center",color:T.textMuted,fontSize:13}}>No findings.</div>:
@@ -13906,17 +14182,24 @@ const PolicyManager2View = ({onToast, onNav}) => {
 
   // ═════ APPROVALS — the queue and the approval policies ═════
   const renderApprovals = () => {
+    const kindLabel = r => r.kind==="pm2exception"?"Exception":r.kind==="pm2mapping"?"Article mapping":r.kind==="pm2attest"?"Attestation review":r.kind==="pm2attestdue"?"Attestation due":(r.name||"").includes(" change)")?"Policy change":"Policy activation";
     const queue = [
-      ...pm2StatusPending.map(r=>({k:"s", r, type:r.kind==="pm2exception"?"Exception":r.name.includes(" change)")?"Policy change":"Policy activation", subject:r.name, note:r.note, by:r.requestedBy, to:r.approver})),
+      ...pm2StatusPending.map(r=>({k:"s", r, type:kindLabel(r), subject:r.name, note:r.note, by:r.requestedBy, to:r.approver})),
       ...pm2EnfPending.map(r=>({k:"e", r, type:"Enforcement on a table", subject:`${r.action} on ${r.table}`, note:r.policyName, by:r.requestedBy, to:r.approver})),
     ];
-    const decided = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.status!=="pending").slice(0,8);
-    const typeC = {"Policy activation":T.accent,"Policy change":T.amber,"Exception":T.violet,"Enforcement on a table":T.green};
-    const apCard = (title, when, body) => card(<>
+    const decided = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.kind!=="pm2attestdue"&&r.status!=="pending").slice(0,8);
+    const typeC = {"Policy activation":T.accent,"Policy change":T.amber,"Exception":T.rose,"Enforcement on a table":typeColor("enforcement"),"Attestation review":typeColor("attestation"),"Attestation due":typeColor("attestation"),"Article mapping":T.blue};
+    const apCard = (title, when, body) => <div key={title}>{card(<>
       <div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>
-      <div style={{fontSize:11.5,color:T.textSub,margin:"3px 0 10px",lineHeight:1.5}}>{when}</div>{body}</>);
+      <div style={{fontSize:11.5,color:T.textSub,margin:"3px 0 10px",lineHeight:1.5}}>{when}</div>{body}</>)}</div>;
     const row = (label, ctrl) => <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,fontSize:12,color:T.textSub}}><span style={{width:150}}>{label}</span>{ctrl}</div>;
     const ro = !isAdmin;
+    const act = x => {
+      if(x.r.kind==="pm2attestdue") return x.to===me||isAdmin ? <Btn small variant="primary" onClick={()=>{openPolicy(x.r.targetId);setPdTab("activity");setFill({polId:x.r.targetId,values:{}});}}>Fill in the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>Waiting on {x.to}</span>;
+      if(x.r.kind==="pm2attest") return canDecide(x.r) ? <Btn small variant="primary" onClick={()=>{openPolicy(x.r.targetId);setPdTab("activity");}}>Review the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You submitted this — someone else reviews":`Waiting on ${x.to}`}</span>;
+      return canDecide(x.r) ? <><Btn small variant="primary" onClick={()=>x.k==="s"?decideReq(x.r,true):decideEnf(x.r,true)}>Approve</Btn><Btn small ghost onClick={()=>x.k==="s"?decideReq(x.r,false):decideEnf(x.r,false)}>Reject</Btn></>
+        : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You requested this — someone else decides":`Waiting on ${x.to}`}</span>;
+    };
     return (
       <div style={pad}>
         {secLabel(`Waiting on a decision (${queue.length})`)}
@@ -13924,23 +14207,29 @@ const PolicyManager2View = ({onToast, onNav}) => {
           <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
             {queue.map((x,i)=>(
               <div key={x.r.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                <span style={{width:150}}>{pill(typeC[x.type], x.type)}</span>
+                <span style={{width:160}}>{pill(typeC[x.type]||T.accent, x.type)}</span>
                 <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{x.subject}</div><div style={{fontSize:11,color:T.textMuted}}>“{x.note}” · {x.by} → <b style={{color:T.textSub}}>{x.to}</b></div></div>
-                {canDecide(x.r) ? <><Btn small variant="primary" onClick={()=>x.k==="s"?decideReq(x.r,true):decideEnf(x.r,true)}>Approve</Btn><Btn small ghost onClick={()=>x.k==="s"?decideReq(x.r,false):decideEnf(x.r,false)}>Reject</Btn></>
-                  : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You requested this — someone else decides":`Waiting on ${x.to}`}</span>}
+                {act(x)}
               </div>))}
           </div>}
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The same requests appear in each approver's Workspace inbox; deciding in either place updates both.</div>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The same requests appear in each person's Workspace inbox; acting in either place updates both.</div>
 
         {secLabel("Approval policies", ro&&<span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— only an admin can change these</span>)}
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:10}}>
           {apCard("Policy activation & changes", "A new policy, or a change to an active one, goes live only after approval. A change runs as a new version; the old one keeps running until it's approved.", <>
             {row("Approver", ro?<b>{ap.activation.approver}</b>:userSel(ap.activation.approver, v=>setAp(["activation","approver"],v)))}
-            {row("Monitor-only policies", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.activation.autoMonitor} onChange={e=>setAp(["activation","autoMonitor"],e.target.checked)} style={{accentColor:T.accent}}/>activate without approval — they change no data</label>)}
+            {row("Validation policies", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.activation.autoValidation} onChange={e=>setAp(["activation","autoValidation"],e.target.checked)} style={{accentColor:T.accent}}/>activate without approval — they change no data</label>)}
           </>)}
-          {apCard("Enforcement on a table", "Before a rule masks, retains or disposes of data in a table, that table's owner approves. Nothing executes through CDP until they do.", <>
+          {apCard("Enforcement on a table", "Before retention or a legal hold acts on a table, that table's owner approves. Nothing executes through CDP until they do.", <>
             {row("Approver", <b style={{color:T.text}}>The table's owner</b>)}
             {row("If a table has no owner", ro?<b>{ap.enforcement.fallback}</b>:userSel(ap.enforcement.fallback, v=>setAp(["enforcement","fallback"],v)))}
+          </>)}
+          {apCard("Attestation review", "Every submitted form is reviewed before it counts. A rejection goes back to the person who filled it in, with the reviewer's comment.", <>
+            {row("Default reviewer", ro?<b>{ap.attest.reviewer}</b>:userSel(ap.attest.reviewer, v=>setAp(["attest","reviewer"],v)))}
+            <div style={{fontSize:11,color:T.textMuted}}>A policy can name its own reviewer instead.</div>
+          </>)}
+          {apCard("Custom policy → regulation article", "When a custom policy claims to satisfy a regulation's article, someone confirms it before it counts toward readiness. Mapping to your own frameworks needs no approval.", <>
+            {row("Approver", ro?<b>{ap.mapping.approver}</b>:userSel(ap.mapping.approver, v=>setAp(["mapping","approver"],v)))}
           </>)}
           {apCard("Exceptions", "Accepting a finding as an exception stops it counting against readiness until it expires. The reason is kept with the finding.", <>
             {row("Approver", ro?<b>{ap.exceptions.approver==="policy owner"?"The policy's owner":ap.exceptions.named}</b>:<select value={ap.exceptions.approver==="policy owner"?"policy owner":ap.exceptions.named} onChange={e=>{const v=e.target.value; if(v==="policy owner") setAp(["exceptions","approver"],"policy owner"); else {setAp(["exceptions","approver"],"named"); setAp(["exceptions","named"],v);}}} style={selStyle}><option value="policy owner">The policy's owner</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select>)}
@@ -13961,25 +14250,28 @@ const PolicyManager2View = ({onToast, onNav}) => {
     );
   };
 
-  // ── Right-side drawer with a section rail — the same shape as the other create/edit surfaces.
-  const drawer = ({title, sub, steps, step, onStep, body, footer, onClose}) => (
+  // ── Right-side drawer with a section rail — the same shape as the original Policy Manager wizard.
+  const drawer = ({title, sub, steps, step, done, onStep, body, footer, onClose, width}) => (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:300}}/>
-      <div style={{position:"fixed",top:0,right:0,bottom:0,width:960,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:301,display:"flex",flexDirection:"column",boxShadow:"-8px 0 30px rgba(0,0,0,.2)"}}>
-        <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{flex:1}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted}}>{sub}</div>}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>{Ic.x(14)}</button>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:width||900,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+            <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>
+          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
         </div>
-        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
-          <div style={{width:200,borderRight:`1px solid ${T.border}`,padding:"14px 10px",flexShrink:0,background:T.bgElevated}}>
-            {steps.map((s,i)=>{ const n=i+1, a=step===n, done=step>n; return (
-              <button key={s} onClick={()=>onStep(n)} style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:7,border:"none",background:a?T.bgSurface:"transparent",color:a?T.text:T.textSub,fontSize:12.5,fontWeight:a?700:500,cursor:"pointer",textAlign:"left",marginBottom:2}}>
-                <span style={{width:20,height:20,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,background:done?T.green:a?T.accent:T.bgHover,color:done||a?"#fff":T.textMuted,flexShrink:0}}>{done?"✓":n}</span>{s}
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
+            {steps.map((s,i)=>{ const n=i+1, on=step===n, ok=done?done(n):step>n; return (
+              <button key={s} onClick={()=>onStep(n)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textSub,fontSize:12.5,fontWeight:on?600:500,cursor:"pointer",textAlign:"left"}}>
+                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:ok?T.accent:T.borderLight}}/><span style={{flex:1}}>{s}</span>
               </button>); })}
           </div>
-          <div style={{flex:1,overflowY:"auto",padding:"18px 24px 24px"}}>{body}</div>
+          <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 26px"}}>{body}</div>
         </div>
-        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center"}}>{footer}</div>
+        <div style={{padding:"12px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",alignItems:"center",background:T.bgElevated}}>{footer}</div>
       </div>
     </>
   );
@@ -13989,39 +14281,84 @@ const PolicyManager2View = ({onToast, onNav}) => {
       <select value="" onChange={e=>e.target.value&&onChange([...list,e.target.value])} style={selStyle}><option value="">+ steward</option>{PM2_USERS.filter(u=>!list.includes(u)&&u!==exclude).map(u=><option key={u}>{u}</option>)}</select>
     </div>
   );
-  const routeText = (kinds, n) => {
-    if(kinds.every(k=>k==="monitor")&&ap.activation.autoMonitor) return <span style={{color:T.green}}>Activates as soon as it's submitted — monitor-only, it changes no data</span>;
+  const routeText = (type, n) => {
+    if(type==="validation"&&ap.activation.autoValidation) return <span style={{color:T.green}}>Active as soon as it's submitted — validation changes no data</span>;
     const who = pm2Approver(ap.activation.approver, me);
-    return <span>Goes to <b>{who}</b> for approval{kinds.includes("enforce")?<>, then {n!=null?`${n} table owner${n===1?"":"s"}`:"each table owner"} approve before CDP acts</>:""}</span>;
+    return <span>Goes to <b>{who}</b> for approval{type==="enforcement"?<>, then {n!=null?`${n} table owner${n===1?"":"s"}`:"each table owner"} approve before CDP acts</>:type==="attestation"?", then the form is assigned and comes due on its schedule":""}</span>;
   };
+  const enfEditor = (e, setEnf, locked, floor) => (
+    <div style={{display:"flex",flexDirection:"column",gap:14,maxWidth:640}}>
+      <div><label style={lbl}>Action</label>
+        <select disabled={locked} value={e.action} onChange={x=>setEnf(x.target.value==="hold"?{action:"hold",matter:"",select:"flag",assets:[]}:{action:"retention",mode:"dispose",period:36,unit:"months",trigger:"Last use",disposal:"Delete permanently"})} style={{...selStyle,minWidth:260}}>
+          <option value="retention">Retention — keep or dispose of data on a schedule</option><option value="hold">Legal hold — freeze records for a legal matter</option></select>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>These are the only two actions EDG executes through CDP. Masking is checked by a validation policy instead.</div></div>
+      {e.action==="retention"&&<>
+        <div><label style={lbl}>Mode</label><select disabled={locked} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...selStyle,minWidth:260}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select></div>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+          <div><label style={lbl}>Period{floor?` (at least ${floor} years — legal minimum)`:""}</label><div style={{display:"flex",gap:6}}><input type="number" min={1} value={e.period} onChange={x=>setEnf({...e,period:Number(x.target.value)})} style={{...inStyle,width:80}}/><select value={e.unit} onChange={x=>setEnf({...e,unit:x.target.value})} style={selStyle}><option>months</option><option>years</option></select></div></div>
+          <div><label style={lbl}>Starts from</label><select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={selStyle}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><label style={lbl}>At the end</label><select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={selStyle}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select></div>
+        </div></>}
+      {e.action==="hold"&&<>
+        <div><label style={lbl}>Legal matter</label><input value={e.matter} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={inp}/></div>
+        <div><label style={lbl}>What's held</label><select value={e.select} onChange={x=>setEnf({...e,select:x.target.value})} style={{...selStyle,minWidth:300}}><option value="flag">In-scope assets already flagged under legal hold</option><option value="assets">Specific assets I pick</option></select></div>
+        {e.select==="assets"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:4}}>{PM2_ASSETS.map(a=><label key={a.name} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={(e.assets||[]).includes(a.name)} onChange={x=>setEnf({...e,assets:x.target.checked?[...(e.assets||[]),a.name]:(e.assets||[]).filter(n=>n!==a.name)})} style={{accentColor:T.accent}}/><span style={{fontFamily:"'Geist Mono',monospace"}}>{a.name}</span></label>)}</div>}
+        <div style={{fontSize:11,color:T.textMuted}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"} (Approval policies).</div></>}
+    </div>
+  );
+  const formBuilder = (att, setAtt) => {
+    const setF = (i, f) => setAtt({...att, form:att.form.map((x,j)=>j===i?f:x)});
+    const move = (i, d) => { const f=[...att.form]; const j=i+d; if(j<0||j>=f.length) return; [f[i],f[j]]=[f[j],f[i]]; setAtt({...att, form:f}); };
+    return (<>
+      {att.form.map((f,i)=>(
+        <div key={f.id} style={{border:`1px solid ${T.border}`,borderRadius:9,padding:"10px 12px",marginBottom:8,background:T.bgElevated}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:11,color:T.textMuted,width:18}}>{i+1}</span>
+            <input value={f.label} onChange={e=>setF(i,{...f,label:e.target.value})} placeholder="Question or field label" style={{...inStyle,flex:"1 1 220px"}}/>
+            <select value={f.type} onChange={e=>setF(i,{...f,type:e.target.value})} style={selStyle}>{Object.entries(PM2_FORM_TYPES).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
+            <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={f.required} onChange={e=>setF(i,{...f,required:e.target.checked})} style={{accentColor:T.accent}}/>Required</label>
+            <button onClick={()=>move(i,-1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↑</button><button onClick={()=>move(i,1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↓</button>
+            <button onClick={()=>setAtt({...att, form:att.form.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:11}}>Remove</button>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:6,paddingLeft:26,flexWrap:"wrap"}}>
+            <input value={f.help} onChange={e=>setF(i,{...f,help:e.target.value})} placeholder="Help text (optional)" style={{...inStyle,flex:"1 1 220px"}}/>
+            {f.type==="select"&&<input value={f.opts.join(", ")} onChange={e=>setF(i,{...f,opts:e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})} placeholder="Options, comma-separated" style={{...inStyle,flex:"1 1 220px"}}/>}
+          </div>
+        </div>))}
+      <Btn small onClick={()=>setAtt({...att, form:[...att.form, {id:`f-${Date.now()}`, label:"", type:"text", required:false, help:"", opts:[]}]})}>+ Add field</Btn>
+    </>);
+  };
+  const scheduleEditor = (att, setAtt, p) => (
+    <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+      <div><label style={lbl}>Comes due every</label><div style={{display:"flex",gap:6,alignItems:"center"}}><input type="number" min={1} value={att.every} onChange={e=>setAtt({...att,every:Number(e.target.value)})} style={{...inStyle,width:70}}/><span style={{fontSize:12,color:T.textSub}}>months</span></div></div>
+      <div><label style={lbl}>Reminder</label><div style={{display:"flex",gap:6,alignItems:"center"}}><input type="number" min={0} value={att.remind} onChange={e=>setAtt({...att,remind:Number(e.target.value)})} style={{...inStyle,width:70}}/><span style={{fontSize:12,color:T.textSub}}>days before</span></div></div>
+      <div><label style={lbl}>Filled in by</label><select value={att.assignee} onChange={e=>setAtt({...att,assignee:e.target.value})} style={selStyle}><option value="owner">The policy owner</option><option value="steward">The first steward</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+      <div><label style={lbl}>Reviewed by</label><select value={att.reviewer} onChange={e=>setAtt({...att,reviewer:e.target.value})} style={selStyle}><option value="approver">Approval policy reviewer ({ap.attest.reviewer})</option><option value="owner">The policy owner</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+    </div>
+  );
 
-  // ═════ ADOPT A FRAMEWORK ═════
+  // ═════ ADOPT A REGULATION ═════
   const tplIds = fw => [...new Set(fw.arts.flatMap(a=>a.c||[]))];
-  const existingFor = t => livePols.find(p=>p.template===t);
+  const existingFor = (t, fw) => livePols.find(p=>p.id===pm2TplPolicyId(t,fw));
   const startAdopt = (fwId, step=1) => {
-    const fw = pm2Fw(fwId); const picks={}, stewards={}, rules={};
-    tplIds(fw).forEach(t=>{ picks[t]=true; stewards[t]=[PM2_TPL_STEWARD[t]||"priya.nair"]; rules[t]=pm2PolicyFromTemplate(t,me).rules; });
-    setWiz({fwId, step, owner:st.adopted[fwId]?.owner||me, picks, owners:{}, stewards, rules, links:{}, editing:!!st.adopted[fwId]});
+    const fw = pm2Fw(fwId); const picks={}, pols={};
+    tplIds(fw).forEach(t=>{ picks[t]=true; pols[t]=pm2PolicyFromTemplate(t, fw, me, [PM2_TPL_STEWARD[t]||"priya.nair"]); });
+    setWiz({fwId, step, owner:st.adopted[fwId]?.owner||me, picks, pols, owners:{}, editing:!!st.adopted[fwId]});
   };
-  const previewTplPolicy = (t, fw) => pm2LinkToFw({...pm2PolicyFromTemplate(t, wiz.owners[t]||wiz.owner, wiz.stewards[t]), rules:wiz.rules[t]}, fw);
+  const previewTpl = (t, fw) => pm2LinkToFw({...wiz.pols[t], owner:wiz.owners[t]||wiz.owner}, fw);
   const adoptSubmit = () => {
     const fw = pm2Fw(wiz.fwId); const when = pm2Today();
     let pols = [..._pm2.policies]; const created = []; let extended = 0;
     tplIds(fw).forEach(t=>{
-      const ex = pols.find(p=>p.template===t&&p.status!=="Retired");
+      const ex = pols.find(p=>p.id===pm2TplPolicyId(t,fw)&&p.status!=="Retired");
       if(ex){
         const np = pm2LinkToFw(ex, fw); const wid = np.scope.filter(c=>!ex.scope.includes(c)); const na = np.articles.length-ex.articles.length;
         if(na||wid.length){ extended++; pols = pols.map(p=>p.id===ex.id?{...np, history:[{when, who:me, what:`Linked to ${fw.name} (${na} article${na===1?"":"s"})${wid.length?` — scope widened to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}`}, ...(np.history||[])]}:p); }
-      } else if(wiz.picks[t]){
-        const np = {...previewTplPolicy(t, fw), history:[{when, who:me, what:`Created from the ${fw.name} template`}]};
-        pols.push(np); created.push(np.id);
-      }
+      } else if(wiz.picks[t]){ const np = {...previewTpl(t, fw), history:[{when, who:me, what:`Created from the ${fw.name} template`}]}; pols.push(np); created.push(np.id); }
     });
-    Object.entries(wiz.links).forEach(([i,ids])=>ids.forEach(id=>{ const ii=Number(i);
-      pols = pols.map(p=>p.id===id&&!p.articles.some(x=>x.fw===fw.id&&x.i===ii)?{...p, articles:[...p.articles,{fw:fw.id,i:ii}], history:[{when, who:me, what:`Mapped to ${fw.name} ${fw.arts[ii].ref}`}, ...(p.history||[])]}:p); }));
     pm2Set(s=>({...s, adopted:{...s.adopted, [fw.id]:s.adopted[fw.id]||{owner:wiz.owner, at:when}}, policies:pols}));
     created.forEach(id=>submitPolicy(id, `Adopting ${fw.name}`, true));
-    pm2RequestTargets();
+    setTimeout(pm2Sync,0);
     const auto = created.filter(id=>_pm2.policies.find(p=>p.id===id)?.status==="Active").length;
     onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${created.length} new polic${created.length===1?"y":"ies"} (${auto} active now, ${created.length-auto} sent for approval), ${extended} existing extended`,"success");
     setWiz(null); setSelFw(fw.id); setTab("frameworks");
@@ -14030,213 +14367,250 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const fw = pm2Fw(wiz.fwId); const m = regMeta(fw.id);
     const inS = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)); const sus = PM2_ASSETS.filter(a=>pm2SuspectIn(a,fw.covers));
     const recs = (fw.recordClasses||[]).length ? PM2_ASSETS.filter(a=>pm2Classes(a).some(c=>fw.recordClasses.includes(c))) : [];
-    const tids = tplIds(fw); const newT = tids.filter(t=>!existingFor(t)&&wiz.picks[t]); const exT = tids.filter(t=>existingFor(t));
+    const tids = tplIds(fw); const newT = tids.filter(t=>!existingFor(t,fw)&&wiz.picks[t]); const exT = tids.filter(t=>existingFor(t,fw));
     const setW = (k,v) => setWiz(w=>({...w,[k]:v}));
+    const setPol = (t, fn) => setWiz(w=>({...w, pols:{...w.pols, [t]:fn(w.pols[t])}}));
     const assetRow = (a, right) => <div key={a.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span><div style={{flex:1,display:"flex",gap:4,flexWrap:"wrap"}}>{right}</div></div>;
-    const tablesAfter = [...newT.map(t=>previewTplPolicy(t,fw)), ...exT.map(t=>pm2LinkToFw(existingFor(t),fw))].filter(p=>pm2Kinds(p).includes("enforce"))
-      .reduce((n,p)=>n+pm2Eval(p).targets.filter(t=>pm2TargetStatus(p.id,t.asset.name)==="none").length,0);
+    const tplBody = (t, pv, editable) => {
+      if(pv.type==="validation") return pv.rules.map((r,ri)=><div key={r.id}>{ruleView(r,pv, editable?nr=>setPol(t,x=>({...x, rules:x.rules.map((y,j)=>j===ri?nr:y)})):null, c=>c.edit)}</div>);
+      if(pv.type==="enforcement") return <div style={{fontSize:12,color:T.text,lineHeight:1.6,padding:"8px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("enforcement")}`,borderRadius:8}}>{enfText(pv)}
+        {editable&&pv.enf.action==="retention"&&<div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",fontSize:11.5,color:T.textSub}}>Your period: <input type="number" value={pv.enf.period} onChange={e=>setPol(t,x=>({...x,enf:{...x.enf,period:Number(e.target.value)}}))} style={{...inStyle,width:70}}/> {pv.enf.unit}</div>}</div>;
+      return <div style={{fontSize:12,color:T.text,padding:"8px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8}}>
+        A form with <b>{pv.att.form.length} fields</b> ({pv.att.form.map(f=>f.label).join(" · ")}), due every <b>{pv.att.every} months</b>, reviewed before it counts.</div>;
+    };
     let body;
     if(wiz.step===1) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>{fw.name} applies to the data classes below. EDG uses your classifications to decide what's in scope — nothing is hand-picked, and newly classified data joins automatically.</div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>{fw.covers.map(classChip)}</div>
+      {secHead("Applicability", `${fw.name} applies to the data classes below. EDG uses your classifications to decide what's in scope — nothing is hand-picked, and newly classified data joins automatically.`)}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{fw.covers.map(classChip)}</div>
       {secLabel(`In scope today (${inS.length} assets)`)}
-      <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginTop:-1}}>{inS.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)).map(classChip)))}</div>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{inS.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)).map(classChip)))}</div>
       {recs.length>0&&<>{secLabel(`Records ${fw.name} says you must keep (${recs.length})`)}
-        <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>Not personal data in themselves, but {fw.name} sets a minimum retention on them{fw.recordYears?` — ${fw.recordYears} year${fw.recordYears>1?"s":""}`:""}.</div>
         <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{recs.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.recordClasses.includes(c)).map(classChip)))}</div></>}
       {sus.length>0&&<>{secLabel(`Probably in scope, not classified yet (${sus.length})`)}
-        <div style={{fontSize:11.5,color:T.textSub,marginBottom:6}}>These look like {fw.name} data but no policy would touch them until they're classified. The discovery policy keeps flagging them.</div>
         {sus.map(a=><div key={a.name} style={{display:"flex",gap:10,padding:"7px 12px",border:`1px dashed ${T.amber}70`,borderRadius:8,marginBottom:5,background:`${T.amber}08`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11.5,color:T.textSub}}>{Object.entries(a.suspect).map(([k,v])=>`${k} → ${v}`).join(", ")}</span></div>)}</>}
       {secLabel("Framework owner")}
-      <div style={{display:"flex",alignItems:"center",gap:10}}>{userSel(wiz.owner, v=>setW("owner",v))}<span style={{fontSize:11.5,color:T.textMuted}}>Answers for {fw.name} readiness. New policies default to this owner — you can change each one in step 3.</span></div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>{userSel(wiz.owner, v=>setW("owner",v))}<span style={{fontSize:11.5,color:T.textMuted}}>Answers for {fw.name} readiness. New policies default to this owner.</span></div>
     </>;
     if(wiz.step===2) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Every article, what it asks, and the policies that would satisfy it. <b>Recommended policies are on</b> — each one's rules are shown as they'll run, and the numbers are editable. Policies you already run are reused, not duplicated.</div>
-      {fw.arts.map((art,i)=>{
-        const covering = livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i)&&!(art.c||[]).includes(p.template));
-        const linked = (wiz.links[i]||[]).map(id=>st.policies.find(p=>p.id===id)).filter(Boolean);
-        const linkable = livePols.filter(p=>!(art.c||[]).includes(p.template)&&!covering.includes(p)&&!linked.includes(p));
-        return (
-          <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface}}>
-            <div style={{padding:"10px 14px",borderBottom:art.out?"none":`1px solid ${T.border}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(art.ref, typeColor(fw.type))}<span style={{fontSize:13,fontWeight:700,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>{art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}</div>
-              <div style={{fontSize:12,color:T.textSub,marginTop:4}}><span style={{color:T.textMuted,fontWeight:600}}>The law asks: </span>{art.ask}</div>
-            </div>
-            {!art.out&&<div style={{padding:"8px 14px 12px",display:"flex",flexDirection:"column",gap:8}}>
-              {(art.c||[]).map(t=>{ const ex=existingFor(t);
-                if(ex){ const np=pm2LinkToFw(ex,fw); const wid=np.scope.filter(c=>!ex.scope.includes(c));
-                  return (<div key={t}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><input type="checkbox" checked disabled style={{accentColor:T.accent}}/>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{ex.name}</span>{pill(statusColor(ex.status),`Existing · ${ex.status}`)}<span style={{fontSize:11,color:T.textMuted}}>owner {ex.owner}</span>
-                      <span style={{fontSize:11,color:T.green,fontWeight:600}}>Reused — also counts for {fw.name}{wid.length?`; scope widens to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}</span></div>
-                    <div style={{margin:"6px 0 0 24px",display:"flex",flexDirection:"column",gap:4}}>{np.rules.map(r=><div key={r.id}>{ruleView(r,np)}</div>)}</div>
-                  </div>); }
-                const on = wiz.picks[t]; const pv = previewTplPolicy(t,fw);
-                return (<div key={t}>
-                  <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}><input type="checkbox" checked={!!on} onChange={e=>setW("picks",{...wiz.picks,[t]:e.target.checked})} style={{accentColor:T.accent}}/>
-                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{PM2_TPL[t].name}</span>{pill(T.accent,"New policy")}<span style={{fontSize:11.5,color:T.textMuted}}>{PM2_TPL[t].why}</span></label>
-                  {on&&<div style={{margin:"6px 0 0 24px",display:"flex",flexDirection:"column",gap:4}}>{pv.rules.map((r,ri)=><div key={r.id}>{ruleView(r,pv,nr=>setW("rules",{...wiz.rules,[t]:wiz.rules[t].map((x,j)=>j===ri?nr:x)}))}</div>)}</div>}
-                  {!on&&<div style={{margin:"4px 0 0 24px",fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
-                </div>); })}
-              {[...covering, ...linked].map(p=><div key={p.id} style={{display:"flex",alignItems:"center",gap:8}}>{pill(T.textSub,"Mapped")}<span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span><span style={{fontSize:11,color:T.textMuted}}>{p.template?"":"custom · "}{p.status} · owner {p.owner}</span>{linked.includes(p)&&<button onClick={()=>setW("links",{...wiz.links,[i]:wiz.links[i].filter(x=>x!==p.id)})} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>remove</button>}</div>)}
-              {linkable.length>0&&<select value="" onChange={e=>e.target.value&&setW("links",{...wiz.links,[i]:[...(wiz.links[i]||[]),e.target.value]})} style={{...selStyle,alignSelf:"flex-start"}}><option value="">+ Map one of your other policies to this article</option>{linkable.map(p=><option key={p.id} value={p.id}>{p.name}{p.template?"":" (custom)"}</option>)}</select>}
-            </div>}
-          </div>);
-      })}
+      {secHead("Articles & policies", `Every article, what it asks, and the regulation policy that satisfies it — each one a single type. Policies are on by default; the values the law leaves to you are editable. Policies you already run are reused, not duplicated.`)}
+      {fw.arts.map((art,i)=>(
+        <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface}}>
+          <div style={{padding:"10px 14px",borderBottom:art.out?"none":`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(art.ref, fwTypeColor(fw.type))}<span style={{fontSize:13,fontWeight:700,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>{art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}</div>
+            <div style={{fontSize:12,color:T.textSub,marginTop:4}}><span style={{color:T.textMuted,fontWeight:600}}>The law asks: </span>{art.ask}</div>
+          </div>
+          {!art.out&&<div style={{padding:"8px 14px 12px",display:"flex",flexDirection:"column",gap:10}}>
+            {(art.c||[]).map(t=>{ const ex=existingFor(t,fw);
+              if(ex){ const np=pm2LinkToFw(ex,fw); const wid=np.scope.filter(c=>!ex.scope.includes(c));
+                return (<div key={t}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}><input type="checkbox" checked disabled style={{accentColor:T.accent}}/>{typePill(ex.type)}<span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{ex.name}</span>{pill(statusColor(ex.status),`Existing · ${ex.status}`)}<span style={{fontSize:11,color:T.green,fontWeight:600}}>Reused — also counts for {fw.name}{wid.length?`; scope widens to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}</span></div>
+                  <div style={{marginLeft:24}}>{tplBody(t,np,false)}</div></div>); }
+              const on=wiz.picks[t]; const pv=previewTpl(t,fw);
+              return (<div key={t}>
+                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginBottom:6}}><input type="checkbox" checked={!!on} onChange={e=>setW("picks",{...wiz.picks,[t]:e.target.checked})} style={{accentColor:T.accent}}/>{typePill(pv.type)}<span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{pv.name}</span>{pill(T.accent,"New regulation policy")}</label>
+                <div style={{marginLeft:24,fontSize:11.5,color:T.textMuted,marginBottom:6}}>{PM2_TPL[t].why}</div>
+                {on?<div style={{marginLeft:24}}>{tplBody(t,pv,true)}</div>:<div style={{marginLeft:24,fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
+              </div>); })}
+          </div>}
+        </div>))}
     </>;
     if(wiz.step===3) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Every policy has one <b>owner</b> — who answers for it, submits it and approves changes to it — and <b>stewards</b> who edit drafts and work the findings. The approval route comes from your Approval policies.</div>
-      {secLabel(`New policies (${newT.length})`)}
-      {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None — everything this framework needs already exists.</div>}
-      {newT.map(t=>{ const pv=previewTplPolicy(t,fw); const k=pm2Kinds(pv); const n=pm2Eval(pv).targets.length;
-        return <div key={t}>{card(<>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span>{k.map(x=><span key={x}>{kindPill(x)}</span>)}</div>
+      {secHead("Owners & approval","Every policy has one owner — who answers for it and submits changes — and stewards who work it. Attestation policies also say who fills in the form.")}
+      {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>No new policies — everything {fw.name} needs already exists.</div>}
+      {newT.map(t=>{ const pv=previewTpl(t,fw); const n=pv.type==="enforcement"?pm2Eval(pv).targets.length:null;
+        return <div key={t} style={{marginBottom:8}}>{card(<>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{typePill(pv.type)}<span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span></div>
           <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
             <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Owner {userSel(wiz.owners[t]||wiz.owner, v=>setW("owners",{...wiz.owners,[t]:v}))}</label>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.stewards[t]||[], v=>setW("stewards",{...wiz.stewards,[t]:v}), wiz.owners[t]||wiz.owner)}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.pols[t].stewards||[], v=>setPol(t,x=>({...x,stewards:v})), wiz.owners[t]||wiz.owner)}</div>
+            {pv.type==="attestation"&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Filled in by <select value={pv.att.assignee} onChange={e=>setPol(t,x=>({...x,att:{...x.att,assignee:e.target.value}}))} style={selStyle}><option value="owner">The owner</option><option value="steward">The first steward</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select></label>}
           </div>
-          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(k, n)}</div>
-        </>,{marginBottom:8,padding:"12px 14px"})}</div>; })}
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(pv.type, n)}</div>
+        </>,{padding:"12px 14px"})}</div>; })}
       {exT.length>0&&<>{secLabel(`Existing policies this reuses (${exT.length})`)}
-        {exT.map(t=>{ const ex=existingFor(t); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}><span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner} · stewards {(ex.stewards||[]).join(", ")||"none"}</span></div>; })}
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Linking a framework widens an active policy's scope without a new approval. Any new table it would change still goes to that table's owner.</div></>}
+        {exT.map(t=>{ const ex=existingFor(t,fw); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{typePill(ex.type)}<span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner}</span></div>; })}</>}
     </>;
     if(wiz.step===4){
-      const pvs = newT.map(t=>previewTplPolicy(t,fw));
-      const autoN = pvs.filter(p=>pm2Kinds(p).every(k=>k==="monitor")&&ap.activation.autoMonitor).length;
-      const attN = [...pvs, ...exT.map(existingFor)].filter(p=>pm2Kinds(p).includes("attest")).length;
+      const pvs = newT.map(t=>previewTpl(t,fw)); const by = k => pvs.filter(p=>p.type===k).length;
+      const autoN = ap.activation.autoValidation ? by("validation") : 0;
       const stat = (v,l,c) => <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}><div style={{fontSize:24,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:11.5,color:T.textSub}}>{l}</div></div>;
       body = <>
-        <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>What happens when you submit {fw.name}.</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:14}}>
-          {stat(newT.length, "new policies created", T.accent)}
-          {stat(autoN, "activate at once (monitor-only)", T.blue)}
-          {stat(newT.length-autoN, `go to ${pm2Approver(ap.activation.approver, me)} for approval`, T.amber)}
+        {secHead("Review & submit", `What happens when you submit ${fw.name}.`)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+          {stat(by("validation"), "validation policies — active at once", typeColor("validation"))}
+          {stat(by("enforcement"), `enforcement policies — to ${pm2Approver(ap.activation.approver, me)}, then table owners`, typeColor("enforcement"))}
+          {stat(by("attestation"), "attestation policies — forms assigned once approved", typeColor("attestation"))}
           {stat(exT.length, "existing policies reused", T.green)}
-          {stat(tablesAfter, "table-owner approvals once active", T.green)}
-          {stat(attN, `policies needing ${fw.name} evidence`, T.violet)}
+          {stat(pvs.length-autoN, "approval requests sent now", T.amber)}
+          {stat(fw.arts.filter(a=>a.out).length, "articles outside EDG — listed, never scored", T.textMuted)}
         </div>
-        {secLabel("The path to Met")}
-        <div style={{display:"flex",flexDirection:"column",gap:6,fontSize:12.5,color:T.text}}>
-          {["Policies are created with the owners and stewards you chose.", `Monitor-only policies go active${ap.activation.autoMonitor?" immediately":" after approval"}; policies that change data go to ${pm2Approver(ap.activation.approver, me)}.`, "Once a policy is active, each table it would change goes to that table's owner. CDP acts only after they approve.", "Monitoring rules evaluate and raise findings; stewards fix them or request an exception.", `Evidence is added per article on the ${fw.name} page.`].map((s,i)=><div key={i} style={{display:"flex",gap:10}}><span style={{width:20,height:20,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</span>{s}</div>)}
-        </div>
-        {tids.filter(t=>!existingFor(t)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:12}}>Switched off: {tids.filter(t=>!existingFor(t)&&!wiz.picks[t]).map(t=>PM2_TPL[t].name).join("; ")}. The articles they cover will read "No policy".</div>}
-        <div style={{fontSize:11.5,color:T.textMuted,marginTop:12}}>{fw.arts.filter(a=>a.out).length} articles are outside EDG — they stay listed on the {fw.name} page and never count toward readiness.</div>
+        {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:12}}>Switched off: {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).map(t=>PM2_TPL[t].name).join("; ")}. The articles they cover will read "No policy".</div>}
       </>;
     }
     return drawer({title:`${wiz.editing?"Review":"Adopt"} ${fw.name}`, sub:m.fullName, steps:["Applicability","Articles & policies","Owners & approval","Review & submit"], step:wiz.step, onStep:n=>setW("step",n), body, onClose:()=>setWiz(null),
       footer:<><Btn ghost onClick={()=>wiz.step>1?setW("step",wiz.step-1):setWiz(null)}>{wiz.step>1?"Back":"Cancel"}</Btn>{wiz.step<4?<Btn variant="primary" onClick={()=>setW("step",wiz.step+1)}>Continue</Btn>:<Btn variant="primary" onClick={adoptSubmit}>{wiz.editing?"Save":"Submit"} {fw.name}</Btn>}</>});
   };
 
-  // ═════ CREATE / EDIT A POLICY ═════
+  // ═════ CREATE / EDIT A POLICY — the original wizard's five steps ═════
   const newRuleId = () => `r-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-  const openEditor = p => {
+  const openEditor = (p, preset) => {
     if(p&&!canEdit(p)){ onToast(`Only ${p.owner} or a steward can edit this policy`,"info"); return; }
-    setEd(p ? {id:p.id, step:1, name:p.name, purpose:p.purpose, scope:[...p.scope], scopeBy:p.scopeBy, rules:p.rules.map(r=>({...r,conds:r.conds.map(c=>({...c})),act:{...r.act}})), articles:[...p.articles], owner:p.owner, stewards:[...(p.stewards||[])], isActive:p.status==="Active", version:p.version, template:p.template}
-            : {id:null, step:1, name:"", purpose:"", scope:["PII"], scopeBy:"class", rules:[{id:newRuleId(), conds:[{f:"access",op:"is",v:"Broad"}], act:{type:"flag",msg:"Granted to a broad role"}}], articles:[], owner:me, stewards:[], isActive:false, version:1, template:null});
+    if(p){ setEd({id:p.id, step:1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template, type:p.type,
+      name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], scopeBy:p.scopeBy, domains:[...(p.domains||[])], severity:p.severity||"Medium",
+      rules:(p.rules||[]).map(r=>({...r,conds:r.conds.map(c=>({...c}))})), enf:p.enf?{...p.enf,assets:[...(p.enf.assets||[])]}:null,
+      att:p.att?{...p.att,form:p.att.form.map(f=>({...f,opts:[...f.opts]}))}:null, articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])], fwPick:""});
+      return; }
+    const type = preset?.type||"validation";
+    setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, type, name:preset?.name||"", purpose:"", category:"", scope:["PII"], scopeBy:"class", domains:[], severity:"Medium",
+      rules:[{id:newRuleId(), conds:[{f:"access",op:"is",v:"Broad"}], msg:"Granted to a broad role"}],
+      enf:{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently"},
+      att:{every:12, remind:14, assignee:"owner", reviewer:"approver", form:[pm2Field("Completed on","date",true), pm2Field("What was checked","long",true), pm2Field("Evidence","doc",true), pm2Field("Signed off by","person",true)]},
+      articles:preset?.articles||[], owner:me, stewards:[], fwPick:preset?.articles?.[0]?.fw||""});
   };
+  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, type:ed.type, name:ed.name, scope:ed.scope, scopeBy:ed.scopeBy, domains:ed.domains, severity:ed.severity,
+    rules:ed.type==="validation"?ed.rules:[], enf:ed.type==="enforcement"?ed.enf:null, att:ed.type==="attestation"?ed.att:null, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
   const saveEditor = submit => {
+    const pv = edPolicy();
     if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
-    if(!ed.rules.length){ onToast("Add at least one rule","info"); setEd(e=>({...e,step:2})); return; }
-    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), scope:ed.scope, scopeBy:ed.scopeBy, rules:ed.rules, articles:ed.articles, stewards:ed.stewards};
+    if(ed.type==="validation"&&!ed.rules.length){ onToast("Add at least one rule","info"); setEd(e=>({...e,step:3})); return; }
+    if(ed.type==="attestation"&&(!ed.att.form.length||ed.att.form.some(f=>!f.label.trim()))){ onToast("Every form field needs a label","info"); setEd(e=>({...e,step:3})); return; }
+    if(ed.type==="enforcement"&&ed.enf.action==="hold"&&(!ed.enf.matter.trim()||(ed.enf.select==="assets"&&!ed.enf.assets.length))){ onToast("Name the legal matter and what's held","info"); setEd(e=>({...e,step:3})); return; }
+    if(ed.type==="enforcement"&&ed.enf.action==="retention"&&ed.enf.mode==="minimum"){ const eff=pm2EffectivePeriod(pv); const own=ed.enf.unit==="years"?ed.enf.period:ed.enf.period/12;
+      if(ed.isReg&&eff.floor&&own<eff.floor){ onToast(`The law requires at least ${eff.floor} years`,"info"); setEd(e=>({...e,step:3})); return; } }
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, severity:ed.severity, rules:pv.rules, enf:pv.enf, att:pv.att, articles:ed.articles, stewards:ed.stewards};
     let id = ed.id;
     if(!id){
       id = "p-cust-"+Date.now();
-      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, ...fields, owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:"Created"}]}]}));
+      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", type:ed.type, scopeBy:"class", ...fields, owner:ed.owner, submissions:[], status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created (custom ${PM2_TYPE_META[ed.type].label.toLowerCase()} policy)`}]}]}));
     } else if(ed.isActive){
       updPol(id, p=>addHist({...p, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
-    } else {
-      updPol(id, p=>addHist({...p, ...fields, owner:ed.owner, status:"Draft"}, "Edited"));
-    }
-    if(submit) submitPolicy(id, ed.isActive?"Change to an active policy":"New policy");
-    else onToast("Saved as draft","success");
-    setEd(null); setSelFw(null); setTab("policies"); setSelPol(id);
+    } else updPol(id, p=>addHist({...p, ...fields, owner:ed.owner, status:"Draft"}, "Edited"));
+    if(submit) submitPolicy(id, ed.isActive?"Change to an active policy":"New policy"); else onToast("Saved as draft","success");
+    setTimeout(pm2Sync,0);
+    setEd(null); setSelFw(null); setTab("policies"); setSelPol(id); setPdTab("overview");
   };
   const renderEditor = () => {
     const setE = (k,v) => setEd(e=>({...e,[k]:v}));
-    const pv = {id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, scopeBy:ed.scopeBy, rules:ed.rules, articles:ed.articles};
-    const ev = pm2Eval(pv); const kinds = pm2Kinds(pv);
+    const pv = edPolicy(); const ev = pm2Eval(pv);
     const ownerSubmits = isAdmin || ed.owner===me;
     const setRule = (ri, r) => setE("rules", ed.rules.map((x,j)=>j===ri?r:x));
+    const cfgStep = {validation:"Rules", enforcement:"Enforcement", attestation:"Attestation form"}[ed.type];
+    const lockedArt = x => ed.isReg && !pm2Fw(x.fw)?.custom;
     let body;
-    if(ed.step===1) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>A policy is a commitment someone answers for. Name it for what it protects, and say why it exists in one sentence — that sentence is what reviewers and auditors read first.</div>
-      {secLabel("Name")}<input value={ed.name} onChange={e=>setE("name",e.target.value)} placeholder="e.g. HR compensation masking" style={{...inStyle,width:"100%",fontSize:13,padding:"8px 10px",boxSizing:"border-box"}}/>
-      {secLabel("Why it exists")}<textarea rows={3} value={ed.purpose} onChange={e=>setE("purpose",e.target.value)} placeholder="e.g. Salary and national ID are visible only to the HR compensation team." style={{...inStyle,width:"100%",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",fontSize:12.5}}/>
-    </>;
-    if(ed.step===2) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Scope picks the data by classification. Each rule then says <b>WHEN</b> an in-scope asset matches these conditions, <b>THEN</b> do this. Raising a finding changes nothing; masking, retention and disposal change data and need approval.</div>
-      {secLabel("Scope — data classes")}
-      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{Object.keys(PM2_CLASS_META).map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={ed.scope.includes(c)} onChange={e=>setE("scope",e.target.checked?[...ed.scope,c]:ed.scope.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{PM2_CLASS_META[c].label}</label>)}</div>
-      {secLabel(`Rules (${ed.rules.length})`)}
-      {ed.rules.map((r,ri)=>(
-        <div key={r.id} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10,background:T.bgElevated}}>
-          <div style={{display:"flex",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>Rule {ri+1}</span><button onClick={()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))} style={{fontSize:11,background:"none",border:"none",color:T.rose,cursor:"pointer"}}>Remove</button></div>
-          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:6}}>WHEN an in-scope asset…</div>
-          {r.conds.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No conditions — the rule applies to every in-scope asset.</div>}
-          {r.conds.map((c,ci)=>{ const F=PM2_FIELDS[c.f]; const setC=nc=>setRule(ri,{...r,conds:r.conds.map((x,j)=>j===ci?nc:x)});
-            return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-              <span style={{fontSize:10.5,fontWeight:800,color:T.textMuted,width:30}}>{ci?"AND":""}</span>
-              <select value={c.f} onChange={e=>{const nf=PM2_FIELDS[e.target.value]; setC({f:e.target.value, op:PM2_OPS[nf.type][0], v:nf.type==="enum"?nf.opts[0]:nf.type==="number"?0:nf.type==="list"?"":undefined});}} style={selStyle}>{Object.entries(PM2_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
-              <select value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={selStyle}>{PM2_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
-              {F.type==="enum"&&<select value={c.v} onChange={e=>setC({...c,v:e.target.value})} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
-              {F.type==="number"&&<input type="number" value={c.v} onChange={e=>setC({...c,v:Number(e.target.value)})} style={{...inStyle,width:80}}/>}
-              {F.type==="list"&&<input value={c.v} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={{...inStyle,width:220}}/>}
-              <button onClick={()=>setRule(ri,{...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>×</button>
-            </div>); })}
-          <button onClick={()=>setRule(ri,{...r,conds:[...r.conds,{f:"env",op:"is",v:"prod"}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 8px 36px"}}>+ condition</button>
-          <div style={{fontSize:11,fontWeight:800,color:T.textMuted,margin:"4px 0 6px"}}>THEN</div>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <select value={r.act.type} onChange={e=>setRule(ri,{...r,act:pm2DefaultAct(e.target.value)})} style={selStyle}>{Object.entries(PM2_ACTIONS).map(([k,a])=><option key={k} value={k}>{a.label}</option>)}</select>
-            {kindPill(PM2_ACTIONS[r.act.type].kind)}
-            {r.act.type==="mask"&&<select value={r.act.cols} onChange={e=>setRule(ri,{...r,act:{...r.act,cols:e.target.value}})} style={selStyle}><option value="all">every in-scope column</option><option value="sensitive">sensitive-category columns only</option></select>}
-          </div>
-          <div style={{marginTop:8}}>{ruleView(r, pv, nr=>setRule(ri,nr))}</div>
-        </div>))}
-      <Btn small onClick={()=>setE("rules",[...ed.rules,{id:newRuleId(), conds:[], act:pm2DefaultAct("flag")}])}>+ Add rule</Btn>
-      {secLabel("If it ran now")}
-      {card(<>
-        <div style={{fontSize:12.5,color:T.text}}><b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"} · <b>{ev.targets.length}</b> table{ev.targets.length===1?"":"s"} to enforce on · <b>{ev.evidence.length}</b> evidence requirement{ev.evidence.length===1?"":"s"}</div>
-        <div style={{display:"flex",flexDirection:"column",gap:3,marginTop:8}}>
-          {[...ev.findings.map(f=>({n:f.asset.name,d:f.msg,c:T.blue})), ...ev.targets.map(t=>({n:t.asset.name,d:`${PM2_ACTIONS[t.rule.act.type].verb} — ${t.detail}`,c:T.green}))].slice(0,8).map((x,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}><span style={{fontFamily:"'Geist Mono',monospace",color:x.c}}>{x.n}</span> — {x.d}</div>)}
-        </div>
-      </>)}
-    </>;
+    if(ed.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:620}}>
+      {secHead("Policy Details","Name this policy, describe its purpose, choose its type, and file it under a category.")}
+      <div><label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label><input value={ed.name} onChange={e=>setE("name",e.target.value)} disabled={ed.isReg} placeholder="e.g. HR compensation masking check, Quarterly access review…" style={inp}/></div>
+      <div><label style={lbl}>Description</label><textarea rows={3} value={ed.purpose} onChange={e=>setE("purpose",e.target.value)} disabled={ed.isReg} placeholder="Business or compliance reason for this policy…" style={{...inp,resize:"vertical"}}/></div>
+      <div><label style={lbl}>Type <span style={{color:T.rose}}>*</span></label>
+        <select value={ed.type} disabled={!!ed.id} onChange={e=>setE("type",e.target.value)} style={{...selStyle,minWidth:260}}>{["validation","enforcement","attestation"].map(k=><option key={k} value={k}>{PM2_TYPE_META[k].label}</option>)}</select>
+        <div style={{marginTop:8,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(ed.type)}`,borderRadius:8,fontSize:12,color:T.textSub,lineHeight:1.55}}>{PM2_TYPE_META[ed.type].hint}{ed.id&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>A policy's type can't change after it's created.</div>}</div></div>
+      <div><label style={lbl}>Category</label><select value={ed.category} onChange={e=>setE("category",e.target.value)} style={{...selStyle,minWidth:200}}><option value="">Not set</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></div>
+    </div>;
+    if(ed.step===2) body = <div style={{maxWidth:680}}>
+      {secHead("Policy Scope", ed.isReg?"A regulation policy's data classes come from the regulation. You can narrow it to specific domains.":"Pick the data this policy governs by classification, and optionally narrow it to domains.")}
+      <label style={lbl}>Data classes</label>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>{Object.keys(PM2_CLASS_META).map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:ed.isReg?"not-allowed":"pointer"}}><input type="checkbox" disabled={ed.isReg} checked={ed.scope.includes(c)} onChange={e=>setE("scope",e.target.checked?[...ed.scope,c]:ed.scope.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{PM2_CLASS_META[c].label}</label>)}
+        {ed.scope.includes("ALL")&&pill(T.textSub,"All classified data")}</div>
+      <label style={{...lbl,marginTop:16}}>Domains <span style={{fontWeight:400,color:T.textMuted}}>(optional — leave empty for all)</span></label>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>{PM2_DOMAINS.map(d=><label key={d} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={ed.domains.includes(d)} onChange={e=>setE("domains",e.target.checked?[...ed.domains,d]:ed.domains.filter(x=>x!==d))} style={{accentColor:T.accent}}/>{d}</label>)}</div>
+      <div style={{fontSize:12,color:T.textSub,marginTop:14}}>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope today.</div>
+    </div>;
     if(ed.step===3){
-      const fwList = [...adoptedFws, ...PM2_FW.filter(f=>!st.adopted[f.id]&&ed.articles.some(x=>x.fw===f.id))];
-      body = <>
-        <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>Which articles does this policy help satisfy? Mapped articles count it toward readiness — and it's held to them: its findings break those articles.</div>
-        {fwList.map(fw=>(
-          <div key={fw.id}>{secLabel(fw.name, !st.adopted[fw.id]&&<span style={{textTransform:"none",letterSpacing:0,fontWeight:400}}>— not adopted</span>)}
-            {fw.arts.map((a,i)=>a.out?null:(
-              <label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:`1px dashed ${T.border}`,cursor:"pointer"}}>
-                <input type="checkbox" checked={ed.articles.some(x=>x.fw===fw.id&&x.i===i)} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:fw.id,i}]:ed.articles.filter(x=>!(x.fw===fw.id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
-                {refTag(a.ref)}<div><div style={{fontSize:12.5,color:T.text}}>{a.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{a.ask}</div></div>
-              </label>))}
-          </div>))}
-        {fwList.length===0&&<div style={{fontSize:12,color:T.textMuted,marginTop:10}}>Adopt a framework first to map this policy to its articles.</div>}
+      if(ed.type==="validation") body = <>
+        {secHead("Rules", ed.isReg?"Locked to the regulation. Values the law leaves to you are editable in place.":"Each rule says WHEN an in-scope asset matches these conditions, raise a finding. Validation changes no data.")}
+        <div style={{marginBottom:12}}><label style={lbl}>Severity</label><select value={ed.severity} onChange={e=>setE("severity",e.target.value)} style={selStyle}>{["Low","Medium","High","Critical"].map(s=><option key={s}>{s}</option>)}</select></div>
+        {ed.isReg ? ed.rules.map((r,ri)=><div key={r.id} style={{marginBottom:6}}>{ruleView(r,pv,nr=>setRule(ri,nr),c=>c.edit)}</div>) : <>
+          {ed.rules.map((r,ri)=>(
+            <div key={r.id} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10,background:T.bgElevated}}>
+              <div style={{display:"flex",alignItems:"center",marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>Rule {ri+1}</span><button onClick={()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))} style={{fontSize:11,background:"none",border:"none",color:T.rose,cursor:"pointer"}}>Remove</button></div>
+              <div style={{fontSize:11,fontWeight:800,color:T.textMuted,marginBottom:6}}>WHEN an in-scope asset…</div>
+              {r.conds.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No conditions — every in-scope asset matches.</div>}
+              {r.conds.map((c,ci)=>{ const F=PM2_FIELDS[c.f]; const setC=nc=>setRule(ri,{...r,conds:r.conds.map((x,j)=>j===ci?nc:x)});
+                return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+                  <span style={{fontSize:10.5,fontWeight:800,color:T.textMuted,width:30}}>{ci?"AND":""}</span>
+                  <select value={c.f} onChange={e=>{const nf=PM2_FIELDS[e.target.value]; setC({f:e.target.value, op:PM2_OPS[nf.type][0], v:nf.type==="enum"?nf.opts[0]:nf.type==="number"?0:nf.type==="list"?"":undefined});}} style={selStyle}>{Object.entries(PM2_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
+                  <select value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={selStyle}>{PM2_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
+                  {F.type==="enum"&&<select value={c.v} onChange={e=>setC({...c,v:e.target.value})} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
+                  {F.type==="number"&&<input type="number" value={c.v} onChange={e=>setC({...c,v:Number(e.target.value)})} style={{...inStyle,width:80}}/>}
+                  {F.type==="list"&&<input value={c.v} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={{...inStyle,width:220}}/>}
+                  <button onClick={()=>setRule(ri,{...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>×</button>
+                </div>); })}
+              <button onClick={()=>setRule(ri,{...r,conds:[...r.conds,{f:"env",op:"is",v:"prod"}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 8px 36px"}}>+ condition</button>
+              <div style={{fontSize:11,fontWeight:800,color:T.textMuted,margin:"4px 0 6px"}}>THEN raise a finding that says</div>
+              <input value={r.msg} onChange={e=>setRule(ri,{...r,msg:e.target.value})} placeholder="e.g. Sensitive columns are not masked" style={{...inStyle,width:"100%",boxSizing:"border-box"}}/>
+              <div style={{marginTop:8}}>{ruleView(r,pv)}</div>
+            </div>))}
+          <Btn small onClick={()=>setE("rules",[...ed.rules,{id:newRuleId(), conds:[], msg:""}])}>+ Add rule</Btn></>}
+        {secLabel("If it ran now")}
+        {card(<><div style={{fontSize:12.5,color:T.text}}><b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:3,marginTop:6}}>{ev.findings.slice(0,8).map((f,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}><span style={{fontFamily:"'Geist Mono',monospace",color:typeColor("validation")}}>{f.asset.name}</span> — {f.msg}</div>)}</div></>)}
+      </>;
+      if(ed.type==="enforcement") body = <>
+        {secHead("Enforcement", ed.isReg?"Locked to the regulation. You can set the period (never below the legal minimum), when it starts and what happens at the end.":"Retention keeps or disposes of data on a schedule; legal hold freezes records for a matter. Both run through CDP after approval and each table owner's sign-off.")}
+        {enfEditor(ed.enf, v=>setE("enf",v), ed.isReg, ed.isReg&&ed.enf.mode==="minimum"?pm2EffectivePeriod(pv)?.floor:null)}
+        {secLabel("Reads as")}{card(<div style={{fontSize:12.5,color:T.text,lineHeight:1.7}}>{enfText(pv)}</div>)}
+        {secLabel(`Tables it would act on (${ev.targets.length})`)}
+        {ev.targets.slice(0,10).map((t,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}><span style={{fontFamily:"'Geist Mono',monospace",color:typeColor("enforcement")}}>{t.asset.name}</span> — {t.detail} · owner {t.asset.owner||"none"}</div>)}
+        {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:6}}>Suspended by legal hold: {ev.held.map(a=>a.name).join(", ")}</div>}
+      </>;
+      if(ed.type==="attestation") body = <>
+        {secHead("Attestation form", ed.isReg?"The form is locked to what the regulation needs as evidence. You can set the schedule, who fills it in and who reviews it.":"Design the form the assignee fills in. Required fields must be answered before it can be submitted; a reviewer approves each submission.")}
+        {!ed.isReg&&formBuilder(ed.att, v=>setE("att",v))}
+        {secLabel("Schedule & people")}{scheduleEditor(ed.att, v=>setE("att",v))}
+        {secLabel("Preview — what the assignee sees")}{card(formView(ed.att.form),{maxWidth:620})}
       </>;
     }
-    if(ed.step===4) body = <>
-      <div style={{fontSize:13,color:T.textSub,lineHeight:1.6}}>One owner answers for the policy. Stewards can edit drafts and work its findings; only the owner submits it.</div>
-      {secLabel("Owner")}{(isAdmin||!ed.id||ed.owner===me)?userSel(ed.owner, v=>setE("owner",v)):<b style={{fontSize:12.5,color:T.text}}>{ed.owner}</b>}
-      {secLabel("Stewards")}{stewardChips(ed.stewards, v=>setE("stewards",v), ed.owner)}
-      {secLabel("Approval route")}
-      <div style={{fontSize:12.5,color:T.text}}>{routeText(kinds, ev.targets.length)}</div>
-      {ed.isActive&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>This policy is active. Your change is saved as v{ed.version+1} and goes for approval; v{ed.version} keeps running until then.</div>}
-    </>;
-    if(ed.step===5) body = <>
+    if(ed.step===4){
+      const fwOpts = [...adoptedFws, ...PM2_FW.filter(f=>!st.adopted[f.id])];
+      const pick = pm2Fw(ed.fwPick);
+      body = <div style={{maxWidth:720}}>
+        {secHead("Ownership & Compliance","Assign who's accountable for this policy, and attach it to the articles it satisfies — in a regulation or in your own framework.")}
+        <div style={{display:"flex",gap:18,flexWrap:"wrap"}}>
+          <div><label style={lbl}>Owner</label>{(isAdmin||!ed.id||ed.owner===me)?userSel(ed.owner, v=>setE("owner",v)):<b style={{fontSize:12.5,color:T.text}}>{ed.owner}</b>}</div>
+          <div><label style={lbl}>Stewards</label>{stewardChips(ed.stewards, v=>setE("stewards",v), ed.owner)}</div>
+        </div>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The owner submits and changes it; stewards edit drafts and work it. Approval comes from the Approval policies.</div>
+        {secLabel(`Attached to (${ed.articles.length})`)}
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {ed.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not attached — it will be an internal policy. That's fine; attaching it makes it count toward a framework's readiness.</div>}
+          {ed.articles.map((x,i)=>{ const f=pm2Fw(x.fw); const a=f?.arts[x.i]; if(!a) return null; return (
+            <div key={i} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
+              <span style={{fontWeight:700,color:T.text,width:130}}>{f.name}</span>{refTag(a.ref)}<span style={{flex:1,color:T.textSub}}>{a.t}</span>
+              {x.ok===false&&pill(T.amber,"Needs approval to count")}
+              {!lockedArt(x)?<button onClick={()=>setE("articles",ed.articles.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>×</button>:<span style={{fontSize:10.5,color:T.textMuted}}>🔒 regulation</span>}
+            </div>); })}
+        </div>
+        {secLabel("Attach to an article")}
+        <select value={ed.fwPick} onChange={e=>setE("fwPick",e.target.value)} style={{...selStyle,minWidth:280}}><option value="">Choose a framework…</option>
+          <optgroup label="Your frameworks">{PM2_CUSTOM_FW.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</optgroup>
+          <optgroup label="Regulations">{fwOpts.filter(f=>!f.custom).map(f=><option key={f.id} value={f.id}>{f.name}{st.adopted[f.id]?"":" (not adopted)"}</option>)}</optgroup></select>
+        {pick&&<div style={{marginTop:10}}>
+          {!pick.custom&&!ed.isReg&&<div style={{fontSize:11.5,color:T.amber,marginBottom:6}}>A custom policy attached to a regulation article is "your interpretation" — it counts toward readiness once {ap.mapping.approver} approves the mapping.</div>}
+          {pick.arts.map((a,i)=>{ if(a.out) return null; const has=ed.articles.some(x=>x.fw===pick.id&&x.i===i); const locked=has&&lockedArt(ed.articles.find(x=>x.fw===pick.id&&x.i===i));
+            return (<label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 0",borderBottom:`1px dashed ${T.border}`,cursor:locked?"default":"pointer"}}>
+              <input type="checkbox" checked={has} disabled={locked} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:pick.id,i,ok:!!pick.custom}]:ed.articles.filter(x=>!(x.fw===pick.id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
+              {refTag(a.ref)}<div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{a.t} {a.expect&&a.expect!==ed.type&&<span style={{fontSize:10.5,color:T.amber}}>· expects {PM2_TYPE_META[a.expect].label.toLowerCase()}</span>}</div><div style={{fontSize:11.5,color:T.textMuted}}>{a.ask}</div></div>
+            </label>); })}
+        </div>}
+      </div>;
+    }
+    if(ed.step===5) body = <div style={{maxWidth:720}}>
+      {secHead("Review & Create","Confirm the policy, then save it as a draft or submit it.")}
       {card(<>
-        <div style={{fontSize:15,fontWeight:700,color:T.text}}>{ed.name||<i style={{color:T.textMuted}}>Unnamed policy</i>}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:15,fontWeight:700,color:T.text}}>{ed.name||<i style={{color:T.textMuted}}>Unnamed policy</i>}</span>{typePill(ed.type)}{pill(ed.isReg?T.textSub:T.accent, ed.isReg?"Regulation":"Custom")}</div>
         <div style={{fontSize:12.5,color:T.textSub,marginTop:4}}>{ed.purpose||"—"}</div>
-        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{ed.scope.map(classChip)}{kinds.map(k=><span key={k}>{kindPill(k)}</span>)}</div>
-        <div style={{fontSize:12,color:T.textSub,marginTop:8}}>Owner <b>{ed.owner}</b> · stewards {ed.stewards.join(", ")||"none"} · {ed.articles.length} article{ed.articles.length===1?"":"s"} mapped</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{ed.scope.map(classChip)}{ed.domains.map(d=><span key={d}>{pill(T.textSub,d)}</span>)}</div>
+        <div style={{fontSize:12,color:T.textSub,marginTop:8}}>Owner <b>{ed.owner}</b> · stewards {ed.stewards.join(", ")||"none"} · attached to {ed.articles.length} article{ed.articles.length===1?"":"s"}{ed.articles.some(x=>x.ok===false)?` (${ed.articles.filter(x=>x.ok===false).length} awaiting mapping approval)`:""}</div>
       </>)}
-      {secLabel("Rules")}<div style={{display:"flex",flexDirection:"column",gap:6}}>{ed.rules.map(r=><div key={r.id}>{ruleView(r,pv)}</div>)}</div>
-      {secLabel("Next")}<div style={{fontSize:12.5,color:T.text}}>{routeText(kinds, ev.targets.length)}</div>
+      {secLabel(ed.type==="validation"?"Rules":ed.type==="enforcement"?"Enforcement":"Form")}
+      {ed.type==="validation"&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{ed.rules.map(r=><div key={r.id}>{ruleView(r,pv)}</div>)}</div>}
+      {ed.type==="enforcement"&&card(<div style={{fontSize:12.5,color:T.text,lineHeight:1.7}}>{enfText(pv)}</div>)}
+      {ed.type==="attestation"&&<div style={{fontSize:12.5,color:T.text}}>{ed.att.form.length} fields — {ed.att.form.map(f=>f.label).join(" · ")}. Filled in by {ed.att.assignee==="owner"?ed.owner:ed.att.assignee==="steward"?(ed.stewards[0]||ed.owner):ed.att.assignee}, every {ed.att.every} months.</div>}
+      {secLabel("Next")}<div style={{fontSize:12.5,color:T.text}}>{routeText(ed.type, ed.type==="enforcement"?ev.targets.length:null)}</div>
+      {ed.isActive&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>This policy is active. Your change becomes v{ed.version+1}; v{ed.version} keeps running until it's approved.</div>}
       {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:6}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
-    </>;
-    return drawer({title:ed.id?`Edit · ${ed.name}`:"New policy", sub:ed.isActive?`Active v${ed.version} — changes become v${ed.version+1}`:"Draft → submit → approval → active", steps:["Basics","Scope & rules","Compliance mapping","Ownership","Review"], step:ed.step, onStep:n=>setE("step",n), body, onClose:()=>setEd(null),
+    </div>;
+    const stepDone = n => n===1?!!ed.name.trim() : n===2?ed.scope.length>0 : n===3?(ed.type==="validation"?ed.rules.length>0:ed.type==="attestation"?ed.att.form.length>0:true) : n===4?!!ed.owner : false;
+    return drawer({title:ed.id?"Edit Policy":"New Policy", sub:ed.isActive?`Active v${ed.version} — changes become v${ed.version+1}`:"Define what this policy governs and how it's met.", steps:["Policy Details","Policy Scope",cfgStep,"Ownership & Compliance","Review & Create"], step:ed.step, done:stepDone, onStep:n=>setE("step",n), body, onClose:()=>setEd(null), width:880,
       footer:<>
         <Btn ghost onClick={()=>ed.step>1?setE("step",ed.step-1):setEd(null)}>{ed.step>1?"Back":"Cancel"}</Btn>
         {ed.step<5?<Btn variant="primary" onClick={()=>setE("step",ed.step+1)}>Continue</Btn>:<>
@@ -14246,41 +14620,103 @@ const PolicyManager2View = ({onToast, onNav}) => {
       </>});
   };
 
+  // ═════ CREATE / EDIT A CUSTOM FRAMEWORK ═════
+  const openFwEditor = fw => setFwEd(fw ? {id:fw.id, step:1, name:fw.name, fullName:fw.fullName||"", type:fw.type, jurisdiction:fw.jurisdiction||"", owner:fw.owner||me, covers:[...fw.covers], arts:fw.arts.map((a,i)=>({...a, _old:i}))}
+    : {id:null, step:1, name:"", fullName:"", type:"Internal", jurisdiction:"", owner:me, covers:["ALL"], arts:[{ref:"1", t:"", ask:"", expect:"validation"}]});
+  const saveFw = () => {
+    if(!fwEd.name.trim()||!fwEd.arts.length||fwEd.arts.some(a=>!a.t.trim())){ onToast("Name the framework and every article","info"); return; }
+    const arts = fwEd.arts.map(({_old,...a})=>a.expect==="outside"?{ref:a.ref,t:a.t,ask:a.ask,out:a.out||"Another system"}:{ref:a.ref,t:a.t,ask:a.ask,expect:a.expect});
+    if(fwEd.id){
+      const fw = PM2_CUSTOM_FW.find(f=>f.id===fwEd.id);
+      const remap = {}; fwEd.arts.forEach((a,ni)=>{ if(a._old!=null) remap[a._old]=ni; });
+      Object.assign(fw, {name:fwEd.name.trim(), fullName:fwEd.fullName, type:fwEd.type, jurisdiction:fwEd.jurisdiction, owner:fwEd.owner, covers:fwEd.covers, arts});
+      pm2Set(s=>({...s, fwVer:(s.fwVer||0)+1, policies:s.policies.map(p=>({...p, articles:p.articles.map(x=>x.fw!==fw.id?x:(remap[x.i]!=null?{...x,i:remap[x.i]}:null)).filter(Boolean)}))}));
+      onToast(`${fw.name} saved`,"success"); setFwEd(null); setSelFw(fw.id); setTab("frameworks"); return;
+    }
+    const id = "cf-"+Date.now();
+    PM2_CUSTOM_FW.push({id, custom:true, name:fwEd.name.trim(), fullName:fwEd.fullName, type:fwEd.type, jurisdiction:fwEd.jurisdiction, owner:fwEd.owner, covers:fwEd.covers, created:pm2Today(), arts});
+    pm2Set(s=>({...s, fwVer:(s.fwVer||0)+1, adopted:{...s.adopted, [id]:{owner:fwEd.owner, at:pm2Today()}}}));
+    onToast(`${fwEd.name} created — now attach policies to its articles`,"success"); setFwEd(null); setSelFw(id); setTab("frameworks");
+  };
+  const renderFwEditor = () => {
+    const setF = (k,v) => setFwEd(e=>({...e,[k]:v}));
+    const setArt = (i,a) => setF("arts", fwEd.arts.map((x,j)=>j===i?a:x));
+    const mappedCount = i => fwEd.id ? st.policies.filter(p=>p.articles.some(x=>x.fw===fwEd.id&&x.i===fwEd.arts[i]._old)).length : 0;
+    let body;
+    if(fwEd.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:620}}>
+      {secHead("Framework details","Your own standard — an internal policy, a contract obligation or an industry code — built exactly like a regulation.")}
+      <div><label style={lbl}>Name <span style={{color:T.rose}}>*</span></label><input value={fwEd.name} onChange={e=>setF("name",e.target.value)} placeholder="e.g. Internal Data Standard" style={inp}/></div>
+      <div><label style={lbl}>Full name</label><input value={fwEd.fullName} onChange={e=>setF("fullName",e.target.value)} placeholder="e.g. J&J Internal Data Handling Standard v3" style={inp}/></div>
+      <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+        <div><label style={lbl}>Kind</label><select value={fwEd.type} onChange={e=>setF("type",e.target.value)} style={selStyle}>{["Internal","Contractual","Industry","Regional"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div><label style={lbl}>Applies where</label><input value={fwEd.jurisdiction} onChange={e=>setF("jurisdiction",e.target.value)} placeholder="e.g. Company-wide, EU subsidiaries" style={{...inStyle,width:240}}/></div>
+        <div><label style={lbl}>Owner</label>{userSel(fwEd.owner, v=>setF("owner",v))}</div>
+      </div>
+      <div><label style={lbl}>Data it covers</label>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>{["ALL",...Object.keys(PM2_CLASS_META)].map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={fwEd.covers.includes(c)} onChange={e=>setF("covers",e.target.checked?(c==="ALL"?["ALL"]:[...fwEd.covers.filter(x=>x!=="ALL"),c]):fwEd.covers.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{c==="ALL"?"All classified data":PM2_CLASS_META[c].label}</label>)}</div></div>
+    </div>;
+    if(fwEd.step===2) body = <>
+      {secHead("Articles","Each article states one requirement in plain language, and how it's meant to be met — which becomes the suggested type when you create a policy for it.")}
+      {fwEd.arts.map((a,i)=>{ const n=mappedCount(i); return (
+        <div key={i} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10,background:T.bgElevated}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input value={a.ref} onChange={e=>setArt(i,{...a,ref:e.target.value})} placeholder="Ref" style={{...inStyle,width:80}}/>
+            <input value={a.t} onChange={e=>setArt(i,{...a,t:e.target.value})} placeholder="Requirement title" style={{...inStyle,flex:"1 1 260px"}}/>
+            <select value={a.expect||(a.out?"outside":"validation")} onChange={e=>setArt(i,{...a,expect:e.target.value})} style={selStyle}>{["validation","enforcement","attestation","outside"].map(k=><option key={k} value={k}>{PM2_TYPE_META[k].label}</option>)}</select>
+            <button disabled={n>0} title={n?`${n} polic${n>1?"ies are":"y is"} attached — detach first`:"Remove"} onClick={()=>setF("arts",fwEd.arts.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:n?T.textMuted:T.rose,cursor:n?"not-allowed":"pointer",fontSize:11}}>Remove</button>
+          </div>
+          <textarea rows={2} value={a.ask} onChange={e=>setArt(i,{...a,ask:e.target.value})} placeholder="What it asks, in one plain sentence" style={{...inp,marginTop:8,resize:"vertical"}}/>
+          {(a.expect==="outside"||(!a.expect&&a.out))&&<input value={a.out||""} onChange={e=>setArt(i,{...a,out:e.target.value})} placeholder="Which system owns it (e.g. Vendor risk)" style={{...inp,marginTop:6}}/>}
+          {n>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{n} polic{n>1?"ies":"y"} attached</div>}
+        </div>); })}
+      <Btn small onClick={()=>setF("arts",[...fwEd.arts,{ref:String(fwEd.arts.length+1), t:"", ask:"", expect:"validation"}])}>+ Add article</Btn>
+    </>;
+    if(fwEd.step===3) body = <div style={{maxWidth:720}}>
+      {secHead("Review & Create", fwEd.id?"Save your changes. Policies stay attached to the articles you kept.":"Once created, open each article and create or attach the policies that meet it.")}
+      {card(<><div style={{fontSize:15,fontWeight:700,color:T.text}}>{fwEd.name||"Unnamed framework"}</div><div style={{fontSize:12,color:T.textSub,marginTop:2}}>{fwEd.fullName} · {fwEd.type} · {fwEd.jurisdiction||"—"} · owner {fwEd.owner}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{fwEd.covers.map(classChip)}</div></>)}
+      {secLabel(`Articles (${fwEd.arts.length})`)}
+      {fwEd.arts.map((a,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{refTag(a.ref||"—")}<span style={{flex:1,color:T.text}}>{a.t||<i style={{color:T.textMuted}}>untitled</i>}</span>{typePill(a.expect||(a.out?"outside":"validation"))}</div>)}
+    </div>;
+    return drawer({title:fwEd.id?"Edit Framework":"New Framework", sub:"A custom framework works exactly like a regulation — articles, policies, readiness.", steps:["Framework details","Articles","Review & Create"], step:fwEd.step, onStep:n=>setF("step",n), body, onClose:()=>setFwEd(null), width:820,
+      footer:<><Btn ghost onClick={()=>fwEd.step>1?setF("step",fwEd.step-1):setFwEd(null)}>{fwEd.step>1?"Back":"Cancel"}</Btn>{fwEd.step<3?<Btn variant="primary" onClick={()=>setF("step",fwEd.step+1)}>Continue</Btn>:<Btn variant="primary" onClick={saveFw}>{fwEd.id?"Save framework":"Create framework"}</Btn>}</>});
+  };
+
   // ═════ PAGE ═════
-  const waiting = pm2StatusPending.length + pm2EnfPending.length;
+  const waiting = pm2StatusPending.filter(r=>r.kind!=="pm2attestdue").length + pm2EnfPending.length;
   const activeN = st.policies.filter(p=>p.status==="Active").length;
   const summary = [
-    {l:"Frameworks adopted", v:adoptedFws.length, c:T.accent, go:"frameworks"},
+    {l:"Frameworks", v:adoptedFws.length, c:T.accent, go:"frameworks"},
     {l:"Active policies", v:`${activeN}/${livePols.length}`, c:T.green, go:"policies"},
     {l:"Open findings", v:openFindings.length, c:openFindings.length?T.rose:T.green, go:"findings"},
     {l:"Waiting on approval", v:waiting, c:waiting?T.amber:T.textMuted, go:"approvals"},
-    {l:"Evidence needed", v:evidenceNeeded.length, c:evidenceNeeded.length?T.violet:T.textMuted, go:"frameworks"},
+    {l:"Attestations due", v:attDue.length, c:attDue.length?typeColor("attestation"):T.textMuted, go:"approvals"},
   ];
-  const TABS = [{key:"frameworks",label:"Frameworks",badge:adoptedFws.length},{key:"policies",label:"Policies",badge:livePols.length},{key:"findings",label:"Findings",badge:openFindings.length||null},{key:"approvals",label:"Approvals",badge:waiting||null}];
+  const TABS = [{key:"frameworks",label:"Frameworks",badge:adoptedFws.length},{key:"policies",label:"Policies",badge:livePols.length},{key:"findings",label:"Findings",badge:openFindings.length||null},{key:"approvals",label:"Approvals",badge:(waiting+attDue.length)||null}];
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Policy Manager 2"}]}/>
       <div style={{flexShrink:0,display:"flex",gap:10,padding:"14px 28px 0",flexWrap:"wrap"}}>
         {summary.map(s=>(
-          <div key={s.l} onClick={()=>{setTab(s.go);setSelFw(null);setSelPol(null);}} style={{flex:"1 1 150px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
+          <div key={s.l} onClick={()=>{setTab(s.go);setSelFw(null);}} style={{flex:"1 1 150px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{s.l}</div>
             <div style={{fontSize:22,fontWeight:800,color:s.c,fontFamily:"'Geist Mono',monospace",marginTop:2}}>{s.v}</div>
           </div>))}
       </div>
       <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,display:"flex",paddingLeft:24,marginTop:10}}>
         {TABS.map(t=>{ const a=tab===t.key; return (
-          <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);setSelPol(null);}} style={{display:"flex",alignItems:"center",gap:7,padding:"11px 18px",background:"transparent",border:"none",borderBottom:`2.5px solid ${a?T.accent:"transparent"}`,color:a?T.accent:T.textMuted,fontSize:13,fontWeight:a?600:500,cursor:"pointer",marginBottom:-1}}>
+          <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);}} style={{display:"flex",alignItems:"center",gap:7,padding:"11px 18px",background:"transparent",border:"none",borderBottom:`2.5px solid ${a?T.accent:"transparent"}`,color:a?T.accent:T.textMuted,fontSize:13,fontWeight:a?600:500,cursor:"pointer",marginBottom:-1}}>
             {t.label}{t.badge!=null&&<span style={{minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:a?T.accent:T.bgElevated,color:a?"#fff":T.textSub}}>{t.badge}</span>}
           </button>); })}
       </div>
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {tab==="frameworks"&&(selFw?renderFwDetail():renderFrameworks())}
-        {tab==="policies"&&(selPol?renderPolicy():renderPolicyList())}
+        {tab==="policies"&&renderPolicies()}
         {tab==="findings"&&renderFindings()}
         {tab==="approvals"&&renderApprovals()}
       </div>
       {wiz&&renderWizard()}
       {ed&&renderEditor()}
+      {fwEd&&renderFwEditor()}
     </div>
   );
 };
@@ -45007,8 +45443,8 @@ const InboxView = ({onToast}) => {
   const statusReqs = useStatusReqs();
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
     id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||(r.kind||"").startsWith("pm2"))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||r.kind==="pm2policy")?"Policy":r.kind==="pm2exception"?"Exception":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
-    body:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
+    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="pm2attest"?"Attestation · Policy Manager 2":r.kind==="pm2attestdue"?"Attestation due · Policy Manager 2":r.kind==="pm2mapping"?"Article mapping · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||r.kind==="pm2policy"||r.kind==="pm2mapping")?"Policy":r.kind==="pm2exception"?"Exception":(r.kind==="pm2attest"||r.kind==="pm2attestdue")?"Attestation":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
+    body:r.kind==="pm2attestdue"?`Your attestation form is due — ${r.note||""}. Fill it in in Policy Manager 2.`:r.kind==="pm2attest"?`${r.requestedBy} submitted an attestation for your review.`:r.kind==="pm2mapping"?`A custom policy by ${r.requestedBy} claims to satisfy regulation articles — ${r.note||""}`:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
   // top-down deletion requests (tag/domain) → owner approval items
@@ -45167,6 +45603,9 @@ const InboxView = ({onToast}) => {
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review"){
       // Policy Manager 2 requests: resolve the shared request — Policy Manager 2 applies the decision.
+      // An attestation that is due is filled in, not approved — it only links to the form.
+      if(item.reqKind==="pm2attestdue")
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>Fill in and submit the form — it then goes to a reviewer.</span>{openIn("Fill in the form in Policy Manager 2","policymanager2")}</>;
       if((item.reqKind||"").startsWith("pm2")&&_pm2.approvalPolicy.sod&&item.requestedBy===meHandle)
         return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{openIn("Open in Policy Manager 2","policymanager2")}</>;
       if((item.reqKind||"").startsWith("pm2"))
