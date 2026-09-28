@@ -13494,7 +13494,7 @@ function pm2Sync(){
   if(_pm2Syncing) return; _pm2Syncing = true;
   try{
     const reqOf = id => id && _statusReqs.find(r=>r.id===id);
-    const decided = r => r && r.status!=="pending";
+    const decided = r => r && (r.status==="approved"||r.status==="rejected"); // a withdrawn request is simply gone
     const who = r => r.decidedBy || r.approver || "approver";
     let changed = false;
     let policies = _pm2.policies.map(p=>{
@@ -13589,6 +13589,10 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const [fill, setFill]       = useState(null);     // {polId, values}
   const [review, setReview]   = useState(null);     // {reqId, comment}
   const [openSub, setOpenSub] = useState(null);
+  const [confirm, setConfirm] = useState(null);     // {title, body, yesLabel, onYes, danger}
+  const [menu, setMenu]       = useState(null);     // which ⋮ menu is open
+  const [statusFilter, setStatusFilter] = useState("live");
+  const [hovPol, setHovPol]   = useState(null);
 
   // ── permissions ──
   const canEdit   = p => isAdmin || p.owner===me || (p.stewards||[]).includes(me);
@@ -13705,13 +13709,13 @@ const PolicyManager2View = ({onToast, onNav}) => {
   };
   const duplicateAsCustom = p => {
     const id = "p-cust-"+Date.now();
-    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (custom)`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null, submissions:[],
+    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (${p.source==="regulation"?"custom":"copy"})`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null, submissions:[],
       articles:p.articles.map(x=>({...x, ok:!!pm2Fw(x.fw)?.custom})), created:pm2Today(), owner:me, stewards:[...(p.stewards||[])],
       rules:(p.rules||[]).map((r,i)=>({...r, id:`${id}-r${i+1}`, conds:r.conds.map(c=>{ const {edit, ...rest}=c; return rest; })})),
       enf:p.enf?{...p.enf, assets:[...(p.enf.assets||[])]}:null, att:p.att?{...p.att, form:p.att.form.map(f=>({...f}))}:null,
-      history:[{when:pm2Today(), who:me, what:`Duplicated from the regulation policy "${p.name}" — regulation mappings need approval before they count`}]};
+      history:[{when:pm2Today(), who:me, what:`Duplicated from "${p.name}" — regulation mappings need approval before they count`}]};
     pm2Set(s=>({...s, policies:[...s.policies, copy]}));
-    onToast("Duplicated as a custom policy — edit it, then submit","success");
+    onToast(`Duplicated as a custom draft — edit it, then submit`,"success");
     setSelPol(id); setPdTab("overview"); setTimeout(()=>openEditor(copy),0);
   };
   const applyTplUpdate = p => {
@@ -13721,6 +13725,74 @@ const PolicyManager2View = ({onToast, onNav}) => {
   };
   const setAp = (path, v) => pm2Set(s=>{ const a={...s.approvalPolicy}; const [k1,k2]=path; a[k1]= k2?{...a[k1],[k2]:v}:v; return {...s, approvalPolicy:a}; });
   const openPolicy = id => { setTab("policies"); setSelFw(null); setSelPol(id); setPdTab("overview"); };
+
+  // ── The rest of CRUD. Every object can be created, read, changed and removed; each rule is stated where it applies.
+  const ask = (title, body, yesLabel, onYes, danger) => setConfirm({title, body, yesLabel, onYes, danger});
+  const cancelReq = id => srSet(prev=>prev.map(r=>r.id===id&&r.status==="pending"?{...r, status:"withdrawn", decidedBy:me}:r));
+  const canDelete = p => canSubmit(p) && ["Draft","Rejected","Retired"].includes(p.status);
+  const canFw = fw => isAdmin || st.adopted[fw.id]?.owner===me || fw.owner===me;
+  const withdrawRequest = p => {
+    const r = pendingReqOf(p); if(!r) return;
+    updPol(p.id, x=> x.draft ? addHist({...x, draft:null}, `Withdrew v${x.draft.version} — v${x.version} keeps running`) : addHist({...x, status:"Draft", reqId:null}, "Withdrew the approval request — back to Draft"));
+    cancelReq(r.id); onToast("Request withdrawn — the policy is editable again","info");
+  };
+  const retirePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Retired"}, "Retired — stopped running")); onToast(`"${p.name}" retired — restore it any time`,"info"); };
+  const restorePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Draft", reqId:null}, "Restored as a draft — submit it to run again")); setSelPol(p.id); onToast("Restored as a draft","success"); };
+  const deletePolicy = p => {
+    [p.reqId, p.draft?.reqId, p.mapReqId, ...(p.submissions||[]).map(s=>s.reqId)].filter(Boolean).forEach(cancelReq);
+    statusReqs.filter(r=>r.targetId===p.id&&r.status==="pending").forEach(r=>cancelReq(r.id));
+    pm2Set(s=>({...s, policies:s.policies.filter(x=>x.id!==p.id), exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>!k.startsWith(p.id+"|")))}));
+    setSelPol(null); onToast(`"${p.name}" deleted`,"info");
+  };
+  const unmap = (p, fwId, i) => { const f=pm2Fw(fwId); updPol(p.id, x=>addHist({...x, articles:x.articles.filter(a=>!(a.fw===fwId&&a.i===i))}, `Detached from ${f?.name} ${f?.arts[i]?.ref}`)); onToast("Detached from the article","info"); };
+  const withdrawSubmission = (p, sb) => { updPol(p.id, x=>addHist({...x, submissions:x.submissions.filter(s=>s.id!==sb.id)}, "Withdrew a pending submission")); if(sb.reqId) cancelReq(sb.reqId); setTimeout(pm2Sync,0); onToast("Submission withdrawn — the form is due again","info"); };
+  const revokeException = f => { pm2Set(s=>({...s, exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>k!==f.key))})); onToast("Exception revoked — the finding counts again","info"); };
+  const removeFramework = fw => {
+    pm2Set(s=>{
+      const adopted = {...s.adopted}; delete adopted[fw.id];
+      const policies = s.policies.map(p=>{
+        if(!p.articles.some(a=>a.fw===fw.id)) return p;
+        const rest = p.articles.filter(a=>a.fw!==fw.id);
+        const orphan = p.source==="regulation" && !rest.some(a=>!pm2Fw(a.fw)?.custom);
+        return {...p, articles:rest, status:orphan&&p.status!=="Retired"?"Retired":p.status,
+          history:[{when:pm2Today(), who:me, what:orphan?`Retired — ${fw.name} was removed and no other regulation uses it`:`Detached from ${fw.name}`}, ...(p.history||[])]};
+      });
+      return {...s, adopted, policies, fwVer:(s.fwVer||0)+1};
+    });
+    if(fw.custom){ const i=PM2_CUSTOM_FW.findIndex(f=>f.id===fw.id); if(i>=0) PM2_CUSTOM_FW.splice(i,1); }
+    setSelFw(null); onToast(fw.custom?`${fw.name} deleted`:`${fw.name} removed — adopt it again any time`,"info");
+  };
+  const artCount = p => p.articles.length;
+  const policyMenu = p => {
+    const pr = pendingReqOf(p);
+    return [
+      {label:"Open", on:()=>openPolicy(p.id)},
+      {label:"Edit", on:()=>openEditor(p), disabled:!canEdit(p)?`Only ${p.owner} or a steward can edit it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
+      {label:p.source==="regulation"?"Duplicate as custom":"Duplicate", on:()=>duplicateAsCustom(p)},
+      "-",
+      (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:null},
+      pr&&{label:"Withdraw approval request", on:()=>withdrawRequest(p), disabled:(pr.requestedBy===me||canSubmit(p))?null:"Only the requester or the owner can withdraw it"},
+      p.status==="Active"&&p.type!=="attestation"&&{label:"Run now", on:()=>runNow(p)},
+      p.status==="Active"&&{label:"Retire", on:()=>ask(`Retire "${p.name}"?`, `It stops running. The ${artCount(p)} article${artCount(p)===1?"":"s"} it satisfies will read "No policy" unless another policy covers ${artCount(p)===1?"it":"them"}. You can restore it later.`, "Retire", ()=>retirePolicy(p)), disabled:!canSubmit(p)?`Only the owner (${p.owner}) retires it`:null},
+      p.status==="Retired"&&{label:"Restore as draft", on:()=>restorePolicy(p), disabled:!canSubmit(p)?`Only the owner (${p.owner}) restores it`:null},
+      "-",
+      {label:"Delete", danger:true, on:()=>ask(`Delete "${p.name}"?`, `This permanently removes the policy and its history${p.type==="attestation"?", including its submissions":""}. Articles it covered will read "No policy". It can't be undone.`, "Delete", ()=>deletePolicy(p), true),
+        disabled:!canSubmit(p)?`Only the owner (${p.owner}) or an admin deletes it`:(p.status==="Active"||p.status==="In review")?"Retire it (or withdraw its request) first — a running policy can't be deleted":null},
+    ];
+  };
+  const fwMenu = fw => {
+    const attached = st.policies.filter(p=>p.articles.some(a=>a.fw===fw.id));
+    const orphans = attached.filter(p=>p.source==="regulation"&&!p.articles.some(a=>a.fw!==fw.id&&!pm2Fw(a.fw)?.custom));
+    const who = canFw(fw)?null:`Only the framework owner (${st.adopted[fw.id]?.owner||fw.owner}) or an admin`;
+    return [
+      {label:"Open", on:()=>setSelFw(fw.id)},
+      fw.custom ? {label:"Edit framework", on:()=>openFwEditor(fw), disabled:who} : {label:"Review its policies", on:()=>startAdopt(fw.id,2), disabled:who},
+      "-",
+      fw.custom
+        ? {label:"Delete framework", danger:true, disabled:who, on:()=>ask(`Delete ${fw.name}?`, `Its ${fw.arts.length} articles are removed. The ${attached.length} polic${attached.length===1?"y":"ies"} attached to it stay, but lose these mappings. It can't be undone.`, "Delete", ()=>removeFramework(fw), true)}
+        : {label:"Remove framework", danger:true, disabled:who, on:()=>ask(`Remove ${fw.name}?`, `EDG stops tracking ${fw.name} readiness. ${orphans.length} regulation polic${orphans.length===1?"y":"ies"} only ${fw.name} uses will be retired; policies shared with other frameworks keep running, and custom policies stay. You can adopt it again later.`, "Remove", ()=>removeFramework(fw), true)},
+    ];
+  };
 
   // ── small render helpers (plain functions — nothing remounts) ──
   const pill = (c, text, title) => <span title={title} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${c}15`,color:c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{text}</span>;
@@ -13784,6 +13856,46 @@ const PolicyManager2View = ({onToast, onNav}) => {
     </div>
   );
   const valText = (f, v) => f.type==="yesno" ? (v==="yes"?"Yes":v==="no"?"No":"—") : (v||"—");
+  // ⋮ menu — every action for an object in one place. A disabled item says why.
+  const menuBtn = (id, items, align) => (
+    <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+      <button onClick={()=>setMenu(menu===id?null:id)} title="Actions" style={{width:26,height:26,borderRadius:6,background:menu===id?T.bgHover:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontSize:15,lineHeight:1,display:"flex",alignItems:"center",justifyContent:"center"}}>⋮</button>
+      {menu===id&&<>
+        <div onClick={()=>setMenu(null)} style={{position:"fixed",inset:0,zIndex:60}}/>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="left"?"left":"right"]:0,width:250,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:61,padding:"4px 0"}}>
+          {items.filter(Boolean).map((it,i,arr)=> it==="-" ? (i>0&&i<arr.length-1&&arr[i-1]!=="-"?<div key={i} style={{borderTop:`1px solid ${T.border}`,margin:"4px 0"}}/>:null) : (
+            <button key={i} disabled={!!it.disabled} onClick={()=>{setMenu(null); it.on();}}
+              style={{width:"100%",display:"block",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:it.disabled?"not-allowed":"pointer",fontSize:12.5,color:it.disabled?T.textMuted:it.danger?T.rose:T.text}}
+              onMouseEnter={e=>{if(!it.disabled)e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover;}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              {it.label}{it.disabled&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:1,lineHeight:1.4}}>{it.disabled}</div>}
+            </button>))}
+        </div></>}
+    </div>);
+  // Where a policy is in its life, and who acts next.
+  const lifecycle = p => {
+    const pr = pendingReqOf(p); const steps = ["Draft","In review","Active"];
+    const at = p.status==="Rejected"?0 : p.status==="Retired"?-1 : steps.indexOf(p.status);
+    let next;
+    if(p.status==="Draft") next = <>Next: <b>{canSubmit(p)?"you submit it":`${p.owner} submits it`}</b>. {routeText(p.type)}.</>;
+    else if(p.status==="Rejected") next = <>Rejected. Next: <b>{p.owner}</b> edits it and submits again — or deletes it.</>;
+    else if(p.status==="In review") next = <>Next: <b>{pr?.approver||"the approver"}</b> approves or rejects it. Nothing runs until then{(pr?.requestedBy===me||canSubmit(p))?" — you can withdraw the request to make changes":""}.</>;
+    else if(p.status==="Retired") next = <>Not running. Restore it as a draft to use it again, or delete it.</>;
+    else if(p.draft) next = <>v{p.version} is running. v{p.draft.version} waits for <b>{pr?.approver||"the approver"}</b>.</>;
+    else if(p.type==="validation"){ const n=evalOf(p).findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length; next = n?<>Running. <b>{n} finding{n>1?"s":""}</b> open — stewards ({(p.stewards||[]).join(", ")||p.owner}) fix them or request an exception.</>:<>Running — nothing found.</>; }
+    else if(p.type==="enforcement"){ const tg=evalOf(p).targets; const n=tg.filter(t=>pm2TargetStatus(p.id,t.asset.name)!=="approved").length; next = n?<>Next: <b>{n} table owner{n>1?"s":""}</b> approve before CDP acts on their tables.</>:<>Running on {tg.length} table{tg.length===1?"":"s"} through CDP.</>; }
+    else { const s=pm2AttState(p); next = s.state==="review"?<>Next: <b>{s.pending.reviewer}</b> reviews the submitted form.</>:["due","overdue","rejected"].includes(s.state)?<>Next: <b>{pm2Assignee(p)}</b> fills in the form{s.state==="overdue"?` — overdue since ${s.due}`:""}.</>:<>Evidenced until {s.due}. {pm2Assignee(p)} is reminded {p.att.remind} days before.</>; }
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginTop:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          {steps.map((s,i)=>{ const done=at>i, on=at===i;
+            return <React.Fragment key={s}>{i>0&&<span style={{width:18,height:2,background:done||on?T.accent:T.border}}/>}
+              <span style={{fontSize:11,fontWeight:on?700:500,padding:"3px 10px",borderRadius:99,background:on?(p.status==="Rejected"?T.rose:T.accent):done?`${T.accent}18`:"transparent",color:on?"#fff":done?T.accent:T.textMuted,border:`1px solid ${on?(p.status==="Rejected"?T.rose:T.accent):done?T.accent+"40":T.border}`}}>{on&&p.status==="Rejected"?"Rejected":s}</span></React.Fragment>; })}
+          <span style={{width:18,height:2,background:T.border}}/>
+          <span style={{fontSize:11,fontWeight:at===-1?700:500,padding:"3px 10px",borderRadius:99,background:at===-1?T.textMuted:"transparent",color:at===-1?"#fff":T.textMuted,border:`1px solid ${T.border}`}}>Retired</span>
+        </div>
+        <div style={{fontSize:12,color:T.textSub,flex:"1 1 300px"}}>{next}</div>
+      </div>);
+  };
 
   const pad = {flex:1,overflowY:"auto",padding:"20px 28px 48px"};
   const policyRow = (p, fw, mark) => {
@@ -13810,6 +13922,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:15,fontWeight:800,color:T.text}}>{fw.name}</span>{pill(fwTypeColor(fw.type), fw.custom?"Custom":fw.type)}
           <span style={{marginLeft:"auto",fontSize:18,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:scoreColor(s)}}>{s}%</span>
+          {menuBtn("fw:"+fw.id, fwMenu(fw))}
         </div>
         <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"8px 0"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
         <div style={{fontSize:11.5,color:T.textSub}}>{cnt.met||0} of {idx.length} articles met · owner {st.adopted[fw.id]?.owner||fw.owner}</div>
@@ -13877,9 +13990,35 @@ const PolicyManager2View = ({onToast, onNav}) => {
             <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:28,fontWeight:800,color:scoreColor(s),fontFamily:"'Geist Mono',monospace"}}>{s}%</span><span style={{fontSize:11,color:T.textMuted}}>readiness</span></div>
             <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden",margin:"4px 0 6px"}}><div style={{width:`${s}%`,height:"100%",background:scoreColor(s)}}/></div>
             <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.5}}>{inIdx.filter(i=>artState(fw,i)==="met").length} of {inIdx.length} articles met. Data-governance readiness — not a certification.</div>
-            <div style={{marginTop:10,display:"flex",gap:6}}>{fw.custom?<Btn small onClick={()=>openFwEditor(fw)}>Edit framework</Btn>:<Btn small onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn>}</div>
+            <div style={{marginTop:10,display:"flex",gap:6,alignItems:"center"}}>{fw.custom?<Btn small onClick={()=>openFwEditor(fw)}>Edit framework</Btn>:<Btn small onClick={()=>startAdopt(fw.id,2)}>Review its policies</Btn>}{menuBtn("fwd:"+fw.id, fwMenu(fw))}</div>
           </div> : <Btn variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt {fw.name}</Btn>}
         </div>)}
+        {adopted&&(()=>{
+          // What stands between this framework and "Met" — each line goes where the work is.
+          const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
+          const noPol = inIdx.filter(i=>artState(fw,i)==="uncovered");
+          const drafts = linked.filter(p=>p.status==="Draft"||p.status==="Rejected");
+          const review = linked.filter(p=>p.status==="In review");
+          const tables = linked.filter(p=>p.status==="Active"&&p.type==="enforcement").reduce((n,p)=>n+evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw)&&pm2TargetStatus(p.id,t.asset.name)!=="approved").length,0);
+          const forms = linked.filter(p=>p.status==="Active"&&p.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p).state));
+          const inRev = linked.filter(p=>p.status==="Active"&&p.type==="attestation"&&pm2AttState(p).state==="review");
+          const finds = allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name)).length;
+          const line = (n, text, go, c) => n>0 && <div key={text} onClick={go} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px dashed ${T.border}`,cursor:"pointer",fontSize:12.5}}>
+            <span style={{minWidth:26,textAlign:"center",fontWeight:800,fontFamily:"'Geist Mono',monospace",color:c}}>{n}</span><span style={{flex:1,color:T.text}}>{text}</span><span style={{color:T.accent,fontSize:12}}>Go ›</span></div>;
+          const items = [
+            line(noPol.length, `article${noPol.length>1?"s have":" has"} no policy — ${fw.custom?"create or map one on the article below":"review the framework's policies to switch one on"}`, ()=>fw.custom?null:startAdopt(fw.id,2), T.rose),
+            line(drafts.length, `polic${drafts.length>1?"ies are drafts":"y is a draft"} — the owner submits ${drafts.length>1?"them":"it"}`, ()=>openPolicy(drafts[0].id), T.textSub),
+            line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
+            line(tables, `table${tables>1?"s wait":" waits"} for its owner to approve enforcement`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
+            line(forms.length, `attestation form${forms.length>1?"s are":" is"} due — ${forms.map(p=>pm2Assignee(p)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")} fills ${forms.length>1?"them":"it"} in`, ()=>{openPolicy(forms[0].id);setPdTab("activity");}, typeColor("attestation")),
+            line(inRev.length, `submitted form${inRev.length>1?"s wait":" waits"} for review`, ()=>{openPolicy(inRev[0].id);setPdTab("activity");}, T.amber),
+            line(finds, `open finding${finds>1?"s":""} — stewards fix them or request exceptions`, ()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}, T.rose),
+          ].filter(Boolean);
+          return card(<>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>What's left to reach Met</div>
+            {items.length?items:<div style={{fontSize:12.5,color:T.green,padding:"6px 0"}}>Nothing — every article EDG can act on is met.</div>}
+          </>,{marginTop:10});
+        })()}
         {card(<div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
           <b style={{color:T.text}}>How to read this page. </b>Each article says what it asks. Under it are the policies that satisfy it — {fw.custom?"any policy you map here counts":<><b>regulation policies</b> ship with {fw.name}; <b>your interpretation</b> is a custom policy you mapped, and it counts once approved</>}. An article is <span style={{color:T.green,fontWeight:700}}>met</span> when every policy under it is: validation — no open findings; enforcement — running on every table; attestation — an approved form that hasn't expired.
         </div>,{marginTop:10,background:T.bgElevated})}
@@ -13901,7 +14040,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {pols.map(p=>{ const link=p.articles.find(x=>x.fw===fw.id&&x.i===i); const mine=p.source==="custom"&&!fw.custom;
                     return (<div key={p.id}>
-                      {policyRow(p,fw, mine ? (link.ok ? pill(T.accent,"Your interpretation","A custom policy mapped to this article — approved") : pill(T.amber,"Mapping awaiting approval","Doesn't count until the mapping is approved")) : null)}
+                      {policyRow(p,fw, <>{mine ? (link.ok ? pill(T.accent,"Your interpretation","A custom policy mapped to this article — approved") : pill(T.amber,"Mapping awaiting approval","Doesn't count until the mapping is approved")) : null}
+                        {(fw.custom||mine)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} title="Detach from this article" style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Detach</button>}</>)}
                       <div style={{margin:"4px 0 0 10px",fontSize:11.5,color:T.textSub}}>{p.type==="enforcement"?enfText(p):p.purpose}</div>
                       {p.type==="attestation"&&p.status==="Active"&&(()=>{ const as=pm2AttState(p); const who=pm2Assignee(p);
                         return <div style={{margin:"6px 0 0 10px",display:"flex",gap:8,alignItems:"center",fontSize:11.5,color:T.textSub}}>
@@ -13933,8 +14073,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
   // ═════ POLICIES — the original Policy Manager layout: tree on the left, detail on the right ═════
   const renderPolicies = () => {
     const ql = polQ.toLowerCase();
-    const list = st.policies.filter(p=>p.status!=="Retired"||typeFilter==="retired")
-      .filter(p=>typeFilter==="all"||typeFilter==="retired"?true:p.type===typeFilter)
+    const list = st.policies.filter(p=>statusFilter==="live"?p.status!=="Retired":p.status===statusFilter)
+      .filter(p=>typeFilter==="all"||p.type===typeFilter)
       .filter(p=>!ql||p.name.toLowerCase().includes(ql));
     const groups = [{k:"regulation", l:"Regulation policies", hint:"Shipped with a regulation — rules locked"}, {k:"custom", l:"Custom policies", hint:"Built by your organisation"}];
     const sel = st.policies.find(p=>p.id===selPol);
@@ -13954,9 +14094,14 @@ const PolicyManager2View = ({onToast, onNav}) => {
               </div>
             </div>
             <input value={polQ} onChange={e=>setPolQ(e.target.value)} placeholder="Search policies…" style={{width:"100%",padding:"7px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box",marginBottom:7}}/>
-            <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{...selStyle,width:"100%"}}>
-              <option value="all">All types</option><option value="validation">Validation</option><option value="enforcement">Enforcement</option><option value="attestation">Attestation</option><option value="retired">Include retired</option>
-            </select>
+            <div style={{display:"flex",gap:6}}>
+              <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)} style={{...selStyle,flex:1,minWidth:0}}>
+                <option value="all">All types</option><option value="validation">Validation</option><option value="enforcement">Enforcement</option><option value="attestation">Attestation</option>
+              </select>
+              <select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)} style={{...selStyle,flex:1,minWidth:0}}>
+                <option value="live">Not retired</option>{["Draft","In review","Active","Rejected","Retired"].map(s=><option key={s} value={s}>{s} ({st.policies.filter(p=>p.status===s).length})</option>)}
+              </select>
+            </div>
           </div>
           <div style={{flex:1,overflowY:"auto",minHeight:0}}>
             {groups.map(g=>{ const rows=list.filter(p=>p.source===g.k); const exp=expGrp[g.k];
@@ -13967,13 +14112,14 @@ const PolicyManager2View = ({onToast, onNav}) => {
                   <span style={{flex:1,fontSize:12,fontWeight:600,color:T.textSub}}>{g.l}</span>
                   <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{rows.length}</span>
                 </button>
-                {exp&&rows.map(p=>{ const on=selPol===p.id; const h=polHealth(p);
-                  return (<button key={p.id} onClick={()=>{setSelPol(p.id);setPdTab("overview");setFill(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:7,padding:"6px 8px 6px 28px",background:on?T.accentDim:"transparent",border:"none",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`,cursor:"pointer",textAlign:"left"}}
-                    onMouseEnter={e=>{if(!on)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!on)e.currentTarget.style.background="transparent";}}>
+                {exp&&rows.length===0&&<div style={{padding:"4px 10px 8px 28px",fontSize:11,color:T.textMuted}}>{g.k==="custom"?<>None yet — <span onClick={()=>openEditor(null)} style={{color:T.accent,cursor:"pointer"}}>create one</span></>:"None match the filters"}</div>}
+                {exp&&rows.map(p=>{ const on=selPol===p.id; const h=polHealth(p); const hov=hovPol===p.id||menu==="pl:"+p.id;
+                  return (<div key={p.id} onClick={()=>{setSelPol(p.id);setPdTab("overview");setFill(null);}} onMouseEnter={()=>setHovPol(p.id)} onMouseLeave={()=>setHovPol(null)}
+                    style={{display:"flex",alignItems:"center",gap:7,padding:"4px 6px 4px 28px",background:on?T.accentDim:hov?T.bgHover:"transparent",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`,cursor:"pointer",minHeight:28}}>
                     <span title={PM2_TYPE_META[p.type].label} style={{width:8,height:8,borderRadius:"50%",background:typeColor(p.type),flexShrink:0}}/>
                     <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                    {p.status!=="Active"?<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700}}>{p.status}</span>:["findings","pending","evidence","review2"].includes(h.state)&&<span style={{width:6,height:6,borderRadius:"50%",background:ART_META[h.state].c}}/>}
-                  </button>); })}
+                    {hov ? menuBtn("pl:"+p.id, policyMenu(p)) : p.status!=="Active"?<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700}}>{p.status}</span>:["findings","pending","evidence","review2"].includes(h.state)&&<span style={{width:6,height:6,borderRadius:"50%",background:ART_META[h.state].c}}/>}
+                  </div>); })}
               </div>); })}
           </div>
           <div style={{padding:"8px 12px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap"}}>
@@ -14096,7 +14242,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
             <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer"}}>
               <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
               <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
-              {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+{pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+              {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?", "The reviewer's request is cancelled and the form is due again.", "Withdraw", ()=>withdrawSubmission(p,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
             </div>
             {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
               {p.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
@@ -14111,7 +14258,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
       </>;
     }
     if(pdTab==="history") body = <>
-      {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
+      {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:r.status==="withdrawn"?T.textMuted:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
       {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
     </>;
     return (
@@ -14121,20 +14268,22 @@ const PolicyManager2View = ({onToast, onNav}) => {
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:19,fontWeight:800,color:T.text}}>{p.name}</span>{pill(statusColor(p.status),p.status)}{typePill(p.type)}{srcPill(p)}</div>
             <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>v{p.version}{p.draft?` · v${p.draft.version} in review`:""} · {p.category||"No category"} · {p.source==="regulation"?`from the "${PM2_TPL[p.template].name}" template`:p.basedOn?`duplicated from ${st.policies.find(x=>x.id===p.basedOn)?.name||"a regulation policy"}`:"custom policy"}</div>
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {canEdit(p)&&p.status!=="Retired"&&!p.draft&&p.status!=="In review"&&<Btn small onClick={()=>openEditor(p)}>Edit</Btn>}
-            {p.source==="regulation"&&<Btn small ghost onClick={()=>duplicateAsCustom(p)}>Duplicate as custom</Btn>}
-            {(p.status==="Draft"||p.status==="Rejected")&&(canSubmit(p)?<Btn small variant="primary" onClick={()=>submitPolicy(p.id)}>Submit for approval</Btn>:<span style={{fontSize:11,color:T.textMuted,alignSelf:"center"}}>Only the owner ({p.owner}) submits</span>)}
-            {p.status==="Active"&&p.type!=="attestation"&&<Btn small onClick={()=>runNow(p)}>Run now</Btn>}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            {/* One primary action — whatever moves this policy forward right now. */}
+            {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>submitPolicy(p.id)}>Submit for approval</Btn>}
+            {pr&&canDecide(pr)&&<Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn>}
+            {pr&&!canDecide(pr)&&(pr.requestedBy===me||canSubmit(p))&&<Btn small onClick={()=>withdrawRequest(p)}>Withdraw request</Btn>}
             {canFill&&!fill&&<Btn small variant="primary" onClick={()=>{setPdTab("activity");setFill({polId:p.id,values:{}});}}>Fill in the form</Btn>}
-            {p.status==="Active"&&canSubmit(p)&&<Btn small ghost onClick={()=>{updPol(p.id,x=>addHist({...x,status:"Retired"},"Retired")); setSelPol(null); onToast("Policy retired — the articles it covered now read 'No policy'","info");}}>Retire</Btn>}
+            {p.status==="Retired"&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>restorePolicy(p)}>Restore as draft</Btn>}
+            {canEdit(p)&&p.status!=="Retired"&&!pr&&<Btn small onClick={()=>openEditor(p)}>Edit</Btn>}
+            {menuBtn("pd:"+p.id, policyMenu(p))}
           </div>
         </div>
-        {pr&&card(<div style={{fontSize:12,color:T.text}}>{p.draft?<>Version {p.draft.version} is <b>in review with {pr.approver}</b>. Version {p.version} keeps running until it's approved.</>:<>Waiting for <b>{pr.approver}</b> to approve. Nothing runs until then.</>}
-          {canDecide(pr)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></span>}</div>,{marginTop:12,borderColor:T.amber+"60",background:`${T.amber}0c`})}
+        {lifecycle(p)}
+        {pr&&canDecide(pr)&&card(<div style={{fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>{pr.requestedBy}</b> asks you to approve {p.draft?`v${p.draft.version} of this policy`:"this policy"} — “{pr.note}”.</span>
+          <Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn><Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></div>,{marginTop:10,borderColor:T.amber+"60",background:`${T.amber}0c`})}
         {upd&&!p.draft&&card(<div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",fontSize:12,color:T.text}}><span style={{flex:1}}><b>Update available — template v{upd.version}.</b> {upd.changelog} Nothing changes until you review and apply it.</span>{canSubmit(p)&&<Btn small variant="primary" onClick={()=>applyTplUpdate(p)}>Review & apply</Btn>}</div>,{marginTop:12,borderColor:T.blue+"60",background:`${T.blue}0c`})}
-        {pendMaps>0&&card(<div style={{fontSize:12,color:T.text}}>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq?.approver||ap.mapping.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>,{marginTop:12,borderColor:T.amber+"60",background:`${T.amber}0c`})}
-        {p.status==="Rejected"&&card(<div style={{fontSize:12,color:T.text}}>Rejected. Edit it and submit again, or retire it.</div>,{marginTop:12,borderColor:T.rose+"50"})}
+        {pendMaps>0&&card(<div style={{fontSize:12,color:T.text}}>{mapReq&&mapReq.status==="pending"?<>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.</>:<>{pendMaps} regulation article mapping{pendMaps>1?"s go":" goes"} to {ap.mapping.approver} for approval once the policy is submitted — {pendMaps>1?"they don't":"it doesn't"} count until then.</>}{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>,{marginTop:12,borderColor:T.amber+"60",background:`${T.amber}0c`})}
         <div style={{margin:"16px 0 14px"}}><Tabs2 pill tabs={tabs} active={pdTab} onChange={setPdTab}/></div>
         {body}
       </div>
@@ -14154,7 +14303,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
           <div style={{fontSize:12.5,color:T.text}}>{f.msg} <span style={{fontSize:10.5,color:T.textMuted}}>· {f.severity}</span></div>
           {!compact&&<div onClick={()=>openPolicy(f.pol.id)} style={{fontSize:11,color:T.accent,cursor:"pointer",marginTop:2}}>{f.pol.name} · steward {(f.pol.stewards||[])[0]||f.pol.owner}</div>}
           <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`, T.rose)}</span>)}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>Internal policy — no article</span>}</div>
-          {e&&<div style={{fontSize:11,marginTop:5,color:e.status==="accepted"?T.green:e.status==="rejected"?T.rose:T.amber}}>{e.status==="accepted"?`Exception accepted until ${e.until} by ${e.decidedBy}`:e.status==="rejected"?`Exception rejected by ${e.decidedBy}`:`Exception requested — waiting on ${e.approver}`} · “{e.reason}”</div>}
+          {e&&<div style={{fontSize:11,marginTop:5,color:e.status==="accepted"?T.green:e.status==="rejected"?T.rose:T.amber}}>{e.status==="accepted"&&(isAdmin||f.pol.owner===me)&&<button onClick={()=>ask("Revoke this exception?", `The finding on ${f.asset.name} counts against readiness again.`, "Revoke", ()=>revokeException(f))} style={{fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,marginRight:8}}>Revoke</button>}{e.status==="accepted"?`Exception accepted until ${e.until} by ${e.decidedBy}`:e.status==="rejected"?`Exception rejected by ${e.decidedBy}`:`Exception requested — waiting on ${e.approver}`} · “{e.reason}”</div>}
           {open&&<div style={{display:"flex",gap:8,marginTop:8}}>
             <input value={excDraft.reason} onChange={e2=>setExcDraft(d=>({...d,reason:e2.target.value}))} placeholder="Why is this acceptable, and what compensates for it?" style={{...inStyle,flex:1}}/>
             <Btn small ghost onClick={()=>setExcDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>excDraft.reason.trim()&&requestException(f,excDraft.reason.trim())}>Send</Btn></div>}
@@ -14244,7 +14393,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
           </>)}
         </div>
         {decided.length>0&&<>{secLabel("Recently decided")}
-          {decided.map(r=><div key={r.id} style={{display:"flex",gap:10,alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}>{pill(r.status==="approved"?T.green:T.rose, r.status)}<span style={{color:T.text,flex:1}}>{r.name}</span><span style={{color:T.textMuted}}>{r.requestedBy} → {r.decidedBy||r.approver}</span></div>)}
+          {decided.map(r=><div key={r.id} style={{display:"flex",gap:10,alignItems:"center",fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}>{pill(r.status==="approved"?T.green:r.status==="withdrawn"?T.textMuted:T.rose, r.status)}<span style={{color:T.text,flex:1}}>{r.name}</span><span style={{color:T.textMuted}}>{r.requestedBy} → {r.decidedBy||r.approver}</span></div>)}
         </>}
       </div>
     );
@@ -14284,7 +14433,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const routeText = (type, n) => {
     if(type==="validation"&&ap.activation.autoValidation) return <span style={{color:T.green}}>Active as soon as it's submitted — validation changes no data</span>;
     const who = pm2Approver(ap.activation.approver, me);
-    return <span>Goes to <b>{who}</b> for approval{type==="enforcement"?<>, then {n!=null?`${n} table owner${n===1?"":"s"}`:"each table owner"} approve before CDP acts</>:type==="attestation"?", then the form is assigned and comes due on its schedule":""}</span>;
+    return <span>Goes to <b>{who}</b> for approval{type==="enforcement"?<>, then {n!=null&&n!==1?`${n} table owners approve`:n===1?"1 table owner approves":"each table owner approves"} before CDP acts</>:type==="attestation"?", then the form is assigned and comes due on its schedule":""}</span>;
   };
   const enfEditor = (e, setEnf, locked, floor) => (
     <div style={{display:"flex",flexDirection:"column",gap:14,maxWidth:640}}>
@@ -14694,7 +14843,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const TABS = [{key:"frameworks",label:"Frameworks",badge:adoptedFws.length},{key:"policies",label:"Policies",badge:livePols.length},{key:"findings",label:"Findings",badge:openFindings.length||null},{key:"approvals",label:"Approvals",badge:(waiting+attDue.length)||null}];
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Policy Manager 2"}]}/>
+      <Topbar breadcrumb={[{label:"Policy Manager 2"}]} actions={<><Btn small ghost icon={Ic.plus(11)} onClick={()=>openFwEditor(null)}>New framework</Btn><Btn small variant="primary" icon={Ic.plus(11)} onClick={()=>openEditor(null)}>New policy</Btn></>}/>
       <div style={{flexShrink:0,display:"flex",gap:10,padding:"14px 28px 0",flexWrap:"wrap"}}>
         {summary.map(s=>(
           <div key={s.l} onClick={()=>{setTab(s.go);setSelFw(null);}} style={{flex:"1 1 150px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 14px",cursor:"pointer"}}>
@@ -14717,6 +14866,16 @@ const PolicyManager2View = ({onToast, onNav}) => {
       {wiz&&renderWizard()}
       {ed&&renderEditor()}
       {fwEd&&renderFwEditor()}
+      {confirm&&<>
+        <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
+        <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{confirm.title}</div>
+          <div style={{fontSize:12.5,color:T.textSub,marginTop:8,lineHeight:1.6}}>{confirm.body}</div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}>
+            <Btn ghost onClick={()=>setConfirm(null)}>Cancel</Btn>
+            <Btn variant={confirm.danger?"danger":"primary"} onClick={()=>{ const f=confirm.onYes; setConfirm(null); f(); }}>{confirm.yesLabel}</Btn>
+          </div>
+        </div></>}
     </div>
   );
 };
