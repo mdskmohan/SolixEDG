@@ -35672,7 +35672,8 @@ const SL_MODELS = [
   {id:"mdl_commerce", name:"Commerce Revenue", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
    status:"Approved", entityIds:["e_order","e_customer"], targets:["ossie","dbt","snowflake","powerbi"], icon:"∑", color:"#e11d48",
    owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue","KPI"], terms:["Customer Lifetime Value"],
-   lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item"},
+   lastPublished:"2026-09-02", created:"2026-06-11", sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item",
+         connections:{dbt:"dbt Cloud", snowflake:"Snowflake DWH", powerbi:"Power BI Service"}},
    desc:"Order-grain revenue and customer value for the commerce domain. The model every finance and growth dashboard should be reading from."},
   {id:"mdl_product", name:"Product Engagement", domain:"Product", owner:"alex.wu", steward:"alex.wu",
    status:"Approved", entityIds:["e_customer"], targets:["dbt","databricks"],
@@ -37608,6 +37609,15 @@ const slOssieValidate = (doc) => {
 //    carries the same metric written for every platform that will read it. A dialect
 //    is only emitted where the expression genuinely differs — the same string repeated
 //    under three headings is padding, not portability.
+// Which catalogued connection a platform's definitions would be read from. Derived
+// from the assets already ingested, so it only ever offers a connection that exists.
+const SL_SERVICE_OF = {snowflake:"snowflake", databricks:"databricks", powerbi:"powerbi",
+                       tableau:"tableau", dbt:"dbt", gooddata:"gooddata"};
+const slConnectionsFor = (platKey) => {
+  const svc = SL_SERVICE_OF[platKey]; if(!svc) return [];
+  return [...new Set(ASSETS.filter(a=>a.service===svc && a.connectionLabel).map(a=>a.connectionLabel))].sort();
+};
+
 const SL_DIALECT_OF = {snowflake:"SNOWFLAKE", databricks:"DATABRICKS", powerbi:"DAX",
                        tableau:"TABLEAU", dbt:"ANSI_SQL", gooddata:"MAQL", ossie:"ANSI_SQL"};
 // Ossie names the vendors it expects in custom_extensions. Using its names rather than
@@ -39643,7 +39653,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
               return (
                 <div>
                 <div style={{marginBottom:20}}>
-                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Sync"}]}
+                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Reverse sync"}]}
                     active={cfgTab} onChange={setCfgTab}/>
                 </div>
 
@@ -39789,8 +39799,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
                 {cfgTab==="sync" && <div style={{maxWidth:900}}>
                   <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-                  <SH title="Watch your platforms for changes"
-                      sub="Publishing sends this model out. This reads it back — so when somebody edits the metric directly in Power BI or Snowflake, you find out instead of discovering it in a board pack."/>
+                  <SH title="Reverse sync"
+                      sub="Reads the definitions back out of your platforms and compares them with this model — so when somebody edits the metric directly in Power BI or Snowflake, you find out instead of discovering it in a board pack. Sending this model the other way is set up on the connection itself, not here."/>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
                     <button onClick={()=>setSync({enabled:!sync.enabled})}
                       style={{display:"flex",alignItems:"center",gap:12,background:"transparent",border:"none",cursor:"pointer",padding:0,width:"100%",textAlign:"left"}}>
@@ -39808,22 +39818,48 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     </button>
                   </div>
 
-                  <SH title="Which platforms to read" sub="Tableau is the one EDG never publishes into, so reading it back is the only way to know what it says."/>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
+                  <SH title="Where to read from" sub="Pick a platform and the connection its definitions live in. Only connections EDG already has are offered — a platform with none cannot be read."/>
+                  <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
                     {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange").map(p=>{
-                      const on=(sync.targets||[]).includes(p.k);
+                      const on    = (sync.targets||[]).includes(p.k);
+                      const conns = slConnectionsFor(p.k);
+                      const picked = (sync.connections||{})[p.k] || conns[0] || "";
                       return (
-                        <button key={p.k} onClick={()=>setSync({targets: on?(sync.targets||[]).filter(x=>x!==p.k):[...(sync.targets||[]),p.k]})}
-                          style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
-                          <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                          <SLSysChip system={p.k}/>
-                          <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{p.artifact}</span>
-                          {p.adapter==="harvest_only" && <span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>read only</span>}
-                          {!(mdl.targets||[]).includes(p.k) && p.adapter==="ready" &&
-                            <span style={{fontSize:10.5,color:T.textMuted}}>not a publish target</span>}
-                        </button>
+                        <div key={p.k} style={{background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,overflow:"hidden"}}>
+                          <button
+                            onClick={()=>{
+                              if(!conns.length) return;
+                              setSync({
+                                targets: on ? (sync.targets||[]).filter(x=>x!==p.k) : [...(sync.targets||[]), p.k],
+                                connections: {...(sync.connections||{}), [p.k]: picked},
+                              });
+                            }}
+                            disabled={!conns.length}
+                            style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:"transparent",border:"none",
+                              cursor:conns.length?"pointer":"not-allowed",textAlign:"left"}}>
+                            <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
+                            <SLSysChip system={p.k}/>
+                            <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{p.artifact}</span>
+                            {!conns.length && <span style={{fontSize:10.5,color:T.amber}}>no connection</span>}
+                          </button>
+                          {on && conns.length>0 && (
+                            <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 13px 11px 38px"}}>
+                              <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>Read from</span>
+                              <div style={{flex:1,maxWidth:320}}>
+                                <SLSelect value={picked}
+                                  onChange={e=>setSync({connections:{...(sync.connections||{}), [p.k]:e.target.value}})}
+                                  options={conns}/>
+                              </div>
+                              {conns.length===1 && <span style={{fontSize:10.5,color:T.textMuted}}>the only one catalogued</span>}
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
+                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange" && !slConnectionsFor(p.k).length).length>0 &&
+                      <div style={{fontSize:11,color:T.textMuted,lineHeight:1.55,marginTop:2}}>
+                        A platform with no connection cannot be read. Add one under Settings → Connections and it appears here.
+                      </div>}
                   </div>
 
                   <div style={{display:"flex",gap:24,marginBottom:24,flexWrap:"wrap",opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
@@ -39905,18 +39941,35 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div></Card2>
 
                   <Card2><div style={{padding:"14px 16px"}}>
-                  <SH title="Bring a model in from a platform"
-                      sub="Read a semantic model out of a platform and see it as the same open-format file this model uses. Choose a platform below to read its live definitions, or paste a file from any tool that speaks the format. EDG checks it, tells you exactly what it would change, and changes nothing until you accept."/>
-                  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-                    {(mdl.targets||[]).filter(t=>t!=="ossie" && (SL_PLATFORMS[t]||{}).adapter==="ready").map(t=>(
-                      <Btn key={t} small onClick={()=>{ setPullText(slVendorOssie(t, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts}, vendor)); setPullResult(null); }}>
-                        Read from {(SL_PLATFORMS[t]||{}).label}
-                      </Btn>
-                    ))}
+                  <SH title="Bring a model in"
+                      sub="Read a semantic model out of one of your connections and see it as the same open-format file the Source tab shows — a Snowflake semantic view, a dbt project, a Power BI dataset, all in one shape. Or upload a file from any tool that speaks the format. EDG checks it, tells you exactly what it would change, and changes nothing until you accept."/>
+                  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange" && slConnectionsFor(p.k).length).map(p=>{
+                      const conn = (sync.connections||{})[p.k] || slConnectionsFor(p.k)[0];
+                      return (
+                        <Btn key={p.k} small title={`Read the semantic model out of ${conn}`}
+                          onClick={()=>{ setPullText(slVendorOssie(p.k, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts}, vendor)); setPullResult(null); }}>
+                          Read {p.label}
+                        </Btn>
+                      );
+                    })}
+                    <span style={{width:1,height:20,background:T.border}}/>
+                    {/* A file from a tool EDG has no connection to is still a model it can read. */}
+                    <Btn small onClick={()=>document.getElementById("sl-ossie-upload").click()}>Upload a file</Btn>
+                    <input id="sl-ossie-upload" type="file" accept=".yaml,.yml,.json,.txt" style={{display:"none"}}
+                      onChange={e=>{
+                        const file = e.target.files && e.target.files[0]; if(!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => { setPullText(String(reader.result||"")); setPullResult(null);
+                          onToast && onToast(`${file.name} loaded — nothing changes until you accept`,"success"); };
+                        reader.onerror = () => onToast && onToast("Could not read that file","error");
+                        reader.readAsText(file);
+                        e.target.value = "";
+                      }}/>
                     {pullText!=="" && <Btn small ghost onClick={()=>{setPullText("");setPullResult(null);}}>Clear</Btn>}
                   </div>
                   <textarea value={pullText} onChange={e=>{setPullText(e.target.value);setPullResult(null);}} spellCheck={false}
-                    placeholder={`# Read from a platform above, or paste a model file here.
+                    placeholder={`# Read a connection above, upload a file, or paste one here.
 # Apache Ossie ${OSSIE_VERSION} — the same format the Source tab shows.`}
                     style={{width:"100%",minHeight:190,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
                       color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
