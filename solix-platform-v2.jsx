@@ -39346,58 +39346,84 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   ];
                   return (
                   <div style={{maxWidth:900}}>
-                    <SH title={`${srcFile.path} · Apache Ossie core-spec ${OSSIE_VERSION}`}
-                        sub="The one document this model is. EDG authors it, every platform artifact is compiled from it, and a tool that speaks the standard reads it without EDG in the middle. Edit it and apply, and the datasets, fields and metrics behind every other tab change with it."/>
+                    <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                      <SH title="The model file"
+                          sub="This model is one file, written in Apache Ossie — the open format Snowflake, dbt, Databricks and Power BI have all agreed to read. Everything on the other tabs is a view of what is in here, and every platform artifact is compiled from it."/>
 
-                    <div style={{padding:"13px 16px",borderRadius:10,marginBottom:20,
-                      background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
-                      border:`1px solid ${bad.length?T.rose+"35":T.green+"35"}`}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:bad.length||warn.length?7:0}}>
-                        <span style={{fontSize:13,fontWeight:700,color:bad.length?T.rose:T.green}}>
-                          {bad.length
-                            ? `Does not validate — ${bad.length} problem${bad.length===1?"":"s"}`
-                            : `Validates against ossie-schema.json ${OSSIE_VERSION}`}
+                      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 13px",borderRadius:9,marginBottom:14,
+                        background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
+                        border:`1px solid ${bad.length?T.rose+"35":T.green+"35"}`}}>
+                        <span style={{fontSize:12.5,fontWeight:700,color:bad.length?T.rose:T.green}}>
+                          {bad.length ? `${bad.length} problem${bad.length===1?"":"s"} — not valid` : "Valid"}
                         </span>
-                        {!bad.length && <span style={{fontSize:11,color:T.textMuted}}>
-                          required fields, closed key sets, both enums and every cross-reference
-                        </span>}
+                        <span style={{fontSize:11.5,color:T.textMuted,flex:1,minWidth:200}}>
+                          {bad.length
+                            ? "Fix these before this file can be read by anything else."
+                            : `Checked against the published Ossie schema ${OSSIE_VERSION}. Any tool that speaks the standard can read this.`}
+                        </span>
+                        <span style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{srcFile.path}</span>
                       </div>
                       {[...bad, ...warn].map((e,i)=>(
-                        <div key={i} style={{fontSize:11.5,lineHeight:1.6,color:e.level==="error"?T.textSub:T.amber}}>
+                        <div key={i} style={{fontSize:11.5,lineHeight:1.6,color:e.level==="error"?T.rose:T.amber,marginBottom:2}}>
                           · <span style={{fontFamily:"ui-monospace,monospace"}}>{e.path}</span> — {e.msg}
                         </div>
                       ))}
-                    </div>
 
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:22}}>
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>In the core spec</div>
-                        {carried.map(([k,v])=>(
-                          <div key={k} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:4}}>
-                            <span style={{fontFamily:"ui-monospace,monospace",color:T.text}}>{k}</span> · {v}
+                      <div style={{display:"flex",gap:20,flexWrap:"wrap",padding:"11px 0 13px"}}>
+                        {[["Datasets",(odoc.datasets||[]).length],["Fields",nFields],
+                          ["Joins",(odoc.relationships||[]).length],["Metrics",(odoc.metrics||[]).length]].map(([k,v])=>(
+                          <div key={k} style={{display:"flex",alignItems:"baseline",gap:6}}>
+                            <span style={{fontSize:17,fontWeight:700,color:v?T.text:T.textMuted,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
+                            <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
                           </div>
                         ))}
-                      </div>
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px"}}>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>
-                          In custom_extensions
-                        </div>
-                        {extended.map(t=>(
-                          <div key={t} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:4}}>· {t}</div>
-                        ))}
-                        <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
-                          The escape hatch the spec defines, under the vendor names it expects. Nothing is invented alongside the standard, and a reader that ignores it still gets a working model.
+                        <div style={{display:"flex",alignItems:"baseline",gap:6}}>
+                          <span style={{fontSize:11.5,color:T.textMuted}}>written for</span>
+                          <span style={{fontSize:11.5,color:T.text,fontWeight:600}}>{dialects.join(", ")||"nothing yet"}</span>
                         </div>
                       </div>
-                    </div>
 
-                    {gaps.length>0 && <div style={{marginBottom:22}}>
-                      <SH title="What the crossing costs"
-                          sub="Ossie has no metric typology, so a metric that cannot be written as one expression cannot cross intact. Reported rather than quietly approximated."/>
-                      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                        {gaps.map((g,i)=>(
-                          <div key={g.metric.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 15px",
-                            borderBottom:i<gaps.length-1?`1px solid ${T.border}`:"none"}}>
+                      <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
+                        style={{width:"100%",minHeight:400,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
+                          color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
+                      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
+                        <Btn variant="primary" onClick={applyYaml} disabled={yamlDraft===null}>Apply changes</Btn>
+                        <Btn ghost onClick={()=>{setYamlDraft(null);setYamlResult(null);}} disabled={yamlDraft===null}>Revert</Btn>
+                        <span style={{fontSize:11.5,color:T.textMuted}}>
+                          {yamlDraft===null
+                            ? "Edit this and apply, and the datasets, fields and metrics on the other tabs change with it."
+                            : "Edited — not applied yet."}
+                        </span>
+                      </div>
+
+                      {yamlResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
+                        background:yamlResult.ok?"rgba(22,163,74,.07)":T.roseDim,
+                        border:`1px solid ${yamlResult.ok?T.green+"35":T.rose+"35"}`}}>
+                        {!yamlResult.ok && <>
+                          <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not applied — {yamlResult.errors.length} problem{yamlResult.errors.length===1?"":"s"}</div>
+                          {yamlResult.errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
+                        </>}
+                        {yamlResult.ok && <>
+                          <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
+                            {yamlResult.changes.length ? `${yamlResult.changes.length} change${yamlResult.changes.length===1?"":"s"} applied` : "Read cleanly — nothing to change"}
+                          </div>
+                          {yamlResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
+                          {yamlResult.warnings.map((w,i)=><div key={"w"+i} style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>· {w}</div>)}
+                        </>}
+                      </div>}
+
+                      <div style={{marginTop:14,fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+                        An edit is checked before anything is touched, so a file with a mistake in it is never half-applied. Anything the file does not mention is left alone rather than deleted.
+                      </div>
+                    </div></Card2>
+
+                    {gaps.length>0 && <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                      <SH title={`${gaps.length} metric${gaps.length===1?"":"s"} cannot be exported`}
+                          sub="The open format allows one calculation per metric. A metric EDG cannot write as a single calculation is named here rather than exported as something that looks right and is not."/>
+                      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                        {gaps.map(g=>(
+                          <div key={g.metric.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 13px",
+                            background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
                             <span style={{fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.05em",
                               padding:"3px 7px",borderRadius:5,flexShrink:0,marginTop:1,
                               background:g.level==="blocked"?T.roseDim:T.amberDim,
@@ -39411,44 +39437,35 @@ const SemanticLayerView = ({onToast, onNav}) => {
                           </div>
                         ))}
                       </div>
-                    </div>}
+                    </div></Card2>}
 
-                    <textarea value={curYaml} onChange={e=>{setYamlDraft(e.target.value);setYamlResult(null);}} spellCheck={false}
-                      style={{width:"100%",minHeight:420,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
-                        color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
-                    <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
-                      <Btn variant="primary" onClick={applyYaml} disabled={yamlDraft===null}>Apply changes</Btn>
-                      <Btn ghost onClick={()=>{setYamlDraft(null);setYamlResult(null);}} disabled={yamlDraft===null}>Revert</Btn>
-                      <span style={{fontSize:11.5,color:T.textMuted}}>
-                        {yamlDraft===null ? "Generated from the model as it stands." : "Edited — not applied yet."}
-                      </span>
-                    </div>
-
-                    {yamlResult && <div style={{marginTop:14,padding:"12px 14px",borderRadius:9,
-                      background:yamlResult.ok?"rgba(22,163,74,.07)":T.roseDim,
-                      border:`1px solid ${yamlResult.ok?T.green+"35":T.rose+"35"}`}}>
-                      {!yamlResult.ok && <>
-                        <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not applied — {yamlResult.errors.length} problem{yamlResult.errors.length===1?"":"s"}</div>
-                        {yamlResult.errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
-                      </>}
-                      {yamlResult.ok && <>
-                        <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
-                          {yamlResult.changes.length ? `${yamlResult.changes.length} change${yamlResult.changes.length===1?"":"s"} applied` : "Parsed clean — nothing to change"}
+                    <Card2><div style={{padding:"14px 16px"}}>
+                      <SH title="What travels in the file"
+                          sub="The open format covers the modelling. Everything EDG adds on top travels alongside it, under a vendor name the format reserves for exactly that — so a tool that does not understand it ignores it and still gets a working model."/>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:22}}>
+                        <div>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Understood by every tool</div>
+                          {carried.map(([k,v])=>(
+                            <div key={k} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:3}}>
+                              <span style={{fontFamily:"ui-monospace,monospace",color:T.text}}>{k}</span> · {v}
+                            </div>
+                          ))}
                         </div>
-                        {yamlResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
-                        {yamlResult.warnings.map((w,i)=><div key={"w"+i} style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>· {w}</div>)}
-                      </>}
-                    </div>}
-
-                    <div style={{marginTop:16,fontSize:11.5,color:T.textMuted,lineHeight:1.6,maxWidth:780}}>
-                      An edit is parsed and validated before anything is touched, so a document that does not validate is never half-applied. Objects the document does not mention are left alone rather than deleted — an editor that silently drops what you did not retype is a data-loss bug, not a feature.
-                    </div>
+                        <div>
+                          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Added by EDG, carried alongside</div>
+                          {extended.map(t=>(
+                            <div key={t} style={{fontSize:11.5,color:T.textSub,lineHeight:1.65,marginBottom:3}}>· {t}</div>
+                          ))}
+                        </div>
+                      </div>
+                    </div></Card2>
                   </div>);
                 })()}
 
-                {cfgTab==="sync" && <div style={{maxWidth:760}}>
-                  <SH title="Reverse sync"
-                      sub="Reading definitions back out of your platforms is how drift is detected. Turn it off and this model stops noticing when someone edits a metric in Power BI."/>
+                {cfgTab==="sync" && <div style={{maxWidth:900}}>
+                  <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                  <SH title="Watch your platforms for changes"
+                      sub="Publishing sends this model out. This reads it back — so when somebody edits the metric directly in Power BI or Snowflake, you find out instead of discovering it in a board pack."/>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
                     <button onClick={()=>setSync({enabled:!sync.enabled})}
                       style={{display:"flex",alignItems:"center",gap:12,background:"transparent",border:"none",cursor:"pointer",padding:0,width:"100%",textAlign:"left"}}>
@@ -39466,7 +39483,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     </button>
                   </div>
 
-                  <SH title="What to read" sub="Tableau is read-only everywhere — it is the one platform EDG never publishes into, so reading it back is the only way to know what it says."/>
+                  <SH title="Which platforms to read" sub="Tableau is the one EDG never publishes into, so reading it back is the only way to know what it says."/>
                   <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
                     {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange").map(p=>{
                       const on=(sync.targets||[]).includes(p.k);
@@ -39512,10 +39529,13 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     </div>
                   </div>
 
-                  <SH title="Run it now" sub="A manual run does not change the schedule."/>
+                  </div></Card2>
+
+                  <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                  <SH title="Check now" sub="Compares what each platform has today against this model. A manual check does not change the schedule."/>
                   <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",marginBottom:14}}>
                     <Btn icon={Ic.refresh(12)} onClick={runSync} disabled={!sync.enabled||syncing}>
-                      {syncing?"Reading…":"Run reverse sync"}
+                      {syncing?"Reading…":"Check the platforms now"}
                     </Btn>
                     <span style={{fontSize:11.5,color:T.textMuted}}>
                       {sync.enabled
@@ -39557,24 +39577,27 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
                   {/* ── The other direction. A standard nobody can hand you a document in is
                          a export format, so this is the half that makes it an interchange. */}
-                  <div style={{height:1,background:T.border,margin:"4px 0 26px"}}/>
-                  <SH title="Pull a document in"
-                      sub="Any tool that speaks Apache Ossie can hand you its model. Paste it here and EDG validates it, says exactly what it would change, and changes nothing until you say so."/>
+                  </div></Card2>
+
+                  <Card2><div style={{padding:"14px 16px"}}>
+                  <SH title="Bring a model in from a platform"
+                      sub="Read a semantic model out of a platform and see it as the same open-format file this model uses. Choose a platform below to read its live definitions, or paste a file from any tool that speaks the format. EDG checks it, tells you exactly what it would change, and changes nothing until you accept."/>
                   <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
                     {(mdl.targets||[]).filter(t=>t!=="ossie" && (SL_PLATFORMS[t]||{}).adapter==="ready").map(t=>(
                       <Btn key={t} small onClick={()=>{ setPullText(slVendorOssie(t, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts}, vendor)); setPullResult(null); }}>
-                        Load what {(SL_PLATFORMS[t]||{}).label} publishes
+                        Read from {(SL_PLATFORMS[t]||{}).label}
                       </Btn>
                     ))}
                     {pullText!=="" && <Btn small ghost onClick={()=>{setPullText("");setPullResult(null);}}>Clear</Btn>}
                   </div>
                   <textarea value={pullText} onChange={e=>{setPullText(e.target.value);setPullResult(null);}} spellCheck={false}
-                    placeholder={`# Paste an Apache Ossie ${OSSIE_VERSION} document`}
+                    placeholder={`# Read from a platform above, or paste a model file here.
+# Apache Ossie ${OSSIE_VERSION} — the same format the Source tab shows.`}
                     style={{width:"100%",minHeight:190,boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,lineHeight:1.65,
                       color:T.text,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",outline:"none",resize:"vertical"}}/>
                   <div style={{display:"flex",alignItems:"center",gap:10,marginTop:12,flexWrap:"wrap"}}>
                     <Btn onClick={()=>setPullResult(slReadOssie(pullText, {mdl, ents:mEnts, rels:mRels, dims:mDims, facts:mFacts, metrics:mMetrics}))}
-                      disabled={!pullText.trim()}>Check it</Btn>
+                      disabled={!pullText.trim()}>See what would change</Btn>
                     <Btn variant="primary" disabled={!pullResult || !pullResult.ok || !pullResult.changes.length}
                       onClick={()=>{
                         setStore(prev=>({...prev,
@@ -39595,16 +39618,17 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     background:pullResult.ok?"rgba(22,163,74,.07)":T.roseDim,
                     border:`1px solid ${pullResult.ok?T.green+"35":T.rose+"35"}`}}>
                     {!pullResult.ok && <>
-                      <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not a valid Ossie document — {pullResult.errors.length} problem{pullResult.errors.length===1?"":"s"}</div>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.rose,marginBottom:5}}>Not a valid model file — {pullResult.errors.length} problem{pullResult.errors.length===1?"":"s"}</div>
                       {pullResult.errors.slice(0,12).map((e,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {e}</div>)}
                     </>}
                     {pullResult.ok && <>
                       <div style={{fontSize:11.5,fontWeight:700,color:T.green,marginBottom:5}}>
-                        {pullResult.changes.length ? `${pullResult.changes.length} change${pullResult.changes.length===1?"":"s"} to accept` : "Validates, and says the same as this model"}
+                        {pullResult.changes.length ? `${pullResult.changes.length} change${pullResult.changes.length===1?"":"s"} to accept` : "Valid, and it says exactly what this model already says"}
                       </div>
                       {pullResult.changes.map((c,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>· {c}</div>)}
                     </>}
                   </div>}
+                  </div></Card2>
                 </div>}
                 </div>
               );
