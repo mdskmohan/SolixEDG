@@ -12910,17 +12910,19 @@ const AccessView = ({onToast}) => {
 
 // ═════════════════════════════════════════════════════════════════════════
 // POLICY MANAGER 2 — framework-first compliance, end to end
-//   Framework — a built-in regulation (22 of them) or a custom framework you define.
+//   Framework — a built-in regulation (22) or a custom framework you define.
 //   Article   — what the framework asks, in plain language.
-//   Policy    — your commitment that satisfies articles. Exactly ONE type:
-//                 Validation  — EDG checks catalog metadata and raises findings.
-//                 Enforcement — EDG executes through CDP: retention or legal hold only.
-//                 Attestation — a person fills in a form; a reviewer approves; it recurs.
-//               Source is Regulation (shipped with a framework, rules locked) or Custom.
-//               Owned (owner + stewards), versioned, approved: Draft → In review → Active.
-//   Approval policies — who approves activation, changes, enforcement per table,
-//               attestations, custom mappings to regulation articles, exceptions, holds.
-//               Every request lands in the one Workspace inbox.
+//   Policy    — your commitment that satisfies one or more articles, shared across
+//               frameworks. Owned (owner + stewards), versioned, approved:
+//               Draft → In review → Active. Source: Regulation (prebuilt) or Custom.
+//   Rule      — what actually runs. Each rule is one of three types:
+//                 Validation  — checks catalog metadata and raises findings.
+//                 Enforcement — retention or legal hold, executed through CDP.
+//                 Attestation — a named form a person fills in; a reviewer approves.
+//               Rules are Prebuilt (shipped, locked except the values the law leaves
+//               open) or Custom (added by you — to your own policies or to prebuilt ones).
+//   Articles point at exact rules: HIPAA §164.514(b) counts the "non-production
+//   copies are masked" rule, not everything the Masking policy contains.
 // ═════════════════════════════════════════════════════════════════════════
 const PM2_CLASS_META = {
   PII:  {label:"Personal data",               color:"#8b5cf6"},
@@ -12931,28 +12933,30 @@ const PM2_CLASS_META = {
   AUDIT:{label:"Audit & access logs",         color:"#64748b"},
 };
 const PM2_TYPE_META = {
-  validation: {label:"Validation",  color:"#2563eb", hint:"EDG checks catalog metadata continuously and raises findings. Changes no data."},
-  enforcement:{label:"Enforcement", color:"#16a34a", hint:"EDG executes it through CDP — retention or legal hold — after approval and each table owner's sign-off."},
-  attestation:{label:"Attestation", color:"#7c3aed", hint:"EDG can't observe it. A person fills in a form you design; a reviewer approves; it comes due again."},
+  validation: {label:"Validation",  color:"#2563eb", hint:"Checks catalog metadata continuously and raises findings. Changes no data."},
+  enforcement:{label:"Enforcement", color:"#16a34a", hint:"Retention or legal hold, executed through CDP after approval and each table owner's sign-off."},
+  attestation:{label:"Attestation", color:"#7c3aed", hint:"Something EDG can't observe. A person fills in a form; a reviewer approves; it comes due again."},
   outside:    {label:"Outside EDG", color:"#64748b", hint:"Another system's job — listed so nothing is hidden, never scored."},
 };
 
 // ── Validation vocabulary: every field is something the catalog or a connector knows.
 const PM2_FIELDS = {
-  env:     {label:"Environment",          type:"enum", opts:["prod","dev"], get:a=>a.env},
-  access:  {label:"Access",               type:"enum", opts:["Broad","Restricted"], get:a=>a.access},
-  masking: {label:"Masking (reported by source)", type:"enum", opts:["Applied","Not applied"], get:a=>a.masking},
-  sens:    {label:"Has sensitive-category columns", type:"bool", get:a=>Object.values(a.cols||{}).some(c=>["SPI","PHI","PCI"].includes(c))},
-  enc:     {label:"Encrypted at rest",    type:"bool", get:a=>!!a.enc},
-  hold:    {label:"Under legal hold",     type:"bool", get:a=>!!a.hold},
-  suspect: {label:"Unclassified sensitive-looking columns", type:"bool", get:a=>!!a.suspect},
-  owner:   {label:"Owner",                type:"presence", get:a=>!!a.owner},
-  steward: {label:"Steward",              type:"presence", get:a=>!!a.steward},
-  purpose: {label:"Processing purpose",   type:"presence", get:a=>!!a.purpose},
-  transfer:{label:"Transfer mechanism",   type:"presence", get:a=>!!a.transfer},
-  region:  {label:"Region",               type:"list", get:a=>a.region},
-  idle:    {label:"Days since last read", type:"number", get:a=>a.idle},
-  quality: {label:"Quality score",        type:"number", get:a=>a.quality},
+  env:      {label:"Environment",          type:"enum", opts:["prod","dev"], get:a=>a.env},
+  access:   {label:"Access",               type:"enum", opts:["Broad","Restricted"], get:a=>a.access},
+  domain:   {label:"Domain",               type:"enum", opts:["Commerce","Finance","Platform","Product"], get:a=>a.domain},
+  masking:  {label:"Masking (reported by source)", type:"enum", opts:["Applied","Not applied"], get:a=>a.masking},
+  sens:     {label:"Has sensitive-category columns", type:"bool", get:a=>Object.values(a.cols||{}).some(c=>["SPI","PHI","PCI"].includes(c))},
+  enc:      {label:"Encrypted at rest",    type:"bool", get:a=>!!a.enc},
+  hold:     {label:"Under legal hold",     type:"bool", get:a=>!!a.hold},
+  suspect:  {label:"Unclassified sensitive-looking columns", type:"bool", get:a=>!!a.suspect},
+  owner:    {label:"Owner",                type:"presence", get:a=>!!a.owner},
+  steward:  {label:"Steward",              type:"presence", get:a=>!!a.steward},
+  purpose:  {label:"Processing purpose",   type:"presence", get:a=>!!a.purpose},
+  transfer: {label:"Transfer mechanism",   type:"presence", get:a=>!!a.transfer},
+  retention:{label:"Retention schedule",   type:"presence", get:a=>!!a.retention},
+  region:   {label:"Region",               type:"list", get:a=>a.region},
+  idle:     {label:"Days since last read", type:"number", get:a=>a.idle},
+  quality:  {label:"Quality score",        type:"number", get:a=>a.quality},
 };
 const PM2_OPS = {enum:["is","is not"], bool:["is yes","is no"], presence:["is set","is not set"], list:["is one of","is not one of"], number:["greater than","less than"]};
 const pm2CondTest = (c,a) => {
@@ -12968,277 +12972,281 @@ const pm2CondTest = (c,a) => {
   }
 };
 const pm2CondText = c => { const F=PM2_FIELDS[c.f]; if(!F) return "?"; return F.type==="bool"||F.type==="presence" ? `${F.label} ${c.op}` : `${F.label} ${c.op} ${c.v}`; };
-
-// ── Attestation form field types
 const PM2_FORM_TYPES = {text:"Short text", long:"Long text", date:"Date", yesno:"Yes / no", select:"Dropdown", person:"Person", doc:"Document link"};
 const pm2Field = (label, type, required, help, opts) => ({id:"f-"+label.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,24), label, type, required:!!required, help:help||"", opts:opts||[]});
+const pm2V = (key, name, finding, severity, conds, extra) => ({key, type:"validation", name, finding, severity, conds, ...(extra||{})});
+const pm2E = (key, name, enf) => ({key, type:"enforcement", name, enf});
+const pm2A = (key, name, instructions, every, form, extra) => ({key, type:"attestation", name, att:{instructions, every, remind:every<=3?14:30, assignee:"owner", reviewer:"approver", form, ...(extra||{})}});
 
-// ── Regulation policy templates — each exactly one type. Adopting a framework turns the
-// templates you keep into Regulation policies. Validation and enforcement policies are shared
-// across frameworks; attestation policies are per framework (a GDPR DPIA isn't a HIPAA risk analysis).
-// `edit` lists the values the law leaves to you; everything else is locked.
+// ── The prebuilt policy library. Each policy groups the rules a regulation asks for under
+// one commitment: one rule where the law asks one thing, several where it asks several.
+// Validation and enforcement policies are shared across frameworks; policies whose evidence
+// is framework-specific (an impact assessment, a rights-request log) are one per framework.
 const PM2_TEMPLATES = [
-  {id:"C-INV", type:"validation", name:"Sensitive data discovery", scopeBy:"suspect", severity:"High",
-    why:"You can't protect data you haven't found. Flags assets whose columns look like regulated data but carry no classification yet.",
-    rules:[{conds:[{f:"suspect",op:"is yes"}], msg:"Sensitive-looking columns are unclassified"}]},
-  {id:"C-OWN", type:"validation", name:"Ownership & stewardship", severity:"Medium",
-    why:"Every in-scope asset needs an owner (who approves enforcement on it) and a steward (who fixes what's found).",
-    rules:[{conds:[{f:"owner",op:"is not set"}], msg:"No owner"},{conds:[{f:"steward",op:"is not set"}], msg:"No steward"}]},
-  {id:"C-ROPA", type:"validation", name:"Processing purpose on record", severity:"Medium",
-    why:"The catalog doubles as your record of processing: every personal-data asset states why it's processed.",
-    rules:[{conds:[{f:"purpose",op:"is not set"}], msg:"No processing purpose recorded"}]},
-  {id:"C-ENC", type:"validation", name:"Encryption at rest", severity:"Critical",
-    why:"EDG reads encryption status from the source connector. It reports the gap; the source system closes it.",
-    rules:[{conds:[{f:"enc",op:"is no"}], msg:"Not encrypted at rest"}]},
-  {id:"C-ACC", type:"validation", name:"Need-to-know access", severity:"High",
-    why:"Regulated data is granted to a need-to-know group — never to a broad role such as all-employees or analysts-all.",
-    rules:[{conds:[{f:"access",op:"is",v:"Broad"}], msg:"Granted to a broad role"}]},
-  {id:"C-XB", type:"validation", name:"Cross-border transfers", severity:"High", version:2,
-    why:"Personal data stored outside your approved regions must have a transfer mechanism on record (SCCs, adequacy, BCRs, security assessment).",
-    rules:[{conds:[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1, eu-north-1",edit:true},{f:"transfer",op:"is not set"}], msg:"Outside approved regions with no transfer mechanism"}],
-    changelog:"v2 adds eu-north-1 (Stockholm) to the default approved regions."},
-  {id:"C-MIN", type:"validation", name:"Minimisation review", severity:"Medium",
-    why:"Data nobody reads is a signal it may no longer be needed. A person reviews it — EDG never deletes on this signal alone.",
-    rules:[{conds:[{f:"idle",op:"greater than",v:180,edit:true},{f:"hold",op:"is no"}], msg:"Not read in a long time — confirm it's still needed"}]},
-  {id:"C-DQ", type:"validation", name:"Data quality bar", severity:"Medium",
-    why:"Accuracy obligations and reporting integrity: in-scope data must meet the quality threshold.",
-    rules:[{conds:[{f:"quality",op:"less than",v:85,edit:true}], msg:"Below the quality bar"}]},
-  {id:"C-MASKNP", type:"validation", name:"Masking outside production", severity:"High",
-    why:"Dev, test and analytics copies must not show real identifiers. EDG reads masking status from the source and flags copies that aren't masked.",
-    rules:[{conds:[{f:"env",op:"is not",v:"prod"},{f:"masking",op:"is",v:"Not applied"}], msg:"Non-production copy is not masked"}]},
-  {id:"C-MASKENT", type:"validation", name:"Masking for non-entitled users", severity:"High",
-    why:"In production, sensitive-category columns must be masked for everyone outside the entitled group. EDG verifies masking is applied at the source.",
-    rules:[{conds:[{f:"env",op:"is",v:"prod"},{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], msg:"Sensitive columns are not masked"}]},
-  {id:"C-RET", type:"enforcement", name:"Retention & disposal",
-    why:"Personal data is disposed of when its retention period ends. Records under a mandated minimum keep the longer period, and a legal hold suspends both.",
-    enf:{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently"}},
-  {id:"C-RETREC", type:"enforcement", name:"Mandated records retention", scopeFrom:"records",
-    why:"Records a regulation says you must keep are locked for the minimum period so nothing disposes of them early. The longest requirement wins.",
-    enf:{action:"retention", mode:"minimum", period:3, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete"}},
-  {id:"C-HOLD", type:"enforcement", name:"Legal hold",
-    why:"Records under a legal matter are frozen: retention and erasure can't touch them until the hold is released by two people.",
-    enf:{action:"hold", matter:"LIT-2026-014 · Vendor dispute", select:"flag", assets:[]}},
-  {id:"C-DSR", type:"attestation", perFramework:true, name:"Individual rights requests",
-    why:"Access and deletion requests are fulfilled across every system that holds the person's data. EDG supplies the map; this form is the evidence.",
-    att:{name:"Rights requests completed on time", instructions:"Document every access, correction and deletion request received in the period, confirm each was completed within the statutory deadline across every system that holds the person's data, and explain any that were late or partial.", every:3, remind:14, assignee:"owner", reviewer:"approver", form:[
-      pm2Field("Reporting period","text",true,"e.g. Q3 2026"),
-      pm2Field("Requests received","text",true,"Access, deletion and correction requests, by count"),
-      pm2Field("All completed within the statutory deadline","yesno",true),
-      pm2Field("Late or partial requests and why","long",false,"Required if the answer above is no"),
-      pm2Field("Request log","doc",true,"Link to the log or ticket export")]}},
-  {id:"C-AUDIT", type:"attestation", perFramework:true, name:"Access logging",
-    why:"Source systems log reads of sensitive data. EDG has no canonical audit-logging field yet, so each source's logging is attested.",
-    att:{name:"Read access to sensitive data is logged", instructions:"For every source system holding in-scope data, confirm that reads of sensitive tables are written to an audit log, state how long the log is kept, and attach the configuration as evidence.", every:12, remind:30, assignee:"steward", reviewer:"approver", form:[
-      pm2Field("Systems covered","long",true,"Every source system holding in-scope data"),
-      pm2Field("Read access is logged on every in-scope table","yesno",true),
-      pm2Field("Log retention period","select",true,"",["90 days","12 months","6 years","7 years"]),
-      pm2Field("Configuration evidence","doc",true,"Screenshot or config export"),
-      pm2Field("Verified by","person",true)]}},
-  {id:"C-RISK", type:"attestation", perFramework:true, name:"Risk / impact assessment",
-    why:"The framework's own assessment (DPIA, HIPAA risk analysis, PIA…) is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
-    att:{name:"Impact assessment completed and signed off", instructions:"Record the assessment the framework requires (DPIA, HIPAA risk analysis or PIA): what processing and systems it covered, the high risks found, the residual risk accepted, and who signed it off. Attach the signed document.", every:12, remind:30, assignee:"owner", reviewer:"approver", form:[
-      pm2Field("Assessment date","date",true),
-      pm2Field("Processing or systems assessed","long",true,"EDG's in-scope asset list is a starting point"),
-      pm2Field("High risks identified","long",false),
-      pm2Field("Residual risk accepted","select",true,"",["Low","Medium","High"]),
-      pm2Field("Signed off by","person",true,"DPO, privacy officer or security officer"),
-      pm2Field("Assessment document","doc",true)]}},
+  {id:"P-DISCOVER", name:"Sensitive data discovery & inventory", category:"Governance",
+    why:"You can't protect data you haven't found. Finds regulated data that isn't classified yet, and has the inventory of in-scope systems confirmed on a schedule.",
+    rules:[pm2V("unclassified","Sensitive-looking columns are classified","Sensitive-looking columns are unclassified","High",[{f:"suspect",op:"is yes"}],{scopeBy:"suspect"}),
+           pm2A("inventory","Inventory of in-scope systems confirmed","Confirm the inventory of systems and datasets that hold in-scope data is complete — including any source added since the last review — and that each has an owner.",12,
+             [pm2Field("Review date","date",true),pm2Field("Systems in scope","long",true,"EDG's in-scope asset list is a starting point"),pm2Field("Sources added since last review","long",false),pm2Field("Confirmed by","person",true)])]},
+  {id:"P-OWN", name:"Ownership & accountability", category:"Governance",
+    why:"Every in-scope asset has an owner, who approves enforcement on it, and a steward, who fixes what's found.",
+    rules:[pm2V("owner","Every in-scope asset has an owner","No owner","Medium",[{f:"owner",op:"is not set"}]),
+           pm2V("steward","Every in-scope asset has a steward","No steward","Medium",[{f:"steward",op:"is not set"}])]},
+  {id:"P-ROPA", name:"Records of processing", category:"Privacy",
+    why:"The catalog doubles as your record of processing: every personal-data asset states why it's processed, and the record is reviewed each year.",
+    rules:[pm2V("purpose","Processing purpose is recorded","No processing purpose recorded","Medium",[{f:"purpose",op:"is not set"}]),
+           pm2A("review","Record of processing reviewed","Review the record of processing activities: for each activity, its purpose, lawful basis, data categories, recipients and retention. Record what changed since the last review.",12,
+             [pm2Field("Review date","date",true),pm2Field("Activities reviewed","long",true),pm2Field("Changes made","long",false),pm2Field("Approved by","person",true),pm2Field("Record","doc",true)])]},
+  {id:"P-ENC", name:"Encryption", category:"Security",
+    why:"Sensitive data is encrypted at rest. EDG reads the status from each source connector; the standard and key management are documented, and so is any justified exception.",
+    rules:[pm2V("enc","Sensitive data is encrypted at rest","Not encrypted at rest","Critical",[{f:"enc",op:"is no"}]),
+           pm2A("keys","Encryption standard and key management documented","Document the encryption standard used at rest, how keys are managed and rotated, and — where encryption isn't used — the equivalent measure and why it's reasonable.",12,
+             [pm2Field("Encryption standard","text",true,"e.g. AES-256, provider-managed keys"),pm2Field("Key management and rotation","long",true),pm2Field("Exceptions and compensating measures","long",false),pm2Field("Evidence","doc",true),pm2Field("Verified by","person",true)])]},
+  {id:"P-ACC", name:"Access control (need to know)", category:"Access",
+    why:"Regulated data is granted only to need-to-know groups, and access is reviewed and signed off every quarter.",
+    rules:[pm2V("broad","Sensitive data is not granted to broad roles","Granted to a broad role","High",[{f:"access",op:"is",v:"Broad"}]),
+           pm2A("review","Quarterly access review signed off","Review who can access each in-scope system, remove access that is no longer needed, and record any exception you approved.",3,
+             [pm2Field("Quarter reviewed","select",true,"",["Q1 2026","Q2 2026","Q3 2026","Q4 2026"]),pm2Field("Systems reviewed","long",true,"Every system and how many accounts were reviewed"),pm2Field("Access removed","text",false),pm2Field("Exceptions approved","long",false),pm2Field("Review evidence","doc",true)])]},
+  {id:"P-XB", name:"International transfers", category:"Privacy", version:2, changelog:"v2 adds eu-north-1 (Stockholm) to the default approved regions.",
+    why:"Personal data stored outside your approved regions has a transfer mechanism on record, and each transfer has an impact assessment.",
+    rules:[pm2V("region","Data outside approved regions has a transfer mechanism","Outside approved regions with no transfer mechanism","High",[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1, eu-north-1",edit:true},{f:"transfer",op:"is not set"}]),
+           pm2A("tia","Transfer impact assessment on file","For each transfer outside approved regions, record the destination, the mechanism relied on (SCCs, adequacy, BCRs, security assessment) and the assessment of the destination's laws.",12,
+             [pm2Field("Transfers covered","long",true),pm2Field("Mechanism","select",true,"",["Standard contractual clauses","Adequacy decision","Binding corporate rules","Security assessment","Consent"]),pm2Field("Assessment document","doc",true),pm2Field("Approved by","person",true)])]},
+  {id:"P-MIN", name:"Data minimisation", category:"Privacy",
+    why:"Personal data nobody reads is a sign it may no longer be needed. A person reviews it — EDG never deletes on this signal alone.",
+    rules:[pm2V("idle","Unused personal data is reviewed","Not read in a long time — confirm it's still needed","Medium",[{f:"idle",op:"greater than",v:180,edit:true},{f:"hold",op:"is no"}])]},
+  {id:"P-DQ", name:"Data accuracy", category:"Quality",
+    why:"Accuracy obligations and reporting integrity: in-scope data meets the quality threshold.",
+    rules:[pm2V("quality","In-scope data meets the quality bar","Below the quality bar","Medium",[{f:"quality",op:"less than",v:85,edit:true}])]},
+  {id:"P-MASK", name:"Masking of sensitive data", category:"Privacy",
+    why:"Real identifiers never appear in dev, test or analytics copies, and sensitive-category columns are masked in production for anyone outside the entitled group. EDG verifies masking at the source.",
+    rules:[pm2V("nonprod","Non-production copies are masked","Non-production copy is not masked","High",[{f:"env",op:"is not",v:"prod"},{f:"masking",op:"is",v:"Not applied"}]),
+           pm2V("entitled","Sensitive columns are masked for non-entitled users","Sensitive columns are not masked","High",[{f:"env",op:"is",v:"prod"},{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}])]},
+  {id:"P-RET", name:"Retention & disposal", category:"Retention",
+    why:"Personal data has a retention schedule, is disposed of when it ends, and the schedule is reviewed each year. Records under a mandated minimum keep the longer period; a legal hold suspends disposal.",
+    rules:[pm2E("dispose","Dispose of personal data when its retention ends",{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently", select:"flag", assets:[]}),
+           pm2V("set","Every personal-data asset has a retention schedule","No retention schedule","Medium",[{f:"retention",op:"is not set"}]),
+           pm2A("review","Retention schedule reviewed","Review the retention schedule: each data category's period and the reason for it, and confirm disposal ran as scheduled since the last review.",12,
+             [pm2Field("Review date","date",true),pm2Field("Categories reviewed","long",true),pm2Field("Disposal ran as scheduled","yesno",true),pm2Field("Changes made","long",false),pm2Field("Approved by","person",true)])]},
+  {id:"P-RECORDS", name:"Mandated records retention", category:"Retention", scopeFrom:"records",
+    why:"Records a regulation says you must keep are locked for the minimum period so nothing disposes of them early. The longest requirement among your frameworks wins.",
+    rules:[pm2E("retain","Keep mandated records for the required minimum",{action:"retention", mode:"minimum", period:3, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete", select:"flag", assets:[]})]},
+  {id:"P-HOLD", name:"Legal hold", category:"Retention",
+    why:"Records under a legal matter are frozen — retention and erasure can't touch them — and every custodian has been told to preserve them.",
+    rules:[pm2E("hold","Freeze records under a legal matter",{action:"hold", matter:"LIT-2026-014 · Vendor dispute", select:"flag", assets:[]}),
+           pm2A("notice","Hold notice issued to custodians","Record the legal matter, every custodian notified, and their acknowledgement that the records must be preserved.",6,
+             [pm2Field("Matter","text",true),pm2Field("Custodians notified","long",true),pm2Field("All custodians acknowledged","yesno",true),pm2Field("Hold notice","doc",true)])]},
+  {id:"P-DSR", name:"Individual rights requests", category:"Privacy", perFramework:true,
+    why:"Access, correction and deletion requests are fulfilled across every system that holds the person's data, within the law's deadline. EDG supplies the map; the log is the evidence.",
+    rules:[pm2A("log","Rights requests completed on time","Document every access, correction and deletion request received in the period, confirm each was completed within the statutory deadline across every system holding the person's data, and explain any that were late or partial.",3,
+             [pm2Field("Reporting period","text",true,"e.g. Q3 2026"),pm2Field("Requests received","text",true,"Access, deletion and correction requests, by count"),pm2Field("All completed within the deadline","yesno",true),pm2Field("Late or partial requests and why","long",false),pm2Field("Request log","doc",true,"Link to the log or ticket export")])]},
+  {id:"P-AUDIT", name:"Access logging", category:"Security",
+    why:"Source systems log reads of sensitive data and keep the logs long enough to investigate. EDG has no audit-logging field yet, so each source's logging is attested.",
+    rules:[pm2A("logging","Read access to sensitive data is logged","For every source system holding in-scope data, confirm that reads of sensitive tables are written to an audit log, state how long the log is kept, and attach the configuration as evidence.",12,
+             [pm2Field("Systems covered","long",true),pm2Field("Read access is logged on every in-scope table","yesno",true),pm2Field("Log retention period","select",true,"",["90 days","12 months","6 years","7 years"]),pm2Field("Configuration evidence","doc",true),pm2Field("Verified by","person",true)],{assignee:"steward"})]},
+  {id:"P-RISK", name:"Risk / impact assessment", category:"Governance", perFramework:true,
+    why:"The framework's own assessment — a DPIA, a HIPAA risk analysis, a PIA — is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
+    rules:[pm2A("assessment","Impact assessment completed and signed off","Record the assessment the framework requires: what processing and systems it covered, the high risks found, the residual risk accepted, and who signed it off. Attach the signed document.",12,
+             [pm2Field("Assessment date","date",true),pm2Field("Processing or systems assessed","long",true,"EDG's in-scope asset list is a starting point"),pm2Field("High risks identified","long",false),pm2Field("Residual risk accepted","select",true,"",["Low","Medium","High"]),pm2Field("Signed off by","person",true,"DPO, privacy officer or security officer"),pm2Field("Assessment document","doc",true)])]},
 ];
 const PM2_TPL = Object.fromEntries(PM2_TEMPLATES.map(t=>[t.id,t]));
+// An article's `c` entry: "P-MASK" (the whole policy) or "P-MASK:nonprod" / "P-RET:dispose,set" (exact rules).
+const pm2ParseRef = ref => { const [tid, keys] = String(ref).split(":"); return {tid, keys: keys ? keys.split(",") : null}; };
+const pm2RuleId = (tid, key) => `${tid}-${key}`;
 
 const PM2_FW = [
   {id:"gdpr", name:"GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need for the purpose.", c:["C-MIN"]},
-    {ref:"Art. 5(1)(d)", t:"Accuracy", ask:"Personal data must be accurate and, where necessary, kept up to date.", c:["C-DQ"]},
-    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data in identifiable form longer than the purpose requires.", c:["C-RET"]},
-    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to show compliance — someone is answerable for each dataset.", c:["C-OWN"]},
-    {ref:"Art. 9",       t:"Special categories", ask:"Health, biometric, religious and similar data need extra protection and a specific legal condition.", c:["C-INV","C-MASKENT"]},
-    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased, generally within one month.", c:["C-DSR"]},
-    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"Build protection in; by default only the data each purpose needs is accessible.", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what personal data you process, why, and where it lives.", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk — encryption, pseudonymisation, access control.", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["C-RISK"]},
-    {ref:"Art. 44–46",   t:"International transfers", ask:"Personal data leaving the EU needs an adequacy decision or safeguards such as SCCs.", c:["C-XB"]},
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 5(1)(d)", t:"Accuracy", ask:"Personal data must be accurate and, where necessary, kept up to date.", c:["P-DQ"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data in identifiable form longer than the purpose requires.", c:["P-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to show compliance — someone is answerable for each dataset.", c:["P-OWN"]},
+    {ref:"Art. 9",       t:"Special categories", ask:"Health, biometric, religious and similar data need extra protection and a specific legal condition.", c:["P-DISCOVER:unclassified","P-MASK:entitled"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased, generally within one month.", c:["P-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"Build protection in; by default only the data each purpose needs is accessible.", c:["P-MASK"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what personal data you process, why, and where it lives.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk — encryption, pseudonymisation, access control.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["P-RISK"]},
+    {ref:"Art. 44–46",   t:"International transfers", ask:"Personal data leaving the EU needs an adequacy decision or safeguards such as SCCs.", c:["P-XB"]},
     {ref:"Art. 33–34",   t:"Breach notification", ask:"Report breaches to the authority within 72 hours, and to people when the risk is high.", out:"Incident response"},
     {ref:"Art. 6–7",     t:"Lawful basis and consent", ask:"Every processing activity needs a lawful basis; consent must be provable.", out:"Consent management"}]},
   {id:"ukgdpr", name:"UK GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need.", c:["C-MIN"]},
-    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data longer than the purpose requires.", c:["C-RET"]},
-    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to demonstrate compliance.", c:["C-OWN"]},
-    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased.", c:["C-DSR"]},
-    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"By default only the data each purpose needs is accessible.", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what you process, why, and where.", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk.", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["C-RISK"]},
-    {ref:"Art. 44–46",   t:"Restricted transfers", ask:"Transfers out of the UK need adequacy regulations or appropriate safeguards (e.g. the IDTA).", c:["C-XB"]},
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need.", c:["P-MIN"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data longer than the purpose requires.", c:["P-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to demonstrate compliance.", c:["P-OWN"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased.", c:["P-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"By default only the data each purpose needs is accessible.", c:["P-MASK"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what you process, why, and where.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["P-RISK"]},
+    {ref:"Art. 44–46",   t:"Restricted transfers", ask:"Transfers out of the UK need adequacy regulations or appropriate safeguards (e.g. the IDTA).", c:["P-XB"]},
     {ref:"Art. 33",      t:"Breach reporting", ask:"Report notifiable breaches to the ICO within 72 hours.", out:"Incident response"}]},
   {id:"ccpa", name:"CCPA / CPRA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"§1798.100(a)(3)", t:"Retention limits", ask:"Disclose how long you keep each category, and keep it no longer than reasonably necessary.", c:["C-RET"]},
-    {ref:"§1798.100(c)", t:"Proportionate collection", ask:"Collection and use must be reasonably necessary and proportionate to the disclosed purpose.", c:["C-MIN","C-ROPA"]},
-    {ref:"§1798.105",    t:"Right to delete", ask:"Consumers can have their personal information deleted, including by your service providers.", c:["C-DSR"]},
-    {ref:"§1798.110",    t:"Right to know", ask:"Consumers can learn what personal information you hold about them.", c:["C-DSR"]},
-    {ref:"§1798.121",    t:"Limit use of sensitive personal information", ask:"Consumers can limit use of sensitive personal information to what the service needs.", c:["C-MASKENT"]},
-    {ref:"§1798.150",    t:"Reasonable security", ask:"A breach caused by unreasonable security exposes you to private lawsuits.", c:["C-ENC","C-ACC"]},
-    {ref:"§1798.185(a)(15)", t:"Risk assessments", ask:"Processing with significant risk needs a documented risk assessment.", c:["C-RISK"]},
+    {ref:"§1798.100(a)(3)", t:"Retention limits", ask:"Disclose how long you keep each category, and keep it no longer than reasonably necessary.", c:["P-RET"]},
+    {ref:"§1798.100(c)", t:"Proportionate collection", ask:"Collection and use must be reasonably necessary and proportionate to the disclosed purpose.", c:["P-MIN","P-ROPA:purpose"]},
+    {ref:"§1798.105",    t:"Right to delete", ask:"Consumers can have their personal information deleted, including by your service providers.", c:["P-DSR"]},
+    {ref:"§1798.110",    t:"Right to know", ask:"Consumers can learn what personal information you hold about them.", c:["P-DSR"]},
+    {ref:"§1798.121",    t:"Limit use of sensitive personal information", ask:"Consumers can limit use of sensitive personal information to what the service needs.", c:["P-MASK:entitled"]},
+    {ref:"§1798.150",    t:"Reasonable security", ask:"A breach caused by unreasonable security exposes you to private lawsuits.", c:["P-ENC","P-ACC"]},
+    {ref:"§1798.185(a)(15)", t:"Risk assessments", ask:"Processing with significant risk needs a documented risk assessment.", c:["P-RISK"]},
     {ref:"§1798.120",    t:"Opt-out of sale or sharing", ask:"Consumers can opt out of the sale or sharing of their personal information.", out:"Consent & preference platform"}]},
   {id:"lgpd", name:"LGPD", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 6 (III)", t:"Necessity", ask:"Limit processing to the minimum necessary for the purpose.", c:["C-MIN"]},
-    {ref:"Art. 16",      t:"Deletion at the end of processing", ask:"Delete personal data once processing ends, unless an exception applies.", c:["C-RET"]},
-    {ref:"Art. 18",      t:"Data subject rights", ask:"Data subjects can confirm, access, correct and delete their data.", c:["C-DSR"]},
-    {ref:"Art. 33",      t:"International transfer", ask:"Transfers abroad are allowed only under the mechanisms the law lists.", c:["C-XB"]},
-    {ref:"Art. 37",      t:"Record of processing operations", ask:"Controllers and processors keep records of their processing operations.", c:["C-ROPA","C-INV"]},
-    {ref:"Art. 38",      t:"Data protection impact report", ask:"The ANPD can require a data protection impact report (RIPD).", c:["C-RISK"]},
-    {ref:"Art. 46",      t:"Security measures", ask:"Adopt measures that protect data from unauthorised access, loss and leakage.", c:["C-ENC","C-ACC"]},
+    {ref:"Art. 6 (III)", t:"Necessity", ask:"Limit processing to the minimum necessary for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 16",      t:"Deletion at the end of processing", ask:"Delete personal data once processing ends, unless an exception applies.", c:["P-RET"]},
+    {ref:"Art. 18",      t:"Data subject rights", ask:"Data subjects can confirm, access, correct and delete their data.", c:["P-DSR"]},
+    {ref:"Art. 33",      t:"International transfer", ask:"Transfers abroad are allowed only under the mechanisms the law lists.", c:["P-XB"]},
+    {ref:"Art. 37",      t:"Record of processing operations", ask:"Controllers and processors keep records of their processing operations.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 38",      t:"Data protection impact report", ask:"The ANPD can require a data protection impact report (RIPD).", c:["P-RISK"]},
+    {ref:"Art. 46",      t:"Security measures", ask:"Adopt measures that protect data from unauthorised access, loss and leakage.", c:["P-ENC","P-ACC"]},
     {ref:"Art. 48",      t:"Incident communication", ask:"Notify the ANPD and data subjects of incidents that may cause relevant risk.", out:"Incident response"}]},
   {id:"pipl", name:"PIPL", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 6",       t:"Minimum necessary", ask:"Processing is limited to the minimum scope needed for the purpose.", c:["C-MIN"]},
-    {ref:"Art. 19",      t:"Retention", ask:"Keep personal information only for the shortest period necessary.", c:["C-RET"]},
-    {ref:"Art. 28–29",   t:"Sensitive personal information", ask:"Sensitive data needs a specific purpose, strict protection and separate consent.", c:["C-INV","C-MASKENT"]},
-    {ref:"Art. 38–40",   t:"Cross-border provision", ask:"Sending data out of China needs a security assessment, certification or standard contract.", c:["C-XB"]},
-    {ref:"Art. 44–47",   t:"Individual rights", ask:"Individuals can access, copy, correct and delete their personal information.", c:["C-DSR"]},
-    {ref:"Art. 51",      t:"Security measures", ask:"Use technical measures such as encryption and de-identification, and manage access.", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 55–56",   t:"Impact assessment", ask:"Assess impact before sensitive or cross-border processing.", c:["C-RISK"]},
+    {ref:"Art. 6",       t:"Minimum necessary", ask:"Processing is limited to the minimum scope needed for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 19",      t:"Retention", ask:"Keep personal information only for the shortest period necessary.", c:["P-RET"]},
+    {ref:"Art. 28–29",   t:"Sensitive personal information", ask:"Sensitive data needs a specific purpose, strict protection and separate consent.", c:["P-DISCOVER:unclassified","P-MASK:entitled"]},
+    {ref:"Art. 38–40",   t:"Cross-border provision", ask:"Sending data out of China needs a security assessment, certification or standard contract.", c:["P-XB"]},
+    {ref:"Art. 44–47",   t:"Individual rights", ask:"Individuals can access, copy, correct and delete their personal information.", c:["P-DSR"]},
+    {ref:"Art. 51",      t:"Security measures", ask:"Use technical measures such as encryption and de-identification, and manage access.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 55–56",   t:"Impact assessment", ask:"Assess impact before sensitive or cross-border processing.", c:["P-RISK"]},
     {ref:"Art. 57",      t:"Incident notification", ask:"Remediate incidents and notify the authorities and the individuals affected.", out:"Incident response"}]},
   {id:"pipeda", name:"PIPEDA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Sch. 1 §4.1",  t:"Accountability", ask:"Designate someone accountable for the organisation's personal information.", c:["C-OWN"]},
-    {ref:"Sch. 1 §4.4",  t:"Limiting collection", ask:"Collect only what the identified purposes need.", c:["C-MIN"]},
-    {ref:"Sch. 1 §4.5",  t:"Limiting use, disclosure and retention", ask:"Keep personal information only as long as the purpose needs it.", c:["C-RET"]},
-    {ref:"Sch. 1 §4.6",  t:"Accuracy", ask:"Keep personal information accurate, complete and up to date.", c:["C-DQ"]},
-    {ref:"Sch. 1 §4.7",  t:"Safeguards", ask:"Protect personal information with safeguards suited to its sensitivity.", c:["C-ENC","C-ACC"]},
-    {ref:"Sch. 1 §4.9",  t:"Individual access", ask:"Individuals can access their personal information on request.", c:["C-DSR"]},
+    {ref:"Sch. 1 §4.1",  t:"Accountability", ask:"Designate someone accountable for the organisation's personal information.", c:["P-OWN"]},
+    {ref:"Sch. 1 §4.4",  t:"Limiting collection", ask:"Collect only what the identified purposes need.", c:["P-MIN"]},
+    {ref:"Sch. 1 §4.5",  t:"Limiting use, disclosure and retention", ask:"Keep personal information only as long as the purpose needs it.", c:["P-RET"]},
+    {ref:"Sch. 1 §4.6",  t:"Accuracy", ask:"Keep personal information accurate, complete and up to date.", c:["P-DQ"]},
+    {ref:"Sch. 1 §4.7",  t:"Safeguards", ask:"Protect personal information with safeguards suited to its sensitivity.", c:["P-ENC","P-ACC"]},
+    {ref:"Sch. 1 §4.9",  t:"Individual access", ask:"Individuals can access their personal information on request.", c:["P-DSR"]},
     {ref:"Sch. 1 §4.3",  t:"Consent", ask:"Meaningful consent is required for collection, use and disclosure.", out:"Consent management"},
     {ref:"§10.1",        t:"Breach reporting", ask:"Report breaches with a real risk of significant harm to the Commissioner.", out:"Incident response"}]},
   {id:"pdpa_sg", name:"PDPA (Singapore)", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"s.18",   t:"Purpose limitation", ask:"Use personal data only for appropriate purposes that were notified.", c:["C-ROPA"]},
-    {ref:"s.21–22",t:"Access and correction", ask:"Individuals can access and correct their personal data.", c:["C-DSR"]},
-    {ref:"s.23",   t:"Accuracy", ask:"Make a reasonable effort to keep personal data accurate and complete.", c:["C-DQ"]},
-    {ref:"s.24",   t:"Protection", ask:"Make reasonable security arrangements to protect personal data.", c:["C-ENC","C-ACC"]},
-    {ref:"s.25",   t:"Retention limitation", ask:"Stop retaining personal data once it no longer serves the purpose.", c:["C-RET"]},
-    {ref:"s.26",   t:"Transfer limitation", ask:"Transfers out of Singapore need comparable protection.", c:["C-XB"]},
+    {ref:"s.18",   t:"Purpose limitation", ask:"Use personal data only for appropriate purposes that were notified.", c:["P-ROPA:purpose"]},
+    {ref:"s.21–22",t:"Access and correction", ask:"Individuals can access and correct their personal data.", c:["P-DSR"]},
+    {ref:"s.23",   t:"Accuracy", ask:"Make a reasonable effort to keep personal data accurate and complete.", c:["P-DQ"]},
+    {ref:"s.24",   t:"Protection", ask:"Make reasonable security arrangements to protect personal data.", c:["P-ENC","P-ACC"]},
+    {ref:"s.25",   t:"Retention limitation", ask:"Stop retaining personal data once it no longer serves the purpose.", c:["P-RET"]},
+    {ref:"s.26",   t:"Transfer limitation", ask:"Transfers out of Singapore need comparable protection.", c:["P-XB"]},
     {ref:"s.13",   t:"Consent", ask:"Obtain consent before collecting, using or disclosing personal data.", out:"Consent management"},
     {ref:"Part 6A",t:"Breach notification", ask:"Notify the PDPC within 3 days of assessing a breach as notifiable.", out:"Incident response"}]},
   {id:"appi", name:"APPI", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"Art. 17",   t:"Purpose of use", ask:"Specify the purpose of use as concretely as possible.", c:["C-ROPA"]},
-    {ref:"Art. 22",   t:"Accuracy and deletion", ask:"Keep data accurate, and try to delete it once it's no longer needed.", c:["C-DQ","C-RET"]},
-    {ref:"Art. 23",   t:"Security control measures", ask:"Take the measures needed to prevent leakage, loss or damage.", c:["C-ENC","C-ACC"]},
-    {ref:"Art. 28",   t:"Third parties in foreign countries", ask:"Providing data to a party abroad needs consent or an equivalent-protection basis.", c:["C-XB"]},
-    {ref:"Art. 33–35",t:"Individual requests", ask:"Individuals can request disclosure, correction and cessation of use.", c:["C-DSR"]},
+    {ref:"Art. 17",   t:"Purpose of use", ask:"Specify the purpose of use as concretely as possible.", c:["P-ROPA:purpose"]},
+    {ref:"Art. 22",   t:"Accuracy and deletion", ask:"Keep data accurate, and try to delete it once it's no longer needed.", c:["P-DQ","P-RET:dispose,set"]},
+    {ref:"Art. 23",   t:"Security control measures", ask:"Take the measures needed to prevent leakage, loss or damage.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 28",   t:"Third parties in foreign countries", ask:"Providing data to a party abroad needs consent or an equivalent-protection basis.", c:["P-XB"]},
+    {ref:"Art. 33–35",t:"Individual requests", ask:"Individuals can request disclosure, correction and cessation of use.", c:["P-DSR"]},
     {ref:"Art. 26",   t:"Leak reporting", ask:"Report harmful leaks to the PPC and notify the individuals.", out:"Incident response"}]},
   {id:"popia", name:"POPIA", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"s.8",    t:"Accountability", ask:"The responsible party ensures the conditions for lawful processing are met.", c:["C-OWN"]},
-    {ref:"s.10",   t:"Minimality", ask:"Process only what's adequate, relevant and not excessive.", c:["C-MIN"]},
-    {ref:"s.14",   t:"Retention and restriction of records", ask:"Keep records no longer than necessary, then destroy or de-identify them.", c:["C-RET"]},
-    {ref:"s.16",   t:"Quality of information", ask:"Keep personal information complete, accurate and updated.", c:["C-DQ"]},
-    {ref:"s.19",   t:"Security safeguards", ask:"Secure the integrity and confidentiality of personal information.", c:["C-ENC","C-ACC"]},
-    {ref:"s.23–24",t:"Access and correction", ask:"Data subjects can access and correct their personal information.", c:["C-DSR"]},
-    {ref:"s.72",   t:"Transfers outside the Republic", ask:"Transfers out of South Africa need adequate protection or consent.", c:["C-XB"]},
+    {ref:"s.8",    t:"Accountability", ask:"The responsible party ensures the conditions for lawful processing are met.", c:["P-OWN"]},
+    {ref:"s.10",   t:"Minimality", ask:"Process only what's adequate, relevant and not excessive.", c:["P-MIN"]},
+    {ref:"s.14",   t:"Retention and restriction of records", ask:"Keep records no longer than necessary, then destroy or de-identify them.", c:["P-RET"]},
+    {ref:"s.16",   t:"Quality of information", ask:"Keep personal information complete, accurate and updated.", c:["P-DQ"]},
+    {ref:"s.19",   t:"Security safeguards", ask:"Secure the integrity and confidentiality of personal information.", c:["P-ENC","P-ACC"]},
+    {ref:"s.23–24",t:"Access and correction", ask:"Data subjects can access and correct their personal information.", c:["P-DSR"]},
+    {ref:"s.72",   t:"Transfers outside the Republic", ask:"Transfers out of South Africa need adequate protection or consent.", c:["P-XB"]},
     {ref:"s.22",   t:"Security compromises", ask:"Notify the Regulator and data subjects of security compromises.", out:"Incident response"}]},
   {id:"dpdp", name:"DPDP Act", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"§8(3)",  t:"Completeness and accuracy", ask:"Data used for decisions or disclosed must be complete, accurate and consistent.", c:["C-DQ"]},
-    {ref:"§8(5)",  t:"Security safeguards", ask:"Take reasonable security safeguards to prevent breaches.", c:["C-ENC","C-ACC"]},
-    {ref:"§8(7)",  t:"Erasure", ask:"Erase data once consent is withdrawn or the purpose is no longer served.", c:["C-RET"]},
-    {ref:"§10",    t:"Significant Data Fiduciaries", ask:"Significant Data Fiduciaries run periodic DPIAs and independent audits.", c:["C-RISK"]},
-    {ref:"§11–12", t:"Access, correction and erasure", ask:"Data principals can get a summary of their data and have it corrected or erased.", c:["C-DSR"]},
-    {ref:"§16",    t:"Cross-border transfer", ask:"Transfers are allowed except to countries the government restricts.", c:["C-XB"]},
+    {ref:"§8(3)",  t:"Completeness and accuracy", ask:"Data used for decisions or disclosed must be complete, accurate and consistent.", c:["P-DQ"]},
+    {ref:"§8(5)",  t:"Security safeguards", ask:"Take reasonable security safeguards to prevent breaches.", c:["P-ENC","P-ACC"]},
+    {ref:"§8(7)",  t:"Erasure", ask:"Erase data once consent is withdrawn or the purpose is no longer served.", c:["P-RET"]},
+    {ref:"§10",    t:"Significant Data Fiduciaries", ask:"Significant Data Fiduciaries run periodic DPIAs and independent audits.", c:["P-RISK"]},
+    {ref:"§11–12", t:"Access, correction and erasure", ask:"Data principals can get a summary of their data and have it corrected or erased.", c:["P-DSR"]},
+    {ref:"§16",    t:"Cross-border transfer", ask:"Transfers are allowed except to countries the government restricts.", c:["P-XB"]},
     {ref:"§6",     t:"Consent", ask:"Consent must be free, specific, informed, unconditional and unambiguous.", out:"Consent management"},
     {ref:"§8(6)",  t:"Breach intimation", ask:"Report personal data breaches to the Board and to affected data principals.", out:"Incident response"}]},
   {id:"iso27701", name:"ISO 27701", type:"Privacy", covers:["PII","SPI"], arts:[
-    {ref:"7.2.5", t:"Privacy impact assessment", ask:"Assess privacy impact where processing is new or changed.", c:["C-RISK"]},
-    {ref:"7.2.8", t:"Records related to processing PII", ask:"Maintain records that support your PII processing obligations.", c:["C-ROPA","C-INV"]},
-    {ref:"7.3.6", t:"Access, correction and erasure", ask:"Give PII principals a way to access, correct and erase their PII.", c:["C-DSR"]},
-    {ref:"7.4.1", t:"Limit collection", ask:"Limit PII collection to what's relevant and necessary.", c:["C-MIN"]},
-    {ref:"7.4.7", t:"Retention", ask:"Keep PII no longer than necessary for its purposes.", c:["C-RET"]},
-    {ref:"7.5.1", t:"Basis for transfer", ask:"Identify and document the basis for moving PII between jurisdictions.", c:["C-XB"]}]},
+    {ref:"7.2.5", t:"Privacy impact assessment", ask:"Assess privacy impact where processing is new or changed.", c:["P-RISK"]},
+    {ref:"7.2.8", t:"Records related to processing PII", ask:"Maintain records that support your PII processing obligations.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"7.3.6", t:"Access, correction and erasure", ask:"Give PII principals a way to access, correct and erase their PII.", c:["P-DSR"]},
+    {ref:"7.4.1", t:"Limit collection", ask:"Limit PII collection to what's relevant and necessary.", c:["P-MIN"]},
+    {ref:"7.4.7", t:"Retention", ask:"Keep PII no longer than necessary for its purposes.", c:["P-RET"]},
+    {ref:"7.5.1", t:"Basis for transfer", ask:"Identify and document the basis for moving PII between jurisdictions.", c:["P-XB"]}]},
   {id:"hipaa", name:"HIPAA", type:"Healthcare", covers:["PHI"], recordClasses:["AUDIT"], recordYears:6, arts:[
-    {ref:"§164.308(a)(1)(ii)(A)", t:"Risk analysis", ask:"Accurately assess risks to ePHI — which starts with knowing where it lives.", c:["C-RISK","C-INV"]},
-    {ref:"§164.312(a)(1)",        t:"Access control", ask:"Only authorised people and software can access ePHI.", c:["C-ACC","C-OWN"]},
-    {ref:"§164.312(a)(2)(iv)",    t:"Encryption and decryption", ask:"Encrypt ePHI where reasonable, or document the equivalent measure you use instead.", c:["C-ENC"]},
-    {ref:"§164.312(b)",           t:"Audit controls", ask:"Record and examine activity in systems that contain ePHI.", c:["C-AUDIT"]},
-    {ref:"§164.502(b)",           t:"Minimum necessary", ask:"Use and disclose only the minimum PHI necessary for the purpose.", c:["C-MASKENT"]},
-    {ref:"§164.514(b)",           t:"De-identification", ask:"Data counts as de-identified once the 18 Safe Harbor identifiers are removed.", c:["C-MASKNP"]},
-    {ref:"§164.316(b)(2)(i)",     t:"Documentation retention", ask:"Keep required policies, procedures and records for 6 years.", c:["C-RETREC"]},
-    {ref:"§164.524",              t:"Right of access", ask:"Patients can access and get copies of their PHI, generally within 30 days.", c:["C-DSR"]},
+    {ref:"§164.308(a)(1)(ii)(A)", t:"Risk analysis", ask:"Accurately assess risks to ePHI — which starts with knowing where it lives.", c:["P-RISK","P-DISCOVER"]},
+    {ref:"§164.312(a)(1)",        t:"Access control", ask:"Only authorised people and software can access ePHI.", c:["P-ACC","P-OWN"]},
+    {ref:"§164.312(a)(2)(iv)",    t:"Encryption and decryption", ask:"Encrypt ePHI where reasonable, or document the equivalent measure you use instead.", c:["P-ENC"]},
+    {ref:"§164.312(b)",           t:"Audit controls", ask:"Record and examine activity in systems that contain ePHI.", c:["P-AUDIT"]},
+    {ref:"§164.502(b)",           t:"Minimum necessary", ask:"Use and disclose only the minimum PHI necessary for the purpose.", c:["P-MASK:entitled"]},
+    {ref:"§164.514(b)",           t:"De-identification", ask:"Data counts as de-identified once the 18 Safe Harbor identifiers are removed.", c:["P-MASK:nonprod"]},
+    {ref:"§164.316(b)(2)(i)",     t:"Documentation retention", ask:"Keep required policies, procedures and records for 6 years.", c:["P-RECORDS"]},
+    {ref:"§164.524",              t:"Right of access", ask:"Patients can access and get copies of their PHI, generally within 30 days.", c:["P-DSR"]},
     {ref:"§164.310",              t:"Physical safeguards", ask:"Control physical access to facilities, workstations and devices.", out:"Facilities & device management"},
     {ref:"§164.404–410",          t:"Breach notification", ask:"Notify individuals, HHS and sometimes the media after a breach of unsecured PHI.", out:"Incident response"}]},
   {id:"hitech", name:"HITECH", type:"Healthcare", covers:["PHI"], arts:[
-    {ref:"§13405(b)", t:"Minimum necessary", ask:"Limit uses and disclosures to a limited data set or the minimum necessary.", c:["C-MASKENT"]},
-    {ref:"§13405(c)", t:"Accounting of disclosures", ask:"Account for disclosures made through an electronic health record.", c:["C-AUDIT"]},
-    {ref:"§13405(e)", t:"Electronic access", ask:"Patients can get their PHI in electronic format.", c:["C-DSR"]},
+    {ref:"§13405(b)", t:"Minimum necessary", ask:"Limit uses and disclosures to a limited data set or the minimum necessary.", c:["P-MASK:entitled"]},
+    {ref:"§13405(c)", t:"Accounting of disclosures", ask:"Account for disclosures made through an electronic health record.", c:["P-AUDIT"]},
+    {ref:"§13405(e)", t:"Electronic access", ask:"Patients can get their PHI in electronic format.", c:["P-DSR"]},
     {ref:"§13401",    t:"Business associates", ask:"Business associates must meet the Security Rule directly.", out:"Vendor contracts"},
     {ref:"§13402",    t:"Breach notification", ask:"Notify individuals of breaches of unsecured PHI.", out:"Incident response"}]},
   {id:"pci_dss", name:"PCI DSS", type:"Financial", covers:["PCI"], recordClasses:["AUDIT"], recordYears:1, arts:[
-    {ref:"Req. 3.2.1", t:"Minimise stored account data", ask:"Keep account data only as long as needed, then delete it securely.", c:["C-RET"]},
-    {ref:"Req. 3.4.1", t:"Mask the PAN when displayed", ask:"Only people with a business need see more than the BIN and last four digits.", c:["C-MASKENT"]},
-    {ref:"Req. 3.5.1", t:"PAN unreadable when stored", ask:"Make the PAN unreadable wherever it's stored — hashing, truncation, tokens or strong encryption.", c:["C-ENC","C-MASKNP"]},
-    {ref:"Req. 7.2",   t:"Need-to-know access", ask:"Grant access to systems and cardholder data only by need to know.", c:["C-ACC"]},
-    {ref:"Req. 10.2",  t:"Audit logs", ask:"Audit logs capture every individual's access to cardholder data.", c:["C-AUDIT"]},
-    {ref:"Req. 10.5.1",t:"Audit log retention", ask:"Keep audit log history for at least 12 months, the last 3 immediately available.", c:["C-RETREC"]},
-    {ref:"Req. 12.5.2",t:"Scope confirmed", ask:"Document and confirm PCI DSS scope at least every 12 months.", c:["C-INV","C-OWN"]},
+    {ref:"Req. 3.2.1", t:"Minimise stored account data", ask:"Keep account data only as long as needed, then delete it securely.", c:["P-RET:dispose,set"]},
+    {ref:"Req. 3.4.1", t:"Mask the PAN when displayed", ask:"Only people with a business need see more than the BIN and last four digits.", c:["P-MASK:entitled"]},
+    {ref:"Req. 3.5.1", t:"PAN unreadable when stored", ask:"Make the PAN unreadable wherever it's stored — hashing, truncation, tokens or strong encryption.", c:["P-ENC","P-MASK:nonprod"]},
+    {ref:"Req. 7.2",   t:"Need-to-know access", ask:"Grant access to systems and cardholder data only by need to know.", c:["P-ACC"]},
+    {ref:"Req. 10.2",  t:"Audit logs", ask:"Audit logs capture every individual's access to cardholder data.", c:["P-AUDIT"]},
+    {ref:"Req. 10.5.1",t:"Audit log retention", ask:"Keep audit log history for at least 12 months, the last 3 immediately available.", c:["P-RECORDS"]},
+    {ref:"Req. 12.5.2",t:"Scope confirmed", ask:"Document and confirm PCI DSS scope at least every 12 months.", c:["P-DISCOVER","P-OWN"]},
     {ref:"Req. 8",     t:"Authentication", ask:"Authenticate users, including MFA into the cardholder data environment.", out:"Identity provider"},
     {ref:"Req. 11",    t:"Security testing", ask:"Test the security of systems and networks regularly.", out:"Security testing"}]},
   {id:"sox", name:"SOX", type:"Financial", covers:["FIN"], recordClasses:["FIN"], recordYears:7, arts:[
-    {ref:"§404",  t:"Internal control over financial reporting", ask:"Management assesses internal controls over financial reporting every year — the data must be owned and accurate.", c:["C-DQ","C-OWN"]},
-    {ref:"§802",  t:"Records retention", ask:"Audit workpapers and related records must be kept for 7 years.", c:["C-RETREC"]},
-    {ref:"§802",  t:"No destruction under investigation", ask:"Destroying or altering records to obstruct an investigation is a crime.", c:["C-HOLD"]},
+    {ref:"§404",  t:"Internal control over financial reporting", ask:"Management assesses internal controls over financial reporting every year — the data must be owned and accurate.", c:["P-DQ","P-OWN"]},
+    {ref:"§802",  t:"Records retention", ask:"Audit workpapers and related records must be kept for 7 years.", c:["P-RECORDS"]},
+    {ref:"§802",  t:"No destruction under investigation", ask:"Destroying or altering records to obstruct an investigation is a crime.", c:["P-HOLD"]},
     {ref:"§302",  t:"Officer certification", ask:"The CEO and CFO personally certify each periodic report.", out:"Finance leadership sign-off"},
     {ref:"§409",  t:"Real-time disclosure", ask:"Disclose material changes in financial condition rapidly.", out:"Investor relations"}]},
   {id:"glba", name:"GLBA", type:"Financial", covers:["PII","FIN"], retentionCeiling:24, arts:[
-    {ref:"16 CFR 314.4(b)",    t:"Written risk assessment", ask:"Base the information security programme on a written risk assessment.", c:["C-RISK"]},
-    {ref:"16 CFR 314.4(c)(1)", t:"Access controls", ask:"Limit access to customer information to authorised users who need it.", c:["C-ACC"]},
-    {ref:"16 CFR 314.4(c)(2)", t:"Data inventory", ask:"Identify and manage the data, systems and devices in your environment.", c:["C-INV","C-OWN"]},
-    {ref:"16 CFR 314.4(c)(3)", t:"Encryption", ask:"Encrypt customer information at rest and in transit.", c:["C-ENC"]},
-    {ref:"16 CFR 314.4(c)(6)", t:"Secure disposal", ask:"Dispose of customer information no later than 2 years after last use, unless still needed.", c:["C-RET"]},
+    {ref:"16 CFR 314.4(b)",    t:"Written risk assessment", ask:"Base the information security programme on a written risk assessment.", c:["P-RISK"]},
+    {ref:"16 CFR 314.4(c)(1)", t:"Access controls", ask:"Limit access to customer information to authorised users who need it.", c:["P-ACC"]},
+    {ref:"16 CFR 314.4(c)(2)", t:"Data inventory", ask:"Identify and manage the data, systems and devices in your environment.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"16 CFR 314.4(c)(3)", t:"Encryption", ask:"Encrypt customer information at rest and in transit.", c:["P-ENC"]},
+    {ref:"16 CFR 314.4(c)(6)", t:"Secure disposal", ask:"Dispose of customer information no later than 2 years after last use, unless still needed.", c:["P-RET:dispose"]},
     {ref:"16 CFR 314.4(c)(5)", t:"Multi-factor authentication", ask:"Require MFA for anyone accessing information systems.", out:"Identity provider"},
     {ref:"§6802–6803",        t:"Privacy notices and opt-out", ask:"Give customers privacy notices and the right to opt out of some sharing.", out:"Customer communications"}]},
   {id:"dora", name:"DORA", type:"Financial", covers:["ALL"], arts:[
-    {ref:"Art. 6",     t:"ICT risk management framework", ask:"Maintain a documented ICT risk management framework.", c:["C-RISK"]},
-    {ref:"Art. 8",     t:"Identification", ask:"Identify, classify and document information assets and their owners.", c:["C-INV","C-OWN"]},
-    {ref:"Art. 9",     t:"Protection and prevention", ask:"Protect ICT systems and data with security policies and access controls.", c:["C-ACC","C-ENC"]},
+    {ref:"Art. 6",     t:"ICT risk management framework", ask:"Maintain a documented ICT risk management framework.", c:["P-RISK"]},
+    {ref:"Art. 8",     t:"Identification", ask:"Identify, classify and document information assets and their owners.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"Art. 9",     t:"Protection and prevention", ask:"Protect ICT systems and data with security policies and access controls.", c:["P-ACC","P-ENC:enc"]},
     {ref:"Art. 12",    t:"Backup and restoration", ask:"Keep backup and restoration policies and procedures.", out:"Backup / DR"},
     {ref:"Art. 17–19", t:"ICT incidents", ask:"Manage, classify and report major ICT incidents.", out:"Incident response"},
     {ref:"Art. 28",    t:"ICT third-party risk", ask:"Manage risk from ICT third-party providers.", out:"Vendor risk"}]},
   {id:"soc2", name:"SOC 2", type:"Security", covers:["ALL"], arts:[
-    {ref:"CC6.1", t:"Logical access security", ask:"Logical access controls protect information assets.", c:["C-ACC","C-ENC"]},
-    {ref:"CC6.5", t:"Protections removed only when unrecoverable", ask:"Protections come off an asset only once its data can no longer be read or recovered.", c:["C-RET"]},
-    {ref:"CC7.2", t:"Monitoring for anomalies", ask:"Monitor systems for anomalies that indicate malicious acts or errors.", c:["C-AUDIT"]},
-    {ref:"C1.1",  t:"Confidential information identified", ask:"Identify and maintain confidential information to meet your commitments.", c:["C-INV","C-OWN"]},
-    {ref:"C1.2",  t:"Confidential information disposed", ask:"Dispose of confidential information to meet your commitments.", c:["C-RET"]},
+    {ref:"CC6.1", t:"Logical access security", ask:"Logical access controls protect information assets.", c:["P-ACC","P-ENC:enc"]},
+    {ref:"CC6.5", t:"Protections removed only when unrecoverable", ask:"Protections come off an asset only once its data can no longer be read or recovered.", c:["P-RET:dispose"]},
+    {ref:"CC7.2", t:"Monitoring for anomalies", ask:"Monitor systems for anomalies that indicate malicious acts or errors.", c:["P-AUDIT"]},
+    {ref:"C1.1",  t:"Confidential information identified", ask:"Identify and maintain confidential information to meet your commitments.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"C1.2",  t:"Confidential information disposed", ask:"Dispose of confidential information to meet your commitments.", c:["P-RET:dispose"]},
     {ref:"CC8.1", t:"Change management", ask:"Authorise, test and approve changes before they go live.", out:"SDLC tooling"},
     {ref:"A1.2",  t:"Backup and recovery", ask:"Back up data and test recovery.", out:"Backup / DR"}]},
   {id:"iso27001", name:"ISO 27001", type:"Security", covers:["ALL"], recordClasses:["AUDIT","FIN"], arts:[
-    {ref:"6.1.2", t:"Risk assessment", ask:"Define and apply an information security risk assessment process.", c:["C-RISK"]},
-    {ref:"A.5.9", t:"Inventory of assets", ask:"Keep an inventory of information and assets, each with an owner.", c:["C-INV","C-OWN"]},
-    {ref:"A.5.12",t:"Classification", ask:"Classify information by its confidentiality, integrity and availability needs.", c:["C-INV"]},
-    {ref:"A.5.15",t:"Access control", ask:"Set and apply rules for physical and logical access.", c:["C-ACC"]},
-    {ref:"A.5.33",t:"Protection of records", ask:"Protect records from loss, destruction, falsification and unauthorised release.", c:["C-RETREC","C-HOLD"]},
-    {ref:"A.8.10",t:"Information deletion", ask:"Delete information once it's no longer required.", c:["C-RET"]},
-    {ref:"A.8.11",t:"Data masking", ask:"Mask data in line with the access-control policy and business need.", c:["C-MASKNP","C-MASKENT"]},
-    {ref:"A.8.15",t:"Logging", ask:"Produce, store and review logs of activities and events.", c:["C-AUDIT"]},
-    {ref:"A.8.24",t:"Use of cryptography", ask:"Define and apply rules for effective use of cryptography.", c:["C-ENC"]},
+    {ref:"6.1.2", t:"Risk assessment", ask:"Define and apply an information security risk assessment process.", c:["P-RISK"]},
+    {ref:"A.5.9", t:"Inventory of assets", ask:"Keep an inventory of information and assets, each with an owner.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"A.5.12",t:"Classification", ask:"Classify information by its confidentiality, integrity and availability needs.", c:["P-DISCOVER:unclassified"]},
+    {ref:"A.5.15",t:"Access control", ask:"Set and apply rules for physical and logical access.", c:["P-ACC"]},
+    {ref:"A.5.33",t:"Protection of records", ask:"Protect records from loss, destruction, falsification and unauthorised release.", c:["P-RECORDS","P-HOLD"]},
+    {ref:"A.8.10",t:"Information deletion", ask:"Delete information once it's no longer required.", c:["P-RET:dispose"]},
+    {ref:"A.8.11",t:"Data masking", ask:"Mask data in line with the access-control policy and business need.", c:["P-MASK"]},
+    {ref:"A.8.15",t:"Logging", ask:"Produce, store and review logs of activities and events.", c:["P-AUDIT"]},
+    {ref:"A.8.24",t:"Use of cryptography", ask:"Define and apply rules for effective use of cryptography.", c:["P-ENC"]},
     {ref:"A.7",   t:"Physical controls", ask:"Physical perimeters, entry controls and equipment protection.", out:"Facilities"}]},
   {id:"nistcsf", name:"NIST CSF", type:"Security", covers:["ALL"], arts:[
-    {ref:"ID.AM-07", t:"Data inventories", ask:"Maintain inventories of data and its metadata for designated data types.", c:["C-INV","C-OWN"]},
-    {ref:"ID.RA",    t:"Risk assessment", ask:"Understand the cybersecurity risk to your assets and operations.", c:["C-RISK"]},
-    {ref:"PR.AA-05", t:"Least privilege", ask:"Define, manage and review access permissions using least privilege.", c:["C-ACC"]},
-    {ref:"PR.DS-01", t:"Data at rest", ask:"Protect the confidentiality and integrity of data at rest.", c:["C-ENC","C-MASKNP"]},
-    {ref:"PR.PS-04", t:"Log records", ask:"Generate log records and make them available for monitoring.", c:["C-AUDIT"]},
+    {ref:"ID.AM-07", t:"Data inventories", ask:"Maintain inventories of data and its metadata for designated data types.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"ID.RA",    t:"Risk assessment", ask:"Understand the cybersecurity risk to your assets and operations.", c:["P-RISK"]},
+    {ref:"PR.AA-05", t:"Least privilege", ask:"Define, manage and review access permissions using least privilege.", c:["P-ACC"]},
+    {ref:"PR.DS-01", t:"Data at rest", ask:"Protect the confidentiality and integrity of data at rest.", c:["P-ENC:enc","P-MASK:nonprod"]},
+    {ref:"PR.PS-04", t:"Log records", ask:"Generate log records and make them available for monitoring.", c:["P-AUDIT"]},
     {ref:"DE.CM",    t:"Continuous monitoring", ask:"Monitor networks and assets to find adverse events.", out:"SIEM / SOC"},
     {ref:"RS.MA",    t:"Incident management", ask:"Manage responses to detected incidents.", out:"Incident response"}]},
   {id:"nis2", name:"NIS2", type:"Security", covers:["ALL"], arts:[
-    {ref:"Art. 21(2)(a)", t:"Risk analysis and security policies", ask:"Have policies on risk analysis and information system security.", c:["C-RISK"]},
-    {ref:"Art. 21(2)(h)", t:"Cryptography", ask:"Have policies on the use of cryptography and encryption.", c:["C-ENC"]},
-    {ref:"Art. 21(2)(i)", t:"Access control and asset management", ask:"Apply access control and asset management.", c:["C-ACC","C-INV"]},
+    {ref:"Art. 21(2)(a)", t:"Risk analysis and security policies", ask:"Have policies on risk analysis and information system security.", c:["P-RISK"]},
+    {ref:"Art. 21(2)(h)", t:"Cryptography", ask:"Have policies on the use of cryptography and encryption.", c:["P-ENC"]},
+    {ref:"Art. 21(2)(i)", t:"Access control and asset management", ask:"Apply access control and asset management.", c:["P-ACC","P-DISCOVER"]},
     {ref:"Art. 21(2)(c)", t:"Business continuity", ask:"Maintain business continuity, backup and crisis management.", out:"Backup / DR"},
     {ref:"Art. 21(2)(d)", t:"Supply chain security", ask:"Secure your supply chain.", out:"Vendor risk"},
     {ref:"Art. 23",       t:"Incident reporting", ask:"Early warning within 24 hours, notification within 72 hours.", out:"Incident response"}]},
   {id:"fedramp", name:"FedRAMP", type:"Security", covers:["ALL"], recordClasses:["AUDIT"], arts:[
-    {ref:"RA-2",  t:"Security categorization", ask:"Categorize information and systems by impact level.", c:["C-INV"]},
-    {ref:"RA-3",  t:"Risk assessment", ask:"Assess risk and update the assessment regularly.", c:["C-RISK"]},
-    {ref:"AC-6",  t:"Least privilege", ask:"Grant only the access users need for their tasks.", c:["C-ACC"]},
-    {ref:"SC-28", t:"Protection at rest", ask:"Protect information at rest.", c:["C-ENC"]},
-    {ref:"AU-2",  t:"Event logging", ask:"Define and log the events the system must capture.", c:["C-AUDIT"]},
-    {ref:"AU-11", t:"Audit record retention", ask:"Keep audit records for the defined period to support investigations.", c:["C-RETREC"]},
-    {ref:"SI-12", t:"Information retention", ask:"Manage and retain information per policy and legal requirements.", c:["C-RET"]},
+    {ref:"RA-2",  t:"Security categorization", ask:"Categorize information and systems by impact level.", c:["P-DISCOVER:unclassified"]},
+    {ref:"RA-3",  t:"Risk assessment", ask:"Assess risk and update the assessment regularly.", c:["P-RISK"]},
+    {ref:"AC-6",  t:"Least privilege", ask:"Grant only the access users need for their tasks.", c:["P-ACC"]},
+    {ref:"SC-28", t:"Protection at rest", ask:"Protect information at rest.", c:["P-ENC"]},
+    {ref:"AU-2",  t:"Event logging", ask:"Define and log the events the system must capture.", c:["P-AUDIT"]},
+    {ref:"AU-11", t:"Audit record retention", ask:"Keep audit records for the defined period to support investigations.", c:["P-RECORDS"]},
+    {ref:"SI-12", t:"Information retention", ask:"Manage and retain information per policy and legal requirements.", c:["P-RET"]},
     {ref:"IA-2",  t:"Identification and authentication", ask:"Uniquely identify and authenticate users, with MFA.", out:"Identity provider"},
     {ref:"IR-4",  t:"Incident handling", ask:"Prepare, detect, contain and recover from incidents.", out:"Incident response"}]},
 ];
@@ -13262,23 +13270,23 @@ const PM2_ASSETS = [
   {name:"user_events",      service:"databricks",domain:"Product",  owner:"alex.wu",   steward:"alex.wu",   env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:1,   quality:82, purpose:false, transfer:"",     cols:{}, suspect:{properties:"PII"}},
   {name:"claims_staging",   service:"glue",      domain:"Finance",  owner:"sarah.kim", steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:6,   quality:77, purpose:false, transfer:"",     cols:{}, suspect:{member_id:"PHI",date_of_birth:"PHI"}},
 ];
-// ── Custom frameworks: your own standards, same shape as a regulation. `expect` says how
-// each article is meant to be met; custom frameworks are yours, so mapping to them needs no approval.
+// ── Custom frameworks: your own standards, same shape as a regulation. Mapping to them needs no approval.
 const PM2_CUSTOM_FW = [
   {id:"cf-ids", custom:true, name:"Internal Data Standard", type:"Internal", jurisdiction:"Company-wide", owner:"maya.chen", covers:["ALL"], created:"2026-08-01",
     fullName:"J&J Internal Data Handling Standard v3", arts:[
     {ref:"IDS-1", t:"Every production table has an owner", ask:"No production table exists without a named owner and steward.", expect:"validation"},
     {ref:"IDS-2", t:"HR compensation data is visible only to HR", ask:"Salary and national ID are masked for everyone outside the HR compensation team.", expect:"validation"},
     {ref:"IDS-3", t:"Finance records are kept for 7 years", ask:"Ledger and transaction records are retained at least 7 years for audit.", expect:"enforcement"},
-    {ref:"IDS-4", t:"Quarterly access review", ask:"Access to sensitive systems is reviewed and signed off every quarter.", expect:"attestation"},
+    {ref:"IDS-4", t:"Vendor data sharing is reviewed", ask:"Every dataset shared with a vendor has a signed data-sharing review on file each year.", expect:"attestation"},
     {ref:"IDS-5", t:"Vendor security questionnaires", ask:"Every data vendor completes the security questionnaire before onboarding.", out:"Vendor risk"}]},
 ];
 const pm2AllFw = () => [...PM2_FW, ...PM2_CUSTOM_FW];
 const pm2Fw = id => pm2AllFw().find(f=>f.id===id);
 
-// Masking status as each source reports it (a governance attribute, like encryption).
+// Governance attributes each source reports (masking, like encryption) and the retention schedule on record.
 const PM2_MASKING = {customers:"Applied", orders:"Applied", patient_events:"Applied", payments:"Applied", customers_archive:"Applied"};
-PM2_ASSETS.forEach(a=>{ a.masking = PM2_MASKING[a.name]||"Not applied"; });
+const PM2_RETENTION = ["customers","orders","customers_archive","transactions","gl_accounts","payments","patient_events","audit_records"];
+PM2_ASSETS.forEach(a=>{ a.masking = PM2_MASKING[a.name]||"Not applied"; a.retention = PM2_RETENTION.includes(a.name); });
 const PM2_PERSONAL = ["PII","SPI","PHI","PCI"];
 const PM2_USERS = ["alex.rivera","maya.chen","lisa.ray","sarah.kim","priya.nair","james.oh","dev.patel","alex.wu"];
 const PM2_DOMAINS = [...new Set(PM2_ASSETS.map(a=>a.domain))];
@@ -13290,18 +13298,21 @@ const pm2AddDays = (d, n) => { const x=new Date(d+"T00:00:00Z"); x.setUTCDate(x.
 const pm2Classes = a => [...new Set([...(a.classes||[]),...Object.values(a.cols||{})])];
 const pm2InScope = (a, covers) => covers.includes("ALL") ? pm2Classes(a).length>0 : pm2Classes(a).some(c=>covers.includes(c));
 const pm2SuspectIn = (a, covers) => !!a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
-const pm2AssetInPolicy = (a, p) => {
+const pm2AssetInPolicy = (a, p, r) => {
   if((p.domains||[]).length && !p.domains.includes(a.domain)) return false;
-  return p.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
+  return r&&r.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
 };
-const pm2AssetInFw = (a, p, fw) => p.scopeBy==="suspect" ? pm2SuspectIn(a,fw.covers)
-  : pm2InScope(a, p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers);
+const pm2AssetInFw = (a, p, fw, r) => r&&r.scopeBy==="suspect" ? pm2SuspectIn(a,fw.covers)
+  : pm2InScope(a, p.template==="P-RECORDS" ? (fw.recordClasses||[]) : fw.covers);
 const pm2LinkedFws = (p, all) => [...new Set((p.articles||[]).filter(x=>all||x.ok!==false).map(x=>x.fw))].map(pm2Fw).filter(Boolean);
+const pm2Types = p => [...new Set((p.rules||[]).map(r=>r.type))];
+// The rules an article counts: the exact prebuilt rules it points at (or all of them), plus any custom rule.
+const pm2RulesForLink = (p, link) => (p.rules||[]).filter(r=> !link || !link.rules || r.origin==="custom" || link.rules.includes(r.id));
 
 // Enforcement periods — the strictest requirement wins when frameworks overlap.
 const pm2Months = e => e.unit==="years" ? Number(e.period)*12 : Number(e.period);
-function pm2EffectivePeriod(p){
-  const e = p.enf; if(!e||e.action!=="retention") return null;
+function pm2EffectivePeriod(p, r){
+  const e = r&&r.enf; if(!e||e.action!=="retention") return null;
   const fws = pm2LinkedFws(p);
   if(e.mode==="dispose"){
     const caps = fws.filter(f=>f.retentionCeiling).map(f=>({fw:f.name,m:f.retentionCeiling})).sort((a,b)=>a.m-b.m);
@@ -13315,74 +13326,75 @@ function pm2EffectivePeriod(p){
   return {years:ownY, label:`${e.period} ${e.unit}`, why:reqs[0]?`meets ${reqs[0].fw}'s ${reqs[0].y}-year minimum`:"your schedule — no linked regulation sets a number", floor:reqs[0]?.y||0};
 }
 
-// ── One evaluator for every policy, whatever its source.
-function pm2Eval(p){
+// ── One evaluator for every rule, whatever policy it sits in.
+function pm2EvalRule(p, r){
   const out = {findings:[], targets:[], held:[]};
-  if(p.type==="validation"){
-    (p.rules||[]).forEach(r=>PM2_ASSETS.forEach(a=>{
-      if(pm2AssetInPolicy(a,p) && (r.conds||[]).every(c=>pm2CondTest(c,a))) out.findings.push({asset:a, rule:r, msg:r.msg||"Matches the rule", severity:p.severity||"Medium"});
-    }));
-  } else if(p.type==="enforcement" && p.enf){
-    const e = p.enf; const eff = pm2EffectivePeriod(p);
+  if(r.type==="validation"){
+    PM2_ASSETS.forEach(a=>{ if(pm2AssetInPolicy(a,p,r) && (r.conds||[]).length && r.conds.every(c=>pm2CondTest(c,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
+  } else if(r.type==="enforcement" && r.enf){
+    const e = r.enf; const eff = pm2EffectivePeriod(p, r);
     PM2_ASSETS.forEach(a=>{
       if(e.action==="hold"){
         const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm2AssetInPolicy(a,p));
-        if(pick) out.targets.push({asset:a, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
+        if(pick) out.targets.push({asset:a, rule:r, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
         return;
       }
       if(e.select==="assets" ? !(e.assets||[]).includes(a.name) : !pm2AssetInPolicy(a,p)) return;
       if(e.mode==="dispose"){
         if(a.env!=="prod") return;
-        // Disposal is about personal data; a policy scoped only to non-personal classes applies to all of it.
         const personalScope = e.select!=="assets" && (p.scope.includes("ALL")||p.scope.some(c=>PM2_PERSONAL.includes(c)));
         if(personalScope && !pm2Classes(a).some(c=>PM2_PERSONAL.includes(c))) return;
         if(a.hold){ out.held.push(a); return; }
         const longer = pm2Classes(a).some(c=>["FIN","AUDIT"].includes(c));
-        out.targets.push({asset:a, verb:"Set disposition", detail:longer?"Keeps the longer mandated period, then disposal applies":`${e.disposal} ${eff.label} after ${e.trigger.toLowerCase()}`});
+        out.targets.push({asset:a, rule:r, verb:"Set disposition", detail:longer?"Keeps the longer mandated period, then disposal applies":`${e.disposal} ${eff.label} after ${e.trigger.toLowerCase()}`});
       } else {
-        out.targets.push({asset:a, verb:"Retain", detail:`Locked for at least ${eff.label} from ${e.trigger.toLowerCase()} · ${pm2Classes(a).filter(c=>p.scope.includes(c)||p.scope.includes("ALL")).map(c=>PM2_CLASS_META[c].label).join(", ")}`});
+        out.targets.push({asset:a, rule:r, verb:"Retain", detail:`Locked for at least ${eff.label} from ${e.trigger.toLowerCase()}`});
       }
     });
   }
   return out;
 }
+function pm2Eval(p, rules){
+  const out = {findings:[], targets:[], held:[], attest:[]};
+  (rules||p.rules||[]).forEach(r=>{ if(r.type==="attestation"){ out.attest.push(r); return; } const x=pm2EvalRule(p,r); out.findings.push(...x.findings); out.targets.push(...x.targets); out.held.push(...x.held); });
+  return out;
+}
 
-// ── Attestation schedule: current / due soon / due / overdue / in review.
-function pm2AttState(p){
-  const subs = p.submissions||[]; const a = p.att||{};
+// ── Attestation schedule for one rule: current / due soon / due / overdue / in review.
+function pm2AttState(p, r){
+  const subs = r.submissions||[]; const a = r.att||{};
   const pending = subs.find(s=>s.status==="pending");
   const lastOk = subs.filter(s=>s.status==="approved").sort((x,y)=>y.decidedAt.localeCompare(x.decidedAt))[0];
   const lastRej = subs.filter(s=>s.status==="rejected").sort((x,y)=>y.at.localeCompare(x.at))[0];
   const today = pm2Today();
   const due = lastOk ? pm2AddMonths(lastOk.decidedAt, a.every||12) : (p.activatedAt||p.created||today);
   if(pending) return {state:"review", label:`Submitted — awaiting ${pending.reviewer}`, due, pending, lastOk};
-  if(lastOk && due>today){
-    const soon = pm2AddDays(today, a.remind||14) >= due;
-    return {state:soon?"soon":"current", label:soon?`Due ${due}`:`Current until ${due}`, due, lastOk};
-  }
+  if(lastOk && due>today){ const soon = pm2AddDays(today, a.remind||14) >= due; return {state:soon?"soon":"current", label:soon?`Due ${due}`:`Current until ${due}`, due, lastOk}; }
   if(lastRej && (!lastOk || lastRej.at>lastOk.decidedAt)) return {state:"rejected", label:`Rejected by ${lastRej.decidedBy} — resubmit`, due, lastOk, lastRej};
   return {state:lastOk?"overdue":"due", label:lastOk?`Overdue since ${due}`:"Due now — never submitted", due, lastOk};
 }
-const pm2Assignee = p => { const x=p.att?.assignee||"owner"; return x==="owner"?p.owner : x==="steward"?((p.stewards||[])[0]||p.owner) : x; };
+const pm2Assignee = (p, r) => { const x=r.att?.assignee||"owner"; return x==="owner"?p.owner : x==="steward"?((p.stewards||[])[0]||p.owner) : x; };
 
 // ── Build a Regulation policy from a template for a framework.
-const PM2_TPL_OWNER = {"C-INV":"maya.chen","C-OWN":"maya.chen","C-ROPA":"maya.chen","C-ENC":"james.oh","C-ACC":"james.oh","C-XB":"maya.chen","C-MIN":"maya.chen","C-DQ":"sarah.kim","C-MASKNP":"james.oh","C-MASKENT":"maya.chen","C-RET":"dev.patel","C-RETREC":"sarah.kim","C-HOLD":"sarah.kim","C-DSR":"maya.chen","C-AUDIT":"james.oh","C-RISK":"maya.chen"};
-const PM2_TPL_STEWARD = {"C-ENC":"alex.wu","C-ACC":"alex.wu","C-AUDIT":"alex.wu","C-MASKNP":"alex.wu","C-DQ":"dev.patel","C-RETREC":"dev.patel","C-HOLD":"dev.patel","C-RET":"sarah.kim"};
+const PM2_TPL_OWNER = {"P-DISCOVER":"maya.chen","P-OWN":"maya.chen","P-ROPA":"maya.chen","P-ENC":"james.oh","P-ACC":"james.oh","P-XB":"maya.chen","P-MIN":"maya.chen","P-DQ":"sarah.kim","P-MASK":"james.oh","P-RET":"dev.patel","P-RECORDS":"sarah.kim","P-HOLD":"sarah.kim","P-DSR":"maya.chen","P-AUDIT":"james.oh","P-RISK":"maya.chen"};
+const PM2_TPL_STEWARD = {"P-ENC":"alex.wu","P-ACC":"alex.wu","P-AUDIT":"alex.wu","P-MASK":"alex.wu","P-DQ":"dev.patel","P-RECORDS":"dev.patel","P-HOLD":"dev.patel","P-RET":"sarah.kim"};
 const pm2TplPolicyId = (tid, fw) => PM2_TPL[tid].perFramework ? `p-${tid}-${fw.id}` : `p-${tid}`;
+const pm2RuleFromTpl = (tid, r) => ({id:pm2RuleId(tid,r.key), key:r.key, origin:"prebuilt", type:r.type, name:r.name, finding:r.finding, severity:r.severity, scopeBy:r.scopeBy,
+  conds:(r.conds||[]).map(c=>({...c})), enf:r.enf?{...r.enf, assets:[...(r.enf.assets||[])]}:null,
+  att:r.att?{...r.att, form:r.att.form.map(f=>({...f, opts:[...f.opts]}))}:null, submissions:[]});
 function pm2PolicyFromTemplate(tid, fw, owner, stewards){
   const t = PM2_TPL[tid];
-  return {id:pm2TplPolicyId(tid,fw), template:tid, tplVersion:t.version||1, source:"regulation", type:t.type,
-    name: t.perFramework ? `${fw.name} · ${t.name}` : t.name, purpose:t.why, category:t.type==="enforcement"?"Retention":t.type==="attestation"?"Governance":"Privacy",
-    scopeBy:t.scopeBy||"class", scope:[], domains:[], articles:[], severity:t.severity||"Medium",
-    rules:(t.rules||[]).map((r,i)=>({id:`${tid}-r${i+1}`, conds:r.conds.map(c=>({...c})), msg:r.msg})),
-    enf:t.enf?{...t.enf, assets:[...(t.enf.assets||[])]}:null,
-    att:t.att?{...t.att, form:t.att.form.map(f=>({...f, opts:[...f.opts]}))}:null,
-    submissions:[], owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm2Today()};
+  return {id:pm2TplPolicyId(tid,fw), template:tid, tplVersion:t.version||1, source:"regulation",
+    name: t.perFramework ? `${fw.name} · ${t.name}` : t.name, purpose:t.why, category:t.category,
+    scope:[], domains:[], articles:[], rules:t.rules.map(r=>pm2RuleFromTpl(tid,r)),
+    owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm2Today()};
 }
-// Link a policy to every article of `fw` that recommends its template, and widen its scope.
+// Link a policy to every article of `fw` that names its template, recording exactly which rules each article counts.
 function pm2LinkToFw(p, fw){
-  const arts = fw.arts.map((a,i)=>({a,i})).filter(({a})=>(a.c||[]).includes(p.template)).map(({i})=>({fw:fw.id,i,ok:true}));
-  const add = p.template==="C-RETREC" ? (fw.recordClasses||[]) : fw.covers;
+  const arts = [];
+  fw.arts.forEach((a,i)=>(a.c||[]).forEach(ref=>{ const {tid,keys}=pm2ParseRef(ref); if(tid!==p.template) return;
+    arts.push({fw:fw.id, i, ok:true, rules: keys ? keys.map(k=>pm2RuleId(tid,k)) : null}); }));
+  const add = p.template==="P-RECORDS" ? (fw.recordClasses||[]) : fw.covers;
   return {...p, scope:[...new Set([...p.scope, ...add])], articles:[...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))]};
 }
 
@@ -13391,7 +13403,7 @@ let _pm2 = (()=>{
   const byId = {};
   Object.keys(adopted).forEach(fid=>{
     const fw = pm2Fw(fid);
-    [...new Set(fw.arts.flatMap(a=>a.c||[]))].forEach(tid=>{
+    [...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))].forEach(tid=>{
       const id = pm2TplPolicyId(tid, fw);
       if(!byId[id]) byId[id] = pm2PolicyFromTemplate(tid, fw, PM2_TPL_OWNER[tid], [PM2_TPL_STEWARD[tid]||"priya.nair"]);
       byId[id] = pm2LinkToFw(byId[id], fw);
@@ -13400,88 +13412,93 @@ let _pm2 = (()=>{
   const policies = Object.values(byId).map(p=>({...p, status:"Active", activatedAt:"2026-06-20", history:[
     {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
     {when:"2026-06-02", who:p.owner, what:`Created from the ${pm2LinkedFws(p).map(f=>f.name).join(" / ")} template`}]}));
+  const pol = id => policies.find(p=>p.id===id); const rule = (id, key) => pol(id)?.rules.find(r=>r.key===key);
   // Seeded one template version behind, to show "update available".
-  const xb = policies.find(p=>p.template==="C-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
-  // GDPR's DPIA is attested and current; SOC 2's logging attestation is waiting for review.
-  const risk = policies.find(p=>p.id==="p-C-RISK-gdpr");
+  const xb = pol("p-P-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
+  // Evidence already on file: GDPR's DPIA is approved; SOC 2 logging is waiting for review; last quarter's access review is approved.
+  const risk = rule("p-P-RISK-gdpr","assessment");
   if(risk) risk.submissions=[{id:"sub-seed-1", by:"maya.chen", at:"2026-06-08", status:"approved", reviewer:"alex.rivera", decidedBy:"alex.rivera", decidedAt:"2026-06-10",
     values:pm2Vals(risk.att.form,["2026-06-05","Customer analytics: customers, orders, customers_archive","Re-identification through joins in analytics copies","Low","maya.chen","https://sharepoint/privacy/DPIA-2026-03.pdf"])}];
-  const aud = policies.find(p=>p.id==="p-C-AUDIT-soc2");
+  const aud = rule("p-P-AUDIT","logging");
   if(aud) aud.submissions=[{id:"sub-seed-2", by:"alex.wu", at:"2026-09-21", status:"pending", reviewer:"maya.chen",
     values:pm2Vals(aud.att.form,["Snowflake, Postgres, Oracle, MySQL, Databricks","yes","12 months","https://confluence/sec/audit-logging-2026","alex.wu"])}];
+  const acr = rule("p-P-ACC","review");
+  if(acr) acr.submissions=[{id:"sub-seed-3", by:"james.oh", at:"2026-07-02", status:"approved", reviewer:"maya.chen", decidedBy:"maya.chen", decidedAt:"2026-07-03",
+    values:pm2Vals(acr.att.form,["Q2 2026","Snowflake (412), Postgres (88), Oracle (64)","17","Two break-glass accounts kept","https://jira/ACR-Q2-2026"])}];
+  // Reviews already signed off this year, so only the genuinely open forms come due.
+  const seedOk = (r, id, by, reviewer, at, decidedAt) => { if(!r) return; r.submissions=[{id, by, at, status:"approved", reviewer, decidedBy:reviewer, decidedAt,
+    values:Object.fromEntries(r.att.form.map(f=>[f.id, f.type==="date"?at:f.type==="yesno"?"yes":f.type==="doc"?`https://sharepoint/governance/${id}.pdf`:f.type==="person"?by:f.type==="select"?(f.opts[0]||""):f.type==="number"?"12":"Reviewed — no changes needed"]))}]; };
+  seedOk(rule("p-P-ROPA","review"), "sub-seed-4", "maya.chen", "alex.rivera", "2026-04-14", "2026-04-16");
+  seedOk(rule("p-P-RET","review"), "sub-seed-5", "dev.patel", "maya.chen", "2026-03-02", "2026-03-04");
+  seedOk(rule("p-P-ENC","keys"), "sub-seed-6", "james.oh", "maya.chen", "2026-05-11", "2026-05-12");
+  seedOk(rule("p-P-DISCOVER","inventory"), "sub-seed-7", "maya.chen", "alex.rivera", "2026-06-22", "2026-06-24");
+  // A custom rule added to a prebuilt policy — your organisation asks for more than the regulation.
+  const acc = pol("p-P-ACC");
+  if(acc){ acc.rules.push({id:"r-cust-fin-broad", key:null, origin:"custom", type:"validation", name:"Finance data is never granted to broad roles", finding:"Finance data granted to a broad role", severity:"Critical",
+    conds:[{f:"domain",op:"is",v:"Finance"},{f:"access",op:"is",v:"Broad"}], enf:null, att:null, submissions:[]});
+    acc.history.unshift({when:"2026-09-02", who:"james.oh", what:"Added custom rule “Finance data is never granted to broad roles” — approved by maya.chen, v2 active"}); acc.version=2; }
   // Your framework reuses a regulation policy for IDS-1 — no approval needed, it's your standard.
-  const own = policies.find(p=>p.id==="p-C-OWN"); if(own) own.articles.push({fw:"cf-ids", i:0, ok:true});
-  // Custom policies — one of each type.
-  policies.push({id:"p-cust-hr", template:null, source:"custom", type:"validation", name:"HR compensation masking check", category:"Privacy",
+  const own = pol("p-P-OWN"); if(own) own.articles.push({fw:"cf-ids", i:0, ok:true, rules:null});
+  // Custom policies — built by your organisation.
+  policies.push({id:"p-cust-hr", template:null, source:"custom", name:"HR compensation masking", category:"Privacy",
     purpose:"Salary and national ID are masked for everyone outside the HR compensation team, in every environment.",
-    scopeBy:"class", scope:["SPI"], domains:[], severity:"High",
-    rules:[{id:"p-cust-hr-r1", conds:[{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], msg:"HR sensitive columns are not masked"}],
-    articles:[{fw:"cf-ids", i:1, ok:true},{fw:"gdpr", i:8, ok:false}], submissions:[], enf:null, att:null,
+    scope:["SPI"], domains:[], rules:[{id:"r-hr-1", key:null, origin:"custom", type:"validation", name:"HR sensitive columns are masked", finding:"HR sensitive columns are not masked", severity:"High",
+      conds:[{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], enf:null, att:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:1, ok:true, rules:null},{fw:"gdpr", i:8, ok:false, rules:null}],
     owner:"james.oh", stewards:["maya.chen"], status:"Active", activatedAt:"2026-09-12", version:1, reqId:null, draft:null, created:"2026-09-12",
-    history:[{when:"2026-09-12", who:"EDG", what:"Activated without approval — validation policies change no data"},{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
-  policies.push({id:"p-cust-fin", template:null, source:"custom", type:"enforcement", name:"Finance records 7-year retention", category:"Retention",
-    purpose:"Ledger and transaction records are locked for 7 years so audit evidence can't be disposed of early.",
-    scopeBy:"class", scope:["FIN"], domains:["Finance"], severity:"High", rules:[],
-    enf:{action:"retention", mode:"minimum", period:7, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete"},
-    articles:[{fw:"cf-ids", i:2, ok:true}], submissions:[], att:null,
+    history:[{when:"2026-09-12", who:"EDG", what:"Activated without approval — validation-only policies change no data"},{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
+  policies.push({id:"p-cust-fin", template:null, source:"custom", name:"Finance records 7-year retention", category:"Retention",
+    purpose:"Ledger and transaction records are locked for 7 years so audit evidence can't be disposed of early, and the lock is confirmed each year.",
+    scope:["FIN"], domains:["Finance"], rules:[
+      {id:"r-fin-1", key:null, origin:"custom", type:"enforcement", name:"Keep finance records for 7 years", enf:{action:"retention", mode:"minimum", period:7, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete", select:"flag", assets:[]}, conds:[], att:null, submissions:[]},
+      {id:"r-fin-2", key:null, origin:"custom", type:"attestation", name:"Finance retention lock confirmed", att:{instructions:"Confirm every ledger and transaction store has the 7-year lock applied and that nothing was disposed of early.", every:12, remind:30, assignee:"owner", reviewer:"approver",
+        form:[pm2Field("Stores checked","long",true),pm2Field("Lock applied on every store","yesno",true),pm2Field("Evidence","doc",true)]}, conds:[], enf:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:2, ok:true, rules:null}],
     owner:"sarah.kim", stewards:["dev.patel"], status:"Draft", version:1, reqId:null, draft:null, created:"2026-09-20",
     history:[{when:"2026-09-20", who:"sarah.kim", what:"Created (custom policy)"}]});
-  policies.push({id:"p-cust-acr", template:null, source:"custom", type:"attestation", name:"Quarterly access review", category:"Access",
-    purpose:"Access to every system holding sensitive data is reviewed by its owner and signed off each quarter.",
-    scopeBy:"class", scope:["ALL"], domains:[], severity:"Medium", rules:[], enf:null,
-    att:{name:"Quarterly access review signed off", instructions:"List every system holding sensitive data, how many accounts were reviewed in each, what access was removed, and any exceptions approved. Attach the export or ticket as evidence.", every:3, remind:14, assignee:"sarah.kim", reviewer:"owner", form:[
-      pm2Field("Quarter reviewed","select",true,"",["Q1 2026","Q2 2026","Q3 2026","Q4 2026"]),
-      pm2Field("Systems reviewed","long",true,"List every system and the number of accounts reviewed"),
-      pm2Field("Access removed","text",false,"Number of accounts or grants revoked"),
-      pm2Field("Exceptions approved","long",false),
-      pm2Field("Review evidence","doc",true,"Export or ticket link")]},
-    articles:[{fw:"cf-ids", i:3, ok:true}], submissions:[],
+  policies.push({id:"p-cust-vendor", template:null, source:"custom", name:"Vendor data sharing review", category:"Governance",
+    purpose:"Every dataset shared with a vendor is reviewed and signed off each year.",
+    scope:["ALL"], domains:[], rules:[{id:"r-vendor-1", key:null, origin:"custom", type:"attestation", name:"Vendor data-sharing review signed off",
+      att:{instructions:"List every dataset shared with a vendor, the purpose, the contract that covers it, and confirm the vendor still needs it.", every:12, remind:30, assignee:"sarah.kim", reviewer:"owner",
+        form:[pm2Field("Vendors and datasets","long",true),pm2Field("Contracts in place","yesno",true),pm2Field("Sharing stopped","long",false),pm2Field("Evidence","doc",true)]}, conds:[], enf:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:3, ok:true, rules:null}],
     owner:"maya.chen", stewards:["sarah.kim"], status:"Active", activatedAt:"2026-09-01", version:1, reqId:null, draft:null, created:"2026-09-01",
     history:[{when:"2026-09-01", who:"alex.rivera", what:"Approved — v1 active"},{when:"2026-08-28", who:"maya.chen", what:"Created (custom policy)"}]});
   const approved = {};
-  policies.filter(p=>p.status==="Active").forEach(p=>pm2Eval(p).targets.forEach(t=>{ approved[p.id+":"+t.asset.name]=true; }));
+  policies.filter(p=>p.status==="Active").forEach(p=>pm2Eval(p).targets.forEach(t=>{ approved[`${p.id}:${t.rule.id}:${t.asset.name}`]=true; }));
   return {
     adopted:{...adopted, "cf-ids":{owner:"maya.chen", at:"2026-08-01"}}, policies, approved, exceptions:{}, lastRun:{}, fwVer:0,
-    approvalPolicy:{
-      activation:{approver:"maya.chen", autoValidation:true},
-      enforcement:{fallback:"alex.rivera"},
-      attest:{reviewer:"maya.chen"},
-      mapping:{approver:"maya.chen"},
-      exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90},
-      hold:{twoPerson:true},
-      sod:true,
-    },
+    approvalPolicy:{activation:{approver:"maya.chen", autoValidation:true}, enforcement:{fallback:"alex.rivera"}, attest:{reviewer:"maya.chen"}, mapping:{approver:"maya.chen"},
+      exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90}, hold:{twoPerson:true}, sod:true},
   };
 })();
 const _pm2Subs = new Set();
 const pm2Set = (u)=>{ _pm2 = typeof u==="function"?u(_pm2):u; _pm2Subs.forEach(f=>f()); };
 const usePM2 = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_pm2Subs.add(fn);return()=>{_pm2Subs.delete(fn);};},[]); return _pm2; };
 
-const pm2TargetStatus = (polId, asset) => {
-  if(_pm2.approved[polId+":"+asset]) return "approved";
-  const r = _enfReqs.filter(x=>x.policyId==="pm2:"+polId&&x.table===asset).slice(-1)[0];
+const pm2TargetStatus = (polId, ruleId, asset) => {
+  if(_pm2.approved[`${polId}:${ruleId}:${asset}`]) return "approved";
+  const r = _enfReqs.filter(x=>x.policyId==="pm2:"+polId&&x.ruleId===`pm2:${polId}:${ruleId}:${asset}`).slice(-1)[0];
   return r ? r.status : "none";
 };
-// Separation of duties: if the named approver is the requester, route to the fallback.
 const pm2Approver = (named, requester) => {
   const ap = _pm2.approvalPolicy;
   if(ap.sod && named===requester) return named===ap.enforcement.fallback ? "maya.chen" : ap.enforcement.fallback;
   return named;
 };
-const pm2Reviewer = p => { const r=p.att?.reviewer||"approver"; return r==="approver"?_pm2.approvalPolicy.attest.reviewer : r==="owner"?p.owner : r; };
-const pm2Req = (req) => requestStatusChange({id:`sr-pm2-${req.kind}-${Math.random().toString(36).slice(2,8)}-${Date.now()}`, ...req});
+const pm2Reviewer = (p, r) => { const x=r.att?.reviewer||"approver"; return x==="approver"?_pm2.approvalPolicy.attest.reviewer : x==="owner"?p.owner : x; };
 
 // Once a policy is Active, every enforcement target without a decision goes to its table owner.
 function pm2RequestTargets(){
   const ap = _pm2.approvalPolicy; let approved = null;
-  _pm2.policies.filter(p=>p.status==="Active"&&p.type==="enforcement").forEach(p=>{
+  _pm2.policies.filter(p=>p.status==="Active").forEach(p=>{
     pm2Eval(p).targets.forEach(t=>{
-      if(pm2TargetStatus(p.id,t.asset.name)!=="none") return;
+      if(pm2TargetStatus(p.id,t.rule.id,t.asset.name)!=="none") return;
       const owner = t.asset.owner;
-      if(owner && owner===p.owner){ approved = approved||{..._pm2.approved}; approved[p.id+":"+t.asset.name]=true; return; }
+      if(owner && owner===p.owner){ approved = approved||{..._pm2.approved}; approved[`${p.id}:${t.rule.id}:${t.asset.name}`]=true; return; }
       const approver = owner || ap.enforcement.fallback;
-      addEnfApproval({id:`er-pm2-${p.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+p.id, policyName:p.name, ruleId:`pm2:${p.id}:${t.asset.name}`, action:t.verb, table:t.asset.name, approver, requestedBy:p.owner});
-      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${p.name}" needs ${approver} to approve "${t.verb}" on ${t.asset.name}`, nav:"stewardship"});
+      addEnfApproval({id:`er-pm2-${p.id}-${t.rule.id}-${t.asset.name}-${Date.now()}`, policyId:"pm2:"+p.id, policyName:`${p.name} · ${t.rule.name}`, ruleId:`pm2:${p.id}:${t.rule.id}:${t.asset.name}`, action:t.verb, table:t.asset.name, approver, requestedBy:p.owner});
+      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${t.rule.name}" (${p.name}) needs ${approver} to approve "${t.verb}" on ${t.asset.name}`, nav:"stewardship"});
     });
   });
   if(approved) pm2Set(s=>({...s, approved}));
@@ -13497,7 +13514,6 @@ function pm2Sync(){
     let changed = false;
     let policies = _pm2.policies.map(p=>{
       let q = p;
-      // activation or a change
       const rid = q.draft ? q.draft.reqId : q.reqId; const r = reqOf(rid);
       if(decided(r)){
         changed = true;
@@ -13507,22 +13523,19 @@ function pm2Sync(){
         } else if(q.draft) q = {...q, draft:null, history:[{when:pm2Today(), who:who(r), what:`Change to v${q.draft.version} rejected — v${q.version} keeps running`}, ...(q.history||[])]};
         else q = {...q, status:"Rejected", reqId:null, history:[{when:pm2Today(), who:who(r), what:"Rejected — back to the owner"}, ...(q.history||[])]};
       }
-      // custom mappings to regulation articles
       const mr = reqOf(q.mapReqId);
       if(decided(mr)){
-        changed = true;
-        const ok = mr.status==="approved";
-        const n = q.articles.filter(x=>x.ok===false).length;
+        changed = true; const ok = mr.status==="approved"; const n = q.articles.filter(x=>x.ok===false).length;
         q = {...q, mapReqId:null, articles: ok ? q.articles.map(x=>({...x, ok:true})) : q.articles.filter(x=>x.ok!==false),
              history:[{when:pm2Today(), who:who(mr), what: ok?`Approved ${n} regulation article mapping${n>1?"s":""} — they now count toward readiness`:"Regulation article mapping rejected — removed"}, ...(q.history||[])]};
       }
-      // attestation reviews
-      if((q.submissions||[]).some(s=>s.status==="pending"&&decided(reqOf(s.reqId)))){
-        changed = true;
-        q = {...q, submissions:q.submissions.map(s=>{ const sr=reqOf(s.reqId); if(s.status!=="pending"||!decided(sr)) return s;
-          return {...s, status:sr.status, decidedBy:who(sr), decidedAt:pm2Today(), comment:sr.comment||s.comment}; })};
-        const last = q.submissions.find(s=>s.decidedAt===pm2Today());
-        q = {...q, history:[{when:pm2Today(), who:last?.decidedBy||"reviewer", what:last?.status==="approved"?`Attestation approved — next due ${pm2AddMonths(pm2Today(), q.att?.every||12)}`:"Attestation rejected — back to the assignee"}, ...(q.history||[])]};
+      // attestation reviews, rule by rule
+      if(q.rules.some(rl=>(rl.submissions||[]).some(s=>s.status==="pending"&&decided(reqOf(s.reqId))))){
+        changed = true; const notes = [];
+        q = {...q, rules:q.rules.map(rl=>({...rl, submissions:(rl.submissions||[]).map(s=>{ const sr=reqOf(s.reqId); if(s.status!=="pending"||!decided(sr)) return s;
+          notes.push(`${rl.name}: ${sr.status==="approved"?`approved — next due ${pm2AddMonths(pm2Today(), rl.att?.every||12)}`:"rejected — back to the assignee"}`);
+          return {...s, status:sr.status, decidedBy:who(sr), decidedAt:pm2Today(), comment:sr.comment||s.comment}; })}))};
+        q = {...q, history:[...notes.map(n=>({when:pm2Today(), who:"reviewer", what:`Attestation ${n}`})), ...(q.history||[])]};
       }
       return q;
     });
@@ -13535,22 +13548,22 @@ function pm2Sync(){
     // open the requests that are now owed
     policies = policies.map(p=>{
       let q = p;
-      (q.submissions||[]).forEach((s,i)=>{ if(s.status==="pending"&&!s.reqId){
-        const reviewer = pm2Approver(s.reviewer||pm2Reviewer(q), s.by); const id = `sr-pm2-att-${q.id}-${i}-${Date.now()}`;
-        requestStatusChange({id, kind:"pm2attest", targetId:q.id, name:`Attestation · ${q.name}`, requestedStatus:"Approved", requestedBy:s.by, approver:reviewer, note:"Review the submitted evidence"});
-        q = {...q, submissions:q.submissions.map((x,j)=>j===i?{...x, reqId:id, reviewer}:x)}; changed = true; } });
+      q.rules.forEach((rl,ri)=>(rl.submissions||[]).forEach((s,si)=>{ if(s.status==="pending"&&!s.reqId){
+        const reviewer = pm2Approver(s.reviewer||pm2Reviewer(q,rl), s.by); const id = `sr-pm2-att-${q.id}-${rl.id}-${si}-${Date.now()}`;
+        requestStatusChange({id, kind:"pm2attest", targetId:q.id, ruleId:rl.id, name:`Attestation · ${rl.name}`, requestedStatus:"Approved", requestedBy:s.by, approver:reviewer, note:"Review the submitted evidence"});
+        q = {...q, rules:q.rules.map((x,xi)=>xi!==ri?x:{...x, submissions:x.submissions.map((y,yi)=>yi===si?{...y, reqId:id, reviewer}:y)})}; changed = true; } }));
       if(q.status!=="Draft" && q.articles.some(x=>x.ok===false) && !q.mapReqId){
         const n = q.articles.filter(x=>x.ok===false).length; const approver = pm2Approver(_pm2.approvalPolicy.mapping.approver, q.owner);
         const id = `sr-pm2-map-${q.id}-${Date.now()}`;
         requestStatusChange({id, kind:"pm2mapping", targetId:q.id, name:`Article mapping · ${q.name}`, requestedStatus:"Approved", requestedBy:q.owner, approver, note:`${n} regulation article${n>1?"s":""} this custom policy claims to satisfy`});
         q = {...q, mapReqId:id}; changed = true;
       }
-      if(q.status==="Active" && q.type==="attestation"){
-        const s = pm2AttState(q); const owed = ["due","overdue","rejected"].includes(s.state);
-        const open = _statusReqs.find(r=>r.kind==="pm2attestdue"&&r.targetId===q.id&&r.status==="pending");
-        if(owed && !open){ requestStatusChange({id:`sr-pm2-due-${q.id}-${Date.now()}`, kind:"pm2attestdue", targetId:q.id, name:`Submit attestation · ${q.name}`, requestedStatus:"Submitted", requestedBy:"EDG", approver:pm2Assignee(q), note:s.label}); }
+      if(q.status==="Active") q.rules.filter(rl=>rl.type==="attestation").forEach(rl=>{
+        const s = pm2AttState(q, rl); const owed = ["due","overdue","rejected"].includes(s.state); const tid = `${q.id}|${rl.id}`;
+        const open = _statusReqs.find(r=>r.kind==="pm2attestdue"&&r.targetId===tid&&r.status==="pending");
+        if(owed && !open) requestStatusChange({id:`sr-pm2-due-${q.id}-${rl.id}-${Date.now()}`, kind:"pm2attestdue", targetId:tid, name:`Submit attestation · ${rl.name}`, requestedStatus:"Submitted", requestedBy:"EDG", approver:pm2Assignee(q,rl), note:s.label});
         if(!owed && open) srSet(prev=>prev.map(r=>r.id===open.id?{...r, status:"approved", decidedBy:"EDG"}:r));
-      }
+      });
       return q;
     });
     if(changed) pm2Set(s=>({...s, policies, exceptions}));
@@ -13560,6 +13573,7 @@ function pm2Sync(){
 let _pm2Hooked = false;
 // Set by the Workspace inbox so "Open in Policy Manager 2" lands on the exact policy and tab.
 let _pm2Deep = null;
+
 
 const PolicyManager2View = ({onToast, onNav}) => {
   const st = usePM2();
@@ -13576,34 +13590,32 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const [selFw, setSelFw]     = useState(null);
   const [selPol, setSelPol]   = useState(()=>_pm2Deep?_pm2Deep.policy:null);
   const [pdTab, setPdTab]     = useState(()=>_pm2Deep?.tab||"overview");
-  // Consume the inbox's deep link once — it has already set the first tab, policy and detail tab above.
   useEffect(()=>{ if(_pm2Deep){ const d=_pm2Deep; _pm2Deep=null; if(d.folder) setExpCat(x=>({...x,[d.folder]:true})); } },[]);
   const [apOpen, setApOpen]   = useState(false);   // Approval policies panel (the queue itself lives in the Workspace inbox)
-  const [wiz, setWiz]         = useState(null);   // adopt a built-in framework
-  const [ed, setEd]           = useState(null);   // create / edit a policy
-  const [fwEd, setFwEd]       = useState(null);   // create / edit a custom framework
+  const [wiz, setWiz]         = useState(null);    // adopt a regulation
+  const [ed, setEd]           = useState(null);    // create / edit a policy
+  const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
+  const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
   const [q, setQ]             = useState("");
   const [polQ, setPolQ]       = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [expGrp, setExpGrp]   = useState({regulation:true, custom:true});
   const [plusOpen, setPlusOpen] = useState(false);
   const [findFilter, setFindFilter] = useState("all");
   const [excDraft, setExcDraft] = useState(null);   // {key, reason}
-  const [fill, setFill]       = useState(null);     // {polId, values}
+  const [fill, setFill]       = useState(null);     // {polId, ruleId, values}
   const [review, setReview]   = useState(null);     // {reqId, comment}
   const [openSub, setOpenSub] = useState(null);
   const [confirm, setConfirm] = useState(null);     // {title, body, yesLabel, onYes, danger}
   const [menu, setMenu]       = useState(null);     // which ⋮ menu is open
-  const [statusFilter, setStatusFilter] = useState("live");
   const [hovPol, setHovPol]   = useState(null);
   const [selFolder, setSelFolder] = useState(null); // which framework folder the selected policy was opened from
-  const [descEdit, setDescEdit] = useState(null);   // inline description edit, as in the original
-  const [sideEdit, setSideEdit] = useState(null);   // which sidebar field is being edited
+  const [descEdit, setDescEdit] = useState(null);
+  const [sideEdit, setSideEdit] = useState(null);
   const [expCat, setExpCat]   = useState({});
   const [expFind, setExpFind] = useState(null);
   const [findQ, setFindQ]     = useState("");
   const [findSev, setFindSev] = useState("All");
   const [findStat, setFindStat] = useState("Open");
+  const [expArt, setExpArt]   = useState({});
 
   // ── permissions ──
   const canEdit   = p => isAdmin || p.owner===me || (p.stewards||[]).includes(me);
@@ -13614,42 +13626,47 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const allFws     = pm2AllFw();
   const adoptedFws = allFws.filter(f=>st.adopted[f.id]);
   const livePols   = st.policies.filter(p=>p.status!=="Retired");
-  const evalOf     = p => pm2Eval(p);
+  const evalOf     = (p, rules) => pm2Eval(p, rules);
   const excKey     = (p,r,a) => `${p.id}|${r.id}|${a.name}`;
   const excOf      = (p,r,a) => st.exceptions[excKey(p,r,a)];
   const isExcepted = (p,r,a) => excOf(p,r,a)?.status==="accepted";
+  const linkOf     = (p,fw,i) => p.articles.find(x=>x.fw===fw.id&&x.i===i);
   const polsForArt = (fw,i,incPending) => livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i&&(incPending||x.ok!==false)));
-  const artsOfPol  = (p,incPending) => p.articles.filter(x=>incPending||x.ok!==false).map(x=>{ const fw=pm2Fw(x.fw); return fw&&{fw, i:x.i, ok:x.ok!==false, art:fw.arts[x.i]}; }).filter(x=>x&&x.art);
+  const artsOfPol  = (p,incPending) => p.articles.filter(x=>incPending||x.ok!==false).map(x=>{ const fw=pm2Fw(x.fw); return fw&&{fw, i:x.i, ok:x.ok!==false, link:x, art:fw.arts[x.i]}; }).filter(x=>x&&x.art);
+  const artsOfRule = (p,r) => artsOfPol(p,true).filter(x=>!x.link.rules||r.origin==="custom"||x.link.rules.includes(r.id));
   const reqById    = id => statusReqs.find(r=>r.id===id);
   const pendingReqOf = p => { const r = reqById(p.draft?p.draft.reqId:p.reqId); return r&&r.status==="pending"?r:null; };
   const tplUpdate  = p => p.source==="regulation" && p.template && (PM2_TPL[p.template].version||1) > (p.tplVersion||1) ? PM2_TPL[p.template] : null;
 
-  const polHealth = (p, fw) => {
+  // Health of one rule, optionally within one framework's scope.
+  const ruleHealth = (p, r, fw) => {
+    const inFw = a => !fw || pm2AssetInFw(a,p,fw,r);
+    if(r.type==="attestation"){ const s=pm2AttState(p,r); return {state:{current:"met",soon:"met",review:"review2",due:"evidence",overdue:"findings",rejected:"findings"}[s.state], label:s.label}; }
+    const ev = pm2EvalRule(p,r);
+    if(r.type==="validation"){ const f=ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,r,x.asset)); return f.length?{state:"findings",label:`${f.length} finding${f.length>1?"s":""}`,n:f.length}:{state:"met",label:"Passing"}; }
+    const tg = ev.targets.filter(t=>inFw(t.asset)); const ts = tg.map(t=>pm2TargetStatus(p.id,r.id,t.asset.name));
+    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected it"};
+    const pend = ts.filter(s=>s!=="approved").length;
+    return pend?{state:"pending",label:`${pend} of ${tg.length} table${tg.length>1?"s":""} awaiting owner`}:{state:"met",label:tg.length?`Running on ${tg.length} table${tg.length===1?"":"s"}`:"No tables in scope"};
+  };
+  const ART_ORDER = ["uncovered","norules","rejected","findings","draft","review","pending","review2","evidence","met"];
+  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, norules:{l:"No rules",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted},
+    review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, review2:{l:"Evidence in review",c:T.amber}, evidence:{l:"Evidence due",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
+  // Health of a policy — for one article (its exact rules) or overall.
+  const polHealth = (p, fw, link) => {
     if(p.status==="Draft")    return {state:"draft", label:"Draft — not submitted"};
     if(p.status==="Rejected") return {state:"rejected", label:"Rejected"};
     if(p.status==="Retired")  return {state:"draft", label:"Retired"};
     if(p.status==="In review"){ const r=pendingReqOf(p); return {state:"review", label:`In review with ${r?.approver||"approver"}`}; }
-    if(p.type==="attestation"){
-      const s = pm2AttState(p);
-      return {state:{current:"met",soon:"met",review:"review2",due:"evidence",overdue:"findings",rejected:"findings"}[s.state], label:s.label};
-    }
-    const ev = evalOf(p); const inFw = a => !fw || pm2AssetInFw(a,p,fw);
-    if(p.type==="validation"){
-      const f = ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,x.rule,x.asset));
-      return f.length ? {state:"findings", label:`${f.length} finding${f.length>1?"s":""}`} : {state:"met", label:"Passing"};
-    }
-    const tg = ev.targets.filter(t=>inFw(t.asset)); const ts = tg.map(t=>pm2TargetStatus(p.id,t.asset.name));
-    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected it"};
-    const pend = ts.filter(s=>s!=="approved").length;
-    return pend ? {state:"pending", label:`${pend} of ${tg.length} table${tg.length>1?"s":""} awaiting owner`} : {state:"met", label:`Running on ${tg.length} table${tg.length===1?"":"s"}`};
+    const rules = pm2RulesForLink(p, link); if(!rules.length) return {state:"norules", label:"No rules"};
+    const hs = rules.map(r=>ruleHealth(p,r,fw)); const worst = ART_ORDER.find(s=>hs.some(h=>h.state===s))||"met";
+    const nF = hs.filter(h=>h.state==="findings").reduce((n,h)=>n+(h.n||1),0);
+    return {state:worst, label: worst==="met" ? `${rules.length} rule${rules.length>1?"s":""} met` : worst==="findings" ? `${nF} finding${nF>1?"s":""}` : hs.find(h=>h.state===worst).label};
   };
-  const ART_ORDER = ["uncovered","rejected","findings","draft","review","pending","review2","evidence","met"];
-  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted},
-    review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, review2:{l:"Evidence in review",c:T.amber}, evidence:{l:"Evidence due",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
   const artState = (fw,i) => {
     const art = fw.arts[i]; if(art.out) return "outside";
     const pols = polsForArt(fw,i); if(!pols.length) return "uncovered";
-    const states = pols.map(p=>polHealth(p,fw).state);
+    const states = pols.map(p=>polHealth(p,fw,linkOf(p,fw,i)).state);
     return ART_ORDER.find(s=>states.includes(s))||"met";
   };
   const fwScore = fw => { const ins=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out); return ins.length?Math.round(ins.filter(i=>artState(fw,i)==="met").length/ins.length*100):0; };
@@ -13659,24 +13676,28 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const statusColor = s => ({Active:T.green, "In review":T.amber, Draft:T.textMuted, Rejected:T.rose, Retired:T.textMuted}[s]||T.textMuted);
   const regMeta = id => { const f=pm2Fw(id); return f&&f.custom ? {fullName:f.fullName, jurisdiction:f.jurisdiction} : (REGS_META.find(r=>r.id===id)||{}); };
 
-  const allFindings = livePols.filter(p=>p.status==="Active"&&p.type==="validation").flatMap(p=>evalOf(p).findings.map(f=>({
+  const allFindings = livePols.filter(p=>p.status==="Active").flatMap(p=>evalOf(p).findings.map(f=>({
     ...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset),
-    refs: artsOfPol(p).filter(x=>st.adopted[x.fw.id]&&pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name, ref:x.art.ref})),
+    refs: artsOfRule(p,f.rule).filter(x=>x.ok&&st.adopted[x.fw.id]&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name, ref:x.art.ref})),
   })));
   const openFindings = allFindings.filter(f=>f.exc?.status!=="accepted");
   const pm2StatusPending = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.status==="pending");
   const pm2EnfPending    = enfReqs.filter(r=>(r.policyId||"").startsWith("pm2:")&&r.status==="pending");
-  const attDue = livePols.filter(p=>p.status==="Active"&&p.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p).state));
+  const attDue = livePols.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p,r).state)).map(r=>({p,r})));
 
   // ── actions ──
   const addHist = (p, what) => ({...p, history:[{when:pm2Today(), who:me, what}, ...(p.history||[])]});
   const updPol  = (id, fn) => pm2Set(s=>({...s, policies:s.policies.map(p=>p.id===id?fn(p):p)}));
+  // Validation rules change no data, so a policy (or a change) made only of validation rules can activate on its own.
+  const onlyValidation = (rules) => rules.length>0 && rules.every(r=>r.type==="validation");
   const submitPolicy = (id, note, quiet) => {
     const p = _pm2.policies.find(x=>x.id===id); if(!p) return;
-    if(p.type==="validation" && _pm2.approvalPolicy.activation.autoValidation){
+    const newRules = p.draft ? (p.draft.fields.rules||p.rules) : p.rules;
+    const changed = p.draft ? newRules.filter(r=>JSON.stringify(r)!==JSON.stringify(p.rules.find(x=>x.id===r.id)||null)) : newRules;
+    if(_pm2.approvalPolicy.activation.autoValidation && onlyValidation(changed) && newRules.length){
       updPol(id, x=>{ const base = x.draft?{...x, ...x.draft.fields, version:x.draft.version, draft:null}:x;
-        return {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm2Today(), history:[{when:pm2Today(), who:"EDG", what:`v${base.version} active without approval — validation policies change no data (approval policy)`}, ...(x.history||[])]}; });
-      if(!quiet) onToast(`"${p.name}" is active — validation changes no data, so no approval needed`,"success");
+        return {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm2Today(), history:[{when:pm2Today(), who:"EDG", what:`v${base.version} active without approval — ${p.draft?"the change only touches":"it only has"} validation rules, which change no data`}, ...(x.history||[])]}; });
+      if(!quiet) onToast(`"${p.name}" is active — validation rules change no data, so no approval needed`,"success");
       setTimeout(pm2Sync,0); return;
     }
     const approver = pm2Approver(_pm2.approvalPolicy.activation.approver, me);
@@ -13687,6 +13708,18 @@ const PolicyManager2View = ({onToast, onNav}) => {
                             : addHist({...x, status:"In review", reqId}, `Submitted to ${approver} for approval`));
     if(!quiet) onToast(`Sent to ${approver} for approval`,"success");
   };
+  // Change a policy's rules: in place for a draft; as the next version (with approval) for an active one.
+  const changeRules = (p, rules, what) => {
+    if(p.status==="Active"){
+      updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{rules}}}, `${what} — drafted as v${x.version+1}`));
+      setTimeout(()=>submitPolicy(p.id, what),0);
+    } else { updPol(p.id, x=>addHist({...x, rules}, what)); onToast(what,"success"); }
+  };
+  const saveRule = (p, rule, isNew) => {
+    const rules = isNew ? [...p.rules, rule] : p.rules.map(r=>r.id===rule.id?rule:r);
+    changeRules(p, rules, isNew ? `Added ${rule.origin} ${rule.type} rule “${rule.name}”` : `Edited rule “${rule.name}”`);
+  };
+  const removeRule = (p, rule) => changeRules(p, p.rules.filter(r=>r.id!==rule.id), `Removed custom rule “${rule.name}”`);
   const decideReq = (r, ok, comment) => {
     srSet(prev=>prev.map(x=>x.id===r.id?{...x, status:ok?"approved":"rejected", decidedBy:me, comment:comment||x.comment}:x));
     pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`${ok?"Approved":"Rejected"} · ${r.name}`, body:`${me} ${ok?"approved":"rejected"} ${r.requestedBy}'s request${comment?` — "${comment}"`:""}`, nav:"policymanager2"});
@@ -13700,47 +13733,48 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const requestException = (f, reason) => {
     const named = ap.exceptions.approver==="policy owner" ? f.pol.owner : ap.exceptions.named;
     const approver = pm2Approver(named, me); const reqId = `sr-pm2x-${Date.now()}`;
-    requestStatusChange({id:reqId, kind:"pm2exception", targetId:f.key, name:`Exception · ${f.asset.name} · ${f.pol.name}`, requestedStatus:"Exception", requestedBy:me, note:reason, approver});
+    requestStatusChange({id:reqId, kind:"pm2exception", targetId:f.key, name:`Exception · ${f.asset.name} · ${f.rule.name}`, requestedStatus:"Exception", requestedBy:me, note:reason, approver});
     pushNotif({category:"Policy", type:"policy", title:`Exception requested · ${f.asset.name}`, body:`${me}: "${reason}"`, nav:"stewardship"});
     pm2Set(s=>({...s, exceptions:{...s.exceptions, [f.key]:{status:"pending", reqId, reason, by:me, approver}}}));
     setExcDraft(null); onToast(`Exception sent to ${approver}`,"success");
   };
   const submitAttestation = () => {
-    const p = st.policies.find(x=>x.id===fill.polId); const miss = p.att.form.filter(f=>f.required&&!String(fill.values[f.id]||"").trim());
+    const p = st.policies.find(x=>x.id===fill.polId); const r = p.rules.find(x=>x.id===fill.ruleId);
+    const miss = r.att.form.filter(f=>f.required&&!String(fill.values[f.id]||"").trim());
     if(miss.length){ onToast(`Fill in: ${miss.map(f=>f.label).join(", ")}`,"info"); return; }
-    const reviewer = pm2Approver(pm2Reviewer(p), me);
-    updPol(p.id, x=>addHist({...x, submissions:[{id:`sub-${Date.now()}`, by:me, at:pm2Today(), status:"pending", reviewer, values:{...fill.values}}, ...(x.submissions||[])]}, `Attestation submitted to ${reviewer}`));
+    const reviewer = pm2Approver(pm2Reviewer(p,r), me);
+    updPol(p.id, x=>addHist({...x, rules:x.rules.map(rl=>rl.id!==r.id?rl:{...rl, submissions:[{id:`sub-${Date.now()}`, by:me, at:pm2Today(), status:"pending", reviewer, values:{...fill.values}}, ...(rl.submissions||[])]})}, `“${r.name}” submitted to ${reviewer}`));
     setFill(null); setTimeout(pm2Sync,0); onToast(`Submitted — ${reviewer} reviews it`,"success");
   };
   const runNow = p => {
     const ev = evalOf(p);
     pm2Set(s=>({...s, lastRun:{...s.lastRun, [p.id]:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}}));
     pm2RequestTargets();
-    onToast(p.type==="validation"?`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}`:`Ran "${p.name}" — ${ev.targets.length} table${ev.targets.length===1?"":"s"} in scope`,"success");
+    onToast(`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}, ${ev.targets.length} table${ev.targets.length===1?"":"s"} under enforcement`,"success");
   };
   const duplicateAsCustom = p => {
     const id = "p-cust-"+Date.now();
-    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (${p.source==="regulation"?"custom":"copy"})`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null, submissions:[],
-      articles:p.articles.map(x=>({...x, ok:!!pm2Fw(x.fw)?.custom})), created:pm2Today(), owner:me, stewards:[...(p.stewards||[])],
-      rules:(p.rules||[]).map((r,i)=>({...r, id:`${id}-r${i+1}`, conds:r.conds.map(c=>{ const {edit, ...rest}=c; return rest; })})),
-      enf:p.enf?{...p.enf, assets:[...(p.enf.assets||[])]}:null, att:p.att?{...p.att, form:p.att.form.map(f=>({...f}))}:null,
+    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (${p.source==="regulation"?"custom":"copy"})`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null,
+      articles:p.articles.map(x=>({...x, ok:!!pm2Fw(x.fw)?.custom, rules:null})), created:pm2Today(), owner:me, stewards:[...(p.stewards||[])],
+      rules:(p.rules||[]).map((r,i)=>({...r, id:`${id}-r${i+1}`, origin:"custom", submissions:[], conds:(r.conds||[]).map(c=>{ const {edit, ...rest}=c; return rest; }), enf:r.enf?{...r.enf,assets:[...(r.enf.assets||[])]}:null, att:r.att?{...r.att,form:r.att.form.map(f=>({...f}))}:null})),
       history:[{when:pm2Today(), who:me, what:`Duplicated from "${p.name}" — regulation mappings need approval before they count`}]};
     pm2Set(s=>({...s, policies:[...s.policies, copy]}));
-    onToast(`Duplicated as a custom draft — edit it, then submit`,"success");
+    onToast(`Duplicated as a custom draft — every rule is now yours to edit`,"success");
     setSelPol(id); setPdTab("overview"); setTimeout(()=>openEditor(copy),0);
   };
   const applyTplUpdate = p => {
     const t = PM2_TPL[p.template];
-    updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{tplVersion:t.version, rules:t.rules.map((r,i)=>({id:`${t.id}-r${i+1}`, conds:r.conds.map(c=>({...c})), msg:r.msg}))}}}, `Template v${t.version} drafted for review: ${t.changelog}`));
+    const pre = t.rules.map(r=>pm2RuleFromTpl(t.id,r)).map(nr=>{ const old=p.rules.find(x=>x.id===nr.id); return old?{...nr, submissions:old.submissions||[]}:nr; });
+    const rules = [...pre, ...p.rules.filter(r=>r.origin==="custom")];
+    updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{tplVersion:t.version, rules}}}, `Template v${t.version} drafted for review: ${t.changelog}`));
     setTimeout(()=>submitPolicy(p.id, `Template update to v${t.version}: ${t.changelog}`),0);
   };
   const setAp = (path, v) => pm2Set(s=>{ const a={...s.approvalPolicy}; const [k1,k2]=path; a[k1]= k2?{...a[k1],[k2]:v}:v; return {...s, approvalPolicy:a}; });
-  const openPolicy = (id, fwId) => { setTab("policies"); setSelFw(null); setSelPol(id); setPdTab("overview"); const f=fwId?"fw:"+fwId:null; setSelFolder(f); if(f) setExpCat(x=>({...x,[f]:true})); };
+  const openPolicy = (id, fwId, tab2) => { setTab("policies"); setSelFw(null); setSelPol(id); setPdTab(tab2||"overview"); const f=fwId?"fw:"+fwId:null; setSelFolder(f); if(f) setExpCat(x=>({...x,[f]:true})); };
 
-  // ── The rest of CRUD. Every object can be created, read, changed and removed; each rule is stated where it applies.
+  // ── The rest of CRUD ──
   const ask = (title, body, yesLabel, onYes, danger) => setConfirm({title, body, yesLabel, onYes, danger});
   const cancelReq = id => srSet(prev=>prev.map(r=>r.id===id&&r.status==="pending"?{...r, status:"withdrawn", decidedBy:me}:r));
-  const canDelete = p => canSubmit(p) && ["Draft","Rejected","Retired"].includes(p.status);
   const canFw = fw => isAdmin || st.adopted[fw.id]?.owner===me || fw.owner===me;
   const withdrawRequest = p => {
     const r = pendingReqOf(p); if(!r) return;
@@ -13750,13 +13784,13 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const retirePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Retired"}, "Retired — stopped running")); onToast(`"${p.name}" retired — restore it any time`,"info"); };
   const restorePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Draft", reqId:null}, "Restored as a draft — submit it to run again")); setSelPol(p.id); onToast("Restored as a draft","success"); };
   const deletePolicy = p => {
-    [p.reqId, p.draft?.reqId, p.mapReqId, ...(p.submissions||[]).map(s=>s.reqId)].filter(Boolean).forEach(cancelReq);
-    statusReqs.filter(r=>r.targetId===p.id&&r.status==="pending").forEach(r=>cancelReq(r.id));
+    [p.reqId, p.draft?.reqId, p.mapReqId, ...p.rules.flatMap(r=>(r.submissions||[]).map(s=>s.reqId))].filter(Boolean).forEach(cancelReq);
+    statusReqs.filter(r=>String(r.targetId||"").split("|")[0]===p.id&&r.status==="pending").forEach(r=>cancelReq(r.id));
     pm2Set(s=>({...s, policies:s.policies.filter(x=>x.id!==p.id), exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>!k.startsWith(p.id+"|")))}));
     setSelPol(null); onToast(`"${p.name}" deleted`,"info");
   };
   const unmap = (p, fwId, i) => { const f=pm2Fw(fwId); updPol(p.id, x=>addHist({...x, articles:x.articles.filter(a=>!(a.fw===fwId&&a.i===i))}, `Detached from ${f?.name} ${f?.arts[i]?.ref}`)); onToast("Detached from the article","info"); };
-  const withdrawSubmission = (p, sb) => { updPol(p.id, x=>addHist({...x, submissions:x.submissions.filter(s=>s.id!==sb.id)}, "Withdrew a pending submission")); if(sb.reqId) cancelReq(sb.reqId); setTimeout(pm2Sync,0); onToast("Submission withdrawn — the form is due again","info"); };
+  const withdrawSubmission = (p, r, sb) => { updPol(p.id, x=>addHist({...x, rules:x.rules.map(rl=>rl.id!==r.id?rl:{...rl, submissions:rl.submissions.filter(s=>s.id!==sb.id)})}, `Withdrew a pending submission for “${r.name}”`)); if(sb.reqId) cancelReq(sb.reqId); setTimeout(pm2Sync,0); onToast("Submission withdrawn — the form is due again","info"); };
   const revokeException = f => { pm2Set(s=>({...s, exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>k!==f.key))})); onToast("Exception revoked — the finding counts again","info"); };
   const removeFramework = fw => {
     pm2Set(s=>{
@@ -13779,15 +13813,16 @@ const PolicyManager2View = ({onToast, onNav}) => {
     return [
       {label:"Open", on:()=>openPolicy(p.id)},
       {label:"Edit", on:()=>openEditor(p), disabled:!canEdit(p)?`Only ${p.owner} or a steward can edit it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
+      {label:"Add a rule", on:()=>openRuleEditor(p,null), disabled:!canEdit(p)?`Only ${p.owner} or a steward can change it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
       {label:p.source==="regulation"?"Duplicate as custom":"Duplicate", on:()=>duplicateAsCustom(p)},
       "-",
-      (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:null},
+      (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:!p.rules.length?"Add at least one rule first":null},
       pr&&{label:"Withdraw approval request", on:()=>withdrawRequest(p), disabled:(pr.requestedBy===me||canSubmit(p))?null:"Only the requester or the owner can withdraw it"},
-      p.status==="Active"&&p.type!=="attestation"&&{label:"Run now", on:()=>runNow(p)},
+      p.status==="Active"&&{label:"Run now", on:()=>runNow(p)},
       p.status==="Active"&&{label:"Retire", on:()=>ask(`Retire "${p.name}"?`, `It stops running. The ${artCount(p)} article${artCount(p)===1?"":"s"} it satisfies will read "No policy" unless another policy covers ${artCount(p)===1?"it":"them"}. You can restore it later.`, "Retire", ()=>retirePolicy(p)), disabled:!canSubmit(p)?`Only the owner (${p.owner}) retires it`:null},
       p.status==="Retired"&&{label:"Restore as draft", on:()=>restorePolicy(p), disabled:!canSubmit(p)?`Only the owner (${p.owner}) restores it`:null},
       "-",
-      {label:"Delete", danger:true, on:()=>ask(`Delete "${p.name}"?`, `This permanently removes the policy and its history${p.type==="attestation"?", including its submissions":""}. Articles it covered will read "No policy". It can't be undone.`, "Delete", ()=>deletePolicy(p), true),
+      {label:"Delete", danger:true, on:()=>ask(`Delete "${p.name}"?`, `This permanently removes the policy, its ${p.rules.length} rule${p.rules.length===1?"":"s"}, their submissions and the history. Articles it covered will read "No policy". It can't be undone.`, "Delete", ()=>deletePolicy(p), true),
         disabled:!canSubmit(p)?`Only the owner (${p.owner}) or an admin deletes it`:(p.status==="Active"||p.status==="In review")?"Retire it (or withdraw its request) first — a running policy can't be deleted":null},
     ];
   };
@@ -13808,7 +13843,9 @@ const PolicyManager2View = ({onToast, onNav}) => {
   // ── small render helpers (plain functions — nothing remounts) ──
   const pill = (c, text, title) => <span title={title} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${c}15`,color:c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{text}</span>;
   const typePill = k => pill(typeColor(k), PM2_TYPE_META[k].label, PM2_TYPE_META[k].hint);
-  const srcPill = p => p.source==="regulation" ? pill(T.textSub, `Regulation · ${pm2LinkedFws(p).filter(f=>!f.custom).map(f=>f.name).join(", ")||"—"}`, "Shipped with the regulation — rules are locked") : pill(T.accent, "Custom", "Built by your organisation");
+  const originPill = r => r.origin==="custom" ? <span title="Added by your organisation" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,letterSpacing:"0.04em",flexShrink:0}}>CUSTOM</span>
+    : <span title="Shipped with the regulation — locked except the values the law leaves open" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,letterSpacing:"0.04em",flexShrink:0}}>PREBUILT</span>;
+  const typeDots = p => <span style={{display:"flex",gap:2,flexShrink:0}}>{["validation","enforcement","attestation"].filter(k=>pm2Types(p).includes(k)).map(k=><span key={k} title={PM2_TYPE_META[k].label} style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>)}{!p.rules.length&&<span style={{width:7,height:7,borderRadius:"50%",border:`1px solid ${T.border}`}}/>}</span>;
   const classChip = c => <span key={c}>{pill(c==="ALL"?T.textSub:PM2_CLASS_META[c].color, c==="ALL"?"All classified data":PM2_CLASS_META[c].label)}</span>;
   const refTag = (text, c) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{text}</span>;
   const secLabel = (t, extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"20px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
@@ -13819,38 +13856,24 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const secHead = (title, desc) => <div style={{marginBottom:14}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>{desc&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:3,lineHeight:1.6}}>{desc}</div>}</div>;
   const userSel = (v, on, opts) => <select value={v} onChange={e=>on(e.target.value)} style={selStyle}>{(opts||PM2_USERS).map(u=><option key={u} value={u}>{u}</option>)}</select>;
   const card = (children, extra) => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",...extra}}>{children}</div>;
-  const scopePhrase = p => p.scopeBy==="suspect"
+  const scopePhrase = (p, r) => r&&r.scopeBy==="suspect"
     ? <>an asset that <b>looks like</b> {p.scope.includes("ALL")?"regulated":p.scope.map(c=>PM2_CLASS_META[c]?.label.toLowerCase()).join(" / ")} data but <b>isn't classified</b></>
     : <>an asset holding {p.scope.length?p.scope.map((c,i)=><React.Fragment key={c}>{i>0&&" or "}<b>{c==="ALL"?"any classified data":PM2_CLASS_META[c]?.label.toLowerCase()}</b></React.Fragment>):<i>no data class yet</i>}{(p.domains||[]).length>0&&<> in <b>{p.domains.join(" / ")}</b></>}</>;
-  // A validation rule read as a sentence. `canEditCond(c)` decides which values are editable in place.
-  const ruleView = (r, p, onChange, canEditCond) => {
-    const kw = t => <span style={{fontSize:10,fontWeight:800,color:T.textMuted,letterSpacing:"0.06em",marginRight:6}}>{t}</span>;
-    const chip = (content, i) => <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,padding:"2px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{content}</span>;
-    const setCond = (i, v) => onChange({...r, conds:r.conds.map((c,j)=>j===i?{...c,v}:c)});
-    return (
-      <div style={{display:"flex",flexDirection:"column",gap:6,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("validation")}`,borderRadius:8}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.textSub}}>
-          {kw("WHEN")}<span>{scopePhrase(p)}</span>
-          {(r.conds||[]).map((c,i)=>{ const F=PM2_FIELDS[c.f]; const editable = onChange && (!canEditCond||canEditCond(c)) && ["number","list","enum"].includes(F?.type);
-            return <React.Fragment key={i}>{kw("AND")}{chip(editable
-              ? <>{F.label} {c.op} {F.type==="enum"?<select value={c.v} onChange={e=>setCond(i,e.target.value)} style={selStyle}>{F.opts.map(o=><option key={o}>{o}</option>)}</select>
-                  :<input type={F.type==="number"?"number":"text"} value={c.v} onChange={e=>setCond(i,F.type==="number"?Number(e.target.value):e.target.value)} style={{...inStyle,width:F.type==="number"?64:220}}/>}</>
-              : pm2CondText(c), i)}</React.Fragment>; })}
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:12.5,color:T.text}}>{kw("THEN")}{typePill("validation")}<span>raise a finding — <i>“{r.msg||"Matches the rule"}”</i></span></div>
-      </div>
-    );
+  // One sentence for any rule — what it does, in plain language.
+  const ruleSentence = (p, r) => {
+    if(r.type==="validation") return <>When {scopePhrase(p,r)}{(r.conds||[]).length?<> and {r.conds.map(pm2CondText).join(" and ")}</>:""}, raise a finding — <i>“{r.finding||r.name}”</i></>;
+    if(r.type==="enforcement") return enfText(p, r);
+    return <>{r.att?.instructions||"—"} <span style={{color:T.textMuted}}>· {r.att?.form.length} field{r.att?.form.length===1?"":"s"}, every {r.att?.every} months, filled in by {pm2Assignee(p,r)}</span></>;
   };
-  // An enforcement policy read as a sentence.
-  const enfText = p => {
-    const e = p.enf; if(!e) return "—";
-    if(e.action==="hold") return <>Place a <b>legal hold</b> for <b>{e.matter||"a matter"}</b> on {e.select==="assets"?<b>{(e.assets||[]).join(", ")||"no assets yet"}</b>:<>every in-scope asset flagged under legal hold</>}. Retention and erasure can't act on held records; releasing the hold takes {ap.hold.twoPerson?"two people":"the policy owner"}.</>;
-    const eff = pm2EffectivePeriod(p);
+  const enfText = (p, r) => {
+    const e = r.enf; if(!e) return "—";
+    const where = e.select==="assets" ? <b>{(e.assets||[]).join(", ")||"no assets picked"}</b> : null;
+    if(e.action==="hold") return <>Place a <b>legal hold</b> for <b>{e.matter||"a matter"}</b> on {where||<>every in-scope asset flagged for the matter</>}. Retention and erasure can't act on held records; releasing the hold takes {ap.hold.twoPerson?"two people":"the policy owner"}.</>;
+    const eff = pm2EffectivePeriod(p, r);
     return e.mode==="dispose"
-      ? <>For {scopePhrase(p)} in production, <b>{e.disposal.toLowerCase()}</b> <b>{eff.label}</b> after <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Records under a mandated minimum keep the longer period; a legal hold suspends disposal.</>
-      : <>For {scopePhrase(p)}, <b>keep records for at least {eff.label}</b> from <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Nothing can dispose of them earlier. Then: {e.disposal.toLowerCase()}.</>;
+      ? <>For {where||<>{scopePhrase(p)} in production</>}, <b>{e.disposal.toLowerCase()}</b> <b>{eff.label}</b> after <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>.</>
+      : <>For {where||scopePhrase(p)}, <b>keep records for at least {eff.label}</b> from <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Then: {e.disposal.toLowerCase()}.</>;
   };
-  // An attestation form rendered — read-only preview, or live inputs when `vals` + `setVal` are given.
   const formView = (form, vals, setVal) => (
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       {form.map(f=>{ const v = vals?.[f.id]??""; const dis = !setVal; const on = x=>setVal&&setVal(f.id,x);
@@ -13867,7 +13890,6 @@ const PolicyManager2View = ({onToast, onNav}) => {
     </div>
   );
   const valText = (f, v) => f.type==="yesno" ? (v==="yes"?"Yes":v==="no"?"No":"—") : (v||"—");
-  // ⋮ menu — every action for an object in one place. A disabled item says why.
   const menuBtn = (id, items, align, horiz) => (
     <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
       <button onClick={()=>setMenu(menu===id?null:id)} title="Actions" style={{width:horiz?20:28,height:horiz?20:28,borderRadius:horiz?4:7,background:menu===id?T.bgElevated:"transparent",border:`1px solid ${menu===id?T.border:"transparent"}`,color:T.textMuted,cursor:"pointer",display:"flex",flexDirection:horiz?"row":"column",alignItems:"center",justifyContent:"center",gap:horiz?2:2.5,padding:0}}
@@ -13886,32 +13908,21 @@ const PolicyManager2View = ({onToast, onNav}) => {
         </div></>}
     </div>);
   // Where a policy is in its life, and who acts next.
-  const nextText = p => lifecycle(p, true);
-  const lifecycle = (p, textOnly) => {
-    const pr = pendingReqOf(p); const steps = ["Draft","In review","Active"];
-    const at = p.status==="Rejected"?0 : p.status==="Retired"?-1 : steps.indexOf(p.status);
-    let next;
-    if(p.status==="Draft") next = <>Next: <b>{canSubmit(p)?"you submit it":`${p.owner} submits it`}</b>. {routeText(p.type)}.</>;
-    else if(p.status==="Rejected") next = <>Rejected. Next: <b>{p.owner}</b> edits it and submits again — or deletes it.</>;
-    else if(p.status==="In review") next = <>Next: <b>{pr?.approver||"the approver"}</b> approves or rejects it. Nothing runs until then{(pr?.requestedBy===me||canSubmit(p))?" — you can withdraw the request to make changes":""}.</>;
-    else if(p.status==="Retired") next = <>Not running. Restore it as a draft to use it again, or delete it.</>;
-    else if(p.draft) next = <>v{p.version} is running. v{p.draft.version} waits for <b>{pr?.approver||"the approver"}</b>.</>;
-    else if(p.type==="validation"){ const n=evalOf(p).findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length; next = n?<>Running. <b>{n} finding{n>1?"s":""}</b> open — stewards ({(p.stewards||[]).join(", ")||p.owner}) fix them or request an exception.</>:<>Running — nothing found.</>; }
-    else if(p.type==="enforcement"){ const tg=evalOf(p).targets; const n=tg.filter(t=>pm2TargetStatus(p.id,t.asset.name)!=="approved").length; next = n?<>Next: <b>{n} table owner{n>1?"s":""}</b> approve before CDP acts on their tables.</>:<>Running on {tg.length} table{tg.length===1?"":"s"} through CDP.</>; }
-    else { const s=pm2AttState(p); next = s.state==="review"?<>Next: <b>{s.pending.reviewer}</b> reviews the submitted form.</>:["due","overdue","rejected"].includes(s.state)?<>Next: <b>{pm2Assignee(p)}</b> fills in the form{s.state==="overdue"?` — overdue since ${s.due}`:""}.</>:<>Evidenced until {s.due}. {pm2Assignee(p)} is reminded {p.att.remind} days before.</>; }
-    if(textOnly) return next;
-    return (
-      <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginTop:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:4}}>
-          {steps.map((s,i)=>{ const done=at>i, on=at===i;
-            return <React.Fragment key={s}>{i>0&&<span style={{width:18,height:2,background:done||on?T.accent:T.border}}/>}
-              <span style={{fontSize:11,fontWeight:on?700:500,padding:"3px 10px",borderRadius:99,background:on?(p.status==="Rejected"?T.rose:T.accent):done?`${T.accent}18`:"transparent",color:on?"#fff":done?T.accent:T.textMuted,border:`1px solid ${on?(p.status==="Rejected"?T.rose:T.accent):done?T.accent+"40":T.border}`}}>{on&&p.status==="Rejected"?"Rejected":s}</span></React.Fragment>; })}
-          <span style={{width:18,height:2,background:T.border}}/>
-          <span style={{fontSize:11,fontWeight:at===-1?700:500,padding:"3px 10px",borderRadius:99,background:at===-1?T.textMuted:"transparent",color:at===-1?"#fff":T.textMuted,border:`1px solid ${T.border}`}}>Retired</span>
-        </div>
-        <div style={{fontSize:12,color:T.textSub,flex:"1 1 300px"}}>{next}</div>
-      </div>);
+  const nextText = p => {
+    const pr = pendingReqOf(p);
+    if(p.status==="Draft") return <>Next: <b>{canSubmit(p)?"you submit it":`${p.owner} submits it`}</b>. {p.rules.length?routeText(p.rules):"Add at least one rule first"}.</>;
+    if(p.status==="Rejected") return <>Rejected. Next: <b>{p.owner}</b> edits it and submits again — or deletes it.</>;
+    if(p.status==="In review") return <>Next: <b>{pr?.approver||"the approver"}</b> approves or rejects it. Nothing runs until then{(pr?.requestedBy===me||canSubmit(p))?" — you can withdraw the request to make changes":""}.</>;
+    if(p.status==="Retired") return <>Not running. Restore it as a draft to use it again, or delete it.</>;
+    if(p.draft) return <>v{p.version} is running. v{p.draft.version} waits for <b>{pr?.approver||"the approver"}</b>.</>;
+    const parts = [];
+    const nF = p.rules.filter(r=>r.type==="validation").reduce((n,r)=>n+pm2EvalRule(p,r).findings.filter(f=>!isExcepted(p,r,f.asset)).length,0); if(nF) parts.push(`${nF} finding${nF>1?"s":""} for the stewards`);
+    const nT = p.rules.filter(r=>r.type==="enforcement").reduce((n,r)=>n+pm2EvalRule(p,r).targets.filter(t=>pm2TargetStatus(p.id,r.id,t.asset.name)!=="approved").length,0); if(nT) parts.push(`${nT} table owner approval${nT>1?"s":""}`);
+    const nA = p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p,r).state)).length; if(nA) parts.push(`${nA} form${nA>1?"s":""} to fill in`);
+    const nR = p.rules.filter(r=>r.type==="attestation"&&pm2AttState(p,r).state==="review").length; if(nR) parts.push(`${nR} form${nR>1?"s":""} to review`);
+    return parts.length ? <>Running. Waiting on: <b>{parts.join(" · ")}</b>.</> : <>Running — every rule is met.</>;
   };
+
 
   const pad = {flex:1,overflowY:"auto",padding:"20px 28px"};
   // ── Styles shared with the original Policy Manager ──
@@ -14001,14 +14012,14 @@ const PolicyManager2View = ({onToast, onNav}) => {
         {avail.length>0&&<div style={{marginBottom:22}}>
           {groupHead("Available to adopt", avail.length, T.textMuted)}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>
-            {avail.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>a.c||[]))]; const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>k[PM2_TPL[t].type]++);
+            {avail.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))]; const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>PM2_TPL[t].rules.forEach(r=>k[r.type]++));
               const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
               return (<div key={fw.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
                 <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
                   <div><div onClick={()=>setSelFw(fw.id)} style={{fontSize:15,fontWeight:800,color:T.text,letterSpacing:"-0.3px",cursor:"pointer"}}>{fw.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{m.jurisdiction} · {m.industry||fw.type}</div></div>
                   <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>Not adopted</span>
                 </div>
-                <div style={{fontSize:10.5,color:T.textMuted}}>{fw.arts.filter(a=>!a.out).length} in-scope articles · <span style={{color:typeColor("validation")}}>{k.validation} validation</span> · <span style={{color:typeColor("enforcement")}}>{k.enforcement} enforcement</span> · <span style={{color:typeColor("attestation")}}>{k.attestation} attestation</span>{reused>0&&<span style={{color:T.green,fontWeight:600}}> · {reused} already running</span>}</div>
+                <div style={{fontSize:10.5,color:T.textMuted}}>{fw.arts.filter(a=>!a.out).length} in-scope articles · {tids.length} policies · rules: <span style={{color:typeColor("validation")}}>{k.validation} validation</span> · <span style={{color:typeColor("enforcement")}}>{k.enforcement} enforcement</span> · <span style={{color:typeColor("attestation")}}>{k.attestation} attestation</span>{reused>0&&<span style={{color:T.green,fontWeight:600}}> · {reused} already running</span>}</div>
                 <div style={{display:"flex",gap:6,marginTop:2}}><Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt</Btn><Btn small ghost onClick={()=>setSelFw(fw.id)}>Read the articles</Btn></div>
               </div>); })}
           </div></div>}
@@ -14071,9 +14082,9 @@ const PolicyManager2View = ({onToast, onNav}) => {
             const noPol = inIdx.filter(i=>artState(fw,i)==="uncovered");
             const drafts = linked.filter(p=>p.status==="Draft"||p.status==="Rejected");
             const review = linked.filter(p=>p.status==="In review");
-            const tables = linked.filter(p=>p.status==="Active"&&p.type==="enforcement").reduce((n,p)=>n+evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw)&&pm2TargetStatus(p.id,t.asset.name)!=="approved").length,0);
-            const forms = linked.filter(p=>p.status==="Active"&&p.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p).state));
-            const inRev = linked.filter(p=>p.status==="Active"&&p.type==="attestation"&&pm2AttState(p).state==="review");
+            const tables = linked.filter(p=>p.status==="Active").reduce((n,p)=>n+evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw)&&pm2TargetStatus(p.id,t.rule.id,t.asset.name)!=="approved").length,0);
+            const forms = linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p,r).state)).map(r=>({p,r})));
+            const inRev = linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&pm2AttState(p,r).state==="review").map(r=>({p,r})));
             const finds = allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name)).length;
             const line = (n, text, go, c) => n>0 && <div key={text} onClick={go} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,cursor:"pointer",marginBottom:6}}
               onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -14083,8 +14094,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
               line(drafts.length, `polic${drafts.length>1?"ies are drafts":"y is a draft"} — the owner submits ${drafts.length>1?"them":"it"}`, ()=>openPolicy(drafts[0].id), T.textSub),
               line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
               line(tables, `table${tables>1?"s wait":" waits"} for its owner to approve enforcement`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
-              line(forms.length, `attestation form${forms.length>1?"s are":" is"} due — ${forms.map(p=>pm2Assignee(p)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")} fills ${forms.length>1?"them":"it"} in`, ()=>{openPolicy(forms[0].id);setPdTab("activity");}, typeColor("attestation")),
-              line(inRev.length, `submitted form${inRev.length>1?"s wait":" waits"} for review`, ()=>{openPolicy(inRev[0].id);setPdTab("activity");}, T.amber),
+              line(forms.length, `attestation form${forms.length>1?"s are":" is"} due — ${forms.map(x=>pm2Assignee(x.p,x.r)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")} fills ${forms.length>1?"them":"it"} in`, ()=>openPolicy(forms[0].p.id, fw.id, "activity"), typeColor("attestation")),
+              line(inRev.length, `submitted form${inRev.length>1?"s wait":" waits"} for review`, ()=>openPolicy(inRev[0].p.id, fw.id, "activity"), T.amber),
               line(finds, `open finding${finds>1?"s":""} — stewards fix them or request exceptions`, ()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}, T.rose),
             ].filter(Boolean);
             return <div style={{marginBottom:20}}>
@@ -14098,7 +14109,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
                 <div key={p.id} onClick={()=>openPolicy(p.id, fw.id)} style={{padding:"10px 14px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
                   <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
-                    <div style={{fontSize:11,color:T.textMuted}}>{PM2_TYPE_META[p.type].label} · {p.source==="regulation"?"Regulation policy":"Custom policy"} · owner {p.owner}{p.status==="Active"?` · ${h.label}`:""}</div></div>
+                    <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>{typeDots(p)} {p.rules.length} rule{p.rules.length===1?"":"s"} · {p.source==="regulation"?"Prebuilt policy":"Custom policy"} · owner {p.owner}{p.status==="Active"?` · ${h.label}`:""}</div></div>
                   {pill(statusColor(p.status), p.status)}{Ic.chevRight(12)}
                 </div>); })}
             </div></div>}
@@ -14106,43 +14117,71 @@ const PolicyManager2View = ({onToast, onNav}) => {
             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Data governance scope ({inIdx.length})</div>
             {inIdx.map(i=>{
               const art=fw.arts[i]; const stt=adopted?artState(fw,i):"uncovered"; const pols=polsForArt(fw,i,true);
-              const recs=(art.c||[]).filter(t=>!pols.some(p=>p.id===pm2TplPolicyId(t,fw)));
-              const mappable = fw.custom ? livePols.filter(p=>!pols.includes(p)) : [];
+              const recs=(art.c||[]).map(pm2ParseRef).filter(({tid})=>!pols.some(p=>p.id===pm2TplPolicyId(tid,fw)));
+              const mappable = livePols.filter(p=>!pols.includes(p));
+              const open = !!expArt[fw.id+i];
               return (
-                <div key={i} style={{padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${stt==="met"?T.green+"30":T.border}`,borderRadius:9,marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+                <div key={i} style={{background:T.bgSurface,border:`1.5px solid ${stt==="met"?T.green+"30":T.border}`,borderRadius:10,marginBottom:8,overflow:"hidden"}}>
+                  {/* Article */}
+                  <div onClick={()=>setExpArt(x=>({...x,[fw.id+i]:!open}))} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",cursor:"pointer"}}>
                     {circle(stt)}
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
                         <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:tc,background:`${tc}10`,padding:"1px 7px",borderRadius:4,border:`1px solid ${tc}20`,flexShrink:0}}>{art.ref}</span>
-                        <span style={{fontSize:12.5,color:T.text,lineHeight:1.5,fontWeight:600}}>{art.t}</span>
-                        {art.expect&&<span title="How this article is meant to be met">{typePill(art.expect)}</span>}
-                        {adopted&&pill(ART_META[stt].c, ART_META[stt].l)}
+                        <span style={{fontSize:13,color:T.text,lineHeight:1.5,fontWeight:700}}>{art.t}</span>
                       </div>
                       <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{art.ask}</div>
-                      <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:8}}>
-                        {pols.map(p=>{ const link=p.articles.find(x=>x.fw===fw.id&&x.i===i); const pend=link.ok===false; const mine=p.source==="custom"&&!fw.custom; const c=pend?T.amber:p.status==="Active"?T.green:T.textMuted;
-                          return <span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${c}12`,borderLeft:`3px solid ${c}`,color:c,fontWeight:600}}>
-                            <span onClick={()=>openPolicy(p.id, fw.id)} style={{cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:2}}>{p.name}</span>
-                            <span style={{fontWeight:500,opacity:.8}}>· {PM2_TYPE_META[p.type].label}{p.status!=="Active"?` · ${p.status}`:""}{mine?(pend?" · mapping awaiting approval":" · your interpretation"):""}</span>
-                            {(fw.custom||mine)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} title="Detach" style={{background:"none",border:"none",color:c,cursor:"pointer",padding:0,fontSize:12,lineHeight:1,opacity:.7}}>×</button>}
-                          </span>; })}
-                        {recs.map(t=><span key={t} style={{fontSize:11,padding:"2px 8px",borderRadius:5,border:`1px dashed ${T.border}`,color:T.textMuted}}>Recommended: {PM2_TPL[t].name} · {PM2_TYPE_META[PM2_TPL[t].type].label}{adopted?" — switched off":""}</span>)}
-                      </div>
-                      {pols.filter(p=>p.type==="attestation"&&p.status==="Active").map(p=>{ const as=pm2AttState(p); return (
-                        <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
-                          <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 6px",borderRadius:5,background:`${T.blue}12`,borderLeft:`3px solid ${T.blue}`,color:T.blue,fontWeight:600}}>{as.lastOk?`Attested by ${as.lastOk.by}, approved ${as.lastOk.decidedAt}`:"No evidence yet"}</span>
-                          <span style={{fontSize:11,color:T.textMuted}}>{as.label}</span>
-                        </div>); })}
+                      {!open&&pols.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:6}}><span style={{fontSize:10.5,color:T.textMuted}}>→</span>{pols.map(p=><span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text}}>{typeDots(p)}{p.name}</span>)}</div>}
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0,alignItems:"flex-end"}}>
-                      {fw.custom&&<button onClick={()=>openEditor(null,{type:art.expect||"validation", articles:[{fw:fw.id,i,ok:true}], name:art.t})} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:`${T.green}18`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>+ Create policy</button>}
-                      {fw.custom&&mappable.length>0&&<select value="" onChange={e=>{const id=e.target.value; if(id){ updPol(id,p=>addHist({...p,articles:[...p.articles,{fw:fw.id,i,ok:true}]},`Mapped to ${fw.name} ${art.ref}`)); onToast("Mapped","success"); }}} style={{...selStyle,fontSize:11,maxWidth:170}}><option value="">Link existing policy</option>{mappable.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>}
-                      {!fw.custom&&adopted&&stt==="uncovered"&&<button onClick={()=>startAdopt(fw.id,2)} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.amberDim,border:`1px solid ${T.amber}50`,color:T.amber,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Switch on a policy</button>}
-                      {pols.filter(p=>p.type==="attestation"&&p.status==="Active"&&["due","overdue","rejected"].includes(pm2AttState(p).state)&&(pm2Assignee(p)===me||isAdmin)).slice(0,1).map(p=>
-                        <button key={p.id} onClick={()=>{openPolicy(p.id);setPdTab("activity");setFill({polId:p.id,values:{}});}} style={{fontSize:11,padding:"4px 10px",borderRadius:6,background:T.blueDim,border:`1px solid ${T.blue}50`,color:T.blue,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>Fill in the form</button>)}
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                      <span style={{fontSize:11,color:T.textMuted}}>{pols.length} polic{pols.length===1?"y":"ies"} · {(n=>`${n} rule${n===1?"":"s"}`)(pols.reduce((n,p)=>n+pm2RulesForLink(p,linkOf(p,fw,i)).length,0))}</span>
+                      {adopted&&pill(ART_META[stt].c, ART_META[stt].l)}
+                      <span style={{color:T.textMuted,fontSize:11,transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span>
                     </div>
                   </div>
+                  {/* → Policies → Rules */}
+                  {open&&<div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"10px 16px 12px 48px"}}>
+                    {pols.map(p=>{ const link=linkOf(p,fw,i); const pend=link.ok===false; const mine=p.source==="custom"&&!fw.custom; const rules=pm2RulesForLink(p,link); const h=polHealth(p,fw,link);
+                      return (<div key={p.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,overflow:"hidden"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
+                          <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>POLICY</span>
+                          <span onClick={()=>openPolicy(p.id, fw.id)} style={{fontSize:12.5,fontWeight:700,color:T.text,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>{p.name}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
+                          {mine&&pill(pend?T.amber:T.accent, pend?"Mapping awaiting approval":"Your interpretation")}
+                          {p.status!=="Active"&&pill(statusColor(p.status), p.status)}
+                          <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{p.status==="Active"?h.label:""}</span>
+                          {(fw.custom||mine)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Detach</button>}
+                        </div>
+                        {rules.map(r=>{ const rh=p.status==="Active"?ruleHealth(p,r,fw):null; const as=r.type==="attestation"?pm2AttState(p,r):null;
+                          const canFillR = as&&p.status==="Active"&&["due","overdue","rejected","soon"].includes(as.state)&&(pm2Assignee(p,r)===me||isAdmin);
+                          return (<div key={r.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}>
+                            <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em",paddingTop:2,width:34,flexShrink:0}}>RULE</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typePill(r.type)}{originPill(r)}<span style={{fontSize:12.5,color:T.text,fontWeight:600}}>{r.name}</span></div>
+                              <div style={{fontSize:11.5,color:T.textSub,marginTop:3,lineHeight:1.55}}>{ruleSentence(p,r)}</div>
+                              {as&&as.lastOk&&<div style={{fontSize:11,color:T.blue,marginTop:3}}>Attested by {as.lastOk.by}, approved {as.lastOk.decidedAt}</div>}
+                            </div>
+                            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+                              {rh&&<span style={{fontSize:11,fontWeight:600,color:ART_META[rh.state]?.c||T.textMuted,whiteSpace:"nowrap"}}>{rh.label}</span>}
+                              {canFillR&&<button onClick={()=>{openPolicy(p.id,fw.id,"activity");setFill({polId:p.id,ruleId:r.id,values:{}});}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.blueDim,border:`1px solid ${T.blue}50`,color:T.blue,cursor:"pointer",fontWeight:600}}>Fill in the form</button>}
+                              {rh&&rh.state==="findings"&&r.type==="validation"&&<button onClick={()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}} style={{fontSize:11,background:"none",border:"none",color:T.rose,cursor:"pointer",padding:0}}>See findings ›</button>}
+                            </div>
+                          </div>); })}
+                        {!rules.length&&<div style={{padding:"8px 12px",fontSize:11.5,color:T.rose,borderTop:`1px solid ${T.border}`}}>This policy has no rules yet — add one.</div>}
+                        {canEdit(p)&&p.status!=="Retired"&&!pendingReqOf(p)&&<div style={{padding:"6px 12px",borderTop:`1px solid ${T.border}`}}>
+                          <button onClick={()=>openRuleEditor(p,null,{fw:fw.id,i})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>+ Add a custom rule to this policy</button></div>}
+                      </div>); })}
+                    {recs.map(({tid,keys})=><div key={tid} style={{fontSize:11.5,padding:"8px 12px",borderRadius:8,border:`1px dashed ${T.border}`,color:T.textMuted,marginBottom:8}}>
+                      Recommended policy <b style={{color:T.textSub}}>{PM2_TPL[tid].name}</b> ({(keys?PM2_TPL[tid].rules.filter(r=>keys.includes(r.key)):PM2_TPL[tid].rules).map(r=>PM2_TYPE_META[r.type].label.toLowerCase()).join(" + ")}) — {adopted?"switched off when adopted":"created when you adopt"}
+                      {adopted&&!fw.custom&&<button onClick={()=>startAdopt(fw.id,2)} style={{marginLeft:8,fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>Switch on</button>}</div>)}
+                    {!pols.length&&!recs.length&&<div style={{fontSize:12,color:T.rose,marginBottom:8}}>Nothing covers this article yet.</div>}
+                    {adopted&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                      <button onClick={()=>openEditor(null,{articles:[{fw:fw.id,i,ok:!!fw.custom,rules:null}], name:`${art.t} — ${fw.name} custom`, ruleType:art.expect&&art.expect!=="outside"?art.expect:"validation"})} style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>+ New custom policy for this article</button>
+                      {mappable.length>0&&<select value="" onChange={e=>{const id=e.target.value; if(id){ updPol(id,p=>addHist({...p,articles:[...p.articles,{fw:fw.id,i,ok:!!fw.custom,rules:null}]},`Mapped to ${fw.name} ${art.ref}`)); setTimeout(pm2Sync,0); onToast(fw.custom?"Mapped":"Mapped — it counts once the mapping is approved","success"); }}} style={{...selStyle,fontSize:11.5}}>
+                        <option value="">Use an existing policy here…</option>{mappable.map(p=><option key={p.id} value={p.id}>{p.name} ({p.source==="regulation"?"prebuilt":"custom"})</option>)}</select>}
+                      {!fw.custom&&<span style={{fontSize:11,color:T.textMuted}}>A custom policy on a regulation article counts once {ap.mapping.approver} approves the mapping.</span>}
+                    </div>}
+                  </div>}
                 </div>);
             })}
           </div>
@@ -14175,7 +14214,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const folders = [...fwFolders,
       {id:"unlinked", label:"Not linked to a framework", color:T.textMuted, open:true, flat:true, hint:"Custom policies attached to no framework article", rows:live.filter(p=>!p.articles.some(a=>st.adopted[a.fw]||pm2Fw(a.fw)?.custom))},
       {id:"retired", label:"Retired", color:T.textMuted, open:false, flat:true, hint:"Not running — restore or delete", rows:list.filter(p=>p.status==="Retired")}];
-    const badge = p => { const n = p.status!=="Active"?0 : p.type==="validation" ? evalOf(p).findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length : p.type==="attestation" ? (["due","overdue","rejected"].includes(pm2AttState(p).state)?1:0) : evalOf(p).targets.filter(t=>pm2TargetStatus(p.id,t.asset.name)!=="approved").length; return n; };
+    const badge = p => p.status!=="Active"?0 : evalOf(p).findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length + p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p,r).state)).length + evalOf(p).targets.filter(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)!=="approved").length;
     return (
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         <div style={{width:258,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,background:T.bgSurface}}>
@@ -14215,7 +14254,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
                   style={{display:"flex",alignItems:"center",background:on?T.accentDim:hov?T.bgHover:"transparent",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`}}>
                   <button onClick={()=>{ if(on){setSelPol(null);} else {setSelPol(p.id);setSelFolder(fd.id);} setPdTab("overview");setFill(null);setDescEdit(null);setSideEdit(null);}}
                     style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
-                    <span title={PM2_TYPE_META[p.type].label} style={{width:8,height:8,borderRadius:"50%",background:typeColor(p.type),flexShrink:0}}/>
+                    {typeDots(p)}
                     <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                     {pend&&<span title="Mapping to this framework awaits approval" style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:`${T.amber}18`,color:T.amber,flexShrink:0}}>pending</span>}
                     {p.status!=="Active"&&p.status!=="Retired"&&<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700,flexShrink:0}}>{p.status}</span>}
@@ -14255,25 +14294,17 @@ const PolicyManager2View = ({onToast, onNav}) => {
     );
   };
 
-  // ═════ POLICY DETAIL ═════
+
+  // ═════ POLICY DETAIL — the original layout: header, underline tabs, overview with sidebar ═════
   const renderPolicy = p => {
     const ev = evalOf(p); const h = polHealth(p); const pr = pendingReqOf(p); const upd = tplUpdate(p);
-    const pendMaps = p.articles.filter(x=>x.ok===false).length;
-    const mapReq = reqById(p.mapReqId);
-    const cfgLabel = {validation:"Rules", enforcement:"Rules", attestation:"Form"}[p.type];
-    const actLabel = {validation:"Findings", enforcement:"Execution", attestation:"Submissions"}[p.type];
-    const actCount = {validation:ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length, enforcement:ev.targets.length, attestation:(p.submissions||[]).length}[p.type];
-    const tabs = [{k:"overview",l:"Overview"},{k:"config",l:cfgLabel,badge:p.type==="attestation"?p.att.form.length:p.type==="validation"?p.rules.length:1},{k:"activity",l:actLabel,badge:actCount||null,danger:p.type==="validation"&&actCount>0},{k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
-    const as = p.type==="attestation" ? pm2AttState(p) : null;
-    const canFill = p.type==="attestation" && p.status==="Active" && (pm2Assignee(p)===me||isAdmin) && as.state!=="review";
-    const myReqs = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.targetId===p.id);
+    const pendMaps = p.articles.filter(x=>x.ok===false).length; const mapReq = reqById(p.mapReqId);
     const isReg = p.source==="regulation";
-    const secHd = (label, n, go) => <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}{n>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{n}</span>}</div>
-      {go&&<button onClick={go} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</div>;
-    const ruleRow = (tag, text, right, key) => <div key={key} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-      <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textMuted,letterSpacing:"0.05em"}}>{tag}</span>
-      <span style={{flex:1,fontSize:12.5,color:T.text}}>{text}</span>{right}</div>;
+    const canChange = canEdit(p) && p.status!=="Retired" && !pr;
+    const openFindN = ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length;
+    const attRules = p.rules.filter(r=>r.type==="attestation"); const dueN = attRules.filter(r=>["due","overdue","rejected"].includes(pm2AttState(p,r).state)).length;
+    const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Rules",badge:p.rules.length},{k:"activity",l:"Activity",badge:(openFindN+dueN)||null,danger:openFindN+dueN>0},{k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
+    const myReqs = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&String(r.targetId||"").split("|")[0]===p.id);
     const initials = u => u.split(".").map(x=>x[0]?.toUpperCase()).join("");
     const ownerChip = u => <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,border:`1px solid ${T.accent}20`}}>
       <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{initials(u)}</div><span style={{fontSize:12,color:T.accent,fontWeight:500}}>{u}</span></div>;
@@ -14281,41 +14312,43 @@ const PolicyManager2View = ({onToast, onNav}) => {
       <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706"}}>{initials(u)}</div><span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{u}</span>
       {canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==u)},`Removed steward ${u}`))} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,lineHeight:1,opacity:.6}}>×</button>}</div>;
     const SB = (label, onEdit, children) => <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>{sideLabel(label,onEdit)}{children}</div>;
+    const secHd = (label, n, right) => <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}{n>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{n}</span>}</div>{right}</div>;
+    // A rule as a row: type, origin, name, sentence, where it counts, state, actions.
+    const ruleCardView = (r, compact) => { const rh=p.status==="Active"?ruleHealth(p,r):null; const arts=artsOfRule(p,r);
+      const editable = canChange && (r.origin==="custom" || (r.type==="validation"&&(r.conds||[]).some(c=>c.edit)) || r.type==="enforcement" || r.type==="attestation");
+      return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:9,padding:compact?"9px 12px":"12px 14px",marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+          {typePill(r.type)}{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text,flex:1,minWidth:160}}>{r.name}</span>
+          {rh&&<span style={{fontSize:11,fontWeight:600,color:ART_META[rh.state]?.c||T.textMuted}}>{rh.label}</span>}
+          {!compact&&editable&&<button onClick={()=>openRuleEditor(p,r)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{r.origin==="custom"?"Edit":"Edit values"}</button>}
+          {!compact&&canChange&&r.origin==="custom"&&<button onClick={()=>ask(`Remove “${r.name}”?`, p.status==="Active"?"The policy's next version drops this rule; the current version keeps running until that's approved.":"The rule is removed from this draft.", "Remove", ()=>removeRule(p,r), true)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}40`,color:T.rose,cursor:"pointer"}}>Remove</button>}
+        </div>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:6}}>{ruleSentence(p,r)}</div>
+        {!compact&&arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
+      </div>); };
     let body;
     if(pdTab==="overview"){
-      // Result banner — the original's "Evaluation Results", read per type.
       const inScope = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p));
-      const failing = new Set(ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).map(f=>f.asset.name));
-      const pct = inScope.length ? Math.round((inScope.length-failing.size)/inScope.length*100) : 100;
-      const tg = ev.targets; const running = tg.filter(t=>pm2TargetStatus(p.id,t.asset.name)==="approved").length;
-      const banner = p.status!=="Active" ? <div style={{marginBottom:20,padding:"12px 14px",borderRadius:10,border:`1.5px dashed ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg></div>
-          <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Not running yet</div><div style={{fontSize:11.5,color:T.textMuted}}>{nextText(p)}</div></div></div>
-        : (()=>{ const val = p.type==="validation"?pct : p.type==="enforcement"?(tg.length?Math.round(running/tg.length*100):100) : (["current","soon"].includes(as.state)?100:as.state==="review"?50:0);
-          const c = val>=80?T.green:val>=60?T.amber:T.rose; const lbl = val>=80?"Healthy":val>=60?"Needs attention":"Critical";
-          return <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${c}30`,background:`${c}10`,overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${c}20`}}>
-              <div style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:c,boxShadow:`0 0 0 3px ${c}25`}}/><span style={{fontSize:11,fontWeight:700,color:c,textTransform:"uppercase",letterSpacing:"0.07em"}}>{p.type==="validation"?"Evaluation Results":p.type==="enforcement"?"Execution":"Evidence"}</span></div>
-              <button onClick={()=>setPdTab("activity")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View {actLabel.toLowerCase()} →</button></div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
-              <div style={{padding:"14px 16px",borderRight:`1px solid ${c}15`}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{p.type==="validation"?"Compliance Score":p.type==="enforcement"?"Tables Running":"Evidence"}</div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:8}}>
-                  <span style={{fontSize:p.type==="attestation"?16:32,fontWeight:800,color:c,lineHeight:1.1,fontFamily:"'Geist Mono',monospace"}}>{p.type==="validation"?`${pct}%`:p.type==="enforcement"?`${running}/${tg.length}`:as.label}</span>
-                  {p.type!=="attestation"&&<span style={{fontSize:11,color:c,fontWeight:600,marginBottom:4,padding:"1px 7px",borderRadius:99,background:`${c}18`,border:`1px solid ${c}30`}}>{lbl}</span>}</div>
-                <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${val}%`,borderRadius:3,background:c}}/></div>
-                <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>{p.type==="validation"?`${inScope.length-failing.size} of ${inScope.length} assets passing`:p.type==="enforcement"?`${tg.length-running} waiting for their table owner`:`Every ${p.att.every} months · ${pm2Assignee(p)} fills it in`}</div>
-              </div>
-              <div style={{padding:"14px 16px"}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{p.type==="attestation"?"Last Approved":"Last Evaluation"}</div>
-                <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:10}}>{p.type==="attestation"?(as.lastOk?`${as.lastOk.decidedAt} · by ${as.lastOk.decidedBy}`:"Never"):(st.lastRun[p.id]?`Today ${st.lastRun[p.id]}`:`Continuous · since ${p.activatedAt||p.created}`)}</div>
-                {p.type==="validation"&&(failing.size>0
-                  ? <button onClick={()=>setPdTab("activity")} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:`${T.rose}10`,border:`1px solid ${T.rose}30`,cursor:"pointer"}}><span style={{fontSize:11,fontWeight:600,color:T.rose}}>{actCount} open finding{actCount!==1?"s":""}</span>{sevPill(p.severity)}</button>
-                  : <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`}}><span style={{fontSize:11,fontWeight:600,color:T.green}}>All assets compliant</span></div>)}
-                {p.type==="enforcement"&&(tg.length-running>0?<button onClick={()=>setPdTab("activity")} style={{width:"100%",padding:"7px 10px",borderRadius:7,background:`${T.amber}10`,border:`1px solid ${T.amber}30`,cursor:"pointer",fontSize:11,fontWeight:600,color:T.amber,textAlign:"left"}}>{tg.length-running} table owner approval{tg.length-running>1?"s":""} pending</button>:<div style={{padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`,fontSize:11,fontWeight:600,color:T.green}}>Running on every table</div>)}
-                {p.type==="attestation"&&(canFill?<button onClick={()=>{setPdTab("activity");setFill({polId:p.id,values:{}});}} style={{width:"100%",padding:"7px 10px",borderRadius:7,background:`${T.blue}10`,border:`1px solid ${T.blue}30`,cursor:"pointer",fontSize:11,fontWeight:600,color:T.blue,textAlign:"left"}}>Fill in the form →</button>:<div style={{fontSize:11,color:T.textMuted}}>{nextText(p)}</div>)}
-              </div>
-            </div></div>; })();
+      const col = (k, big, sub, c, go) => <div style={{padding:"14px 16px",borderRight:`1px solid ${T.border}`,flex:1,minWidth:150}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{PM2_TYPE_META[k].label}</span></div>
+        <div style={{fontSize:22,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{big}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{sub}</div>
+        {go&&<button onClick={go} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,marginTop:6,fontWeight:500}}>View →</button>}</div>;
+      const vR=p.rules.filter(r=>r.type==="validation"), eR=p.rules.filter(r=>r.type==="enforcement");
+      const failing = new Set(ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).map(f=>f.asset.name)); const pct = inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100;
+      const run = ev.targets.filter(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="approved").length;
+      const cur = attRules.filter(r=>["current","soon"].includes(pm2AttState(p,r).state)).length;
+      const banner = p.status!=="Active"
+        ? <div style={{marginBottom:20,padding:"12px 14px",borderRadius:10,border:`1.5px dashed ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg></div>
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Not running yet</div><div style={{fontSize:11.5,color:T.textMuted}}>{nextText(p)}</div></div></div>
+        : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${T.border}`,background:T.bgElevated,overflow:"hidden"}}>
+            <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"flex",justifyContent:"space-between"}}>Results<span style={{textTransform:"none",letterSpacing:0,fontWeight:500}}>{st.lastRun[p.id]?`Last run today ${st.lastRun[p.id]}`:`Continuous · since ${p.activatedAt||p.created}`}</span></div>
+            <div style={{display:"flex",flexWrap:"wrap"}}>
+              {vR.length>0&&col("validation", `${pct}%`, `${inScope.length-failing.size} of ${inScope.length} assets pass · ${openFindN} finding${openFindN===1?"":"s"}`, pct>=80?T.green:pct>=60?T.amber:T.rose, ()=>setPdTab("activity"))}
+              {eR.length>0&&col("enforcement", `${run}/${ev.targets.length}`, ev.targets.length-run?`${ev.targets.length-run} waiting for their table owner`:"running on every table", ev.targets.length-run?T.amber:T.green, ()=>setPdTab("activity"))}
+              {attRules.length>0&&col("attestation", `${cur}/${attRules.length}`, dueN?`${dueN} form${dueN>1?"s":""} due`:"all forms current", dueN?T.violet:T.green, ()=>setPdTab("activity"))}
+            </div></div>;
       body = (
         <div style={{display:"flex",minHeight:"100%"}}>
           <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,minWidth:0}}>
@@ -14325,158 +14358,134 @@ const PolicyManager2View = ({onToast, onNav}) => {
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
               : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
             {banner}
-            {secHd(p.type==="attestation"?"Form":"Rules", p.type==="attestation"?p.att.form.length:p.type==="validation"?p.rules.length:1, ()=>setPdTab("config"))}
-            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
-              {p.type==="validation"&&p.rules.map(r=>ruleRow("RULE", r.msg||r.conds.map(pm2CondText).join(" and "), <span style={{fontSize:10.5,fontWeight:600,color:SEV_COLOR[p.severity]||T.textMuted}}>{(p.severity||"").slice(0,3)}</span>, r.id))}
-              {p.type==="enforcement"&&ruleRow(p.enf.action==="hold"?"HOLD":"RETENTION", p.enf.action==="hold"?`Legal hold — ${p.enf.matter}`:`${p.enf.mode==="dispose"?"Dispose after":"Keep at least"} ${pm2EffectivePeriod(p).label} · from ${p.enf.trigger.toLowerCase()}`, <span style={{fontSize:10.5,fontWeight:600,color:typeColor("enforcement")}}>CDP</span>, "e")}
-              {p.type==="attestation"&&ruleRow("RULE", p.att.name||p.name, <span style={{fontSize:10.5,color:typeColor("attestation"),fontWeight:600}}>Every {p.att.every} mo</span>, "att-rule")}
-              {p.type==="attestation"&&p.att.form.map(f=>ruleRow("FIELD", f.label, <span style={{fontSize:10.5,color:T.textMuted}}>{PM2_FORM_TYPES[f.type]}{f.required?" · required":""}</span>, f.id))}
-            </div>
+            {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>+ Add rule</button>}<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button></span>)}
+            <div style={{marginBottom:20}}>{p.rules.map(r=>ruleCardView(r,true))}{!p.rules.length&&<div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet — add one.</div>}</div>
             {sideLabel("Scope")}
             <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"12px 14px"}}>
               <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data classes</div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>{p.scope.map(classChip)}</div>
               <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domains</div>
               <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div>
-              <div style={{fontSize:11.5,color:T.textSub}}>{p.scopeBy==="suspect"?"Looks at assets that seem to hold this data but aren't classified.":`${inScope.length} assets in scope today.`}</div>
+              <div style={{fontSize:11.5,color:T.textSub}}>{inScope.length} assets in scope today.</div>
             </div>
           </div>
           <div style={{width:250,flexShrink:0}}>
             {SB("Status", null, <>
               <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,padding:"3px 10px",borderRadius:6,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`}}>{p.status==="Active"?"✓ ":""}{p.status}{p.draft?` · v${p.draft.version} in review`:""}</span>
-              <div style={{fontSize:11.5,color:T.textSub,marginTop:8,lineHeight:1.55}}>{nextText(p)}</div>
-            </>)}
-            {SB("Type", null, <>{typePill(p.type)}<div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.5}}>{PM2_TYPE_META[p.type].hint}</div></>)}
+              <div style={{fontSize:11.5,color:T.textSub,marginTop:8,lineHeight:1.55}}>{nextText(p)}</div></>)}
+            {SB("Rules", null, <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {["validation","enforcement","attestation"].map(k=>{ const n=p.rules.filter(r=>r.type===k).length; return n>0&&<div key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>{n} {PM2_TYPE_META[k].label.toLowerCase()}</div>; })}
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{p.rules.filter(r=>r.origin==="prebuilt").length} prebuilt · {p.rules.filter(r=>r.origin==="custom").length} custom</div></div>)}
             {SB("Category", canEdit(p)?()=>setSideEdit(sideEdit==="cat"?null:"cat"):null, sideEdit==="cat"
               ? <select autoFocus value={p.category||""} onChange={e=>{const v=e.target.value; updPol(p.id,x=>addHist({...x,category:v},`Category set to ${v||"Not set"}`)); setSideEdit(null);}} style={{...selStyle,width:"100%"}}><option value="">Not set</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-              : p.category ? <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:`${catColor(p.category)}14`,color:catColor(p.category),border:`1px solid ${catColor(p.category)}30`}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
+              : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:`${catColor(p.category)}14`,color:catColor(p.category),border:`1px solid ${catColor(p.category)}30`}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
             {SB("Owners", (isAdmin||p.owner===me)?()=>setSideEdit(sideEdit==="own"?null:"own"):null, sideEdit==="own"
-              ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");})
-              : ownerChip(p.owner))}
+              ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");}) : ownerChip(p.owner))}
             {SB("Stewards", canSubmit(p)?()=>setSideEdit(sideEdit==="stw"?null:"stw"):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {(p.stewards||[]).map(stewardChip)}{!(p.stewards||[]).length&&<span style={{fontSize:12,color:T.textMuted}}>None</span>}
-              {sideEdit==="stw"&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`)); setSideEdit(null);}} style={{...selStyle,width:"100%",marginTop:4}}><option value="">+ add a steward</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}
-            </div>)}
-            {SB("Frameworks", canEdit(p)&&!pr&&p.status!=="Retired"?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {sideEdit==="stw"&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`)); setSideEdit(null);}} style={{...selStyle,width:"100%",marginTop:4}}><option value="">+ add a steward</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}</div>)}
+            {SB("Frameworks", canChange?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {[...new Set(p.articles.map(a=>a.fw))].map(id=>{ const f=pm2Fw(id); const n=p.articles.filter(a=>a.fw===id).length; const pend=p.articles.some(a=>a.fw===id&&a.ok===false);
                 return f&&<span key={id} title={pend?"Mapping awaiting approval":""} onClick={()=>{setTab("frameworks");setSelFw(id);}} style={{fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:pend?`${T.amber}12`:`${T.blue}10`,color:pend?T.amber:T.blue,border:`1px solid ${pend?T.amber:T.blue}30`,cursor:"pointer"}}>{f.name} · {n}</span>; })}
-              {!p.articles.length&&<span style={{fontSize:12,color:T.textMuted}}>Internal — no framework</span>}
-            </div>)}
-            {SB("Source", null, <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{isReg?<>Regulation policy · template “{PM2_TPL[p.template].name}” v{p.tplVersion||1}{upd&&<div style={{color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>:p.basedOn?<>Custom · duplicated from {st.policies.find(x=>x.id===p.basedOn)?.name||"a regulation policy"}</>:"Custom policy"}</div>)}
+              {!p.articles.length&&<span style={{fontSize:12,color:T.textMuted}}>Internal — no framework</span>}</div>)}
+            {SB("Source", null, <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{isReg?<>Prebuilt policy · template “{PM2_TPL[p.template].name}” v{p.tplVersion||1}{upd&&<div style={{color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>:p.basedOn?<>Custom · duplicated from {st.policies.find(x=>x.id===p.basedOn)?.name||"a prebuilt policy"}</>:"Custom policy"}</div>)}
           </div>
         </div>);
     }
-    if(pdTab==="config") body = <>
-      {p.source==="regulation"&&card(<div style={{fontSize:11.5,color:T.textSub}}>🔒 This is a regulation policy, so its {cfgLabel.toLowerCase()} are locked to what the regulation says. You can change the owner, stewards, a narrower scope and the values the law leaves to you. To change anything else, <button onClick={()=>duplicateAsCustom(p)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>duplicate it as a custom policy</button>.</div>,{marginBottom:12,background:T.bgElevated})}
-      {p.type==="validation"&&<><div style={{fontSize:12,color:T.textSub,marginBottom:8}}>Severity <b>{p.severity}</b> · runs continuously against catalog metadata.</div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>{p.rules.map(r=><div key={r.id}>{ruleView(r,p)}</div>)}</div></>}
-      {p.type==="enforcement"&&<>{card(<div style={{fontSize:12.5,color:T.text,lineHeight:1.7}}>{enfText(p)}</div>)}
-        {p.enf?.action==="retention"&&(()=>{ const eff=pm2EffectivePeriod(p); return <div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:"6px 10px",fontSize:12,marginTop:12}}>
-          {[["Action","Retention"],["Mode",p.enf.mode==="dispose"?"Dispose after a period":"Keep for at least a period"],["Period you set",`${p.enf.period} ${p.enf.unit}`],["Effective period",`${eff.label} — ${eff.why}`],["Starts from",p.enf.trigger],["At the end",p.enf.disposal]].map(([k,v])=><React.Fragment key={k}><span style={{color:T.textMuted,fontWeight:600}}>{k}</span><span style={{color:T.text}}>{v}</span></React.Fragment>)}
-        </div>; })()}
-        {p.enf?.action==="hold"&&<div style={{display:"grid",gridTemplateColumns:"160px 1fr",gap:"6px 10px",fontSize:12,marginTop:12}}>
-          {[["Action","Legal hold"],["Matter",p.enf.matter],["What's held",p.enf.select==="assets"?(p.enf.assets||[]).join(", "):"In-scope assets flagged under legal hold"],["Release",ap.hold.twoPerson?"Two people: the policy owner and the table owner":"The policy owner"]].map(([k,v])=><React.Fragment key={k}><span style={{color:T.textMuted,fontWeight:600}}>{k}</span><span style={{color:T.text}}>{v}</span></React.Fragment>)}
-        </div>}</>}
-      {p.type==="attestation"&&<>
-        {(p.att.name||p.att.instructions)&&<div style={{padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>{p.att.name||p.name}</div>
-          {p.att.instructions&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:4,whiteSpace:"pre-wrap"}}>{p.att.instructions}</div>}</div>}
-        <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>{p.att.form.length} fields · filled in by <b>{pm2Assignee(p)}</b> · reviewed by <b>{pm2Reviewer(p)}</b> · every <b>{p.att.every} months</b>, reminder {p.att.remind} days before it's due.</div>
-        {card(formView(p.att.form),{maxWidth:620})}
-      </>}
+    if(pdTab==="rules") body = <>
+      <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:14}}>
+        <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.6}}>{isReg?<>Prebuilt rules are locked to the regulation — you can edit the values it leaves open. Add your own <b>custom rules</b> next to them; they're marked and go through approval like any change.</>:<>Every rule in this policy. Validation rules check metadata, enforcement rules retain or hold data through CDP, attestation rules ask a person for evidence.</>}</div>
+        {canChange&&<Btn small variant="primary" icon={Ic.plus(11)} onClick={()=>openRuleEditor(p,null)}>Add rule</Btn>}
+      </div>
+      {["validation","enforcement","attestation"].map(k=>{ const rs=p.rules.filter(r=>r.type===k); return rs.length>0&&<div key={k} style={{marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{PM2_TYPE_META[k].label} ({rs.length})</span></div>
+        {rs.map(r=>ruleCardView(r))}</div>; })}
+      {!p.rules.length&&<div style={{padding:"28px 16px",borderRadius:10,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet.</div>}
     </>;
     if(pdTab==="satisfies") body = <>
       {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not attached to any article — it's an internal policy. Edit it to attach it to a regulation or your own framework.</div>}
-      {artsOfPol(p,true).map((x,i)=>(
-        <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
-          <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:130,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
-          <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
-          {!x.ok?pill(T.amber,"Awaiting approval"):p.source==="custom"&&!x.fw.custom?pill(T.accent,"Your interpretation"):null}
-          {!st.adopted[x.fw.id]&&<span style={{fontSize:10.5,color:T.textMuted}}>not adopted</span>}
-        </div>))}
+      {artsOfPol(p,true).map((x,i)=>{ const rules=pm2RulesForLink(p,x.link); return (
+        <div key={i} style={{padding:"10px 0",borderBottom:`1px dashed ${T.border}`}}>
+          <div style={{display:"flex",gap:10,alignItems:"baseline"}}>
+            <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:130,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
+            <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text,cursor:"pointer"}} onClick={()=>{setTab("frameworks");setSelFw(x.fw.id);}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
+            {!x.ok?pill(T.amber,"Awaiting approval"):p.source==="custom"&&!x.fw.custom?pill(T.accent,"Your interpretation"):null}
+          </div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0 0 140px"}}><span style={{fontSize:10.5,color:T.textMuted}}>Counted rules:</span>{rules.map(r=><span key={r.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:T.textSub}}><span style={{width:6,height:6,borderRadius:"50%",background:typeColor(r.type)}}/>{r.name}</span>)}</div>
+        </div>); })}
     </>;
     if(pdTab==="activity"){
-      if(p.status!=="Active") body = <div style={{fontSize:12.5,color:T.textMuted}}>Nothing runs until the policy is active.</div>;
-      else if(p.type==="validation") body = ev.findings.length===0 ? <div style={{fontSize:12.5,color:T.green}}>Nothing found — passing.</div>
-        : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfPol(p).filter(x=>pm2AssetInFw(f.asset,p,x.fw)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div>;
-      else if(p.type==="enforcement") body = <>
-        {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.asset.name); const r=enfReqs.filter(x=>x.policyId==="pm2:"+p.id&&x.table===t.asset.name).slice(-1)[0];
-          return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
-            {pill(typeColor("enforcement"), t.verb)}
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.detail}</div></div>
-            <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
-            {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${r?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
-            {ts==="pending"&&r&&canDecide(r)&&<><Btn small variant="primary" onClick={()=>decideEnf(r,true)}>Approve</Btn><Btn small ghost onClick={()=>decideEnf(r,false)}>Reject</Btn></>}
-          </div>); })}
-        {ev.targets.length===0&&<div style={{fontSize:12.5,color:T.textMuted}}>No tables in scope yet.</div>}
-        {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Disposal suspended by legal hold on: {ev.held.map(a=>a.name).join(", ")}.</div>}
-      </>;
+      const sec = (k, n, children) => <div style={{marginBottom:22}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k==="validation"?"Findings":k==="enforcement"?"Enforcement":"Evidence"} ({n})</span></div>{children}</div>;
+      if(p.status!=="Active") body = <div style={{fontSize:12.5,color:T.textMuted}}>Nothing runs until the policy is active. {nextText(p)}</div>;
       else body = <>
-        {card(<div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:ART_META[h.state]?.c||T.text}}>{as.label}</div><div style={{fontSize:11.5,color:T.textSub}}>Filled in by {pm2Assignee(p)} · reviewed by {pm2Reviewer(p)} · every {p.att.every} months</div></div>
-          {canFill&&!fill&&<Btn variant="primary" onClick={()=>setFill({polId:p.id, values:{}})}>Fill in the form</Btn>}
-        </div>)}
-        {fill&&fill.polId===p.id&&card(<>
-          {(p.att.name||p.att.instructions)&&<div style={{padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>{p.att.name||p.name}</div>
-          {p.att.instructions&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:4,whiteSpace:"pre-wrap"}}>{p.att.instructions}</div>}</div>}
-          {formView(p.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
-          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
-        </>,{marginTop:10,maxWidth:640})}
-        {secLabel(`Submissions (${(p.submissions||[]).length})`)}
-        {(p.submissions||[]).length===0&&<div style={{fontSize:12,color:T.textMuted}}>Nothing submitted yet.</div>}
-        {(p.submissions||[]).map(sb=>{ const r=reqById(sb.reqId); const open=openSub===sb.id;
-          return (<div key={sb.id} style={{border:`1px solid ${T.border}`,borderRadius:9,marginBottom:6,background:T.bgSurface}}>
-            <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",cursor:"pointer"}}>
-              <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
-              <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
-{pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
-              {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?", "The reviewer's request is cancelled and the form is due again.", "Withdraw", ()=>withdrawSubmission(p,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
+        {p.rules.some(r=>r.type==="validation")&&sec("validation", ev.findings.length, ev.findings.length===0?<div style={{fontSize:12.5,color:T.green}}>Nothing found — passing.</div>
+          : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div>)}
+        {p.rules.some(r=>r.type==="enforcement")&&sec("enforcement", ev.targets.length, <>
+          {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.rule.id,t.asset.name); const rq=enfReqs.filter(x=>x.ruleId===`pm2:${p.id}:${t.rule.id}:${t.asset.name}`).slice(-1)[0];
+            return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
+              {pill(typeColor("enforcement"), t.verb)}
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.rule.name} · {t.detail}</div></div>
+              <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
+              {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${rq?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
+            </div>); })}
+          {ev.targets.length===0&&<div style={{fontSize:12.5,color:T.textMuted}}>No tables in scope yet.</div>}
+          {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Disposal suspended by legal hold on: {ev.held.map(a=>a.name).join(", ")}.</div>}
+          {ev.targets.some(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve these in their Workspace inbox.</div>}
+        </>)}
+        {attRules.length>0&&sec("attestation", attRules.length, attRules.map(r=>{ const as=pm2AttState(p,r); const canFill=(pm2Assignee(p,r)===me||isAdmin)&&as.state!=="review"; const filling=fill&&fill.polId===p.id&&fill.ruleId===r.id;
+          return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:200}}><div style={{display:"flex",gap:6,alignItems:"center"}}>{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.name}</span></div>
+                <div style={{fontSize:11.5,color:T.textSub,marginTop:3}}>Filled in by {pm2Assignee(p,r)} · reviewed by {pm2Reviewer(p,r)} · every {r.att.every} months</div></div>
+              <span style={{fontSize:12,fontWeight:700,color:ART_META[ruleHealth(p,r).state]?.c}}>{as.label}</span>
+              {canFill&&!filling&&<Btn small variant="primary" onClick={()=>setFill({polId:p.id, ruleId:r.id, values:{}})}>Fill in the form</Btn>}
             </div>
-            {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
-              {p.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
-              {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}
+            {filling&&<div style={{padding:"14px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+              <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12,fontSize:12,color:T.textSub,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{r.att.instructions}</div>
+              {formView(r.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
             </div>}
-            {sb.status==="pending"&&r&&r.status==="pending"&&canDecide(r)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
-              <input value={review?.reqId===r.id?review.comment:""} onChange={e=>setReview({reqId:r.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
-              <Btn small variant="primary" onClick={()=>decideReq(r,true,review?.reqId===r.id?review.comment:"")}>Approve</Btn>
-              <Btn small ghost onClick={()=>{ const c=review?.reqId===r.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(r,false,c); }}>Reject</Btn>
-            </div>}
-          </div>); })}
+            {(r.submissions||[]).map(sb=>{ const rq=reqById(sb.reqId); const open=openSub===sb.id;
+              return (<div key={sb.id} style={{borderTop:`1px solid ${T.border}`}}>
+                <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer"}}>
+                  <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
+                  <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
+                  {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+                  {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?","The reviewer's request is cancelled and the form is due again.","Withdraw",()=>withdrawSubmission(p,r,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
+                </div>
+                {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
+                  {r.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
+                  {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}</div>}
+                {sb.status==="pending"&&rq&&rq.status==="pending"&&canDecide(rq)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
+                  <input value={review?.reqId===rq.id?review.comment:""} onChange={e=>setReview({reqId:rq.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
+                  <Btn small variant="primary" onClick={()=>decideReq(rq,true,review?.reqId===rq.id?review.comment:"")}>Approve</Btn>
+                  <Btn small ghost onClick={()=>{ const c=review?.reqId===rq.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(rq,false,c); }}>Reject</Btn></div>}
+              </div>); })}
+          </div>); }))}
       </>;
     }
     if(pdTab==="history") body = <>
       {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:r.status==="withdrawn"?T.textMuted:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
       {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
     </>;
-    const banners = <>
-      {pr&&canDecide(pr)&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>{pr.requestedBy}</b> asks you to approve {p.draft?`v${p.draft.version} of this policy`:"this policy"} — “{pr.note}”.</span>
-        <Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn><Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></div>}
-      {upd&&!p.draft&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.blue}50`,background:`${T.blue}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>Update available — template v{upd.version}.</b> {upd.changelog} Nothing changes until you review and apply it.</span>{canSubmit(p)&&<Btn small variant="primary" onClick={()=>applyTplUpdate(p)}>Review & apply</Btn>}</div>}
-      {pendMaps>0&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text}}>{mapReq&&mapReq.status==="pending"?<>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.</>:<>{pendMaps} regulation article mapping{pendMaps>1?"s go":" goes"} to {ap.mapping.approver} for approval once the policy is submitted — {pendMaps>1?"they don't":"it doesn't"} count until then.</>}{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>}
-    </>;
     const hc = ART_META[h.state]?.c||T.textMuted;
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {/* Header — as in the original Policy Manager */}
         <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                {typePill(p.type)}
-                {isReg
-                  ? <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Regulation · {pm2LinkedFws(p).filter(f=>!f.custom).map(f=>f.name).join(", ")||"—"}</span>
+                {isReg ? <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Prebuilt · {pm2LinkedFws(p).filter(f=>!f.custom).map(f=>f.name).join(", ")||"—"}</span>
                   : <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Custom</span>}
-                <span style={{fontSize:11,color:T.textMuted}}>{isReg?"Rules are locked to the regulation.":"Built by your organisation."}</span>
+                {typeDots(p)}<span style={{fontSize:11,color:T.textMuted}}>{p.rules.length} rule{p.rules.length===1?"":"s"} · {p.articles.length} article{p.articles.length===1?"":"s"}</span>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-              {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>submitPolicy(p.id)}>Submit for approval</Btn>}
+              {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>p.rules.length?submitPolicy(p.id):onToast("Add at least one rule first","info")}>Submit for approval</Btn>}
               {pr&&!canDecide(pr)&&(pr.requestedBy===me||canSubmit(p))&&<Btn small ghost onClick={()=>withdrawRequest(p)}>Withdraw request</Btn>}
-              {canFill&&!fill&&<Btn small variant="primary" onClick={()=>{setPdTab("activity");setFill({polId:p.id,values:{}});}}>Fill in the form</Btn>}
               {p.status==="Retired"&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>restorePolicy(p)}>Restore</Btn>}
-              {p.type==="validation"&&sevPill(p.severity)}
+              {canChange&&<Btn small ghost icon={Ic.plus(10)} onClick={()=>openRuleEditor(p,null)}>Rule</Btn>}
               {p.status==="Active"
                 ? <div title={h.label} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:`${hc}12`,border:`1px solid ${hc}30`}}>
                     <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1L2 4v3c0 2.5 1.8 4 4 4.5C8.2 11 10 9.5 10 7V4L6 1z" stroke={hc} strokeWidth="1.3" strokeLinejoin="round"/></svg>
@@ -14488,20 +14497,21 @@ const PolicyManager2View = ({onToast, onNav}) => {
             </div>
           </div>
         </div>
-        {banners}
-        {/* Tab bar — as in the original */}
-        <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto",marginTop:pr||upd||pendMaps?8:0}}>
+        {pr&&canDecide(pr)&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>{pr.requestedBy}</b> asks you to approve {p.draft?`v${p.draft.version} of this policy`:"this policy"} — “{pr.note}”.</span>
+          <Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn><Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></div>}
+        {upd&&!p.draft&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.blue}50`,background:`${T.blue}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>Update available — template v{upd.version}.</b> {upd.changelog} Your custom rules are kept. Nothing changes until you review and apply it.</span>{canSubmit(p)&&<Btn small variant="primary" onClick={()=>applyTplUpdate(p)}>Review & apply</Btn>}</div>}
+        {pendMaps>0&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text}}>{mapReq&&mapReq.status==="pending"?<>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.</>:<>{pendMaps} regulation article mapping{pendMaps>1?"s go":" goes"} to {ap.mapping.approver} for approval once the policy is submitted.</>}{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>}
+        <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto",marginTop:(pr&&canDecide(pr))||upd||pendMaps?8:0}}>
           {tabs.map(({k,l,badge,danger})=>(
             <button key={k} onClick={()=>setPdTab(k)} style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.accent:"transparent"}`,color:pdTab===k?T.accent:T.textMuted,fontSize:12,fontWeight:pdTab===k?600:500,cursor:"pointer",whiteSpace:"nowrap",marginBottom:-1}}>
               {l}{badge!=null&&badge>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:pdTab===k?T.accent:danger?`${T.rose}18`:T.bgElevated,color:pdTab===k?"#fff":danger?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{badge}</span>}
             </button>))}
         </div>
-        <div style={{flex:1,overflowY:"auto",minHeight:0}}>
-          {pdTab==="overview" ? body : <div style={{padding:"20px 22px 40px"}}>{body}</div>}
-        </div>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{pdTab==="overview" ? body : <div style={{padding:"20px 22px 40px"}}>{body}</div>}</div>
       </div>
     );
   };
+
 
   // ═════ FINDINGS ═════
   const findingRow = (f, i, compact) => {
@@ -14596,8 +14606,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const row = (label, ctrl) => <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,fontSize:12,color:T.textSub}}><span style={{width:150}}>{label}</span>{ctrl}</div>;
     const ro = !isAdmin;
     const act = x => {
-      if(x.r.kind==="pm2attestdue") return x.to===me||isAdmin ? <Btn small variant="primary" onClick={()=>{openPolicy(x.r.targetId);setPdTab("activity");setFill({polId:x.r.targetId,values:{}});}}>Fill in the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>Waiting on {x.to}</span>;
-      if(x.r.kind==="pm2attest") return canDecide(x.r) ? <Btn small variant="primary" onClick={()=>{openPolicy(x.r.targetId);setPdTab("activity");}}>Review the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You submitted this — someone else reviews":`Waiting on ${x.to}`}</span>;
+      if(x.r.kind==="pm2attestdue") return x.to===me||isAdmin ? <Btn small variant="primary" onClick={()=>{const [pid,rid]=String(x.r.targetId).split("|"); openPolicy(pid,null,"activity"); setFill({polId:pid,ruleId:rid,values:{}});}}>Fill in the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>Waiting on {x.to}</span>;
+      if(x.r.kind==="pm2attest") return canDecide(x.r) ? <Btn small variant="primary" onClick={()=>openPolicy(String(x.r.targetId).split("|")[0],null,"activity")}>Review the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You submitted this — someone else reviews":`Waiting on ${x.to}`}</span>;
       return canDecide(x.r) ? <><Btn small variant="primary" onClick={()=>x.k==="s"?decideReq(x.r,true):decideEnf(x.r,true)}>Approve</Btn><Btn small ghost onClick={()=>x.k==="s"?decideReq(x.r,false):decideEnf(x.r,false)}>Reject</Btn></>
         : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You requested this — someone else decides":`Waiting on ${x.to}`}</span>;
     };
@@ -14636,6 +14646,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
       </div>
     );
   };
+
 
   // ── The original Policy Manager's create/edit panel: header, section rail, footer with Back on the left.
   const drawer = ({title, sub, steps, step, done, onStep, body, onClose, width, onBack, right}) => (
@@ -14680,64 +14691,171 @@ const PolicyManager2View = ({onToast, onNav}) => {
       <select value="" onChange={e=>e.target.value&&onChange([...list,e.target.value])} style={selStyle}><option value="">+ steward</option>{PM2_USERS.filter(u=>!list.includes(u)&&u!==exclude).map(u=><option key={u}>{u}</option>)}</select>
     </div>
   );
-  const routeText = (type, n) => {
-    if(type==="validation"&&ap.activation.autoValidation) return <span style={{color:T.green}}>Active as soon as it's submitted — validation changes no data</span>;
+  // Approval route for a set of rules — what happens after Submit.
+  const routeText = (rules, n) => {
+    const list = Array.isArray(rules) ? rules : [];
+    if(ap.activation.autoValidation && onlyValidation(list)) return <span style={{color:T.green}}>Active as soon as it's submitted — validation rules change no data</span>;
     const who = pm2Approver(ap.activation.approver, me);
-    return <span>Goes to <b>{who}</b> for approval{type==="enforcement"?<>, then {n!=null&&n!==1?`${n} table owners approve`:n===1?"1 table owner approves":"each table owner approves"} before CDP acts</>:type==="attestation"?", then the form is assigned and comes due on its schedule":""}</span>;
+    return <span>Goes to <b>{who}</b> for approval{list.some(r=>r.type==="enforcement")?<>, then {n!=null&&n!==1?`${n} table owners approve`:n===1?"1 table owner approves":"each table owner approves"} before CDP acts</>:""}{list.some(r=>r.type==="attestation")?", then its forms are assigned and come due on schedule":""}</span>;
   };
-  const enfEditor = (e, setEnf, locked, floor) => (
-    <div style={{display:"flex",flexDirection:"column",gap:14,maxWidth:640}}>
-      <div><label style={lbl}>Action</label>
-        <select disabled={locked} value={e.action} onChange={x=>setEnf(x.target.value==="hold"?{action:"hold",matter:"",select:"flag",assets:[]}:{action:"retention",mode:"dispose",period:36,unit:"months",trigger:"Last use",disposal:"Delete permanently"})} style={{...selStyle,minWidth:260}}>
-          <option value="retention">Retention — keep or dispose of data on a schedule</option><option value="hold">Legal hold — freeze records for a legal matter</option></select>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>These are the only two actions EDG executes through CDP. Masking is checked by a validation policy instead.</div></div>
-      {e.action==="retention"&&<>
-        <div><label style={lbl}>Mode</label><select disabled={locked} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...selStyle,minWidth:260}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select></div>
-        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-          <div><label style={lbl}>Period{floor?` (at least ${floor} years — legal minimum)`:""}</label><div style={{display:"flex",gap:6}}><input type="number" min={1} value={e.period} onChange={x=>setEnf({...e,period:Number(x.target.value)})} style={{...inStyle,width:80}}/><select value={e.unit} onChange={x=>setEnf({...e,unit:x.target.value})} style={selStyle}><option>months</option><option>years</option></select></div></div>
-          <div><label style={lbl}>Starts from</label><select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={selStyle}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select></div>
-          <div><label style={lbl}>At the end</label><select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={selStyle}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select></div>
-        </div></>}
-      {e.action==="hold"&&<>
-        <div><label style={lbl}>Legal matter</label><input value={e.matter} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={inp}/></div>
-        <div><label style={lbl}>What's held</label><select value={e.select} onChange={x=>setEnf({...e,select:x.target.value})} style={{...selStyle,minWidth:300}}><option value="flag">In-scope assets already flagged under legal hold</option><option value="assets">Specific assets I pick</option></select></div>
-        {e.select==="assets"&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:4}}>{PM2_ASSETS.map(a=><label key={a.name} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={(e.assets||[]).includes(a.name)} onChange={x=>setEnf({...e,assets:x.target.checked?[...(e.assets||[]),a.name]:(e.assets||[]).filter(n=>n!==a.name)})} style={{accentColor:T.accent}}/><span style={{fontFamily:"'Geist Mono',monospace"}}>{a.name}</span></label>)}</div>}
-        <div style={{fontSize:11,color:T.textMuted}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"} (Approval policies).</div></>}
-    </div>
-  );
-  const formBuilder = (att, setAtt) => {
-    const setF = (i, f) => setAtt({...att, form:att.form.map((x,j)=>j===i?f:x)});
-    const move = (i, d) => { const f=[...att.form]; const j=i+d; if(j<0||j>=f.length) return; [f[i],f[j]]=[f[j],f[i]]; setAtt({...att, form:f}); };
-    return (<>
-      {att.form.map((f,i)=>(
-        <div key={f.id} style={{border:`1px solid ${T.border}`,borderRadius:9,padding:"10px 12px",marginBottom:8,background:T.bgElevated}}>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <span style={{fontSize:11,color:T.textMuted,width:18}}>{i+1}</span>
-            <input value={f.label} onChange={e=>setF(i,{...f,label:e.target.value})} placeholder="Question or field label" style={{...inStyle,flex:"1 1 220px"}}/>
-            <select value={f.type} onChange={e=>setF(i,{...f,type:e.target.value})} style={selStyle}>{Object.entries(PM2_FORM_TYPES).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select>
-            <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={f.required} onChange={e=>setF(i,{...f,required:e.target.checked})} style={{accentColor:T.accent}}/>Required</label>
-            <button onClick={()=>move(i,-1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↑</button><button onClick={()=>move(i,1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↓</button>
-            <button onClick={()=>setAtt({...att, form:att.form.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:T.rose,cursor:"pointer",fontSize:11}}>Remove</button>
-          </div>
-          <div style={{display:"flex",gap:8,marginTop:6,paddingLeft:26,flexWrap:"wrap"}}>
-            <input value={f.help} onChange={e=>setF(i,{...f,help:e.target.value})} placeholder="Help text (optional)" style={{...inStyle,flex:"1 1 220px"}}/>
-            {f.type==="select"&&<input value={f.opts.join(", ")} onChange={e=>setF(i,{...f,opts:e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})} placeholder="Options, comma-separated" style={{...inStyle,flex:"1 1 220px"}}/>}
-          </div>
+
+  // ── One rule form, used by the create wizard, the single-rule drawer and adoption. ──
+  const newRuleId = () => `r-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  const newRuleOfType = (t, name) => ({id:newRuleId(), key:null, origin:"custom", type:t, name:name||"", finding:"", severity:"Medium",
+    conds: t==="validation"?[{f:"access",op:"is",v:""}]:[],
+    enf: t==="enforcement"?{action:"retention",mode:"dispose",period:36,unit:"months",trigger:"Last use",disposal:"Delete permanently",select:"flag",assets:[],matter:""}:null,
+    att: t==="attestation"?{instructions:"",every:12,remind:30,assignee:"owner",reviewer:"approver",form:[pm2Field("Completed on","date",true),pm2Field("Evidence","doc",true),pm2Field("Signed off by","person",true)]}:null,
+    submissions:[]});
+  const retype = (r, t) => ({...newRuleOfType(t, r.name), id:r.id});
+  const condComplete = c => { const F=PM2_FIELDS[c.f]; return !!F && (F.type==="bool"||F.type==="presence" || (c.v!==undefined&&c.v!==null&&String(c.v).trim()!=="")); };
+  const ruleProblem = (r, n) => {
+    const tag = n!=null ? `Rule ${n}` : "The rule";
+    if(!String(r.name||"").trim()) return `${tag} needs a name`;
+    if(r.type==="validation"){ if(!r.conds.length||!r.conds.every(condComplete)) return `${tag} needs a value for every condition`; if(!String(r.finding||"").trim()) return `${tag} needs the finding message`; }
+    if(r.type==="enforcement"){ const e=r.enf;
+      if(e.action==="hold"&&!String(e.matter||"").trim()) return `${tag}: name the legal matter`;
+      if(e.select==="assets"&&!(e.assets||[]).length) return `${tag}: pick at least one asset`;
+      if(e.action==="retention"&&!(Number(e.period)>0)) return `${tag}: set a retention period`; }
+    if(r.type==="attestation"){ const a=r.att;
+      if(!String(a.instructions||"").trim()) return `${tag}: describe what needs to be documented`;
+      if(!a.form.length) return `${tag}: add at least one form field`;
+      if(a.form.some(f=>!f.label.trim())) return `${tag}: every form field needs a label`;
+      if(a.form.some(f=>f.type==="select"&&!f.opts.length)) return `${tag}: dropdown fields need options`; }
+    return null;
+  };
+  const typeSeg = (r, onType, locked) => (
+    <div style={{display:"flex",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,padding:2}}>
+      {["validation","enforcement","attestation"].map(k=>{ const on=r.type===k; return (
+        <button key={k} disabled={locked||!onType} onClick={()=>onType&&!on&&onType(k)} title={locked?"A prebuilt rule's type is fixed":""}
+          style={{fontSize:10.5,fontWeight:on?700:500,padding:"2px 9px",borderRadius:4,border:"none",cursor:locked||!onType?"default":"pointer",background:on?(k==="validation"?T.bgElevated:typeColor(k)):"transparent",color:on?(k==="validation"?T.text:"#fff"):T.textMuted}}>{PM2_TYPE_META[k].label}</button>); })}
+    </div>);
+  const ruleForm = (r, setR, {locked, p}={}) => {
+    const s2 = {...inp,background:T.bgSurface,width:"auto",flex:1,minWidth:0,padding:"7px 9px"};
+    const pv = p||{id:"preview",scope:[],domains:[],articles:[],rules:[r]};
+    const nameRow = <>
+      <label style={lbl}>Rule name <span style={{color:T.rose}}>*</span></label>
+      <input disabled={locked} value={r.name} onChange={e=>setR({...r,name:e.target.value})} placeholder={r.type==="validation"?"e.g. Sensitive data is encrypted at rest":r.type==="enforcement"?"e.g. Dispose of marketing data after 24 months":"e.g. Quarterly access review signed off"} style={{...inp,background:T.bgSurface,marginBottom:12}}/></>;
+    if(r.type==="validation"){ const ev=pm2EvalRule(pv,r);
+      return <>{nameRow}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:10,marginBottom:12}}>
+          <div><label style={lbl}>Finding message <span style={{color:T.rose}}>*</span></label><input disabled={locked} value={r.finding||""} onChange={e=>setR({...r,finding:e.target.value})} placeholder="What the finding says, e.g. Not encrypted at rest" style={{...inp,background:T.bgSurface}}/></div>
+          <div><label style={lbl}>Severity</label><select value={r.severity||"Medium"} onChange={e=>setR({...r,severity:e.target.value})} style={{...inp,background:T.bgSurface,color:SEV_COLOR[r.severity||"Medium"],fontWeight:600,cursor:"pointer"}}>{["Low","Medium","High","Critical"].map(x=><option key={x}>{x}</option>)}</select></div>
+        </div>
+        <label style={lbl}>Check — raise a finding when an in-scope asset…</label>
+        {r.conds.map((c,ci)=>{ const F=PM2_FIELDS[c.f]; const setC=nc=>setR({...r,conds:r.conds.map((x,j)=>j===ci?nc:x)}); const lockF=locked; const lockV=locked&&!c.edit;
+          return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:10,fontWeight:800,color:T.textMuted,width:30}}>{ci?"AND":""}</span>
+            <select disabled={lockF} value={c.f} onChange={e=>{const nf=PM2_FIELDS[e.target.value]; setC({f:e.target.value, op:PM2_OPS[nf.type][0], v:["enum","number","list"].includes(nf.type)?"":undefined});}} style={{...s2,flex:1.4}}>{Object.entries(PM2_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
+            <select disabled={lockF} value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={s2}>{PM2_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
+            {F.type==="enum"&&<select disabled={lockV} value={c.v||""} onChange={e=>setC({...c,v:e.target.value})} style={{...s2,color:c.v?T.text:T.textMuted}}><option value="">— select —</option>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
+            {F.type==="number"&&<input disabled={lockV} type="number" value={c.v??""} placeholder="value" onChange={e=>setC({...c,v:e.target.value===""?"":Number(e.target.value)})} style={s2}/>}
+            {F.type==="list"&&<input disabled={lockV} value={c.v||""} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={s2}/>}
+            {(F.type==="bool"||F.type==="presence")&&<span style={{flex:1}}/>}
+            {!locked&&<button onClick={()=>setR({...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>×</button>}
+          </div>); })}
+        {!locked&&<button onClick={()=>setR({...r,conds:[...r.conds,{f:"env",op:"is",v:""}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 0 36px"}}>+ Add condition</button>}
+        {locked&&(r.conds||[]).some(c=>c.edit)&&<div style={{fontSize:11,color:T.textMuted,margin:"2px 0 0 36px"}}>Only the values the law leaves to you are editable.</div>}
+        {p&&r.conds.every(condComplete)&&<div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:ev.findings.length?`${T.rose}0c`:`${T.green}0c`,border:`1px solid ${ev.findings.length?T.rose:T.green}30`,fontSize:11.5,color:T.text}}>
+          If it ran now: <b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"}{ev.findings.length>0&&<> — {ev.findings.slice(0,4).map(f=>f.asset.name).join(", ")}{ev.findings.length>4?"…":""}</>}</div>}
+      </>; }
+    if(r.type==="enforcement"){ const e=r.enf; const setEnf=v=>setR({...r,enf:v}); const eff=pm2EffectivePeriod(pv,r); const floor=locked&&e.mode==="minimum"?eff?.floor:null;
+      return <>{nameRow}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div><label style={lbl}>Action</label><select disabled={locked} value={e.action} onChange={x=>setEnf(x.target.value==="hold"?{...e,action:"hold",matter:e.matter||"",select:e.select||"flag"}:{...e,action:"retention",mode:e.mode||"dispose",period:e.period||36,unit:e.unit||"months",trigger:e.trigger||"Last use",disposal:e.disposal||"Delete permanently"})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="retention">Retention</option><option value="hold">Legal Hold</option></select></div>
+          <div><label style={lbl}>Apply to</label><div style={{display:"flex"}}>
+            {[["flag",e.action==="hold"?"Assets flagged for the matter":"By classification"],["assets","Specific assets"]].map(([k,l2],ix)=>{ const on=(e.select||"flag")===k;
+              return <button key={k} disabled={locked} onClick={()=>setEnf({...e,select:k})} style={{flex:1,padding:"7px 8px",fontSize:11.5,fontWeight:600,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accent:T.bgSurface,color:on?"#fff":T.textSub,cursor:locked?"default":"pointer",borderRadius:ix===0?"7px 0 0 7px":"0 7px 7px 0"}}>{l2}</button>; })}</div></div>
+        </div>
+        {e.select==="assets"&&<div style={{marginBottom:12}}><CatFieldDropdown label="Assets" required options={PM2_ASSETS.map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets…"/></div>}
+        {e.action==="retention"&&<div style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:"8px 12px",alignItems:"center"}}>
+          <span style={{fontSize:11.5,color:T.textSub}}>Mode</span>
+          <select disabled={locked} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select>
+          <span style={{fontSize:11.5,color:T.textSub}}>Period{floor?` (≥ ${floor} yrs by law)`:""}</span>
+          <div style={{display:"flex",gap:6}}><input type="number" min={1} value={e.period} onChange={x=>setEnf({...e,period:Number(x.target.value)})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:100}}/>
+            <select value={e.unit} onChange={x=>setEnf({...e,unit:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:120}}><option>months</option><option>years</option></select></div>
+          <span style={{fontSize:11.5,color:T.textSub}}>Starts from</span>
+          <select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11.5,color:T.textSub}}>At the end</span>
+          <select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select>
+        </div>}
+        {e.action==="hold"&&<><label style={lbl}>Legal matter <span style={{color:T.rose}}>*</span></label><input value={e.matter||""} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={{...inp,background:T.bgSurface}}/>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"}.</div></>}
+        <div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.text,lineHeight:1.6}}>{enfText(pv,r)} <span style={{color:T.textMuted}}>Only retention and legal hold are enforced — masking is checked by a validation rule.</span></div>
+      </>; }
+    const a=r.att; const setAtt=v=>setR({...r,att:v});
+    const setF=(i,f)=>setAtt({...a,form:a.form.map((x,j)=>j===i?f:x)}); const move=(i,d)=>{const f=[...a.form]; const j=i+d; if(j<0||j>=f.length) return; [f[i],f[j]]=[f[j],f[i]]; setAtt({...a,form:f});};
+    return <>{nameRow}
+      <label style={lbl}>What needs to be documented <span style={{color:T.rose}}>*</span></label>
+      <textarea disabled={locked} rows={3} value={a.instructions||""} onChange={e=>setAtt({...a,instructions:e.target.value})} placeholder="What the assignee must attest to and what evidence to attach." style={{...inp,background:T.bgSurface,resize:"vertical",marginBottom:12}}/>
+      <label style={lbl}>Form fields</label>
+      {a.form.map((f,i)=>(
+        <div key={f.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,color:T.textMuted,width:18}}>{i+1}</span>
+          <input disabled={locked} value={f.label} onChange={e=>setF(i,{...f,label:e.target.value})} placeholder="Question or label" style={{...s2,flex:"2 1 180px"}}/>
+          <select disabled={locked} value={f.type} onChange={e=>setF(i,{...f,type:e.target.value})} style={{...s2,flex:"1 1 110px"}}>{Object.entries(PM2_FORM_TYPES).map(([k,l2])=><option key={k} value={k}>{l2}</option>)}</select>
+          {f.type==="select"&&<input disabled={locked} value={f.opts.join(", ")} onChange={e=>setF(i,{...f,opts:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})} placeholder="Options, comma-separated" style={{...s2,flex:"2 1 160px"}}/>}
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.textSub}}><input type="checkbox" disabled={locked} checked={f.required} onChange={e=>setF(i,{...f,required:e.target.checked})} style={{accentColor:T.accent}}/>Required</label>
+          {!locked&&<><button onClick={()=>move(i,-1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↑</button><button onClick={()=>move(i,1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↓</button>
+            <button onClick={()=>setAtt({...a,form:a.form.filter((_,j)=>j!==i)})} style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>×</button></>}
         </div>))}
-      <Btn small onClick={()=>setAtt({...att, form:[...att.form, {id:`f-${Date.now()}`, label:"", type:"text", required:false, help:"", opts:[]}]})}>+ Add field</Btn>
-    </>);
+      {!locked&&<button onClick={()=>setAtt({...a,form:[...a.form,{id:`f-${Date.now()}`,label:"",type:"text",required:false,help:"",opts:[]}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 0 24px"}}>+ Add field</button>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginTop:12}}>
+        <div><label style={lbl}>Due every (months)</label><input type="number" min={1} value={a.every} onChange={e=>setAtt({...a,every:Number(e.target.value)})} style={{...inp,background:T.bgSurface}}/></div>
+        <div><label style={lbl}>Reminder (days)</label><input type="number" min={0} value={a.remind} onChange={e=>setAtt({...a,remind:Number(e.target.value)})} style={{...inp,background:T.bgSurface}}/></div>
+        <div><label style={lbl}>Filled in by</label><select value={a.assignee} onChange={e=>setAtt({...a,assignee:e.target.value})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="owner">Policy owner</option><option value="steward">First steward</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+        <div><label style={lbl}>Reviewed by</label><select value={a.reviewer} onChange={e=>setAtt({...a,reviewer:e.target.value})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="approver">Default ({ap.attest.reviewer})</option><option value="owner">Policy owner</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+      </div>
+    </>;
   };
-  const scheduleEditor = (att, setAtt, p) => (
-    <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-      <div><label style={lbl}>Comes due every</label><div style={{display:"flex",gap:6,alignItems:"center"}}><input type="number" min={1} value={att.every} onChange={e=>setAtt({...att,every:Number(e.target.value)})} style={{...inStyle,width:70}}/><span style={{fontSize:12,color:T.textSub}}>months</span></div></div>
-      <div><label style={lbl}>Reminder</label><div style={{display:"flex",gap:6,alignItems:"center"}}><input type="number" min={0} value={att.remind} onChange={e=>setAtt({...att,remind:Number(e.target.value)})} style={{...inStyle,width:70}}/><span style={{fontSize:12,color:T.textSub}}>days before</span></div></div>
-      <div><label style={lbl}>Filled in by</label><select value={att.assignee} onChange={e=>setAtt({...att,assignee:e.target.value})} style={selStyle}><option value="owner">The policy owner</option><option value="steward">The first steward</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
-      <div><label style={lbl}>Reviewed by</label><select value={att.reviewer} onChange={e=>setAtt({...att,reviewer:e.target.value})} style={selStyle}><option value="approver">Approval policy reviewer ({ap.attest.reviewer})</option><option value="owner">The policy owner</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
-    </div>
-  );
+  // A rule card: RULE n, the type toggle, origin, and the form.
+  const ruleCard = (r, n, setR, {onRemove, locked, p, onType}={}) => (
+    <div key={r.id} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:10,padding:"10px 12px 12px",marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>RULE {n}</span>{originPill(r)}
+        <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>{typeSeg(r, onType, locked)}
+          {onRemove&&<button onClick={onRemove} title="Remove" style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>}</span>
+      </div>
+      {ruleForm(r, setR, {locked, p})}
+    </div>);
+  const addRuleButtons = (onAdd) => (
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      {["validation","enforcement","attestation"].map(k=><button key={k} onClick={()=>onAdd(k)} style={{flex:"1 1 150px",padding:"10px",borderRadius:9,border:`1px dashed ${typeColor(k)}60`,background:`${typeColor(k)}08`,color:typeColor(k),fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.plus(11)} {PM2_TYPE_META[k].label} rule</button>)}
+    </div>);
+
+  // ═════ ADD / EDIT ONE RULE — the original's single-rule drawer ═════
+  const openRuleEditor = (p, r, ctx) => {
+    if(!canEdit(p)){ onToast(`Only ${p.owner} or a steward can change this policy`,"info"); return; }
+    if(pendingReqOf(p)){ onToast("Withdraw the approval request first","info"); return; }
+    setRuleEd({polId:p.id, isNew:!r, rule: r ? JSON.parse(JSON.stringify(r)) : newRuleOfType("validation"), ctx});
+  };
+  const renderRuleEditor = () => {
+    const p = st.policies.find(x=>x.id===ruleEd.polId); if(!p) return null;
+    const r = ruleEd.rule; const locked = r.origin==="prebuilt"; const prob = ruleProblem(r);
+    const setR = v => setRuleEd(x=>({...x, rule:v}));
+    const will = p.status==="Active" ? (ap.activation.autoValidation&&r.type==="validation" ? "The policy is active. A validation rule changes no data, so it goes live as soon as you save." : `The policy is active. Saving creates v${p.version+1}, which goes to ${pm2Approver(ap.activation.approver, me)} for approval; v${p.version} keeps running meanwhile.`) : "The policy is a draft — the rule is saved into it now.";
+    return (<>
+      <div onClick={()=>setRuleEd(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:640,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+            <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{ruleEd.isNew?"Add Rule":locked?"Edit Rule Values":"Edit Rule"}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{p.name}{locked?" · prebuilt rule — only the values the law leaves open":""}</div></div></div>
+          <button onClick={()=>setRuleEd(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
+          {ruleEd.isNew&&<div style={{marginBottom:14}}><label style={lbl}>Rule type</label>{typeSeg(r, t=>setR(retype(r,t)), false)}<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{PM2_TYPE_META[r.type].hint}</div></div>}
+          {ruleForm(r, setR, {locked, p})}
+          <div style={{marginTop:16,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{will}{ruleEd.isNew&&p.articles.length>0?` A custom rule counts toward every article this policy satisfies (${p.articles.length}).`:""}</div>
+        </div>
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>
+          {prob&&<span style={{fontSize:11,color:T.rose,marginRight:"auto"}}>{prob}</span>}
+          <button onClick={()=>setRuleEd(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          {fBtn(ruleEd.isNew?"Add rule":"Save rule", ()=>{ saveRule(p, r, ruleEd.isNew); setRuleEd(null); setPdTab("rules"); }, true, !!prob)}
+        </div>
+      </div></>);
+  };
 
   // ═════ ADOPT A REGULATION ═════
-  const tplIds = fw => [...new Set(fw.arts.flatMap(a=>a.c||[]))];
+  const tplIds = fw => [...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))];
   const existingFor = (t, fw) => livePols.find(p=>p.id===pm2TplPolicyId(t,fw));
   const startAdopt = (fwId, step=1) => {
     const fw = pm2Fw(fwId); const picks={}, pols={};
@@ -14759,7 +14877,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
     created.forEach(id=>submitPolicy(id, `Adopting ${fw.name}`, true));
     setTimeout(pm2Sync,0);
     const auto = created.filter(id=>_pm2.policies.find(p=>p.id===id)?.status==="Active").length;
-    onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${created.length} new polic${created.length===1?"y":"ies"} (${auto} active now, ${created.length-auto} sent for approval), ${extended} existing extended`,"success");
+    onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${created.length} new polic${created.length===1?"y":"ies"} (${auto} active now, ${created.length-auto} sent for approval), ${extended} existing reused`,"success");
     setWiz(null); setSelFw(fw.id); setTab("frameworks");
   };
   const renderWizard = () => {
@@ -14768,142 +14886,116 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const recs = (fw.recordClasses||[]).length ? PM2_ASSETS.filter(a=>pm2Classes(a).some(c=>fw.recordClasses.includes(c))) : [];
     const tids = tplIds(fw); const newT = tids.filter(t=>!existingFor(t,fw)&&wiz.picks[t]); const exT = tids.filter(t=>existingFor(t,fw));
     const setW = (k,v) => setWiz(w=>({...w,[k]:v}));
-    const setPol = (t, fn) => setWiz(w=>({...w, pols:{...w.pols, [t]:fn(w.pols[t])}}));
+    const setRuleIn = (t, rid, nr) => setWiz(w=>({...w, pols:{...w.pols, [t]:{...w.pols[t], rules:w.pols[t].rules.map(x=>x.id===rid?nr:x)}}}));
     const assetRow = (a, right) => <div key={a.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span><div style={{flex:1,display:"flex",gap:4,flexWrap:"wrap"}}>{right}</div></div>;
-    const tplBody = (t, pv, editable) => {
-      if(pv.type==="validation") return pv.rules.map((r,ri)=><div key={r.id}>{ruleView(r,pv, editable?nr=>setPol(t,x=>({...x, rules:x.rules.map((y,j)=>j===ri?nr:y)})):null, c=>c.edit)}</div>);
-      if(pv.type==="enforcement") return <div style={{fontSize:12,color:T.text,lineHeight:1.6,padding:"8px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("enforcement")}`,borderRadius:8}}>{enfText(pv)}
-        {editable&&pv.enf.action==="retention"&&<div style={{marginTop:6,display:"flex",gap:6,alignItems:"center",fontSize:11.5,color:T.textSub}}>Your period: <input type="number" value={pv.enf.period} onChange={e=>setPol(t,x=>({...x,enf:{...x.enf,period:Number(e.target.value)}}))} style={{...inStyle,width:70}}/> {pv.enf.unit}</div>}</div>;
-      return <div style={{fontSize:12,color:T.text,padding:"8px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8}}>
-        A form with <b>{pv.att.form.length} fields</b> ({pv.att.form.map(f=>f.label).join(" · ")}), due every <b>{pv.att.every} months</b>, reviewed before it counts.</div>;
-    };
+    // The rules an article counts, with the values the law leaves open editable in place.
+    const ruleLine = (pv, r, t, editable) => (
+      <div key={r.id} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"7px 10px",borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em",paddingTop:3,width:34}}>RULE</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typePill(r.type)}{originPill(r)}<span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{r.name}</span></div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:3,lineHeight:1.5}}>{ruleSentence(pv,r)}</div>
+          {editable&&r.type==="validation"&&(r.conds||[]).some(c=>c.edit)&&<div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+            {r.conds.map((c,ci)=>c.edit&&<label key={ci} style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{PM2_FIELDS[c.f].label} {c.op}
+              <input type={PM2_FIELDS[c.f].type==="number"?"number":"text"} value={c.v} onChange={e=>setRuleIn(t, r.id, {...r, conds:r.conds.map((x,j)=>j===ci?{...x,v:PM2_FIELDS[c.f].type==="number"?Number(e.target.value):e.target.value}:x)})} style={{...inStyle,width:PM2_FIELDS[c.f].type==="number"?70:230}}/></label>)}</div>}
+          {editable&&r.type==="enforcement"&&r.enf.action==="retention"&&<div style={{display:"flex",gap:6,marginTop:6,alignItems:"center",fontSize:11.5,color:T.textSub}}>Your period: <input type="number" value={r.enf.period} onChange={e=>setRuleIn(t, r.id, {...r, enf:{...r.enf, period:Number(e.target.value)}})} style={{...inStyle,width:70}}/> {r.enf.unit}</div>}
+        </div>
+      </div>);
     let body;
     if(wiz.step===1) body = <>
       {secHead("Applicability", `${fw.name} applies to the data classes below. EDG uses your classifications to decide what's in scope — nothing is hand-picked, and newly classified data joins automatically.`)}
       <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{fw.covers.map(classChip)}</div>
       {secLabel(`In scope today (${inS.length} assets)`)}
       <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{inS.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)).map(classChip)))}</div>
-      {recs.length>0&&<>{secLabel(`Records ${fw.name} says you must keep (${recs.length})`)}
-        <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{recs.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.recordClasses.includes(c)).map(classChip)))}</div></>}
+      {recs.length>0&&<>{secLabel(`Records ${fw.name} says you must keep (${recs.length})`)}<div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{recs.map(a=>assetRow(a, pm2Classes(a).filter(c=>fw.recordClasses.includes(c)).map(classChip)))}</div></>}
       {sus.length>0&&<>{secLabel(`Probably in scope, not classified yet (${sus.length})`)}
         {sus.map(a=><div key={a.name} style={{display:"flex",gap:10,padding:"7px 12px",border:`1px dashed ${T.amber}70`,borderRadius:8,marginBottom:5,background:`${T.amber}08`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11.5,color:T.textSub}}>{Object.entries(a.suspect).map(([k,v])=>`${k} → ${v}`).join(", ")}</span></div>)}</>}
       {secLabel("Framework owner")}
       <div style={{display:"flex",alignItems:"center",gap:10}}>{userSel(wiz.owner, v=>setW("owner",v))}<span style={{fontSize:11.5,color:T.textMuted}}>Answers for {fw.name} readiness. New policies default to this owner.</span></div>
     </>;
     if(wiz.step===2) body = <>
-      {secHead("Articles & policies", `Every article, what it asks, and the regulation policy that satisfies it — each one a single type. Policies are on by default; the values the law leaves to you are editable. Policies you already run are reused, not duplicated.`)}
+      {secHead("Articles → policies → rules", `Every article, what it asks, the policy that satisfies it and the exact rules that count for it. Policies you already run are reused. The values the law leaves to you are editable; everything else is fixed by ${fw.name}. You can add custom rules to any policy after adopting.`)}
       {fw.arts.map((art,i)=>(
-        <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface}}>
-          <div style={{padding:"10px 14px",borderBottom:art.out?"none":`1px solid ${T.border}`}}>
+        <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(art.ref, fwTypeColor(fw.type))}<span style={{fontSize:13,fontWeight:700,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>{art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}</div>
             <div style={{fontSize:12,color:T.textSub,marginTop:4}}><span style={{color:T.textMuted,fontWeight:600}}>The law asks: </span>{art.ask}</div>
           </div>
-          {!art.out&&<div style={{padding:"8px 14px 12px",display:"flex",flexDirection:"column",gap:10}}>
-            {(art.c||[]).map(t=>{ const ex=existingFor(t,fw);
-              if(ex){ const np=pm2LinkToFw(ex,fw); const wid=np.scope.filter(c=>!ex.scope.includes(c));
-                return (<div key={t}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}><input type="checkbox" checked disabled style={{accentColor:T.accent}}/>{typePill(ex.type)}<span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{ex.name}</span>{pill(statusColor(ex.status),`Existing · ${ex.status}`)}<span style={{fontSize:11,color:T.green,fontWeight:600}}>Reused — also counts for {fw.name}{wid.length?`; scope widens to ${wid.map(c=>PM2_CLASS_META[c].label).join(", ")}`:""}</span></div>
-                  <div style={{marginLeft:24}}>{tplBody(t,np,false)}</div></div>); }
-              const on=wiz.picks[t]; const pv=previewTpl(t,fw);
-              return (<div key={t}>
-                <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",marginBottom:6}}><input type="checkbox" checked={!!on} onChange={e=>setW("picks",{...wiz.picks,[t]:e.target.checked})} style={{accentColor:T.accent}}/>{typePill(pv.type)}<span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{pv.name}</span>{pill(T.accent,"New regulation policy")}</label>
-                <div style={{marginLeft:24,fontSize:11.5,color:T.textMuted,marginBottom:6}}>{PM2_TPL[t].why}</div>
-                {on?<div style={{marginLeft:24}}>{tplBody(t,pv,true)}</div>:<div style={{marginLeft:24,fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
-              </div>); })}
-          </div>}
+          {!art.out&&(art.c||[]).map(ref=>{ const {tid,keys}=pm2ParseRef(ref); const ex=existingFor(tid,fw);
+            const pv = ex ? pm2LinkToFw(ex,fw) : previewTpl(tid,fw); const rules = keys ? pv.rules.filter(r=>keys.map(k=>pm2RuleId(tid,k)).includes(r.id)) : pv.rules.filter(r=>r.origin==="prebuilt");
+            const on = ex || wiz.picks[tid];
+            return (<div key={ref} style={{margin:"0 14px 12px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgElevated,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px"}}>
+                <input type="checkbox" checked={!!on} disabled={!!ex} onChange={e=>setW("picks",{...wiz.picks,[tid]:e.target.checked})} style={{accentColor:T.accent}}/>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>POLICY</span>
+                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{pv.name}</span>
+                {ex ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>Already running — reused for {fw.name}</span> : pill(T.accent,"New prebuilt policy")}
+                {keys&&<span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{rules.length} of {pv.rules.length} rules count here</span>}
+              </div>
+              {on ? rules.map(r=>ruleLine(pv, r, tid, !ex)) : <div style={{padding:"6px 10px 10px",fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
+            </div>); })}
         </div>))}
     </>;
     if(wiz.step===3) body = <>
-      {secHead("Owners & approval","Every policy has one owner — who answers for it and submits changes — and stewards who work it. Attestation policies also say who fills in the form.")}
+      {secHead("Ownership","Every policy has one owner — who answers for it and submits changes — and stewards who work it.")}
       {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>No new policies — everything {fw.name} needs already exists.</div>}
-      {newT.map(t=>{ const pv=previewTpl(t,fw); const n=pv.type==="enforcement"?pm2Eval(pv).targets.length:null;
+      {newT.map(t=>{ const pv=previewTpl(t,fw); const n=pm2Eval(pv).targets.length;
         return <div key={t} style={{marginBottom:8}}>{card(<>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>{typePill(pv.type)}<span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span></div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span>{typeDots(pv)}<span style={{fontSize:11,color:T.textMuted}}>{pv.rules.length} rule{pv.rules.length===1?"":"s"}</span></div>
           <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
             <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Owner {userSel(wiz.owners[t]||wiz.owner, v=>setW("owners",{...wiz.owners,[t]:v}))}</label>
-            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.pols[t].stewards||[], v=>setPol(t,x=>({...x,stewards:v})), wiz.owners[t]||wiz.owner)}</div>
-            {pv.type==="attestation"&&<label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Filled in by <select value={pv.att.assignee} onChange={e=>setPol(t,x=>({...x,att:{...x.att,assignee:e.target.value}}))} style={selStyle}><option value="owner">The owner</option><option value="steward">The first steward</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select></label>}
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.pols[t].stewards||[], v=>setWiz(w=>({...w,pols:{...w.pols,[t]:{...w.pols[t],stewards:v}}})), wiz.owners[t]||wiz.owner)}</div>
           </div>
-          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(pv.type, n)}</div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(pv.rules, n)}</div>
         </>,{padding:"12px 14px"})}</div>; })}
       {exT.length>0&&<>{secLabel(`Existing policies this reuses (${exT.length})`)}
-        {exT.map(t=>{ const ex=existingFor(t,fw); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{typePill(ex.type)}<span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner}</span></div>; })}</>}
+        {exT.map(t=>{ const ex=existingFor(t,fw); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{typeDots(ex)}<span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner}</span></div>; })}</>}
     </>;
     if(wiz.step===4){
-      const pvs = newT.map(t=>previewTpl(t,fw)); const by = k => pvs.filter(p=>p.type===k).length;
-      const autoN = ap.activation.autoValidation ? by("validation") : 0;
+      const pvs = newT.map(t=>previewTpl(t,fw)); const allR = pvs.flatMap(p=>p.rules); const byT = k => allR.filter(r=>r.type===k).length;
+      const autoN = pvs.filter(p=>ap.activation.autoValidation&&onlyValidation(p.rules)).length;
       const stat = (v,l,c) => <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}><div style={{fontSize:24,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:11.5,color:T.textSub}}>{l}</div></div>;
       body = <>
-        {secHead("Review & submit", `What happens when you submit ${fw.name}.`)}
+        {secHead("Review", `What happens when you submit ${fw.name}.`)}
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-          {stat(by("validation"), "validation policies — active at once", typeColor("validation"))}
-          {stat(by("enforcement"), `enforcement policies — to ${pm2Approver(ap.activation.approver, me)}, then table owners`, typeColor("enforcement"))}
-          {stat(by("attestation"), "attestation policies — forms assigned once approved", typeColor("attestation"))}
+          {stat(pvs.length, "new prebuilt policies", T.accent)}
           {stat(exT.length, "existing policies reused", T.green)}
-          {stat(pvs.length-autoN, "approval requests sent now", T.amber)}
-          {stat(fw.arts.filter(a=>a.out).length, "articles outside EDG — listed, never scored", T.textMuted)}
+          {stat(pvs.length-autoN, `sent to ${pm2Approver(ap.activation.approver, me)} for approval`, T.amber)}
+          {stat(byT("validation"), "validation rules", typeColor("validation"))}
+          {stat(byT("enforcement"), "enforcement rules", typeColor("enforcement"))}
+          {stat(byT("attestation"), "attestation rules (forms)", typeColor("attestation"))}
         </div>
-        {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:12}}>Switched off: {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).map(t=>PM2_TPL[t].name).join("; ")}. The articles they cover will read "No policy".</div>}
+        <div style={{fontSize:11.5,color:T.textMuted,marginTop:12}}>{autoN} validation-only polic{autoN===1?"y goes":"ies go"} live straight away. {fw.arts.filter(a=>a.out).length} article{fw.arts.filter(a=>a.out).length===1?" is":"s are"} outside EDG — listed on the {fw.name} page, never scored.</div>
+        {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:8}}>Switched off: {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).map(t=>PM2_TPL[t].name).join("; ")}.</div>}
       </>;
     }
-    return drawer({title:`${wiz.editing?"Review":"Adopt"} ${fw.name}`, sub:m.fullName, steps:[{label:"Applicability",required:true},{label:"Articles & policies"},{label:"Ownership"},{label:"Review"}], step:wiz.step, onStep:n=>setW("step",n), body, onClose:()=>setWiz(null),
+    return drawer({title:`${wiz.editing?"Review":"Adopt"} ${fw.name}`, sub:m.fullName, steps:[{label:"Applicability",required:true},{label:"Articles & policies"},{label:"Ownership"},{label:"Review"}], step:wiz.step, onStep:n=>setW("step",n), body, onClose:()=>setWiz(null), width:900,
       onBack:()=>setW("step",Math.max(1,wiz.step-1)), right: wiz.step<4 ? continueBtn(()=>setW("step",wiz.step+1)) : fBtn(`${wiz.editing?"Save":"Submit"} ${fw.name}`, adoptSubmit, true)});
   };
 
   // ═════ CREATE / EDIT A POLICY — the original wizard: Details · Scope · Rules · Ownership · Review ═════
-  const newRuleId = () => `r-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
   const openEditor = (p, preset, startStep) => {
     if(p&&!canEdit(p)){ onToast(`Only ${p.owner} or a steward can edit this policy`,"info"); return; }
-    if(p){ setEd({id:p.id, step:startStep||1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template, type:p.type,
-      name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], scopeBy:p.scopeBy, domains:[...(p.domains||[])], severity:p.severity||"Medium",
-      rules:(p.rules||[]).map(r=>({...r,conds:r.conds.map(c=>({...c}))})), enf:p.enf?{...p.enf,assets:[...(p.enf.assets||[])]}:{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently", select:"flag", assets:[], matter:""},
-      att:p.att?{...p.att,form:p.att.form.map(f=>({...f,opts:[...f.opts]}))}:null, articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])],
+    if(p){ setEd({id:p.id, step:startStep||1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template,
+      name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], domains:[...(p.domains||[])],
+      rules:JSON.parse(JSON.stringify(p.rules)), articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])],
       fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"]});
       return; }
-    const type = preset?.type||"validation";
-    setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, type, name:preset?.name||"", purpose:"", category:"", scope:["PII"], scopeBy:"class", domains:[], severity:"Medium",
-      rules:[],
-      enf:{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently", select:"flag", assets:[], matter:""},
-      att:{name:"", instructions:"", every:12, remind:14, assignee:"owner", reviewer:"approver", form:[pm2Field("Completed on","date",true), pm2Field("Evidence","doc",true), pm2Field("Signed off by","person",true)]},
+    setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, name:preset?.name||"", purpose:"", category:"", scope:["PII"], domains:[],
+      rules: preset?.ruleType ? [newRuleOfType(preset.ruleType)] : [],
       articles:preset?.articles||[], owner:me, stewards:[], fwSel:[...new Set((preset?.articles||[]).map(a=>a.fw))], notify:["Owner","Steward"]});
   };
-  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, type:ed.type, name:ed.name, scope:ed.scope, scopeBy:ed.scopeBy, domains:ed.domains, severity:ed.severity,
-    rules:ed.type==="validation"?ed.rules:[], enf:ed.type==="enforcement"?ed.enf:null, att:ed.type==="attestation"?ed.att:null, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
-  const condComplete = c => { const F=PM2_FIELDS[c.f]; return !!F && (F.type==="bool"||F.type==="presence" || (c.v!==undefined&&c.v!==null&&String(c.v).trim()!=="")); };
-  const rulesProblem = () => {
-    if(ed.type==="validation"){
-      if(!ed.rules.length) return "Add at least one rule";
-      const i=ed.rules.findIndex(r=>!String(r.msg||"").trim()); if(i>=0) return `Rule ${i+1} needs a name`;
-      const j=ed.rules.findIndex(r=>!r.conds.length||!r.conds.every(condComplete)); if(j>=0) return `Rule ${j+1} needs a value for every condition`;
-    }
-    if(ed.type==="enforcement"){ const e=ed.enf;
-      if(e.action==="hold"&&!String(e.matter||"").trim()) return "Name the legal matter";
-      if(e.select==="assets"&&!(e.assets||[]).length) return "Pick at least one asset";
-      if(e.action==="retention"&&!(Number(e.period)>0)) return "Set a retention period";
-    }
-    if(ed.type==="attestation"){
-      if(!String(ed.att.name||"").trim()) return "Give the attestation rule a name";
-      if(!String(ed.att.instructions||"").trim()) return "Describe what needs to be documented";
-      if(!ed.att.form.length) return "Add at least one form field";
-      if(ed.att.form.some(f=>!f.label.trim())) return "Every form field needs a label";
-      if(ed.att.form.some(f=>f.type==="select"&&!f.opts.length)) return "Dropdown fields need options";
-    }
-    return null;
-  };
+  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, rules:ed.rules, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
+  const rulesProblem = () => { if(!ed.rules.length) return "Add at least one rule"; for(let i=0;i<ed.rules.length;i++){ const x=ruleProblem(ed.rules[i], i+1); if(x) return x; } return null; };
   const saveEditor = submit => {
-    const pv = edPolicy();
-    const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
     if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
     if(!ed.scope.length){ onToast("Pick at least one data class","info"); setEd(e=>({...e,step:2})); return; }
-    if(ed.type==="validation"&&!ed.rules.length){ onToast("Add at least one rule","info"); setEd(e=>({...e,step:3})); return; }
-    if(ed.type==="attestation"&&(!ed.att.form.length||ed.att.form.some(f=>!f.label.trim()))){ onToast("Every form field needs a label","info"); setEd(e=>({...e,step:3})); return; }
-    if(ed.type==="enforcement"&&ed.enf.action==="hold"&&(!ed.enf.matter.trim()||(ed.enf.select==="assets"&&!ed.enf.assets.length))){ onToast("Name the legal matter and what's held","info"); setEd(e=>({...e,step:3})); return; }
-    if(ed.type==="enforcement"&&ed.enf.action==="retention"&&ed.enf.mode==="minimum"){ const eff=pm2EffectivePeriod(pv); const own=ed.enf.unit==="years"?ed.enf.period:ed.enf.period/12;
-      if(ed.isReg&&eff.floor&&own<eff.floor){ onToast(`The law requires at least ${eff.floor} years`,"info"); setEd(e=>({...e,step:3})); return; } }
-    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, severity:ed.severity, rules:pv.rules, enf:pv.enf, att:pv.att, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
+    const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, rules:ed.rules, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
     let id = ed.id;
     if(!id){
       id = "p-cust-"+Date.now();
-      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", type:ed.type, scopeBy:"class", ...fields, owner:ed.owner, submissions:[], status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created (custom ${PM2_TYPE_META[ed.type].label.toLowerCase()} policy)`}]}]}));
+      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", ...fields, owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created (custom policy, ${ed.rules.length} rule${ed.rules.length===1?"":"s"})`}]}]}));
     } else if(ed.isActive){
       updPol(id, p=>addHist({...p, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
     } else updPol(id, p=>addHist({...p, ...fields, owner:ed.owner, status:"Draft"}, "Edited"));
@@ -14919,206 +15011,80 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const ownerSubmits = isAdmin || ed.owner===me;
     const setRule = (ri, r) => setE("rules", ed.rules.map((x,j)=>j===ri?r:x));
     const lockedArt = x => ed.isReg && !pm2Fw(x.fw)?.custom;
-    const divider = <div style={{borderTop:`1px solid ${T.border}`,margin:"20px 0"}}/>;
-    const ruleCard = (n, chip, right, children, onRemove) => (
-      <div key={n} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"10px 12px 12px",marginBottom:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-          <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>{n}</span>
-          {chip&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.amber}18`,color:T.amber,letterSpacing:"0.04em"}}>{chip}</span>}
-          <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>{right}{onRemove&&<button onClick={onRemove} title="Remove" style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>}</span>
-        </div>{children}</div>);
-    const typeSeg = <div style={{display:"flex",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,padding:2}}>
-      {["validation","enforcement","attestation"].map(k=><span key={k} title={ed.type===k?"":"A policy's type is set in Details"} style={{fontSize:10.5,fontWeight:ed.type===k?700:500,padding:"2px 9px",borderRadius:4,background:ed.type===k?(k==="validation"?T.bgElevated:typeColor(k)):"transparent",color:ed.type===k?(k==="validation"?T.text:"#fff"):T.textMuted}}>{PM2_TYPE_META[k].label}</span>)}</div>;
     const reviewCard = (title, rows) => <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}>
       <div style={{padding:"10px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:`1px solid ${T.border}`}}>{title}</div>
       {rows.map(([k,v],i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:14,padding:"9px 14px",fontSize:12,borderTop:i?`1px solid ${T.border}`:"none"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,textAlign:"right",fontWeight:500}}>{v}</span></div>)}</div>;
     let body;
     if(ed.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
-      {secHead("Policy Details","Name this policy, describe its purpose, choose its type, and file it under a category.")}
-      <div><label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label><input value={ed.name} onChange={e=>setE("name",e.target.value)} disabled={ed.isReg} autoFocus placeholder="e.g. PII Table Access Control, HIPAA Retention Enforcement…" style={inp} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div>
+      {secHead("Policy Details","Name this policy, describe its purpose, and file it under a category. Its rules — validation, enforcement or attestation — come in the Rules step.")}
+      <div><label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label><input value={ed.name} onChange={e=>setE("name",e.target.value)} disabled={ed.isReg} autoFocus placeholder="e.g. Customer data retention, Vendor access review…" style={inp}/></div>
       <div><label style={lbl}>Description</label><textarea rows={3} value={ed.purpose} onChange={e=>setE("purpose",e.target.value)} disabled={ed.isReg} placeholder="Business or compliance reason for this policy…" style={{...inp,resize:"vertical"}}/></div>
-      <div><label style={lbl}>Policy Type <span style={{color:T.rose}}>*</span></label>
-        <select value={ed.type} disabled={!!ed.id} onChange={e=>setE("type",e.target.value)} style={{...inp,cursor:ed.id?"not-allowed":"pointer"}}>{["validation","enforcement","attestation"].map(k=><option key={k} value={k}>{PM2_TYPE_META[k].label}</option>)}</select>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>{PM2_TYPE_META[ed.type].hint}{ed.id?" A policy's type can't change after it's created.":""}</div></div>
       <div><label style={lbl}>Category <span style={{fontWeight:400,color:T.textMuted}}>— optional</span></label>
         <select value={ed.category} onChange={e=>setE("category",e.target.value)} style={{...inp,cursor:"pointer",color:ed.category?T.text:T.textMuted}}><option value="">Select a category…</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave it empty and assign a category later, or pick one to group this policy in the Policy Manager.</div></div>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave it empty and assign a category later.</div></div>
     </div>;
     if(ed.step===2) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
-      {secHead("Policy Scope", ed.isReg?"A regulation policy's data classes come from the regulation. You can narrow it to specific domains.":"Define which data this policy governs. Assets are picked by classification, so newly classified data joins automatically.")}
-      <div>{ed.isReg ? <><label style={lbl}>Data Classes <span style={{color:T.rose}}>*</span></label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{ed.scope.map(classChip)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Locked — set by the regulation.</div></>
+      {secHead("Policy Scope", ed.isReg?"A prebuilt policy's data classes come from its regulations. You can narrow it to specific domains.":"Define which data this policy governs. Assets are picked by classification, so newly classified data joins automatically.")}
+      <div>{ed.isReg ? <><label style={lbl}>Data Classes <span style={{color:T.rose}}>*</span></label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{ed.scope.map(classChip)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Locked — set by the regulations it serves.</div></>
         : <CatFieldDropdown label="Data Classes" required options={classLabels} selected={ed.scope.filter(c=>c!=="ALL").map(c=>PM2_CLASS_META[c].label)} onChange={v=>setE("scope",v.map(classFromLabel).filter(Boolean))} placeholder="Search and select data classes…"/>}
         {!ed.scope.length&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>Select at least one data class to continue.</div>}</div>
       <div><CatFieldDropdown label="Domain" options={PM2_DOMAINS} selected={ed.domains} onChange={v=>setE("domains",v)} placeholder="All domains"/>
         <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave empty to cover every domain.</div></div>
       <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:11.5,color:T.textSub}}><b style={{color:T.text}}>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets</b> in scope today.</div>
     </div>;
-    if(ed.step===3){
-      if(ed.type==="validation") body = <>
-        {secHead("Rules", ed.isReg?"Locked to the regulation. Values the law leaves to you are editable in place.":"Define the conditions evaluated against each in-scope asset. A match raises a finding — validation changes no data.")}
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><label style={{...lbl,marginBottom:0}}>Severity</label>
-          <select value={ed.severity} onChange={e=>setE("severity",e.target.value)} style={{...selStyle,color:SEV_COLOR[ed.severity],fontWeight:600}}>{["Low","Medium","High","Critical"].map(s=><option key={s}>{s}</option>)}</select></div>
-        {ed.rules.length===0&&<div style={{padding:"28px 16px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,textAlign:"center",marginBottom:10}}>
-          <div style={{fontSize:12,color:T.textMuted,marginBottom:12}}>No rules yet — add your first condition.</div>
-          <button onClick={()=>setE("rules",[{id:newRuleId(), conds:[{f:"access",op:"is",v:""}], msg:""}])} style={{padding:"7px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Rule</button></div>}
-        {ed.rules.map((r,ri)=>ruleCard(`RULE ${ri+1}`, "TABLE", typeSeg, <>
-          <label style={lbl}>Rule name</label>
-          <input value={r.msg} disabled={ed.isReg} onChange={e=>setRule(ri,{...r,msg:e.target.value})} placeholder="e.g. PII classification required" style={{...inp,background:T.bgSurface,marginBottom:10}}/>
-          <label style={lbl}>Check</label>
-          {r.conds.length===0&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No conditions — every in-scope asset matches.</div>}
-          {r.conds.map((c,ci)=>{ const F=PM2_FIELDS[c.f]; const setC=nc=>setRule(ri,{...r,conds:r.conds.map((x,j)=>j===ci?nc:x)}); const lock=ed.isReg&&!c.edit; const lockVal=ed.isReg&&!c.edit;
-            const s2={...inp,background:T.bgSurface,width:"auto",flex:1,minWidth:0,padding:"7px 9px"};
-            return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
-              {ci>0&&<span style={{fontSize:10,fontWeight:800,color:T.textMuted,width:28}}>AND</span>}
-              <select disabled={lock} value={c.f} onChange={e=>{const nf=PM2_FIELDS[e.target.value]; setC({f:e.target.value, op:PM2_OPS[nf.type][0], v:nf.type==="enum"||nf.type==="number"||nf.type==="list"?"":undefined});}} style={{...s2,flex:1.4}}>{Object.entries(PM2_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
-              <select disabled={lock} value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={s2}>{PM2_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
-              {F.type==="enum"&&<select disabled={lockVal} value={c.v||""} onChange={e=>setC({...c,v:e.target.value})} style={{...s2,color:c.v?T.text:T.textMuted}}><option value="">— select —</option>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
-              {F.type==="number"&&<input disabled={lockVal} type="number" value={c.v??""} placeholder="value" onChange={e=>setC({...c,v:e.target.value===""?"":Number(e.target.value)})} style={s2}/>}
-              {F.type==="list"&&<input disabled={lockVal} value={c.v} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={s2}/>}
-              {(F.type==="bool"||F.type==="presence")&&<span style={{flex:1}}/>}
-              {ci===0&&<span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:99,background:SEV_BG[ed.severity],color:SEV_COLOR[ed.severity],border:`1px solid ${SEV_COLOR[ed.severity]}30`,whiteSpace:"nowrap"}}>● {ed.severity}</span>}
-              {!ed.isReg&&<button onClick={()=>setRule(ri,{...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>×</button>}
-            </div>); })}
-          {!ed.isReg&&<button onClick={()=>setRule(ri,{...r,conds:[...r.conds,{f:"env",op:"is",v:""}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0"}}>+ Add condition</button>}
-          <div style={{marginTop:8}}>{ruleView(r,pv)}</div>
-        </>, ed.isReg?null:()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))))}
-        {!ed.isReg&&ed.rules.length>0&&<button onClick={()=>setE("rules",[...ed.rules,{id:newRuleId(), conds:[{f:"access",op:"is",v:""}], msg:""}])} style={{width:"100%",padding:"10px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.plus(11)} Add Rule</button>}
-        {divider}
-        <label style={lbl}>If it ran now</label>
-        <div style={{padding:"10px 12px",borderRadius:8,background:ev.findings.length?`${T.rose}0c`:`${T.green}0c`,border:`1px solid ${ev.findings.length?T.rose:T.green}30`,fontSize:12,color:T.text}}>
-          <b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"}{ev.findings.slice(0,6).map((f,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,marginTop:3}}><span style={{fontFamily:"'Geist Mono',monospace"}}>{f.asset.name}</span> — {f.msg}</div>)}</div>
-      </>;
-      if(ed.type==="enforcement"){ const e=ed.enf; const setEnf=v=>setE("enf",v); const floor = ed.isReg&&e.mode==="minimum"?pm2EffectivePeriod(pv)?.floor:null;
-        body = <>
-        {secHead("Rules", ed.isReg?"Locked to the regulation. You can set the period (never below the legal minimum), when it starts and what happens at the end.":"Define what EDG executes through CDP. Only retention and legal hold are enforced; each table owner approves before anything runs.")}
-        {ruleCard("RULE 1", e.action==="hold"?"OBJECT":"TABLE · COL", typeSeg, <>
-          <label style={lbl}>Action</label>
-          <select disabled={ed.isReg} value={e.action} onChange={x=>setEnf(x.target.value==="hold"?{...e,action:"hold",matter:e.matter||"",select:"flag",assets:e.assets||[]}:{...e,action:"retention",mode:e.mode||"dispose",period:e.period||36,unit:e.unit||"months",trigger:e.trigger||"Last use",disposal:e.disposal||"Delete permanently"})} style={{...inp,background:T.bgSurface,marginBottom:12,cursor:"pointer"}}>
-            <option value="retention">Retention</option><option value="hold">Legal Hold</option></select>
-          <label style={lbl}>Apply to</label>
-          <div style={{display:"flex",marginBottom:12}}>
-            {[["flag",e.action==="hold"?"Assets flagged for the matter":"By classification"],["assets","Specific assets"]].map(([k,l])=>{ const on=(e.select||"flag")===k; const dis=false;
-              return <button key={k} disabled={dis||ed.isReg} title={dis?"Retention applies to the policy's scope":""} onClick={()=>setEnf({...e,select:k})} style={{padding:"6px 12px",fontSize:12,fontWeight:600,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accent:T.bgSurface,color:on?"#fff":dis?T.textMuted:T.textSub,cursor:dis?"not-allowed":"pointer",borderRadius:k==="flag"?"7px 0 0 7px":"0 7px 7px 0"}}>{l}</button>; })}
-          </div>
-          {e.action==="retention"&&<>
-            <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:"8px 12px",alignItems:"center"}}>
-              <span style={{fontSize:11.5,color:T.textSub}}>Mode</span>
-              <select disabled={ed.isReg} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select>
-              <span style={{fontSize:11.5,color:T.textSub}}>Retention period{floor?` (≥ ${floor} yrs)`:""}</span>
-              <div style={{display:"flex",gap:6}}><input type="number" min={1} value={e.period} onChange={x=>setEnf({...e,period:Number(x.target.value)})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:100}}/>
-                <select value={e.unit} onChange={x=>setEnf({...e,unit:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:120}}><option>months</option><option>years</option></select></div>
-              <span style={{fontSize:11.5,color:T.textSub}}>Starts from</span>
-              <select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select>
-              <span style={{fontSize:11.5,color:T.textSub}}>At the end</span>
-              <select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select>
-            </div>
-            {e.select==="assets"&&<div style={{marginTop:12}}><CatFieldDropdown label="Assets" required options={PM2_ASSETS.map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets to retain…"/></div>}</>}
-          {e.action==="hold"&&<>
-            <label style={lbl}>Legal matter <span style={{color:T.rose}}>*</span></label>
-            <input value={e.matter} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={{...inp,background:T.bgSurface,marginBottom:12}}/>
-            {e.select==="assets"&&<CatFieldDropdown label="Assets" required options={PM2_ASSETS.map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets to hold…"/>}
-            <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"}.</div></>}
-        </>)}
-        <div style={{fontSize:11,color:T.textMuted,margin:"-2px 0 10px"}}>Masking is checked by a validation policy, not enforced here.</div>
-        {divider}
-        <label style={lbl}>Reads as</label>
-        <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:12.5,color:T.text,lineHeight:1.7}}>{enfText(pv)}</div>
-        <label style={{...lbl,marginTop:14}}>Tables it would act on ({ev.targets.length})</label>
-        {ev.targets.slice(0,10).map((t,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}><span style={{fontFamily:"'Geist Mono',monospace",color:typeColor("enforcement")}}>{t.asset.name}</span> — {t.detail} · owner {t.asset.owner||"none"}</div>)}
-        {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:6}}>Suspended by legal hold: {ev.held.map(a=>a.name).join(", ")}</div>}
-      </>; }
-      if(ed.type==="attestation"){ const a=ed.att; const setAtt=v=>setE("att",v);
-        const setF=(i,f)=>setAtt({...a,form:a.form.map((x,j)=>j===i?f:x)}); const move=(i,d)=>{const f=[...a.form]; const j=i+d; if(j<0||j>=f.length) return; [f[i],f[j]]=[f[j],f[i]]; setAtt({...a,form:f});};
-        body = <>
-        {secHead("Rules", ed.isReg?"The form is locked to the evidence the regulation needs. You can set the schedule, who fills it in and who reviews it.":"Design the form the assignee fills in. Required fields must be answered before it can be submitted; a reviewer approves each submission.")}
-        {ruleCard("RULE 1", "DOCUMENTATION", typeSeg, <>
-          <label style={lbl}>Rule name <span style={{color:T.rose}}>*</span></label>
-          <input disabled={ed.isReg} value={a.name||""} onChange={e=>setAtt({...a,name:e.target.value})} placeholder="e.g. Quarterly access review signed off" style={{...inp,background:T.bgSurface,marginBottom:10}}/>
-          <label style={lbl}>What needs to be documented <span style={{color:T.rose}}>*</span></label>
-          <textarea disabled={ed.isReg} rows={4} value={a.instructions||""} onChange={e=>setAtt({...a,instructions:e.target.value})} placeholder="Describe what the assignee must attest to and what evidence to attach — e.g. which systems were reviewed, what was found, who signed it off." style={{...inp,background:T.bgSurface,resize:"vertical"}}/>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Shown to the assignee above the form, and to the reviewer with the answers.</div>
-        </>)}
-        <label style={{...lbl,marginTop:6}}>Form fields</label>
-        {a.form.map((f,i)=>ruleCard(`FIELD ${i+1}`, PM2_FORM_TYPES[f.type].toUpperCase(), ed.isReg?null:<><button onClick={()=>move(i,-1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↑</button><button onClick={()=>move(i,1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↓</button></>, <>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 180px",gap:10}}>
-            <div><label style={lbl}>Question / label</label><input disabled={ed.isReg} value={f.label} onChange={e=>setF(i,{...f,label:e.target.value})} placeholder="e.g. Assessment date" style={{...inp,background:T.bgSurface}}/></div>
-            <div><label style={lbl}>Field type</label><select disabled={ed.isReg} value={f.type} onChange={e=>setF(i,{...f,type:e.target.value})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}>{Object.entries(PM2_FORM_TYPES).map(([k,l])=><option key={k} value={k}>{l}</option>)}</select></div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 180px",gap:10,marginTop:8,alignItems:"end"}}>
-            <div><label style={lbl}>Help text</label><input disabled={ed.isReg} value={f.help} onChange={e=>setF(i,{...f,help:e.target.value})} placeholder="Optional guidance for the person filling it in" style={{...inp,background:T.bgSurface}}/></div>
-            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub,paddingBottom:8}}><input type="checkbox" disabled={ed.isReg} checked={f.required} onChange={e=>setF(i,{...f,required:e.target.checked})} style={{accentColor:T.accent}}/>Required</label>
-          </div>
-          {f.type==="select"&&<div style={{marginTop:8}}><label style={lbl}>Options</label><input disabled={ed.isReg} value={f.opts.join(", ")} onChange={e=>setF(i,{...f,opts:e.target.value.split(",").map(s=>s.trim()).filter(Boolean)})} placeholder="Comma-separated" style={{...inp,background:T.bgSurface}}/></div>}
-        </>, ed.isReg||a.form.length<2?null:()=>setAtt({...a,form:a.form.filter((_,j)=>j!==i)})))}
-        {!ed.isReg&&<button onClick={()=>setAtt({...a,form:[...a.form,{id:`f-${Date.now()}`,label:"",type:"text",required:false,help:"",opts:[]}]})} style={{width:"100%",padding:"10px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.plus(11)} Add Field</button>}
-        {divider}
-        <label style={lbl}>Schedule & people</label>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          <div><label style={lbl}>Comes due every (months)</label><input type="number" min={1} value={a.every} onChange={e=>setAtt({...a,every:Number(e.target.value)})} style={inp}/></div>
-          <div><label style={lbl}>Reminder (days before)</label><input type="number" min={0} value={a.remind} onChange={e=>setAtt({...a,remind:Number(e.target.value)})} style={inp}/></div>
-          <div><label style={lbl}>Filled in by</label><select value={a.assignee} onChange={e=>setAtt({...a,assignee:e.target.value})} style={{...inp,cursor:"pointer"}}><option value="owner">The policy owner</option><option value="steward">The first steward</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
-          <div><label style={lbl}>Reviewed by</label><select value={a.reviewer} onChange={e=>setAtt({...a,reviewer:e.target.value})} style={{...inp,cursor:"pointer"}}><option value="approver">Approval policy reviewer ({ap.attest.reviewer})</option><option value="owner">The policy owner</option>{PM2_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
-        </div>
-        {divider}
-        <label style={lbl}>Preview — what the assignee sees</label>
-        <div style={{padding:"14px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>{formView(a.form)}</div>
-      </>; }
-    }
+    if(ed.step===3) body = <>
+      {secHead("Rules", ed.isReg?"Prebuilt rules are locked to the regulation — only the values it leaves open are editable. Add your own custom rules alongside them.":"A policy holds as many rules as its commitment needs. Each rule is one type: validation checks metadata, enforcement retains or holds data, attestation asks a person for evidence.")}
+      {ed.rules.length===0&&<div style={{padding:"22px 16px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,textAlign:"center",marginBottom:12,fontSize:12,color:T.textMuted}}>No rules yet — add your first one.</div>}
+      {ed.rules.map((r,ri)=>ruleCard(r, ri+1, nr=>setRule(ri,nr), {locked:r.origin==="prebuilt", p:pv, onType:r.origin==="prebuilt"?null:(t=>setRule(ri, retype(r,t))), onRemove:r.origin==="prebuilt"?null:()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))}))}
+      <div style={{marginTop:4}}>{addRuleButtons(t=>setE("rules",[...ed.rules,newRuleOfType(t)]))}</div>
+    </>;
     if(ed.step===4){
       const fwOpts = [...PM2_CUSTOM_FW, ...PM2_FW.filter(f=>st.adopted[f.id]), ...PM2_FW.filter(f=>!st.adopted[f.id])];
       const lockedFws = new Set(ed.articles.filter(lockedArt).map(a=>a.fw));
       body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:640}}>
-        {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to framework articles.")}
-        {(isAdmin||!ed.id||ed.owner===me)
-          ? <CatFieldDropdown label="Owner" multi={false} options={PM2_USERS} selected={ed.owner} onChange={v=>setE("owner",v||ed.owner)} placeholder="Search and select owners…"/>
-          : <div><label style={lbl}>Owner</label><div style={{fontSize:12.5,color:T.text}}>{ed.owner}</div></div>}
+        {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to the articles it satisfies.")}
+        {(isAdmin||!ed.id||ed.owner===me) ? <CatFieldDropdown label="Owner" multi={false} options={PM2_USERS} selected={ed.owner} onChange={v=>setE("owner",v||ed.owner)} placeholder="Search and select owners…"/> : <div><label style={lbl}>Owner</label><div style={{fontSize:12.5,color:T.text}}>{ed.owner}</div></div>}
         <CatFieldDropdown label="Stewards" options={PM2_USERS.filter(u=>u!==ed.owner)} selected={ed.stewards} onChange={v=>setE("stewards",v)} placeholder="Search and select stewards…"/>
         <div>
           <CatFieldDropdown label="Regulatory Frameworks" options={fwOpts.map(f=>f.name)} selected={ed.fwSel.map(id=>pm2Fw(id)?.name).filter(Boolean)}
-            onChange={names=>{ const ids=names.map(n=>fwOpts.find(f=>f.name===n)?.id).filter(Boolean); const keep=[...new Set([...ids,...lockedFws])];
-              setEd(e=>({...e, fwSel:keep, articles:e.articles.filter(a=>keep.includes(a.fw))})); }} placeholder="Search and select frameworks…"/>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Then tick the articles this policy satisfies. {ed.isReg?"Its regulation's articles are locked.":`A custom policy on a regulation's article counts once ${ap.mapping.approver} approves the mapping; on your own framework it counts straight away.`}</div>
+            onChange={names=>{ const ids=names.map(n=>fwOpts.find(f=>f.name===n)?.id).filter(Boolean); const keep=[...new Set([...ids,...lockedFws])]; setEd(e=>({...e, fwSel:keep, articles:e.articles.filter(a=>keep.includes(a.fw))})); }} placeholder="Search and select frameworks…"/>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Then tick the articles this policy satisfies. {ed.isReg?"Its regulations' articles are locked.":`On a regulation's article a custom policy counts once ${ap.mapping.approver} approves the mapping; on your own framework it counts straight away.`} The same policy can serve several frameworks.</div>
         </div>
         {ed.fwSel.map(id=>{ const fw=pm2Fw(id); if(!fw) return null; return (
           <div key={id} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-            <div style={{padding:"9px 14px",fontSize:12,fontWeight:700,color:T.text,borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center"}}>{fw.name}{fw.custom?pill(T.accent,"Your framework"):!st.adopted[fw.id]&&pill(T.textMuted,"Not adopted")}
-              <span style={{marginLeft:"auto",fontSize:11,fontWeight:500,color:T.textMuted}}>{ed.articles.filter(a=>a.fw===id).length} selected</span></div>
+            <div style={{padding:"9px 14px",fontSize:12,fontWeight:700,color:T.text,borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center"}}>{fw.name}{fw.custom?pill(T.accent,"Your framework"):!st.adopted[fw.id]&&pill(T.textMuted,"Not adopted")}<span style={{marginLeft:"auto",fontSize:11,fontWeight:500,color:T.textMuted}}>{ed.articles.filter(a=>a.fw===id).length} selected</span></div>
             {fw.arts.map((a,i)=>{ if(a.out) return null; const has=ed.articles.some(x=>x.fw===id&&x.i===i); const locked=has&&lockedArt(ed.articles.find(x=>x.fw===id&&x.i===i));
               return (<label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 14px",borderTop:`1px solid ${T.border}`,cursor:locked?"default":"pointer"}}>
-                <input type="checkbox" checked={has} disabled={locked} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:id,i,ok:!!fw.custom}]:ed.articles.filter(x=>!(x.fw===id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
-                {refTag(a.ref)}<div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{a.t}{a.expect&&a.expect!==ed.type&&<span style={{fontSize:10.5,color:T.amber}}> · expects {PM2_TYPE_META[a.expect].label.toLowerCase()}</span>}</div><div style={{fontSize:11,color:T.textMuted}}>{a.ask}</div></div>
-                {has&&!fw.custom&&!ed.isReg&&pill(T.amber,"Needs approval")}
+                <input type="checkbox" checked={has} disabled={locked} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:id,i,ok:!!fw.custom||ed.isReg,rules:null}]:ed.articles.filter(x=>!(x.fw===id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
+                {refTag(a.ref)}<div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{a.t}</div><div style={{fontSize:11,color:T.textMuted}}>{a.ask}</div></div>
+                {has&&!fw.custom&&!ed.isReg&&pill(T.amber,"Needs approval")}{locked&&<span style={{fontSize:10.5,color:T.textMuted}}>🔒 regulation</span>}
               </label>); })}
           </div>); })}
         <CatFieldDropdown label="Notification" options={["Owner","Steward","Approver","Table owners"]} selected={ed.notify} onChange={v=>setE("notify",v)} placeholder="Who is notified"/>
-        <div style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,lineHeight:1.6}}><b style={{color:T.text}}>Approval: </b>{routeText(ed.type, ed.type==="enforcement"?ev.targets.length:null)}.{ed.isActive&&<> Your change becomes v{ed.version+1}; v{ed.version} keeps running until it's approved.</>}</div>
+        <div style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,lineHeight:1.6}}><b style={{color:T.text}}>Approval: </b>{routeText(ed.rules, ev.targets.length||null)}.{ed.isActive&&<> Your change becomes v{ed.version+1}; v{ed.version} keeps running until it's approved.</>}</div>
       </div>;
     }
     if(ed.step===5) body = <div style={{maxWidth:680}}>
       {secHead("Review & Create","Confirm your policy settings, then save it as a draft or submit it for approval.")}
       {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Domains", ed.domains.join(", ")||"All domains"],["Assets", `${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope`]])}
-      {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Type", typePill(ed.type)],["Source", ed.isReg?"Regulation":"Custom"],["Category", ed.category||"Not set"],...(ed.type==="validation"?[["Severity", sevPill(ed.severity)]]:[]),["Notify", ed.notify.join(", ")||"Nobody"]])}
-      {reviewCard(ed.type==="attestation"?`Form (${ed.att.form.length} fields)`:ed.type==="enforcement"?"Rules (1)":`Rules (${ed.rules.length})`,
-        ed.type==="validation" ? ed.rules.map((r,i)=>[`Rule ${i+1}`, r.msg||r.conds.map(pm2CondText).join(" and ")||"—"])
-        : ed.type==="enforcement" ? [["Rule 1", ed.enf.action==="hold"?`Legal hold — ${ed.enf.matter||"no matter"}`:`${ed.enf.mode==="dispose"?"Dispose after":"Keep at least"} ${pm2EffectivePeriod(pv)?.label} · ${ed.enf.disposal}`]]
-        : [["Rule", ed.att.name||"—"],["Document", ed.att.instructions||"—"],...ed.att.form.map((f,i)=>[`Field ${i+1}`, `${f.label||"—"} · ${PM2_FORM_TYPES[f.type]}${f.required?" · required":""}`]),["Schedule",`Every ${ed.att.every} months · reminder ${ed.att.remind} days before`]])}
+      {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Notify", ed.notify.join(", ")||"Nobody"]])}
+      {reviewCard(`Rules (${ed.rules.length})`, ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>]))}
       {reviewCard("Ownership", [["Owner", ed.owner],["Stewards", ed.stewards.join(", ")||"None"],["Frameworks", ed.fwSel.map(id=>`${pm2Fw(id)?.name} (${ed.articles.filter(a=>a.fw===id).length})`).join(", ")||"Internal — none"]])}
-      {reviewCard("Approval", [["Route", routeText(ed.type, ed.type==="enforcement"?ev.targets.length:null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
+      {reviewCard("Approval", [["Route", routeText(ed.rules, ev.targets.length||null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
       {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
     </div>;
-    // As in the original: a step is marked done once it is complete; later steps only after you have been through them.
-    const stepDone = n => (n===1||n<ed.step) && (n===1?!!ed.name.trim() : n===2?ed.scope.length>0 : n===3?!rulesProblem() : n===4?!!ed.owner : false);
-    const next = () => setE("step", ed.step+1);
     const rp = ed.step===3 ? rulesProblem() : null;
     const canNext = ed.step===1?!!ed.name.trim() : ed.step===2?ed.scope.length>0 : ed.step===3?!rp : true;
-    return drawer({title:ed.id?"Edit Policy":"New Policy", sub:ed.isActive?`Active v${ed.version} — your changes become v${ed.version+1}`:"Define what this policy governs and how it's enforced.",
-      steps:[{label:"Details",required:true},{label:"Scope",required:true},{label:"Rules"},{label:"Ownership"},{label:"Review"}], step:ed.step, done:stepDone, onStep:n=>setE("step",n), body, onClose:()=>setEd(null), width:860,
+    const stepDone = n => (n===1||n<ed.step) && (n===1?!!ed.name.trim() : n===2?ed.scope.length>0 : n===3?!rulesProblem() : n===4?!!ed.owner : false);
+    return drawer({title:ed.id?"Edit Policy":"New Policy", sub:ed.isActive?`Active v${ed.version} — your changes become v${ed.version+1}`:"Define what this policy governs and how it's met.",
+      steps:[{label:"Details",required:true},{label:"Scope",required:true},{label:"Rules",required:true},{label:"Ownership"},{label:"Review"}], step:ed.step, done:stepDone, onStep:n=>setE("step",n), body, onClose:()=>setEd(null), width:880,
       onBack:()=>setE("step",Math.max(1,ed.step-1)),
-      right: ed.step<5 ? <>{rp&&<span style={{fontSize:11,color:T.rose,marginRight:4}}>{rp}</span>}{continueBtn(next, canNext)}</> : <>
-        {!ed.isActive&&fBtn("Save as draft", ()=>saveEditor(false), false, false, <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 2h8l2 2v10H3z M5 2v4h6V2 M5 14v-4h6v4"/></svg>)}
+      right: ed.step<5 ? <>{rp&&<span style={{fontSize:11,color:T.rose,marginRight:4}}>{rp}</span>}{continueBtn(()=>setE("step",ed.step+1), canNext)}</> : <>
+        {!ed.isActive&&fBtn("Save as draft", ()=>saveEditor(false), false, false)}
         {ownerSubmits&&fBtn(ed.isActive?"Submit change":"Submit for approval", ()=>saveEditor(true), true)}
       </>});
   };
+
 
   // ═════ CREATE / EDIT A CUSTOM FRAMEWORK ═════
   const openFwEditor = fw => setFwEd(fw ? {id:fw.id, step:1, name:fw.name, fullName:fw.fullName||"", type:fw.type, jurisdiction:fw.jurisdiction||"", owner:fw.owner||me, covers:[...fw.covers], arts:fw.arts.map((a,i)=>({...a, _old:i}))}
@@ -15217,6 +15183,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
       {wiz&&renderWizard()}
       {ed&&renderEditor()}
       {fwEd&&renderFwEditor()}
+      {ruleEd&&renderRuleEditor()}
       {apOpen&&<>
         <div onClick={()=>setApOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
         <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
@@ -45957,7 +45924,7 @@ const InboxView = ({onToast}) => {
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
     id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||(r.kind||"").startsWith("pm2"))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
     asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="pm2attest"?"Attestation · Policy Manager 2":r.kind==="pm2attestdue"?"Attestation due · Policy Manager 2":r.kind==="pm2mapping"?"Article mapping · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||r.kind==="pm2policy"||r.kind==="pm2mapping")?"Policy":r.kind==="pm2exception"?"Exception":(r.kind==="pm2attest"||r.kind==="pm2attestdue")?"Attestation":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
-    body:r.kind==="pm2attestdue"?`Your attestation form is due — ${r.note||""}. Fill it in in Policy Manager 2.`:r.kind==="pm2attest"?(()=>{ const p=_pm2.policies.find(x=>x.id===r.targetId); const sb=p&&(p.submissions||[]).find(x=>x.reqId===r.id); return sb&&p.att ? `${r.requestedBy} submitted "${p.att.name||p.name}" for review — ${p.att.form.map(f=>`${f.label}: ${sb.values?.[f.id]||"—"}`).join(" · ")}` : `${r.requestedBy} submitted an attestation for your review.`; })():r.kind==="pm2mapping"?`A custom policy by ${r.requestedBy} claims to satisfy regulation articles — ${r.note||""}`:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
+    body:r.kind==="pm2attestdue"?`Your attestation form is due — ${r.note||""}. Fill it in in Policy Manager 2.`:r.kind==="pm2attest"?(()=>{ const p=_pm2.policies.find(x=>x.id===String(r.targetId).split("|")[0]); const rl=p&&(p.rules||[]).find(x=>x.id===r.ruleId||(x.submissions||[]).some(y=>y.reqId===r.id)); const sb=rl&&(rl.submissions||[]).find(x=>x.reqId===r.id); return sb&&rl.att ? `${r.requestedBy} submitted "${rl.name}" (${p.name}) for review — ${rl.att.form.map(f=>`${f.label}: ${sb.values?.[f.id]??"—"}`).join(" · ")}` : `${r.requestedBy} submitted an attestation for review.`; })():r.kind==="pm2mapping"?`A custom policy by ${r.requestedBy} claims to satisfy regulation articles — ${r.note||""}`:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
   // top-down deletion requests (tag/domain) → owner approval items
@@ -46118,11 +46085,11 @@ const InboxView = ({onToast}) => {
       // Policy Manager 2 requests: resolve the shared request — Policy Manager 2 applies the decision.
       // An attestation that is due is filled in, not approved — it only links to the form.
       if(item.reqKind==="pm2attestdue")
-        return <><span style={{fontSize:11.5,color:T.textMuted}}>Fill in and submit the form — it then goes to a reviewer.</span>{btn("Fill in the form",()=>{ const k=item.reqKind; const pid=k==="pm2exception"?String(item.reqTargetId||"").split("|")[0]:item.reqTargetId; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>Fill in and submit the form — it then goes to a reviewer.</span>{btn("Fill in the form",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
       if((item.reqKind||"").startsWith("pm2")&&_pm2.approvalPolicy.sod&&item.requestedBy===meHandle)
-        return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=k==="pm2exception"?String(item.reqTargetId||"").split("|")[0]:item.reqTargetId; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
       if((item.reqKind||"").startsWith("pm2"))
-        return <>{btn("Approve",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"approved",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"cert",title:`Approved · ${item.asset.name}`,body:`Approved by ${meHandle||"approver"}`,nav:"policymanager2"});ack(item.id,`${item.asset.name} approved — requester notified`);},true)}{btn("Reject",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"rejected",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"field_updated",title:`Rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was rejected`,nav:"policymanager2"});ack(item.id,"Rejected — requester notified");},false,true)}{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=k==="pm2exception"?String(item.reqTargetId||"").split("|")[0]:item.reqTargetId; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
+        return <>{btn("Approve",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"approved",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"cert",title:`Approved · ${item.asset.name}`,body:`Approved by ${meHandle||"approver"}`,nav:"policymanager2"});ack(item.id,`${item.asset.name} approved — requester notified`);},true)}{btn("Reject",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"rejected",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"field_updated",title:`Rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was rejected`,nav:"policymanager2"});ack(item.id,"Rejected — requester notified");},false,true)}{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
       if(item.reqKind==="tag")
         return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
