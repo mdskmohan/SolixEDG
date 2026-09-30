@@ -57929,7 +57929,7 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
     ops:[...new Set(inConn.filter(a=>a.connectionLabel===c).map(aicContainer))].sort()}));
   const inSchema = inConn.filter(a=>!d.containers.length || d.containers.includes(aicContainer(a)));
   const tableGroups = [...new Set(inSchema.map(aicContainer))].sort().map(c=>({group:c,
-    ops:inSchema.filter(a=>aicContainer(a)===c).map(a=>a.db).sort()}));
+    ops:[...new Set(inSchema.filter(a=>aicContainer(a)===c).map(a=>a.db))].sort()}));
   const assets = aicProfileAssets(d);
   const cols = assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0);
   const set = (patch) => setD(x=>({...x,...patch}));
