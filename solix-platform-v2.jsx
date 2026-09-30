@@ -4048,7 +4048,7 @@ const NOTIF_CATALOG = [
     {ev:"dp_review",  label:"Submitted for review → steward"},
     {ev:"dp_deleted", label:"Deleted → owner"},
   ]},
-  {menu:"Data Ask",        key:"dataask",      events:[
+  {menu:"Copilot",         key:"dataask",      events:[
     {ev:"da_answer_reported", label:"Answer reported as wrong → space steward"},
     {ev:"da_space_review",    label:"Answer Space submitted for review → steward"},
     {ev:"da_space_published", label:"Answer Space published / unpublished → owner"},
@@ -4793,9 +4793,6 @@ const GROUPS = [
     {key:"home",           icon:"home",          label:"Home"},
     {key:"stewardship",    icon:"inbox",         label:"Workspace"},
   ]},
-  {section:"Data Ask",items:[
-    {key:"dataask",        icon:"dataask",       label:"Data Ask"},
-  ]},
   {section:"Catalog",items:[
     {key:"catalog",        icon:"catalog",       label:"Catalog"},
     {key:"quality",        icon:"quality",       label:"Data Quality"},
@@ -4820,7 +4817,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aipipelines"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","settings","tags","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -4898,6 +4895,7 @@ const HomeView = ({onNav, onToast}) => {
   const cfg = roleCfg || {label:"User",name:"User",color:T.accent,badge:T.accentDim,homeWidgets:["metrics","recentAssets","activity"],avatar:"U"};
   const onNavCtx = useNav();
   const nav = onNav || onNavCtx;
+  const copilot = useContext(CopilotCtx);
   const [liveHomeNotifs] = useNotifs();
   const unreadNotifs = liveHomeNotifs.filter(n=>n.unread).length;
   const [certList] = useCertifications(); // live cert store for the home widget
@@ -5021,7 +5019,7 @@ const HomeView = ({onNav, onToast}) => {
             <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:14}}>Quick Actions</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
               {[
-                {l:"Ask your data",   icon:Ic.dataask(13), nav:"dataask"},
+                {l:"Ask Copilot",     icon:Ic.bot(13),     copilot:true},
                 {l:"Browse Catalog",  icon:Ic.catalog(13), nav:"catalog"},
                 {l:"View Lineage",    icon:Ic.lineage(13), nav:"catalog"},
                 {l:"Quality Rules",  icon:Ic.quality(13), nav:"quality"},
@@ -5029,7 +5027,7 @@ const HomeView = ({onNav, onToast}) => {
                 {l:"Stewardship",    icon:Ic.steward(13), nav:"stewardship"},
                 {l:"Glossary",       icon:Ic.glossary(13),nav:"glossary"},
               ].map((a,i)=>(
-                <button key={i} onClick={()=>nav(a.nav)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",transition:"all .12s",textAlign:"left"}}
+                <button key={i} onClick={()=>a.copilot ? (copilot&&copilot.show()) : nav(a.nav)} style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer",transition:"all .12s",textAlign:"left"}}
                   onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                   onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgElevated;}}>
                   <span style={{color:T.accent}}>{a.icon}</span>
@@ -29936,7 +29934,7 @@ const KL_SRC_STEPS = [
 
   {t:"Synonyms", mode:"auto", decide:false, auto:26, needs:0,
    uses:"Glossary synonyms", writes:"Glossary synonym",
-   d:"Alternative names are added as synonyms on the certified term, so search, Data Ask and this graph all resolve the same words.",
+   d:"Alternative names are added as synonyms on the certified term, so search, the Copilot and this graph all resolve the same words.",
    rows:[{nm:"vendor, payee, creditor", chip:"Added to Supplier", kind:"exist", cf:"Stored on the glossary term"},
          {nm:"PO, order",               chip:"Added to Purchase Order", kind:"exist", cf:"Stored on the glossary term"}],
    note:["Synonyms live on the term, never in a list belonging to this graph."]},
@@ -29970,7 +29968,7 @@ const KL_SRC_STEPS = [
   {t:"Publish", mode:"you", decide:true, auto:0, needs:1,
    uses:"your owners and approval flow", writes:null,
    d:"Publishing requires owner sign-off. Once published, this graph can be joined into a Cross-Source Knowledge Graph.",
-   note:["Published graphs are available to Data Ask and eligible for cross-source matching."]},
+   note:["Published graphs are available to the Copilot and eligible for cross-source matching."]},
 ];
 
 const KL_X_STEPS = [
@@ -32819,7 +32817,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                 <div style={{maxWidth:780}}>
                   <KLRow nm="Owner"      chip="Alex Rivera" kind="exist" cf="Sign-off required"/>
                   <KLRow nm="Domain"     chip="Procurement" kind="exist" cf="From Domains" acts="cc" onAct={()=>toast("Domain confirmed")}/>
-                  <KLRow nm="Available to" chip="Data Ask · AI copilot · Cross-source graphs" kind="plain" cf="After publishing"/>
+                  <KLRow nm="Available to" chip="Copilot · Cross-source graphs" kind="plain" cf="After publishing"/>
                 </div>
               )}
 
@@ -33462,17 +33460,25 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           it, never to open a builder. The one thing created in this module is the
           cross-source master, which is EDG's own work: deciding that records held in
           different systems are the same real-world thing. */}
-      <Topbar breadcrumb={[{label:"Knowledge Layer"}]} actions={
-        tab==="sources"
-          ? <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>
-          : <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph</Btn>
-      }/>
+      <Topbar breadcrumb={[{label:"Knowledge Layer"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:24}}>
-        <Tabs2 tabs={[
-          {key:"overview", label:"Overview"},
-          {key:"sources",  label:`Source Knowledge Graphs (${srcGraphs.length})`},
-          {key:"cross",    label:`Cross-Source Knowledge Graphs (${xGraphs.length})`},
-        ]} active={tab} onChange={setTab}/>
+        {/* Create actions sit on the tab row, right-aligned, and follow the tab: a source graph
+            (AKG) can be built here with the builder or imported from Solix EAI; a cross-source
+            graph (XKG) is always built here. */}
+        <div style={{display:"flex",alignItems:"flex-end",gap:12,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
+          <div style={{flex:1,minWidth:0,marginBottom:-21}}>
+            <Tabs2 tabs={[
+              {key:"overview", label:"Overview"},
+              {key:"sources",  label:`Source Knowledge Graphs (${srcGraphs.length})`},
+              {key:"cross",    label:`Cross-Source Knowledge Graphs (${xGraphs.length})`},
+            ]} active={tab} onChange={setTab}/>
+          </div>
+          <div style={{display:"flex",gap:8,flexShrink:0,paddingBottom:8}}>
+            {tab==="sources" && <Btn small icon={Ic.plus(11)} onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>}
+            {tab!=="cross" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("src")}>New Source Graph (AKG)</Btn>}
+            {tab!=="sources" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph (XKG)</Btn>}
+          </div>
+        </div>
 
         {/* ───────── OVERVIEW ───────── */}
         {tab==="overview" && (
@@ -40351,7 +40357,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","settings","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","settings","tags","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -40364,7 +40370,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","tags","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -40376,7 +40382,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask","aipipelines"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","aipipelines"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -40388,7 +40394,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","dataask","aipipelines","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","aipipelines","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -40400,7 +40406,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer","dataask"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
@@ -45208,7 +45214,7 @@ const PersonasSection = ({onToast}) => {
   ]);
   const [editPersona,    setEditPersona]    = useState(null);
   const [editingNavFor,  setEditingNavFor]  = useState(null);
-  const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","dataask","observability","analytics","settings"];
+  const NAV_ITEMS = ["home","search","catalog","lineage","quality","policymanager","access","certifications","stewardship","glossary","domains","observability","analytics","settings"];
   const NAV_LABELS = {home:"Home",search:"Search",catalog:"Catalog",lineage:"Lineage",quality:"Data Quality",policymanager:"Policy Manager",access:"Access Gov.",certifications:"Status",stewardship:"Stewardship",glossary:"Glossary",domains:"Domains",dataask:"Data Ask",observability:"Observability",analytics:"Analytics",settings:"Settings"};
   const WIDGET_LABELS = {metrics:"Platform Metrics",tasks:"My Tasks",certQueue:"Cert. Queue",qualityAlerts:"Quality Alerts",recentAssets:"Recently Viewed",certifiedAssets:"Approved Assets",services:"Service Health",lineageSnippet:"Status",activity:"Activity Feed"};
 
@@ -47506,11 +47512,11 @@ FROM   active GROUP BY region ORDER BY churn_pct DESC`,
     q:"Show me employee salaries by department",
     denied:{
       headline:"This question needs data no Answer Space is allowed to reach.",
-      because:"`employees.base_salary` and `employees.national_id` carry the **Restricted-HR** classification, which is on the platform blocklist. Data Ask refuses blocklisted classifications before a query is planned — the SQL was never generated and no data was read.",
+      because:"`employees.base_salary` and `employees.national_id` carry the **Restricted-HR** classification, which is on the platform blocklist. The Copilot refuses blocklisted classifications before a query is planned — the SQL was never generated and no data was read.",
       cls:"Restricted-HR",
       policy:"SOC2 Access Controls",
       cols:["employees.base_salary","employees.national_id","hr_records/*"],
-      where:"Settings › Data Ask › Guardrails",
+      where:"Settings › Copilot › Guardrails",
       requestable:true,
     },
     conf:0, latency:"0.4s", credits:0,
@@ -47600,7 +47606,7 @@ const DA_ACTIVITY_SEED = [
   {at:"2026-08-22 16:18", who:"dev.patel",   space:"sp_c360",     q:"Show me churn", mode:"hybrid", decision:"Clarified", masked:0, filtered:0, credits:2, ms:900},
 ];
 
-// ── Platform settings (Settings › Data Ask) ─────────────────────────────────
+// ── Platform settings (Settings › Copilot) ─────────────────────────────────
 const DA_SETTINGS_SEED = {
   // Keyed by EAI "app type / service" — the same activity list the EAI LLM
   // model-management screen exposes, so a customer running both products
@@ -47719,7 +47725,7 @@ const daBlockers = sp => {
   const bad = (sp.sources||[]).filter(x=>(x.tags||[]).some(t=>S.guards.blockedTags.includes(t)));
   if(bad.length) out.push({hard:true,
     t:`${bad.map(x=>x.name).join(", ")} carries a classification on the platform blocklist (${S.guards.blockedTags.join(", ")})`,
-    fix:"Settings › Data Ask › Guardrails — an Admin must allow the classification before this space can be indexed"});
+    fix:"Settings › Copilot › Guardrails — an Admin must allow the classification before this space can be indexed"});
   const uncert = (sp.sources||[]).filter(x=>x.cert && x.cert!=="Approved");
   if(uncert.length && sp.guards && sp.guards.requireCert) out.push({
     t:`${uncert.map(x=>`${x.name} is marked ${x.cert}`).join(", ")} in the catalog`,
@@ -47770,9 +47776,9 @@ const daProject = (ans, role) => {
     const host = _da.spaces.find(sp=>(sp.sources||[]).some(x=>(x.tags||[]).includes(ans.denied.cls)));
     ans = {...ans, denied:{
       headline:"No Answer Space covers this data yet.",
-      because:`\`${ans.denied.cls}\` is no longer on the platform blocklist, so Data Ask may index it. But no **published** Answer Space has these columns in scope, and Data Ask never reaches outside a published scope.`,
+      because:`\`${ans.denied.cls}\` is no longer on the platform blocklist, so the Copilot may index it. But no **published** Answer Space has these columns in scope, and the Copilot never reaches outside a published scope.`,
       cls:ans.denied.cls, policy:ans.denied.policy, cols:ans.denied.cols,
-      where: host ? `Data Ask \u203a Answer Spaces \u203a ${host.name}` : "Data Ask \u203a Answer Spaces",
+      where: host ? `Settings \u203a Copilot \u203a Answer Spaces \u203a ${host.name}` : "Settings \u203a Copilot \u203a Answer Spaces",
       publishHint: host ? host.name : null, requestable:false,
     }};
   }
@@ -47911,7 +47917,7 @@ const DASqlPanel = ({sql,canEdit,onRun,edited}) => {
             </>) : (<>
               {canEdit
                 ? <Btn small ghost icon={Ic.edit(10)} onClick={()=>setEditing(true)}>Edit SQL</Btn>
-                : <span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>Editing SQL is restricted to stewards — Settings › Data Ask › Access</span>}
+                : <span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>Editing SQL is restricted to stewards — Settings › Copilot › Access</span>}
               <Btn small ghost icon={Ic.copy(10)} onClick={()=>{navigator.clipboard&&navigator.clipboard.writeText(draft);}}>Copy</Btn>
             </>)}
           </div>
@@ -48090,7 +48096,7 @@ const DATrustDrawer = ({ans,space,role,onClose,onNav}) => {
             <Row l="Model — summary" v={_da.settings.models.summary.model} />
             <Row l="Prompt redaction" v={_da.settings.privacy.redactPrompts?"On — classified values stripped before the model call":"Off"}
                  c={_da.settings.privacy.redactPrompts?T.green:T.amber}/>
-            <Row l="Audit record" v="Written to Data Ask › Activity and Settings › Audit Logs"/>
+            <Row l="Audit record" v="Written to Settings › Copilot › Activity and Settings › Audit Logs"/>
           </div>
         </div>
       </div>
@@ -48100,35 +48106,10 @@ const DATrustDrawer = ({ans,space,role,onClose,onNav}) => {
 
 // ── Ask ─────────────────────────────────────────────────────────────────────
 
-const DA_THINK_STEPS = [
-  "Checking your entitlement…",
-  "Resolving the question against governed semantics…",
-  "Planning and retrieving…",
-  "Applying policy to the result…",
-];
-
 const daNow = () => {
   const d = new Date(), p = n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 };
-
-const DAThinking = ({step}) => (
-  <div style={{display:"flex",flexDirection:"column",gap:7,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10}}>
-    {DA_THINK_STEPS.map((s,i)=>{
-      const done = i<step, now = i===step;
-      return (
-        <div key={s} style={{display:"flex",alignItems:"center",gap:9,opacity:i<=step?1:0.35}}>
-          <span style={{width:14,height:14,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
-            background:done?T.green+"22":now?T.accentDim:"transparent",border:`1.5px solid ${done?T.green:now?T.accent:T.border}`}}>
-            {done&&<svg width="7" height="7" viewBox="0 0 10 10" fill="none"><path d="M1.5 5.4L3.7 7.6 8.4 2.6" stroke={T.green} strokeWidth="2" strokeLinecap="round"/></svg>}
-          </span>
-          <span className={now?"":""} style={{fontSize:12,color:done?T.textSub:now?T.text:T.textMuted,fontWeight:now?600:400,
-            animation:now?"pulse2 1.1s ease-in-out infinite":"none"}}>{s}</span>
-        </div>
-      );
-    })}
-  </div>
-);
 
 // Report-a-bad-answer drawer. Files a real work item into the Review Queue.
 const DAReportDrawer = ({msg,space,me,onClose,onDone}) => {
@@ -48217,7 +48198,7 @@ const DAAnswerCard = ({msg,space,role,me,canEditSql,canPublish,onToast,onNav,onT
             {d.requestable&&<Btn small variant="primary" onClick={()=>{
               daAddReview({id:"rv"+Date.now(), kind:"Access denied", q:ans.q, space:"—", by:me, at:daNow(),
                 assignee:"alex.rivera", status:"Open", sev:"Med",
-                note:`Requested access to ${d.cls} data via Data Ask. Question: “${ans.q}”`, fixes:["grant","dismiss"]});
+                note:`Requested access to ${d.cls} data via the Copilot. Question: “${ans.q}”`, fixes:["grant","dismiss"]});
               onToast("Access request sent to alex.rivera — tracked in Review Queue");
             }}>Request access</Btn>}
             <Btn small ghost onClick={()=>onNav&&onNav("policymanager")}>View policy</Btn>
@@ -48264,7 +48245,7 @@ const DAAnswerCard = ({msg,space,role,me,canEditSql,canPublish,onToast,onNav,onT
           <span style={{fontSize:13,fontWeight:700,color:T.text}}>I couldn't answer that from this space</span>
         </div>
         <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
-          Nothing in <b style={{color:T.text}}>{space?space.name:"this space"}</b> maps to that question. Data Ask will not guess
+          Nothing in <b style={{color:T.text}}>{space?space.name:"this space"}</b> maps to that question. The Copilot will not guess
           across scopes — it answers only from what the space governs. Either the vocabulary is missing, or the data lives elsewhere.
         </div>
         {space&&(space.samples||[]).length>0&&(<>
@@ -48391,266 +48372,6 @@ const DAAnswerCard = ({msg,space,role,me,canEditSql,canPublish,onToast,onNav,onT
           <DAPill mono title="Solix credits consumed by this question">{ans.credits} cr</DAPill>
         </div>
       </div>
-    </div>
-  );
-};
-
-
-const DAAskTab = ({me,role,onToast,onNav,onManage}) => {
-  const st = useDA();
-  const S  = st.settings;
-  const usable = st.spaces.filter(s=>s.status==="Published" || (!S.guards.requirePublished && s.status==="In review"));
-  const [spaceId,setSpaceId] = useState(()=> (usable[0]||{}).id || "sp_commerce");
-  const [draft,setDraft]     = useState("");
-  const [trust,setTrust]     = useState(null);   // message being explained
-  const [report,setReport]   = useState(null);   // message being reported
-  const [retr,setRetr]       = useState("hybrid");
-  const scroller = useRef(null);
-
-  const space  = daSpace(spaceId);
-  const thread = st.threads.find(t=>t.id===st.activeThread) || null;
-  const canEditSql  = S.access.editSql.includes(role);
-  const canPublish  = S.access.publish.includes(role);
-  const canAsk      = S.access.ask.includes(role);
-
-  useEffect(()=>{ if(scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; },
-    [thread&&thread.msgs.length, thread&&thread.id, thread&&thread.msgs.map(m=>m.state).join()]);
-
-  const setMsg = (tid,mid,patch)=>daPatch({threads:_da.threads.map(t=>t.id!==tid?t:
-    {...t, msgs:t.msgs.map(m=>m.id===mid?{...m,...patch}:m)})});
-
-  const ask = (text) => {
-    const q = (text||"").trim(); if(!q || !canAsk) return;
-    let tid = st.activeThread, threads = _da.threads;
-    if(!tid || !threads.some(t=>t.id===tid)){
-      tid = "th"+Date.now();
-      threads = [{id:tid, title:q.length>46?q.slice(0,46)+"…":q, spaceId, at:daNow(), msgs:[]}, ...threads];
-    }
-    const uid = "m"+Date.now(), aid = uid+"a";
-    threads = threads.map(t=>t.id!==tid?t:{...t,
-      title: t.msgs.length?t.title:(q.length>46?q.slice(0,46)+"…":q),
-      msgs:[...t.msgs, {id:uid,role:"user",text:q}, {id:aid,role:"assistant",state:"thinking",step:0,q}]});
-    daPatch({threads, activeThread:tid});
-    setDraft("");
-
-    let i = 0;
-    const tick = () => {
-      i++;
-      if(i < DA_THINK_STEPS.length){ setMsg(tid,aid,{step:i}); setTimeout(tick,430); return; }
-      const raw = daResolve(q, spaceId);
-      const ans = raw ? daProject({...raw, q}, role) : null;
-      // Persist the answer's identity only — the projection is recomputed per
-      // render against whoever is looking, so a role switch cannot leave a
-      // more-privileged result on screen.
-      setMsg(tid,aid,{state:"done", ansId: raw?raw.id:null, resolved:true});
-      daLog({at:daNow(), who:me, space:(raw&&raw.denied)?"—":spaceId, q, mode:raw?raw.mode:(space?space.mode:"structured"),
-        decision: ans?ans.decision:"Not understood",
-        masked: ans&&ans.willMask?ans.masked.length:0,
-        filtered: ans&&ans.filters?ans.filters.reduce((n,f)=>n+f.n,0):0,
-        credits: ans?ans.credits:3, ms: ans?Math.round(parseFloat(ans.latency)*1000):1100});
-    };
-    setTimeout(tick,430);
-  };
-
-  const newThread = () => daPatch({activeThread:null});
-  const starters = (space&&space.samples&&space.samples.length?space.samples:DA_STARTERS[spaceId])||[];
-  const sessionCredits = (thread?thread.msgs:[]).reduce((n,m)=>n+((m.ans&&m.ans.credits)||0),0);
-
-  const selStyle = {padding:"6px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,
-    color:T.text,fontSize:11.5,cursor:"pointer",outline:"none",fontFamily:"inherit"};
-
-  return (
-    <div style={{flex:1,display:"flex",minHeight:0,minWidth:0}}>
-
-      {/* ── conversations ── */}
-      <div style={{width:224,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgSurface,display:"flex",flexDirection:"column"}}>
-        <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`}}>
-          <button onClick={newThread} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:6,
-            padding:"7px 10px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-            {Ic.plus(11)} New conversation
-          </button>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"8px 8px"}}>
-          <DASectionLabel style={{padding:"2px 5px",marginBottom:5}}>Recent</DASectionLabel>
-          {st.threads.length===0
-            ? <div style={{fontSize:11.5,color:T.textMuted,padding:"8px 6px",lineHeight:1.6}}>Your conversations appear here. History is retained for {S.privacy.retainDays} days.</div>
-            : st.threads.map(t=>{
-                const on = t.id===st.activeThread;
-                const sp = daSpace(t.spaceId);
-                return (
-                  <button key={t.id} onClick={()=>{daPatch({activeThread:t.id}); if(sp) setSpaceId(sp.id);}}
-                    style={{width:"100%",textAlign:"left",padding:"8px 9px",marginBottom:3,borderRadius:8,cursor:"pointer",fontFamily:"inherit",
-                      background:on?T.bgHover:"transparent",border:`1px solid ${on?T.border:"transparent"}`}}>
-                    <div style={{fontSize:11.8,fontWeight:on?600:500,color:on?T.text:T.textSub,lineHeight:1.4,
-                      overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
-                    <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{sp?sp.name:"—"} · {t.msgs.filter(m=>m.role==="user").length} question{t.msgs.filter(m=>m.role==="user").length===1?"":"s"}</div>
-                  </button>
-                );
-              })}
-        </div>
-        <div style={{padding:"10px 12px",borderTop:`1px solid ${T.border}`}}>
-          <div style={{fontSize:10,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>Credit balance</div>
-          <div style={{fontSize:14,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{(S.cost.balance-sessionCredits).toLocaleString()}</div>
-          <div style={{height:4,borderRadius:2,background:T.bgHover,marginTop:6,overflow:"hidden"}}>
-            <div style={{height:"100%",width:`${Math.round((S.cost.balance-sessionCredits)/S.cost.granted*100)}%`,background:T.accent}}/>
-          </div>
-          <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>of {S.cost.granted.toLocaleString()} granted{sessionCredits?` · ${sessionCredits} used here`:""}</div>
-        </div>
-      </div>
-
-      {/* ── thread ── */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,background:T.bg}}>
-
-        {/* space bar */}
-        <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap",padding:"10px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
-          <span style={{fontSize:11,color:T.textMuted,fontWeight:600}}>Answer Space</span>
-          <select value={spaceId} onChange={e=>{setSpaceId(e.target.value);}} style={{...selStyle,minWidth:190,fontWeight:600,fontSize:12}}>
-            {st.spaces.map(s=>{
-              const ok = usable.some(u=>u.id===s.id);
-              return <option key={s.id} value={s.id} disabled={!ok}>
-                {s.name}{ok?"":s.status==="In review"?"  — in review, not askable":"  — "+daEffStatus(s).toLowerCase()+", not askable"}
-              </option>;
-            })}
-          </select>
-          {space&&<DAModeTag mode={space.mode}/>}
-          {space&&<DAStatusTag status={space.status}/>}
-          {space&&(space.mode==="documents"||space.mode==="hybrid")&&(<>
-            <span style={{fontSize:11,color:T.textMuted,fontWeight:600,marginLeft:4}}>Retrieval</span>
-            <select value={retr} onChange={e=>setRetr(e.target.value)} style={selStyle}
-              title={(DA_RETRIEVAL[retr]||{}).sub}>
-              {Object.keys(DA_RETRIEVAL).map(k=><option key={k} value={k}>{DA_RETRIEVAL[k].label}</option>)}
-            </select>
-          </>)}
-          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
-            {space&&<span style={{fontSize:10.5,color:T.textMuted}}>{space.sources.length} objects · indexed {space.indexed}</span>}
-            <Btn small ghost onClick={onManage}>Manage spaces</Btn>
-          </div>
-        </div>
-
-        {space&&daDrift(space).n>0&&(
-          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"8px 20px",
-            background:T.amber+"12",borderBottom:`1px solid ${T.amber}44`,flexShrink:0}}>
-            <span style={{color:T.amber,display:"flex",flexShrink:0}}>{Ic.alert(12)}</span>
-            <span style={{fontSize:11.5,color:T.text,flex:1,minWidth:200,lineHeight:1.5}}>
-              This space has not indexed {daDrift(space).detail.replace(/ since .*/,"")} — a question about them will come
-              back empty rather than wrong. {canPublish?"Refresh it from the space profile.":"Its owner has been notified."}
-            </span>
-            {canPublish&&<Btn small ghost onClick={onManage}>Refresh space</Btn>}
-          </div>
-        )}
-
-        {/* messages */}
-        <div ref={scroller} style={{flex:1,overflowY:"auto",padding:"22px 24px"}}>
-          {!thread || thread.msgs.length===0 ? (
-            <div style={{maxWidth:660,margin:"6vh auto 0"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-                <div style={{width:40,height:40,borderRadius:11,background:T.accentDim,border:`1px solid ${T.accent}33`,
-                  display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.bot(20)}</div>
-                <div>
-                  <div style={{fontSize:19,fontWeight:700,color:T.text}}>Ask {space?space.name:"your data"}</div>
-                  <div style={{fontSize:12.5,color:T.textMuted,marginTop:2}}>
-                    {space?space.desc:"Pick an Answer Space to begin."}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{display:"flex",gap:9,padding:"11px 13px",borderRadius:9,background:T.bgElevated,
-                border:`1px solid ${T.border}`,marginBottom:20}}>
-                <span style={{color:T.green,display:"flex",flexShrink:0,marginTop:1}}>{Ic.shield(13)}</span>
-                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.65}}>
-                  Answers are drawn only from what this space governs, and every one carries its policy trace: what was
-                  masked, what rows were withheld, which assets it cited and how fresh they are. You see what your role
-                  is entitled to see — no more, and never silently less.
-                </div>
-              </div>
-
-              {!canAsk&&(
-                <div style={{padding:"11px 13px",borderRadius:9,background:T.roseDim,border:`1px solid ${T.rose}44`,
-                  fontSize:12,color:T.text,marginBottom:20}}>
-                  Your role ({role}) is not permitted to ask questions. An Admin grants this in
-                  <b> Settings › Data Ask › Access</b>.
-                </div>
-              )}
-
-              <DASectionLabel>Try one of these</DASectionLabel>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                {starters.map(s=>(
-                  <button key={s} onClick={()=>ask(s)} disabled={!canAsk} style={{textAlign:"left",padding:"10px 13px",borderRadius:9,
-                    cursor:canAsk?"pointer":"not-allowed",opacity:canAsk?1:.5,background:T.bgSurface,border:`1px solid ${T.border}`,
-                    fontSize:12.5,color:T.text,fontFamily:"inherit",transition:"border-color .12s",display:"flex",alignItems:"center",gap:9}}
-                    onMouseEnter={e=>{if(canAsk)e.currentTarget.style.borderColor=T.accent+"88";}}
-                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                    <span style={{color:T.textMuted,display:"flex",flexShrink:0}}>{Ic.search(12)}</span>{s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div style={{maxWidth:820,margin:"0 auto",display:"flex",flexDirection:"column",gap:20}}>
-              {thread.msgs.map(m=>m.role==="user" ? (
-                <div key={m.id} style={{display:"flex",justifyContent:"flex-end"}}>
-                  <div style={{maxWidth:"78%",padding:"9px 13px",borderRadius:"11px 11px 3px 11px",background:T.accent,color:"#fff",
-                    fontSize:12.8,lineHeight:1.55,fontWeight:500}}>{m.text}</div>
-                </div>
-              ) : (
-                <div key={m.id} style={{display:"flex",gap:11}}>
-                  <div style={{width:26,height:26,borderRadius:8,flexShrink:0,background:T.accentDim,border:`1px solid ${T.accent}33`,
-                    display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.bot(13)}</div>
-                  <div style={{minWidth:0,flex:1}}>
-                    {m.state==="thinking"
-                      ? <DAThinking step={m.step}/>
-                      : <DAAnswerCard msg={{...m, ans: daReproject(m, role)}} space={space} role={role} me={me}
-                          canEditSql={canEditSql} canPublish={canPublish}
-                          onToast={onToast} onNav={onNav}
-                          onTrust={()=>setTrust(m)} onReport={()=>setReport(m)} onAsk={ask} onManage={onManage}
-                          onEditSql={sql=>setMsg(thread.id,m.id,{editedSql:sql})}
-                          onSaveVerified={()=>{
-                            daPatch({verified:[{id:"v"+Date.now(), q:m.q, space:spaceId, answerId:m.ansId,
-                              owner:me, verified:daNow().slice(0,10), uses:0, status:"Verified",
-                              note:"Promoted from a Data Ask conversation."}, ..._da.verified]});
-                            onToast("Saved as a Verified Answer");
-                          }}/>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* composer */}
-        <div style={{padding:"12px 24px 16px",borderTop:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0}}>
-          <div style={{maxWidth:820,margin:"0 auto"}}>
-            <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-              <textarea value={draft} onChange={e=>setDraft(e.target.value)} rows={1} disabled={!canAsk}
-                onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); ask(draft); } }}
-                placeholder={canAsk?`Ask ${space?space.name:"a space"} a question — Enter to send, Shift+Enter for a new line`:"Asking is not permitted for your role"}
-                style={{flex:1,minHeight:40,maxHeight:150,padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,
-                  borderRadius:10,color:T.text,fontSize:12.8,lineHeight:1.55,outline:"none",resize:"none",fontFamily:"inherit",
-                  opacity:canAsk?1:.55,cursor:canAsk?"text":"not-allowed"}}
-                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              <button onClick={()=>ask(draft)} disabled={!draft.trim()||!canAsk}
-                style={{width:40,height:40,borderRadius:10,flexShrink:0,border:"none",cursor:(draft.trim()&&canAsk)?"pointer":"not-allowed",
-                  background:(draft.trim()&&canAsk)?T.accent:T.bgHover,color:(draft.trim()&&canAsk)?"#fff":T.textMuted,
-                  display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 8h10M8.5 3.5L13 8l-4.5 4.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              </button>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:7,flexWrap:"wrap",fontSize:10.5,color:T.textMuted}}>
-              <span>Asking as <b style={{color:T.textSub}}>{me}</b> ({role})</span>
-              <span style={{color:T.border}}>·</span>
-              <span>{S.privacy.redactPrompts?"Classified values stripped from prompts":"Prompt redaction off"}</span>
-              <span style={{color:T.border}}>·</span>
-              <span>{S.guards.groundedOnly?"Grounded answers only":"Ungrounded answers allowed"}</span>
-              <span style={{color:T.border}}>·</span>
-              <span>Every question is audited</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {trust&&<DATrustDrawer ans={trust.ans} space={space} role={role} onClose={()=>setTrust(null)} onNav={onNav}/>}
-      {report&&<DAReportDrawer msg={report} space={space} me={me} onClose={()=>setReport(null)}
-        onDone={msg=>{setReport(null);onToast(msg);}}/>}
     </div>
   );
 };
@@ -48861,7 +48582,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
   const blockReason =
       s.k==="connect" ? (!name.trim() ? "Give the space a name"
                  : (needsStruct&&picked.length===0) ? "Select at least one object"
-                 : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › Data Ask › Guardrails`)
+                 : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › Copilot › Guardrails`)
     : s.k==="docs"    ? "No documents survive the current filters"
     : s.k==="rel"     ? "Confirm or drop every join below the 80% confidence threshold"
     : s.k==="enrich"  ? "Approve or reject every proposed description"
@@ -48991,7 +48712,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                   </select>
                   <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.55}}>
                     Connections are managed in <b>Settings › Connections</b>. A space reads through the same connection and
-                    the same credentials the catalog already uses — Data Ask never holds its own.
+                    the same credentials the catalog already uses — the Copilot never holds its own.
                   </div>
                 </div>
 
@@ -49047,8 +48768,8 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 {blockedPick.length>0&&(
                   <div style={{padding:"10px 13px",borderRadius:8,background:T.roseDim,border:`1px solid ${T.rose}55`,fontSize:12,color:T.text,lineHeight:1.6}}>
                     <b>{blockedPick.map(a=>a.n).join(", ")}</b> carries the <b>{S.guards.blockedTags.join(", ")}</b> classification,
-                    which is on the platform blocklist. Data Ask cannot index it. Remove it from scope, or ask an Admin to
-                    allow the classification in <b>Settings › Data Ask › Guardrails</b>.
+                    which is on the platform blocklist. The Copilot cannot index it. Remove it from scope, or ask an Admin to
+                    allow the classification in <b>Settings › Copilot › Guardrails</b>.
                   </div>
                 )}
                 {uncertified.length>0&&blockedPick.length===0&&(
@@ -49582,7 +49303,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 </div>
                 <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
                   <b style={{color:T.text}}>Blocked classifications:</b> {S.guards.blockedTags.join(", ")||"none"} — set platform-wide in
-                  Settings › Data Ask › Guardrails and not overridable per space.
+                  Settings › Copilot › Guardrails and not overridable per space.
                 </div>
               </div>
             )}
@@ -49623,7 +49344,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 <KLNote tone="quiet">
                   This first build processes everything in scope. Every build after it is incremental by default — only
                   objects added or altered since this one are re-processed, so you are not re-billed for work already done.
-                  That behaviour is set in <b>Settings › Data Ask › Refresh</b>.
+                  That behaviour is set in <b>Settings › Copilot › Refresh</b>.
                 </KLNote>
               </div>
             )}
@@ -49758,7 +49479,25 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
 };
 
 // ── Answer Space profile ────────────────────────────────────────────────────
-const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
+// Inside Settings there is already a page header, so an embedded profile draws
+// its breadcrumb and actions as an in-page row instead of a second Topbar.
+const DABar = ({embedded, breadcrumb, actions}) => embedded ? (
+  <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",paddingBottom:14,marginBottom:16,borderBottom:`1px solid ${T.border}`}}>
+    <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+      {breadcrumb.map((b,i)=>(
+        <React.Fragment key={i}>
+          {i>0&&<span style={{color:T.textMuted,fontSize:12}}>/</span>}
+          {b.onClick
+            ? <button onClick={b.onClick} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",fontSize:12.5,padding:0,fontFamily:"inherit"}}>{b.label}</button>
+            : <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{b.label}</span>}
+        </React.Fragment>
+      ))}
+    </div>
+    {actions}
+  </div>
+) : <Topbar breadcrumb={breadcrumb} actions={actions}/>;
+
+const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk,embedded}) => {
   const [tab,setTab]   = useState("overview");
   const [g,setG]       = useState(sp.guards);
   const [gSaved,setGSaved]=useState(false);
@@ -49786,13 +49525,13 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
 
   return (
     <>
-      <Topbar breadcrumb={[
-        {label:"Data Ask", onClick:onBack},
+      <DABar embedded={embedded} breadcrumb={[
+        {label:"Copilot", onClick:onBack},
         {label:"Answer Spaces", onClick:onBack},
         {label:sp.name},
       ]} actions={
-        <div style={{display:"flex",gap:7}}>
-          {sp.status==="Published"&&<Btn small ghost onClick={()=>onAsk(sp.id)}>Ask this space</Btn>}
+        <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+          {sp.status==="Published"&&<Btn small ghost icon={Ic.bot(11)} onClick={()=>onAsk(sp.id)}>Ask in Copilot</Btn>}
           {canManage&&<Btn small ghost disabled={building} onClick={rebuild}>{building?"Rebuilding…":"Rebuild index"}</Btn>}
           {canManage&&sp.status==="In review"&&<Btn small variant="primary" onClick={()=>{
             daUpdSpace(sp.id,s=>({status:"Published", version:"v1", published:daNow().slice(0,10),
@@ -49811,7 +49550,7 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
           }}>Unpublish</Btn>}
         </div>
       }/>
-      <div style={{flex:1,overflowY:"auto",padding:24}}>
+      <div style={{flex:1,overflowY:"auto",padding:embedded?0:24}}>
         <KLProfileHead
           icon={<div style={{width:38,height:38,borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}33`,
             display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.bot(19)}</div>}
@@ -50096,7 +49835,7 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
               <Toggle on={g.requireCert} disabled={!canManage} onChange={()=>setG(x=>({...x,requireCert:!x.requireCert}))}/>
             </div>
             <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:16}}>
-              <b style={{color:T.text}}>Blocked classifications:</b> {(g.blockedTags||[]).join(", ")||"none"} — platform-wide, set in Settings › Data Ask › Guardrails.
+              <b style={{color:T.text}}>Blocked classifications:</b> {(g.blockedTags||[]).join(", ")||"none"} — platform-wide, set in Settings › Copilot › Guardrails.
             </div>
             {canManage&&<div style={{display:"flex",alignItems:"center",gap:10}}>
               <Btn variant="primary" small onClick={()=>{daUpdSpace(sp.id,{guards:g});setGSaved(true);onToast("Guardrails saved");setTimeout(()=>setGSaved(false),2200);}}>Save guardrails</Btn>
@@ -50170,7 +49909,7 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk}) => {
               {key:"detail",label:"Detail",render:v=><span style={{fontSize:11.5,color:T.textMuted}}>{v}</span>},
             ]}
             rows={sp.history||[]} emptyMsg="No activity yet"/>
-          <SH title="Questions asked here" sub="Drawn from the platform-wide Data Ask audit log." action={null}/>
+          <SH title="Questions asked here" sub="Drawn from the platform-wide Copilot audit log." action={null}/>
           <DataTable
             cols={[
               {key:"at",label:"When",render:v=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textMuted}}>{v}</span>},
@@ -50326,11 +50065,17 @@ const DAReviewDrawer = ({it,me,onClose,onToast}) => {
 };
 
 // ── Main view ───────────────────────────────────────────────────────────────
-const DataAskView = ({onToast, onNav}) => {
+const DataAskView = ({onToast, onNav, tab:tabProp, setTab:setTabProp}) => {
   const st = useDA();
   const {role, roleCfg} = useRole();
   const me = roleCfg && roleCfg.email ? roleCfg.email.split("@")[0] : "alex.rivera";
-  const [tab,setTab]   = useState("ask");
+  // Asking lives in the Copilot now. What remains is the management of what the
+  // Copilot may answer from, and it is hosted by Settings › Copilot, which owns
+  // the tab strip.
+  const cp = useContext(CopilotCtx);
+  const [tabS,setTabS] = useState("spaces");
+  const tab    = tabProp || tabS;
+  const setTab = setTabProp || setTabS;
   const [sel,setSel]   = useState(null);     // open space id
   const [wiz,setWiz]   = useState(false);
   const [vOpen,setVOpen]=useState(null);
@@ -50345,9 +50090,9 @@ const DataAskView = ({onToast, onNav}) => {
   const spName = id => (daSpace(id)||{}).name || id;
 
   if(sel && daSpace(sel)) return (
-    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <DASpaceProfile sp={daSpace(sel)} me={me} role={role} onBack={()=>setSel(null)}
-        onToast={onToast} onNav={onNav} onAsk={()=>{setSel(null);setTab("ask");}}/>
+    <div className="fadeUp" style={{display:"flex",flexDirection:"column"}}>
+      <DASpaceProfile sp={daSpace(sel)} me={me} role={role} onBack={()=>setSel(null)} embedded
+        onToast={onToast} onNav={onNav} onAsk={id=>cp&&cp.ask({spaceId:id||sel})}/>
     </div>
   );
 
@@ -50387,30 +50132,19 @@ const DataAskView = ({onToast, onNav}) => {
   };
 
   return (
-    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column",minHeight:0}}>
-      <Topbar breadcrumb={[{label:"Data Ask"}]} actions={
-        <div style={{display:"flex",gap:7,alignItems:"center"}}>
-          <span style={{fontSize:11,color:T.textMuted}}>
-            {totals.published} published space{totals.published===1?"":"s"} · {openReviews} open review{openReviews===1?"":"s"}
+    <div className="fadeUp" style={{display:"flex",flexDirection:"column"}}>
+      {tab==="spaces"&&(
+        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
+          <span style={{fontSize:11.5,color:T.textMuted,flex:1}}>
+            {totals.published} published space{totals.published===1?"":"s"} · {openReviews} open review{openReviews===1?"":"s"}.
+            The Copilot answers data questions only from a published space.
           </span>
+          {cp&&<Btn small ghost icon={Ic.bot(11)} onClick={()=>cp.show()}>Open Copilot</Btn>}
           {canManage&&<Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>setWiz(true)}>New Answer Space</Btn>}
         </div>
-      }/>
+      )}
 
-      <div style={{padding:"14px 24px 0",flexShrink:0}}>
-        <Tabs2 tabs={[
-          {key:"ask",      label:"Ask"},
-          {key:"spaces",   label:`Answer Spaces (${st.spaces.length})`},
-          {key:"verified", label:`Verified Answers (${st.verified.filter(v=>v.status==="Verified").length})`},
-          {key:"review",   label:`Review Queue${openReviews?` (${openReviews})`:""}`},
-          {key:"activity", label:"Activity"},
-        ]} active={tab} onChange={setTab}/>
-      </div>
-
-      {tab==="ask"
-        ? <DAAskTab me={me} role={role} onToast={onToast} onNav={onNav} onManage={()=>setTab("spaces")}/>
-        : (
-        <div style={{flex:1,overflowY:"auto",padding:"0 24px 24px"}}>
+        <div>
 
           {/* ── ANSWER SPACES ── */}
           {tab==="spaces"&&(<>
@@ -50464,7 +50198,7 @@ const DataAskView = ({onToast, onNav}) => {
 
             <KLNote tone="quiet">
               Models, retrieval defaults, the classification blocklist, credit caps and who may ask are platform-wide
-              settings in <b>Settings › Data Ask</b>. A space can tighten those limits but never loosen them.
+              settings in <b>Settings › Copilot</b>. A space can tighten those limits but never loosen them.
             </KLNote>
           </>)}
 
@@ -50581,12 +50315,11 @@ const DataAskView = ({onToast, onNav}) => {
                   ]}
                   rows={activity}/>}
             <KLNote tone="quiet">
-              Retained for {st.settings.privacy.retainDays} days per <b>Settings › Data Ask › Privacy</b>. The same events are
+              Retained for {st.settings.privacy.retainDays} days per <b>Settings › Copilot › Privacy</b>. The same events are
               mirrored into <b>Settings › Audit Logs</b> for long-term retention.
             </KLNote>
           </>)}
         </div>
-      )}
 
       {wiz&&<DAWizard me={me} onClose={()=>setWiz(false)} onToast={onToast}
         onCreated={id=>{setWiz(false);setTab("spaces");setSel(id);}}/>}
@@ -50597,7 +50330,7 @@ const DataAskView = ({onToast, onNav}) => {
 };
 
 
-// ── Settings › Data Ask ─────────────────────────────────────────────────────
+// ── Settings › Copilot ─────────────────────────────────────────────────────
 // Platform-wide configuration. Everything here is a ceiling: an Answer Space
 // may tighten a limit but never loosen one, which is what makes the section
 // safe to delegate to space owners.
@@ -50631,16 +50364,16 @@ const DA_ACTIVITIES = [
   {k:"index",    area:"Answer Spaces",  l:"Index build — embeddings",
    d:"Vectorises documents and questions for semantic retrieval. Changing this model invalidates every document index and forces a rebuild.",
    rec:"text-embedding-3-large", acc:93, cost:"$", sends:"content"},
-  {k:"sql",      area:"Data Ask",       l:"Prompt → SQL",
+  {k:"sql",      area:"Copilot",       l:"Prompt → SQL",
    d:"Turns a question into a query plan over the governed schema. The most accuracy-sensitive call in the product — use your strongest model. Only schema is sent, never values.",
    rec:"claude-opus-5", acc:95, cost:"$$$", sends:"metadata"},
-  {k:"search",   area:"Data Ask",       l:"Unstructured search",
+  {k:"search",   area:"Copilot",       l:"Unstructured search",
    d:"Retrieves and summarises document passages with citations. Retrieved content is sent to the provider, so the payload and privacy controls matter most here.",
    rec:"claude-sonnet-5", acc:92, cost:"$$", sends:"content"},
-  {k:"router",   area:"Data Ask",       l:"Hybrid intent router",
+  {k:"router",   area:"Copilot",       l:"Hybrid intent router",
    d:"Decides whether a question belongs to tables, documents or both. Small, fast and called on every question in a Hybrid space — keep it cheap.",
    rec:"claude-haiku-4-5", acc:90, cost:"$", sends:"metadata"},
-  {k:"summary",  area:"Data Ask",       l:"Answer composition",
+  {k:"summary",  area:"Copilot",       l:"Answer composition",
    d:"Writes the prose summary and grounds every claim in a citation. Never receives raw values for columns your role may not see.",
    rec:"claude-sonnet-5", acc:93, cost:"$$", sends:"content"},
 ];
@@ -50657,7 +50390,37 @@ const DA_ROLE_LIST = [
 ];
 const DA_ALL_TAGS = ["Restricted-HR","PII","GDPR","confidential","legal-hold","PCI"];
 
-const DASettingsSection = ({onToast}) => {
+// Settings › Copilot. One page for everything that decides what the Copilot may
+// answer about data: the Answer Spaces it answers from, the answers owners have
+// verified, the queue of answers people flagged, the audit trail, and the
+// platform ceilings. It is Settings because it is a control surface — the only
+// place anyone asks a question is the Copilot itself.
+const CopilotSettingsSection = ({onToast}) => {
+  const st = useDA();
+  const onNav = useNav();
+  const [top,setTop] = useState("spaces");
+  const openReviews = st.review.filter(r=>r.status==="Open").length;
+  return (
+    <>
+      <SettSH icon={Ic.bot(16)} title="Copilot"
+        desc="The Copilot answers two kinds of question in one conversation: about your metadata (ownership, policy, lineage, quality) and about your data. Data answers come only from a published Answer Space, and everything that governs them is managed here."/>
+      <div style={{marginBottom:18}}>
+        <SegTabs tabs={[
+          {key:"spaces",   label:`Answer Spaces (${st.spaces.length})`},
+          {key:"verified", label:`Verified Answers (${st.verified.filter(v=>v.status==="Verified").length})`},
+          {key:"review",   label:`Review Queue${openReviews?` (${openReviews})`:""}`},
+          {key:"activity", label:"Activity"},
+          {key:"config",   label:"Configuration"},
+        ]} active={top} onChange={setTop}/>
+      </div>
+      {top==="config"
+        ? <DASettingsSection onToast={onToast} embedded/>
+        : <DataAskView tab={top} setTab={setTop} onToast={onToast} onNav={onNav}/>}
+    </>
+  );
+};
+
+const DASettingsSection = ({onToast, embedded}) => {
   const st = useDA();
   const [sub,setSub]   = useState("models");
   const [d,setD]       = useState(()=>JSON.parse(JSON.stringify(st.settings)));
@@ -50671,7 +50434,7 @@ const DASettingsSection = ({onToast}) => {
   const [saved,setSaved]=useState(false);
   const dirty = JSON.stringify(d)!==JSON.stringify(st.settings);
 
-  const save = () => { daPatch({settings:d}); setSaved(true); onToast("Data Ask settings saved","success"); setTimeout(()=>setSaved(false),2400); };
+  const save = () => { daPatch({settings:d}); setSaved(true); onToast("Copilot settings saved","success"); setTimeout(()=>setSaved(false),2400); };
   const reset= () => setD(JSON.parse(JSON.stringify(st.settings)));
 
   const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,
@@ -50708,8 +50471,11 @@ const DASettingsSection = ({onToast}) => {
 
   return (
     <>
-      <SettSH icon={Ic.bot(16)} title="Data Ask"
-        desc="Models, retrieval, guardrails, privacy and cost for governed conversational access. Every value here is a ceiling — an Answer Space can tighten it but never loosen it."/>
+      {!embedded&&<SettSH icon={Ic.bot(16)} title="Copilot"
+        desc="Models, retrieval, guardrails, privacy and cost for governed conversational access. Every value here is a ceiling — an Answer Space can tighten it but never loosen it."/>}
+      {embedded&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
+        Models, retrieval, guardrails, privacy and cost for every data question the Copilot answers. Each value is a ceiling — an Answer Space can tighten it but never loosen it.
+      </div>}
 
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
@@ -50768,7 +50534,7 @@ const DASettingsSection = ({onToast}) => {
           )}
         </Card>
 
-        {["Classification","Answer Spaces","Data Ask"].map(area=>(
+        {["Classification","Answer Spaces","Copilot"].map(area=>(
           <div key={area}>
             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",
               margin:"20px 0 10px"}}>{area}</div>
@@ -50922,7 +50688,7 @@ const DASettingsSection = ({onToast}) => {
             <div style={{flex:1}}>
               <div style={{fontSize:12,fontWeight:600,color:T.text}}>Minimum relevance score</div>
               <div style={{fontSize:11,color:T.textMuted,marginTop:1,lineHeight:1.55}}>
-                Below this, Data Ask says it does not know rather than answering from weak evidence.
+                Below this, the Copilot says it does not know rather than answering from weak evidence.
               </div>
             </div>
             <input type="number" step="0.01" min="0" max="1" value={d.retrieval.minScore} style={num}
@@ -50934,7 +50700,7 @@ const DASettingsSection = ({onToast}) => {
       {/* ── GUARDRAILS ── */}
       {sub==="guards"&&(<>
         <Card title="Classification blocklist" tone={T.rose+"55"}
-          desc="Data Ask refuses any question that would touch these classifications, before a plan is generated. This is the hardest stop in the product — no space, owner or entitlement overrides it.">
+          desc="The Copilot refuses any question that would touch these classifications, before a plan is generated. This is the hardest stop in the product — no space, owner or entitlement overrides it.">
           <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
             {DA_ALL_TAGS.map(t=>{
               const on = d.guards.blockedTags.includes(t);
@@ -50963,7 +50729,7 @@ const DASettingsSection = ({onToast}) => {
           <RowNum l="Query timeout" suffix="seconds" d="Long plans are cancelled and reported to the asker."
             val={d.guards.timeout} set={v=>setD(x=>({...x,guards:{...x.guards,timeout:v}}))}/>
         </Card>
-        <Card title="Behaviour" desc="What Data Ask does at the edges — where most trust is won or lost.">
+        <Card title="Behaviour" desc="What the Copilot does at the edges — where most trust is won or lost.">
           <div style={{padding:"9px 0"}}>
             <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>When a policy conflicts with a question</div>
             <div style={{fontSize:11,color:T.textMuted,marginBottom:9,lineHeight:1.55}}>
@@ -51313,7 +51079,7 @@ const DASettingsSection = ({onToast}) => {
       {/* ── ACCESS ── */}
       {sub==="access"&&(<>
         <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-          Who can do what in Data Ask. These sit on top of asset-level RBAC — granting somebody the right to ask does not
+          Who can do what with data questions in the Copilot. These sit on top of asset-level RBAC — granting somebody the right to ask does not
           grant them data they could not already read, it only lets them ask about it in words.
         </div>
         {[
@@ -51321,7 +51087,7 @@ const DASettingsSection = ({onToast}) => {
           {k:"editSql", l:"Edit generated SQL",   d:"Bypass the planner with hand-written SQL. Policy is still enforced on the result — editing cannot unmask a column."},
           {k:"publish", l:"Publish Answer Spaces",d:"Approve a space and make it askable. Also permits saving Verified Answers."},
           {k:"seeRaw",  l:"See unmasked values",  d:"Serves raw values for classified columns to this role. Every such access is written to the audit log with the column named."},
-          {k:"manage",  l:"Manage Data Ask settings",d:"Change models, guardrails, privacy and credit caps — everything on this page."},
+          {k:"manage",  l:"Manage Copilot settings",d:"Change models, guardrails, privacy and credit caps — everything on this page."},
         ].map(cap=>(
           <Card key={cap.k} title={cap.l} desc={cap.d} tone={cap.k==="seeRaw"?T.amber+"55":undefined}>
             <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -51344,14 +51110,14 @@ const DASettingsSection = ({onToast}) => {
             {cap.k==="seeRaw"&&d.access.seeRaw.length>1&&(
               <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.amberDim,border:`1px solid ${T.amber}44`,
                 fontSize:11.5,color:T.text,lineHeight:1.55}}>
-                {d.access.seeRaw.length} roles can now read classified values through Data Ask. This widens the blast radius
+                {d.access.seeRaw.length} roles can now read classified values through the Copilot. This widens the blast radius
                 of a single compromised account — keep it as narrow as the job allows.
               </div>
             )}
             {cap.k==="ask"&&d.access.ask.length===0&&(
               <div style={{marginTop:11,padding:"9px 11px",borderRadius:7,background:T.roseDim,border:`1px solid ${T.rose}44`,
                 fontSize:11.5,color:T.text}}>
-                Nobody can ask questions. Data Ask is effectively switched off.
+                Nobody can ask questions. Data questions in the Copilot are effectively switched off.
               </div>
             )}
           </Card>
@@ -51373,6 +51139,9 @@ const DASettingsSection = ({onToast}) => {
 };
 
 
+// Other screens deep-link into a Settings section (the Copilot's "Manage Answer
+// Spaces"). Read once when Settings mounts, then cleared.
+let _settingsJump = null;
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const tagCtx = useTagCtx();
@@ -51387,7 +51156,7 @@ const SettingsView = ({onToast})=>{
   const [rsSourceFilter, setRsSourceFilter] = useState("all");
   const [rsDateFilter, setRsDateFilter] = useState("all"); // all | today | 7d | 30d
   const rsRelTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
-  const [section,   setSection]   = useState("connections");
+  const [section,   setSection]   = useState(()=>{ const s=_settingsJump||"connections"; _settingsJump=null; return s; });
   const [svcSel,    setSvcSel]    = useState(null);
   const [appSel,    setAppSel]    = useState(null);
   const [filterSvc, setFilterSvc] = useState("all");
@@ -51469,7 +51238,7 @@ const SettingsView = ({onToast})=>{
       {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable applicable compliance frameworks"},
     ]},
     {label:"Platform", items:[
-      {key:"dataask",      icon:"dataask", label:"Data Ask",             desc:"Models, guardrails, privacy & credits"},
+      {key:"dataask",      icon:"bot",     label:"Copilot",              desc:"Answer Spaces, guardrails, privacy & credits"},
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
       {key:"custom_props", icon:"props",   label:"Custom Properties",    desc:"Extend asset metadata"},
@@ -53057,7 +52826,7 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {/* ══ NOTIFICATIONS ══ */}
-            {section==="dataask"&&<DASettingsSection onToast={onToast}/>}
+            {section==="dataask"&&<CopilotSettingsSection onToast={onToast}/>}
 
             {section==="notifications"&&<>
               <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which in-app alerts reach you. Today notifications are delivered in-app; email & Slack are coming soon."/>
@@ -55302,7 +55071,29 @@ const AI_TOOLS = {
     return ASSETS.filter(a=>(a.owners||[]).some(o=>o.toLowerCase().includes(s)) ||
                             (a.stewards||[]).some(o=>o.toLowerCase().includes(s))).slice(0,limit);
   },
+
+  // ── Data questions ──────────────────────────────────────────────────────────
+  // The Copilot reaches data only through a published Answer Space. These three
+  // tools are the whole path: which spaces the caller may ask, which governed
+  // answer the question resolves to, and the role projection applied to it.
+  "space.list": ({role}) => _da.spaces.filter(s=>daAskable(s)).map(s=>({...s, canAsk:_da.settings.access.ask.includes(role)})),
+
+  "answer.resolve": ({q, space}) => {
+    const a = daResolve(q, space||null);
+    // An answer that lives in a space nobody published is not an answer yet.
+    if(a && a.space && !daAskable(daSpace(a.space))) return [];
+    return a ? [a] : [];
+  },
+
+  "answer.project": ({id, q, role}) => {
+    const raw = DA_ANSWERS.find(a=>a.id===id);
+    return raw ? [daProject({...raw, q}, role)] : [];
+  },
 };
+
+// Askable = published, or in review when the platform allows asking a space
+// before it is published.
+const daAskable = sp => !!sp && (sp.status==="Published" || (!_da.settings.guards.requirePublished && sp.status==="In review"));
 
 // The runner. Everything the AI layer does goes through here, so every call is
 // timed, counted, and shown back to the user under "how I got this".
@@ -55319,13 +55110,15 @@ const aiCall = (trace, name, args) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // AI LAYER · 1 — TALK TO METADATA (Copilot)
 // ═══════════════════════════════════════════════════════════════════════════════
-// The boundary that keeps this from becoming a second Data Ask:
+// One assistant, two kinds of answer, one conversation:
 //
-//     Data Ask answers questions about DATA — rows, business questions, credit
-//     metered, inside a published Answer Space.
-//     Copilot answers questions about the GOVERNED GRAPH — who owns it, what is
-//     classified, what policy applies, what breaks if it changes — and drafts
-//     the governance work that follows. Seat-priced, not credit-metered.
+//     About the GOVERNED GRAPH — who owns it, what is classified, what policy
+//     applies, what breaks if it changes — plus drafts of the governance work
+//     that follows. Seat-priced, never credit-metered.
+//     About the DATA — rows, business questions — answered only from a
+//     published Answer Space, role-projected, credit-metered. This used to be a
+//     separate Data Ask page; asking now happens here, and the spaces themselves
+//     are managed in Settings › Copilot.
 //
 // It is a dock rather than a page on purpose: its whole advantage over a search
 // box is that it already knows which asset you are looking at.
@@ -55376,6 +55169,33 @@ const aiAsk = (q, ctx) => {
   const domain   = aiFindDomain(q);
   const push     = (b) => blocks.push(b);
   const R        = (intent, headline) => ({q, intent, headline, blocks, trace});
+
+  // ── Data questions ──────────────────────────────────────────────────────────
+  // One conversation, two kinds of answer. A question shaped like governance
+  // ("who owns", "what breaks", "which columns") always goes to the graph, even
+  // when a space is picked. Anything else is offered to the Answer Spaces first,
+  // and falls back to the graph only when no governed answer exists.
+  const scope   = ctx.scope || "auto";
+  const govLike = AI_GOV_RE.test(s);
+  if(scope!=="metadata" && !govLike){
+    const spaceId = scope==="auto" ? null : scope;
+    aiCall(trace, "space.list", {role});
+    const hit = aiCall(trace, "answer.resolve", {q, space:spaceId})[0];
+    if(hit || spaceId){
+      if(!_da.settings.access.ask.includes(role)){
+        push({kind:"text", text:`Your role (${(ROLES_CONFIG[role]||{}).label}) can ask me about metadata, but not about data. An Admin grants data questions in **Settings › Copilot › Access**.`});
+        return R("data-denied", "Data questions not permitted");
+      }
+      const proj = hit ? aiCall(trace, "answer.project", {id:hit.id, q, role})[0] : null;
+      const sp   = daSpace((hit&&hit.space) || spaceId);
+      trace.push({name: hit&&hit.mode==="documents" ? "docs.retrieve" : "query.run",
+        args:{space:sp?sp.name:"—"}, rows:proj&&proj.rows?proj.rows.length:0,
+        ms: proj ? Math.round(parseFloat(proj.latency||"1")*1000) : 40});
+      push({kind:"data", ansId:hit?hit.id:null, spaceId:sp?sp.id:null, q});
+      return {...R("data", proj ? `${sp?sp.name:proj.denied?"Refused by policy":"Governed answer"} · ${proj.decision}` : `Not answerable from ${sp?sp.name:"this space"}`),
+              credits: proj ? proj.credits : 3, decision: proj ? proj.decision : "Not understood"};
+    }
+  }
 
   // ── Gaps / coverage ─────────────────────────────────────────────────────────
   if(/\b(no|without|missing|lack(ing)?|un)\s*(an\s+)?(owner|steward|description|classification|certif)/.test(s)
@@ -55589,8 +55409,33 @@ const aiAsk = (q, ctx) => {
     push({kind:"assets", rows, label:"Matches"});
     return R("search", `${rows.length} matches`);
   }
-  push({kind:"text", text:`I could not ground that in the catalog. I answer from the governed graph only — ownership, classifications, policy, lineage, quality, glossary and coverage. For questions about the data itself (rows, totals, trends), **Data Ask** is the right surface.`});
+  push({kind:"text", text:`I could not ground that. Nothing in the governed graph matches it, and no published Answer Space has a governed answer for it — I will not guess outside either. If it is a data question, a steward can teach a space the vocabulary.`});
+  push({kind:"teach", q});
   return R("none", "No grounding");
+};
+
+// Governance-shaped questions stay on the graph even when they mention a word an
+// Answer Space also knows ("find tables about revenue" is a catalog search, not
+// a revenue query).
+const AI_GOV_RE = /\b(owner|owns|owned|steward|who|polic|mask|lineage|impact|break|downstream|depend|upstream|classif|pii|phi|sensitive|personal data|glossary|definition|defined|mean|quality|failing|dq|coverage|gaps?|missing|orphan|draft|propose|descri|columns?|schema|fields?|tables?|assets?|catalog|certif|tags?|retention|legal hold)/;
+
+// Follow-ups offered under a metadata answer — the next question a steward would
+// ask, not a generic menu.
+const aiFollowups = (ans, ctx) => {
+  const a = ((ans.blocks||[]).find(b=>b.asset)||{}).asset || aiFindAsset(ans.q) || ctx.asset;
+  const n = a && a.name;
+  const by = {
+    owner:      n ? [`What policies apply to ${n}?`, `What breaks if I change ${n}?`] : ["Which assets have no owner?"],
+    policy:     n ? [`What columns does ${n} have?`, `Who owns ${n}?`] : [],
+    impact:     n ? [`Who owns ${n}?`, `What policies apply to ${n}?`] : [],
+    schema:     n ? [`Draft a description for ${n}`, `What policies apply to ${n}?`] : [],
+    asset:      n ? [`What breaks if I change ${n}?`, `Draft a description for ${n}`] : [],
+    coverage:   ["Which assets have no steward?", "Which assets have no description?"],
+    sensitivity:["Which assets have no classification?", "What policies apply to customers?"],
+    quality:    ["Which assets have no description?", "What breaks if I change orders?"],
+    search:     n ? [`Tell me about ${n}`] : [],
+  }[ans.intent] || [];
+  return by.filter(x=>x.toLowerCase()!==String(ans.q||"").toLowerCase()).slice(0,3);
 };
 
 // ── Suggested prompts, keyed to what the user is looking at ───────────────────
@@ -55617,6 +55462,54 @@ const CP_TOOL_ICON = {
   "classification.find":"tag", "policy.evaluate":"policies", "lineage.impact":"lineage",
   "glossary.lookup":"glossary", "quality.status":"quality", "coverage.gaps":"shield",
   "owner.lookup":"steward",
+  "space.list":"bot", "answer.resolve":"glossary", "answer.project":"shield",
+  "query.run":"tableIc", "docs.retrieve":"catalog",
+};
+
+// A data answer inside the dock. It keeps only the answer's identity and
+// re-projects on every render, so switching to a lesser role can never leave a
+// more privileged result on screen (the lesson Data Ask learned the hard way).
+const CPDataBlock = ({b, role, onNav, onToast, onAsk}) => {
+  const st = useDA();
+  const {roleCfg} = useRole();
+  const me = roleCfg && roleCfg.email ? roleCfg.email.split("@")[0] : "alex.rivera";
+  const [trust,setTrust]   = useState(false);
+  const [report,setReport] = useState(false);
+  const [edited,setEdited] = useState(null);
+  const S = st.settings;
+  const space = daSpace(b.spaceId);
+  const ans = daReproject({ansId:b.ansId, q:b.q}, role);
+  const msg = {q:b.q, ansId:b.ansId, ans, editedSql:edited};
+  const manage = () => onNav && onNav("settings",{section:"dataask"});
+  return (
+    <div style={{marginTop:8}}>
+      {space&&(
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
+          <span style={{color:DA_MODE_COLOR(space.mode),display:"flex"}}>{Ic.bot(11)}</span>
+          Answered from <b style={{color:T.textSub,fontWeight:600}}>{space.name}</b>
+          <DAModeTag mode={space.mode}/>
+          <span>· indexed {space.indexed}</span>
+          {st.verified.some(v=>v.answerId===b.ansId && v.status==="Verified") && (
+            <span style={{display:"inline-flex",alignItems:"center",gap:3,color:T.green,fontWeight:700}}>{Ic.check(10)} Verified answer</span>
+          )}
+        </div>
+      )}
+      <DAAnswerCard msg={msg} space={space} role={role} me={me}
+        canEditSql={S.access.editSql.includes(role)} canPublish={S.access.publish.includes(role)}
+        onToast={onToast} onNav={onNav} onAsk={onAsk} onManage={manage}
+        onTrust={()=>setTrust(true)} onReport={()=>setReport(true)}
+        onEditSql={setEdited}
+        onSaveVerified={()=>{
+          daPatch({verified:[{id:"v"+Date.now(), q:b.q, space:b.spaceId, answerId:b.ansId,
+            owner:me, verified:daNow().slice(0,10), uses:0, status:"Verified",
+            note:"Promoted from a Copilot conversation."}, ..._da.verified]});
+          onToast("Saved as a Verified Answer");
+        }}/>
+      {trust&&<DATrustDrawer ans={ans} space={space} role={role} onClose={()=>setTrust(false)} onNav={onNav}/>}
+      {report&&<DAReportDrawer msg={msg} space={space} me={me} onClose={()=>setReport(false)}
+        onDone={m=>{setReport(false); onToast(m);}}/>}
+    </div>
+  );
 };
 
 const CPTrace = ({trace}) => {
@@ -55744,7 +55637,7 @@ const CPProposal = ({p, role, onDone, onToast, onNav}) => {
   );
 };
 
-const CPBlock = ({b, role, onNav, onToast}) => {
+const CPBlock = ({b, role, onNav, onToast, onAsk}) => {
   if(b.kind==="text") return <div style={{marginTop:6}}><DAText size={12.5}>{b.text}</DAText></div>;
 
   if(b.kind==="assets") return (
@@ -55905,100 +55798,234 @@ const CPBlock = ({b, role, onNav, onToast}) => {
   );
 
   if(b.kind==="proposal") return <CPProposal p={b.proposal} role={role} onToast={onToast} onNav={onNav}/>;
+
+  if(b.kind==="data") return <CPDataBlock b={b} role={role} onNav={onNav} onToast={onToast} onAsk={onAsk}/>;
+
+  if(b.kind==="teach") return <CPTeach q={b.q} role={role} onToast={onToast}/>;
   return null;
 };
 
+// An unanswerable question is a vocabulary gap somebody owns. Route it to the
+// Review Queue instead of leaving the asker at a dead end.
+const CPTeach = ({q, role, onToast}) => {
+  const [sent,setSent] = useState(false);
+  const me = aiMe(role);
+  return (
+    <div style={{marginTop:9,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      {sent
+        ? <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,color:T.green,fontWeight:600}}>{Ic.check(12)} Sent to the Review Queue</span>
+        : <Btn small ghost onClick={()=>{
+            daAddReview({id:"rv"+Date.now(), kind:"Missing synonym", q, space:"—", by:me, at:daNow(),
+              assignee:"alex.rivera", status:"Open", sev:"Low",
+              note:"The Copilot could not ground this in the graph or in any published Answer Space.", fixes:["addSynonym","dismiss"]});
+            setSent(true); onToast && onToast("Sent to a steward — tracked in Settings › Copilot › Review Queue");
+          }}>Ask a steward to teach this</Btn>}
+    </div>
+  );
+};
+
 // ── The dock ──────────────────────────────────────────────────────────────────
-const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
-  const {role} = useRole();
-  const [msgs, setMsgs]   = useState([]);
-  const [q, setQ]         = useState("");
-  const [busy, setBusy]   = useState(false);
-  const [live, setLive]   = useState([]);     // tool chips revealed while "thinking"
-  const [w, setW]         = useState(432);
-  const endRef            = useRef(null);
-  const dragRef           = useRef(null);
+const CP_IC_HISTORY = (s=13) => <svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.8v2.6h2.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/><path d="M8 5.2V8l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>;
+const CP_IC_EXPAND  = (s=13, wide) => wide
+  ? <svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M6.5 2.5v4h-4M9.5 13.5v-4h4M6.5 6.5L2 2M9.5 9.5L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  : <svg width={s} height={s} viewBox="0 0 16 16" fill="none"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+
+const CPHeadBtn = ({title, onClick, on, children}) => (
+  <button onClick={onClick} title={title}
+    style={{width:26,height:26,borderRadius:7,background:on?T.bgActive:"transparent",border:`1px solid ${on?T.borderLight:T.border}`,color:on?T.text:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{children}</button>
+);
+
+const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
+  const {role}  = useRole();
+  const st      = useDA();
+  const [msgs, setMsgs]       = useState([]);
+  const [threads, setThreads] = useState([]);   // earlier conversations, newest first
+  const [view, setView]       = useState("chat"); // chat | history
+  const [scope, setScope]     = useState("auto"); // auto | metadata | <space id>
+  const [q, setQ]             = useState("");
+  const [busy, setBusy]       = useState(false);
+  const [live, setLive]       = useState([]);     // tool chips revealed while "thinking"
+  const [w, setW]             = useState(440);
+  const [wide, setWide]       = useState(false);
+  const endRef                = useRef(null);
+  const dragRef               = useRef(null);
+  const inputRef              = useRef(null);
+
+  const spaces   = st.spaces.filter(daAskable);
+  const scopeSp  = scope!=="auto" && scope!=="metadata" ? daSpace(scope) : null;
+  const canData  = st.settings.access.ask.includes(role);
 
   useEffect(()=>{ if(endRef.current) endRef.current.scrollIntoView({behavior:"smooth"}); },[msgs,busy,live]);
+  useEffect(()=>{ if(open && inputRef.current) setTimeout(()=>inputRef.current && inputRef.current.focus(), 60); },[open]);
 
   // Drag the left edge to resize. Small thing; it is the difference between a
   // widget and a panel people keep open all day.
   useEffect(()=>{
-    const move = e => { if(dragRef.current) setW(Math.min(760, Math.max(360, window.innerWidth - e.clientX))); };
+    const move = e => { if(dragRef.current){ setWide(false); setW(Math.min(960, Math.max(360, window.innerWidth - e.clientX))); } };
     const up   = () => { dragRef.current = false; document.body.style.userSelect=""; };
     window.addEventListener("mousemove",move); window.addEventListener("mouseup",up);
     return ()=>{ window.removeEventListener("mousemove",move); window.removeEventListener("mouseup",up); };
   },[]);
 
-  const send = (text) => {
+  // Put the current conversation away before starting or restoring another.
+  const shelve = (list) => {
+    if(!list.length) return;
+    const first = (list.find(m=>m.who==="user")||{}).text || "Conversation";
+    setThreads(t=>[{id:"cp"+Date.now(), title:first.length>52?first.slice(0,52)+"…":first, msgs:list, scope, at:daNow(),
+      credits:list.reduce((n,m)=>n+((m.ans&&m.ans.credits)||0),0)}, ...t].slice(0,25));
+  };
+  const newChat = () => { shelve(msgs); setMsgs([]); setView("chat"); };
+
+  const send = (text, scopeOverride) => {
     const question = (text!=null?text:q).trim();
     if(!question || busy) return;
-    setQ(""); setMsgs(m=>[...m,{who:"user", text:question}]);
+    const sc = scopeOverride || scope;
+    setView("chat"); setQ(""); setMsgs(m=>[...m,{who:"user", text:question}]);
     setBusy(true); setLive([]);
     // Run the router immediately, then reveal its trace at reading speed so the
     // user sees which governed tools were used before the answer lands.
-    const ans = aiAsk(question, {...ctx, role});
+    const ans = aiAsk(question, {...ctx, role, scope:sc});
+    const blk = ans.blocks.find(b=>b.kind==="data");
+    if(blk){
+      const p = blk.ansId ? daReproject({ansId:blk.ansId, q:question}, role) : null;
+      daLog({at:daNow(), who:aiMe(role), space:(p&&p.denied)?"—":(blk.spaceId||"—"), q:question,
+        mode:p?p.mode:((daSpace(blk.spaceId)||{}).mode||"structured"),
+        decision:p?p.decision:"Not understood",
+        masked:p&&p.willMask?p.masked.length:0,
+        filtered:p&&p.filters?p.filters.reduce((n,f)=>n+f.n,0):0,
+        credits:p?p.credits:3, ms:p?Math.round(parseFloat(p.latency)*1000):1100});
+    }
     ans.trace.forEach((t,i)=>setTimeout(()=>setLive(l=>[...l,t.name]), 130 + i*150));
     setTimeout(()=>{ setMsgs(m=>[...m,{who:"ai", ans}]); setBusy(false); setLive([]); },
                260 + ans.trace.length*150);
   };
 
-  const sug = aiSuggest({...ctx, role});
+  // Another screen asked for the dock: "Ask in Copilot" on an Answer Space, or a
+  // question handed over with its scope.
+  useEffect(()=>{
+    if(!req) return;
+    if(req.spaceId){ setScope(req.spaceId); }
+    setView("chat");
+    if(req.q) setTimeout(()=>send(req.q, req.spaceId), 80);
+  },[req && req.at]);
+
+  const sug      = aiSuggest({...ctx, role});
+  const dataSug  = (scopeSp ? [scopeSp] : spaces).flatMap(sp=>((sp.samples&&sp.samples.length?sp.samples:DA_STARTERS[sp.id])||[]).slice(0,scopeSp?4:1)).slice(0,4);
+  const used     = msgs.reduce((n,m)=>n+((m.ans&&m.ans.credits)||0),0);
+  const balance  = st.settings.cost.balance - used;
+  const width    = wide ? Math.min(980, (typeof window!=="undefined"?window.innerWidth:1200) - 72) : w;
+  const drift    = scopeSp ? daDrift(scopeSp) : null;
+
+  const selStyle = {padding:"3px 7px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:10.5,fontWeight:600,cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:210};
+
+  const SugBtn = ({s, icon}) => (
+    <button onClick={()=>send(s)} className="row-hover"
+      style={{width:"100%",textAlign:"left",padding:"8px 10px",marginBottom:5,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:8}}>
+      <span style={{color:T.textMuted,display:"flex",flexShrink:0}}>{icon}</span><span>{s}</span>
+    </button>
+  );
 
   return (
     <div className={open?"slideInRight":""} style={{
-      position:"fixed",top:0,right:0,bottom:0,width:w,zIndex:900,
+      position:"fixed",top:0,right:0,bottom:0,width,zIndex:900,
       background:T.bgSurface,borderLeft:`1px solid ${T.border}`,
       display:open?"flex":"none",flexDirection:"column",
-      boxShadow:"-18px 0 48px rgba(0,0,0,.14)"}}>
+      boxShadow:"-18px 0 48px rgba(0,0,0,.14)",transition:"width .18s ease"}}>
 
       <div onMouseDown={()=>{dragRef.current=true; document.body.style.userSelect="none";}}
         style={{position:"absolute",left:-3,top:0,bottom:0,width:6,cursor:"col-resize",zIndex:2}}/>
 
       {/* Head */}
-      <div style={{flexShrink:0,padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9}}>
+      <div style={{flexShrink:0,padding:"11px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:7}}>
         <div style={{width:26,height:26,borderRadius:7,background:T.violetDim,border:`1px solid ${T.violet}35`,display:"flex",alignItems:"center",justifyContent:"center",color:T.violet,flexShrink:0}}>{Ic.bot(14)}</div>
-        <div style={{flex:1,minWidth:0}}>
+        <div style={{flex:1,minWidth:0,marginLeft:2}}>
           <div style={{fontSize:13,fontWeight:700,color:T.text}}>Copilot</div>
-          <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Talk to your metadata — grounded, policy-aware</div>
+          <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Ask your data and your metadata — grounded, policy-aware</div>
         </div>
-        {msgs.length>0&&(
-          <button onClick={()=>setMsgs([])} title="New conversation"
-            style={{width:26,height:26,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.plus(12)}</button>
-        )}
-        <button onClick={onClose} style={{width:26,height:26,borderRadius:7,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(14)}</button>
+        <CPHeadBtn title={`History${threads.length?` · ${threads.length}`:""}`} on={view==="history"} onClick={()=>setView(v=>v==="history"?"chat":"history")}>{CP_IC_HISTORY(13)}</CPHeadBtn>
+        <CPHeadBtn title="New conversation" onClick={newChat}>{Ic.plus(12)}</CPHeadBtn>
+        <CPHeadBtn title={wide?"Dock to the side":"Expand"} on={wide} onClick={()=>setWide(x=>!x)}>{CP_IC_EXPAND(13, wide)}</CPHeadBtn>
+        <button onClick={onClose} title="Close (Esc)" style={{width:26,height:26,borderRadius:7,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(14)}</button>
       </div>
 
-      {/* Context chip — the reason this is a dock and not a page */}
-      <div style={{flexShrink:0,padding:"7px 14px",borderBottom:`1px solid ${T.border}`,background:T.bg,display:"flex",alignItems:"center",gap:7}}>
+      {/* Context + scope — the reason this is a dock and not a page */}
+      <div style={{flexShrink:0,padding:"7px 14px",borderBottom:`1px solid ${T.border}`,background:T.bg,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
         <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Context</span>
         {ctx.asset ? (
-          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.borderLight}`,fontSize:10.5,color:T.text,fontWeight:600,minWidth:0}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.borderLight}`,fontSize:10.5,color:T.text,fontWeight:600,minWidth:0,maxWidth:180}}>
             <ServiceIcon service={ctx.asset.service} size={11}/>
             <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ctx.asset.name}</span>
-            <span style={{color:T.textMuted,fontWeight:400}}>{ctx.asset.type}</span>
           </span>
         ) : (
-          <span style={{fontSize:10.5,color:T.textSub,fontWeight:600}}>{(NAV_TITLE[ctx.nav]||ctx.nav||"Platform")} · whole catalog</span>
+          <span style={{fontSize:10.5,color:T.textSub,fontWeight:600}}>{(NAV_TITLE[ctx.nav]||ctx.nav||"Platform")}</span>
         )}
         <div style={{flex:1}}/>
-        <span title="Answers are projected through your role before they reach you"
-          style={{fontSize:9.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>as {(ROLES_CONFIG[role]||{}).label}</span>
+        <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Answer from</span>
+        <select value={scope} onChange={e=>setScope(e.target.value)} style={selStyle}
+          title="Auto sends governance questions to the metadata graph and data questions to the published Answer Spaces">
+          <option value="auto">Auto · metadata + data</option>
+          <option value="metadata">Metadata only</option>
+          <optgroup label="One Answer Space">
+            {st.spaces.map(sp=>(
+              <option key={sp.id} value={sp.id} disabled={!daAskable(sp)}>{sp.name}{daAskable(sp)?"":` — ${daEffStatus(sp).toLowerCase()}`}</option>
+            ))}
+          </optgroup>
+        </select>
       </div>
 
-      {/* Thread */}
+      {drift&&drift.n>0&&(
+        <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:7,padding:"7px 14px",background:T.amber+"12",borderBottom:`1px solid ${T.amber}44`}}>
+          <span style={{color:T.amber,display:"flex",flexShrink:0,marginTop:1}}>{Ic.alert(11)}</span>
+          <span style={{fontSize:10.5,color:T.textSub,lineHeight:1.5}}>
+            {scopeSp.name} has not indexed {drift.detail.replace(/ since .*/,"")} — a question about them comes back empty rather than wrong.
+          </span>
+        </div>
+      )}
+
+      {/* History */}
+      {view==="history" ? (
+        <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
+          <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>EARLIER CONVERSATIONS</div>
+          {threads.length===0 && <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+            Nothing yet. Start a new conversation and the current one is kept here. History is retained for {st.settings.privacy.retainDays} days.
+          </div>}
+          {threads.map(t=>(
+            <button key={t.id} className="row-hover" onClick={()=>{
+                shelve(msgs); setMsgs(t.msgs); setScope(t.scope||"auto");
+                setThreads(x=>x.filter(y=>y.id!==t.id)); setView("chat");
+              }}
+              style={{width:"100%",textAlign:"left",padding:"9px 10px",marginBottom:5,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,cursor:"pointer",fontFamily:"inherit"}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+              <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>
+                {t.at} · {t.msgs.filter(m=>m.who==="user").length} question{t.msgs.filter(m=>m.who==="user").length===1?"":"s"}{t.credits?` · ${t.credits} cr`:""}
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+
+      /* Thread */
       <div style={{flex:1,overflowY:"auto",padding:"14px"}}>
+        <div style={{maxWidth:wide?820:"none",margin:"0 auto"}}>
         {msgs.length===0&&!busy&&(
           <div>
             <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>
-              I read the governed graph — ownership, classifications, policy, lineage, quality, glossary and coverage — and I can draft the governance work that follows.
-              I do not read your rows; for questions about the data itself, use <b style={{color:T.text}}>Data Ask</b>.
+              Ask me about the <b style={{color:T.text}}>governed graph</b> — ownership, classifications, policy, lineage, quality, glossary and coverage — and I will draft the governance work that follows.
+              Ask me about the <b style={{color:T.text}}>data</b> and I answer from a published Answer Space, with masking and row policy applied for your role and a trace of why.
             </div>
-            <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"16px 0 7px"}}>TRY</div>
-            {sug.map(s=>(
-              <button key={s} onClick={()=>send(s)} className="row-hover"
-                style={{width:"100%",textAlign:"left",padding:"8px 10px",marginBottom:5,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>{s}</button>
-            ))}
+            {canData && dataSug.length>0 && (<>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"16px 0 7px"}}>ABOUT YOUR DATA{scopeSp?` · ${scopeSp.name.toUpperCase()}`:""}</div>
+              {dataSug.map(s=><SugBtn key={s} s={s} icon={Ic.tableIc(12)}/>)}
+            </>)}
+            {scope!=="metadata" && !canData && (
+              <div style={{marginTop:14,padding:"9px 11px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11,color:T.textSub,lineHeight:1.55}}>
+                Your role can ask about metadata only. An Admin grants data questions in Settings › Copilot › Access.
+              </div>
+            )}
+            {!scopeSp && (<>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"16px 0 7px"}}>ABOUT YOUR METADATA</div>
+              {sug.map(s=><SugBtn key={s} s={s} icon={Ic.catalog(12)}/>)}
+            </>)}
           </div>
         )}
 
@@ -56011,9 +56038,21 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
               <span style={{color:T.violet,display:"flex"}}>{Ic.bot(12)}</span>
               <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>COPILOT</span>
-              {m.ans.intent!=="none"&&<span style={{fontSize:10,color:T.textMuted}}>· {m.ans.headline}</span>}
+              <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,letterSpacing:".03em",
+                background:m.ans.intent==="data"?T.blue+"18":T.violetDim, color:m.ans.intent==="data"?T.blue:T.violet,
+                border:`1px solid ${(m.ans.intent==="data"?T.blue:T.violet)}35`}}>{m.ans.intent==="data"?"DATA":"METADATA"}</span>
+              {m.ans.intent!=="none"&&<span style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>· {m.ans.headline}</span>}
             </div>
-            {m.ans.blocks.map((b,j)=><CPBlock key={j} b={b} role={role} onNav={onNav} onToast={onToast}/>)}
+            {m.ans.blocks.map((b,j)=><CPBlock key={j} b={b} role={role} onNav={onNav} onToast={onToast} onAsk={send}/>)}
+            {m.ans.intent!=="data" && i===msgs.length-1 && aiFollowups(m.ans, ctx).length>0 && (
+              <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:10}}>
+                {aiFollowups(m.ans, ctx).map(f=>(
+                  <button key={f} onClick={()=>send(f)}
+                    style={{padding:"4px 10px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11,color:T.textSub}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.violet+"88"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>{f}</button>
+                ))}
+              </div>
+            )}
             <CPTrace trace={m.ans.trace}/>
           </div>
         ))}
@@ -56022,7 +56061,7 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
           <div style={{marginTop:12}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
               <span style={{color:T.violet,display:"flex"}}>{Ic.bot(12)}</span>
-              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>READING THE GRAPH…</span>
+              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>WORKING THROUGH THE GOVERNED TOOLS…</span>
             </div>
             {live.map((t,i)=>(
               <div key={i} className="fadeIn" style={{display:"flex",alignItems:"center",gap:7,padding:"4px 0"}}>
@@ -56033,14 +56072,16 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
           </div>
         )}
         <div ref={endRef}/>
+        </div>
       </div>
+      )}
 
       {/* Composer */}
       <div style={{flexShrink:0,padding:"10px 14px",borderTop:`1px solid ${T.border}`,background:T.bg}}>
-        <div style={{display:"flex",gap:7,alignItems:"flex-end"}}>
-          <textarea value={q} onChange={e=>setQ(e.target.value)} rows={1}
+        <div style={{display:"flex",gap:7,alignItems:"flex-end",maxWidth:wide?820:"none",margin:"0 auto"}}>
+          <textarea ref={inputRef} value={q} onChange={e=>setQ(e.target.value)} rows={1}
             onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }}
-            placeholder={ctx.asset?`Ask about ${ctx.asset.name}…`:"Ask about ownership, policy, lineage, coverage…"}
+            placeholder={scopeSp ? `Ask ${scopeSp.name}…` : ctx.asset ? `Ask about ${ctx.asset.name}, or about your data…` : "Ask about your data, ownership, policy, lineage…"}
             style={{flex:1,resize:"none",maxHeight:110,padding:"8px 11px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12.5,fontFamily:"inherit",lineHeight:1.5,outline:"none"}}
             onInput={e=>{ e.target.style.height="auto"; e.target.style.height=Math.min(110,e.target.scrollHeight)+"px"; }}/>
           <button onClick={()=>send()} disabled={!q.trim()||busy}
@@ -56048,8 +56089,17 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast}) => {
             {Ic.arrowRight(14)}
           </button>
         </div>
-        <div style={{fontSize:9.5,color:T.textMuted,marginTop:6,lineHeight:1.45}}>
-          Reads metadata only — never your rows. Every answer is projected through your role and logged.
+        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:9.5,color:T.textMuted,marginTop:6,lineHeight:1.45,maxWidth:wide?820:"none",marginLeft:"auto",marginRight:"auto"}}>
+          <span>As <b style={{color:T.textSub,fontWeight:600}}>{(ROLES_CONFIG[role]||{}).label}</b></span>
+          <span style={{color:T.border}}>·</span>
+          <span>Metadata answers are free</span>
+          <span style={{color:T.border}}>·</span>
+          <span title="Solix credits left for data questions">{balance.toLocaleString()} credits left{used?` (${used} this conversation)`:""}</span>
+          <span style={{color:T.border}}>·</span>
+          <span>Every answer is logged</span>
+          <div style={{flex:1}}/>
+          <button onClick={()=>onNav&&onNav("settings",{section:"dataask"})}
+            style={{background:"transparent",border:"none",padding:0,cursor:"pointer",fontSize:9.5,color:T.accent,fontWeight:600,fontFamily:"inherit"}}>Manage Answer Spaces</button>
         </div>
       </div>
     </div>
@@ -56061,7 +56111,7 @@ const NAV_TITLE = {
   home:"Home", stewardship:"Workspace", catalog:"Catalog", quality:"Data Quality",
   policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer",
   glossary:"Glossary", semanticlayer:"Semantic Layer", domains:"Domains",
-  dataproducts:"Data Products", dataask:"Data Ask", settings:"Settings",
+  dataproducts:"Data Products", dataask:"Copilot", settings:"Settings",
   aipipelines:"Pipelines",
 };
 
@@ -56070,7 +56120,7 @@ const CopilotBtn = () => {
   const cp = useContext(CopilotCtx);
   if(!cp) return null;
   return (
-    <button onClick={cp.toggle} title="Copilot — talk to your metadata (Ctrl+K)"
+    <button onClick={cp.toggle} title="Copilot — ask your data and your metadata (Ctrl+K)"
       style={{display:"flex",alignItems:"center",gap:6,height:32,padding:"0 11px",borderRadius:8,
               background:cp.open?T.violetDim:"transparent",border:`1px solid ${cp.open?T.violet+"45":T.border}`,
               color:cp.open?T.violet:T.textSub,cursor:"pointer",fontSize:11.5,fontWeight:600,fontFamily:"inherit",transition:"all .15s"}}
@@ -58062,6 +58112,8 @@ export default function App(){
   const [deepLinkTermId, setDeepLinkTermId] = useState(null);
   const [deepLinkConnName, setDeepLinkConnName] = useState(null);
   const [cpOpen,   setCpOpen]   = useState(false);
+  const [cpReq,    setCpReq]    = useState(null);   // {q?, spaceId?, at} handed to the dock by another screen
+  const [settingsKey, setSettingsKey] = useState(0);
 
   const roleCfg    = ROLES_CONFIG[role] || ROLES_CONFIG.analyst;
   const allowedNav = roleCfg.nav || [];
@@ -58070,6 +58122,10 @@ export default function App(){
   const handleLogout = () => { setLoggedIn(false); setNav("home"); setAssetStack([]); };
   const handleRole   = (r) => { setRole(r); setNav("home"); setAssetStack([]); };
   const handleNav    = (id, payload=null) => {
+    // Data Ask is no longer a page: asking happens in the Copilot, and what used
+    // to live on the page (Answer Spaces and their review) lives in Settings.
+    if(id==="dataask"){ id="settings"; payload={...(payload||{}), section:"dataask"}; }
+    if(id==="settings"){ _settingsJump = payload?.section || null; setSettingsKey(k=>k+1); }
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
     // Catalog deep-links to a specific asset (not just the list) when we know its name.
@@ -58128,13 +58184,12 @@ export default function App(){
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav}/>;
-      case "dataask":       return <DataAskView onToast={showToast} onNav={handleNav}/>;
       case "observability": return <QualityView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
       case "integrations":  return <IntegrationsView onToast={showToast} deepLinkConnName={deepLinkConnName}/>;
       case "profile":       return <ProfileView onToast={showToast}/>;
-      case "settings":      return <SettingsView onToast={showToast}/>;
+      case "settings":      return <SettingsView key={settingsKey} onToast={showToast}/>;
       default:              return <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/>;
     }
   };
@@ -58152,7 +58207,10 @@ export default function App(){
     <TagProvider>
     <RoleCtx.Provider value={{role, roleCfg, onSwitch:handleRole, onLogout:handleLogout}}>
     <NavCtx.Provider value={handleNav}>
-    <CopilotCtx.Provider value={{open:cpOpen, toggle:()=>setCpOpen(o=>!o), close:()=>setCpOpen(false)}}>
+    <CopilotCtx.Provider value={{open:cpOpen, toggle:()=>setCpOpen(o=>!o), close:()=>setCpOpen(false),
+      show:()=>setCpOpen(true),
+      // Open the dock scoped to an Answer Space, optionally asking straight away.
+      ask:(req)=>{ setCpReq({...req, at:Date.now()}); setCpOpen(true); }}}>
     <ThemeCtx.Provider value={{isDark,toggleTheme}}>
       <style key={`theme-style-${themeKey}`}>{makeG(T)}</style>
       <div key={`theme-root-${themeKey}`} style={{display:"flex",height:"100vh",background:T.bg,overflow:"hidden"}}>
@@ -58162,7 +58220,7 @@ export default function App(){
         </main>
         <DocBot open={helpOpen} setOpen={setHelpOpen}/>
         {/* Mounted unconditionally so the conversation survives navigation. */}
-        <CopilotDock open={cpOpen} onClose={()=>setCpOpen(false)} onNav={handleNav} onToast={showToast}
+        <CopilotDock open={cpOpen} onClose={()=>setCpOpen(false)} onNav={handleNav} onToast={showToast} req={cpReq}
           ctx={{nav, asset: assetStack.length>0 ? assetStack[assetStack.length-1] : null}}/>
       </div>
       {toast&&<Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
