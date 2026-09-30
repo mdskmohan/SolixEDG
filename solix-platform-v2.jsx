@@ -13575,7 +13575,7 @@ let _pm2Hooked = false;
 let _pm2Deep = null;
 
 
-const PolicyManager2View = ({onToast, onNav}) => {
+const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const st = usePM2();
   const enfReqs = useEnfApprovals();
   const statusReqs = useStatusReqs();
@@ -13596,6 +13596,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
   const [ed, setEd]           = useState(null);    // create / edit a policy
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
+  const [addFw, setAddFw]     = useState(null);    // {q} — the Add framework drawer (adopt a regulation / create your own)
+  const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
   const [q, setQ]             = useState("");
   const [polQ, setPolQ]       = useState("");
   const [plusOpen, setPlusOpen] = useState(false);
@@ -13953,44 +13955,42 @@ const PolicyManager2View = ({onToast, onNav}) => {
     </div>);
   const readinessLabel = s => s>=80?"On Track":s>=50?"Partial":"Needs Attention";
 
-  // ═════ FRAMEWORKS — the original Regulations tab ═════
-  const fwCard = fw => {
-    const s=fwScore(fw); const sc=scoreColor(s); const tc=fwTypeColor(fw.type);
+  // ═════ FRAMEWORKS — one stacked list of what you track, Add framework at the end ═════
+  const fwRow = fw => {
+    const s=fwScore(fw); const sc=scoreColor(s); const tc=fw.custom?T.accent:fwTypeColor(fw.type);
     const inIdx=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
-    const gaps=inIdx.filter(i=>artState(fw,i)!=="met").length; const outCt=fw.arts.filter(a=>a.out).length;
+    const met=inIdx.filter(i=>artState(fw,i)==="met").length;
     const polCt=livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false)).length;
     return (
-      <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer",transition:"all .15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor=tc;e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.12)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
-        <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10}}>
-          <div><div style={{fontSize:15,fontWeight:800,color:T.text,marginBottom:2,letterSpacing:"-0.3px"}}>{fw.name}</div>
-            <div style={{fontSize:10.5,color:T.textMuted,lineHeight:1.4}}>{fw.custom?`Custom · ${fw.type}`:`${regMeta(fw.id).jurisdiction||""} · ${regMeta(fw.id).industry||fw.type}`}</div></div>
-          <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}25`,flexShrink:0,whiteSpace:"nowrap"}}>{readinessLabel(s)}</span>
+      <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 18px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=tc;e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.10)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+        <div style={{width:36,height:36,borderRadius:9,background:`${tc}14`,border:`1px solid ${tc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={tc} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg></div>
+        <div style={{flex:"1 1 220px",minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,fontWeight:700,color:T.text}}>{fw.name}</span>{fw.custom&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,letterSpacing:"0.04em"}}>CUSTOM</span>}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fw.custom?(fw.fullName||`${fw.type} framework`):regMeta(fw.id).fullName}{!fw.custom&&regMeta(fw.id).jurisdiction?` · ${regMeta(fw.id).jurisdiction}`:""}</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-          <div style={{flex:1,height:4,borderRadius:2,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${s}%`,height:"100%",background:sc,borderRadius:2}}/></div>
-          <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{s}%</span>
+        <div style={{width:210,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${s}%`,height:"100%",background:sc,borderRadius:3}}/></div>
+            <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,width:36,textAlign:"right"}}>{s}%</span></div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{met} of {inIdx.length} articles met</div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:10,fontSize:10.5,color:T.textMuted,flexWrap:"wrap"}}>
-          <span>{inIdx.length} in-scope articles</span>
-          {gaps>0&&<span style={{color:T.amber,fontWeight:600}}>· {gaps} not met</span>}
-          {polCt>0&&<span style={{color:T.green,fontWeight:600}}>· {polCt} {polCt===1?"policy":"policies"}</span>}
-          {outCt>0&&<span>· {outCt} outside scope</span>}
-        </div>
+        <div style={{width:90,flexShrink:0,fontSize:11.5,color:T.textSub,textAlign:"right"}}>{polCt} polic{polCt===1?"y":"ies"}</div>
+        <span style={{width:118,flexShrink:0,textAlign:"center",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}25`,whiteSpace:"nowrap"}}>{readinessLabel(s)}</span>
+        <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(12)}</span>
       </div>);
   };
   const renderFrameworks = () => {
     const ql = q.toLowerCase(); const match = f => !ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
-    const tracked = adoptedFws.filter(match); const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(match);
+    const tracked = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)].filter(match);
     const scores = adoptedFws.map(fwScore);
     const noPolicy = adoptedFws.reduce((n,f)=>n+f.arts.filter((a,i)=>!a.out&&artState(f,i)==="uncovered").length,0);
-    const groups = [...["Privacy","Healthcare","Financial","Security"].map(g=>({label:g, fws:tracked.filter(f=>!f.custom&&f.type===g), color:fwTypeColor(g)})), {label:"Your frameworks", fws:tracked.filter(f=>f.custom), color:T.accent, custom:true}];
     return (
       <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
           {searchBox(q, setQ, "Search frameworks…")}
-          <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} frameworks tracked · {avail.length} more available to adopt</span>
-          <span style={{marginLeft:"auto",display:"flex",gap:6}}><Btn small ghost onClick={()=>setApOpen(true)}>Approval policies</Btn><Btn small icon={Ic.plus(11)} onClick={()=>openFwEditor(null)}>New framework</Btn></span>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} framework{adoptedFws.length===1?"":"s"} tracked</span>
         </div>
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
           {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose}].map(x=>(
@@ -13999,30 +13999,14 @@ const PolicyManager2View = ({onToast, onNav}) => {
               <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{x.label}</div>
             </div>))}
         </div>
-        <div style={{fontSize:11,color:T.textMuted,marginBottom:20}}>Data governance readiness — not a legal compliance certification. Articles outside EDG's scope (identity, incident response, vendor management, legal disclosure) are excluded from these numbers.</div>
-        {groups.map(g=> (g.fws.length||g.custom) ? (
-          <div key={g.label} style={{marginBottom:22}}>
-            {groupHead(g.label, g.fws.length, g.color)}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>
-              {g.fws.map(fwCard)}
-              {g.custom&&<div onClick={()=>openFwEditor(null)} style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"14px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.textMuted,fontSize:12,minHeight:80}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>{Ic.plus(12)} New framework</div>}
-            </div>
-          </div>) : null)}
-        {avail.length>0&&<div style={{marginBottom:22}}>
-          {groupHead("Available to adopt", avail.length, T.textMuted)}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:8}}>
-            {avail.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))]; const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>PM2_TPL[t].rules.forEach(r=>k[r.type]++));
-              const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
-              return (<div key={fw.id} style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",gap:6}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
-                  <div><div onClick={()=>setSelFw(fw.id)} style={{fontSize:15,fontWeight:800,color:T.text,letterSpacing:"-0.3px",cursor:"pointer"}}>{fw.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{m.jurisdiction} · {m.industry||fw.type}</div></div>
-                  <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>Not adopted</span>
-                </div>
-                <div style={{fontSize:10.5,color:T.textMuted}}>{fw.arts.filter(a=>!a.out).length} in-scope articles · {tids.length} policies · rules: <span style={{color:typeColor("validation")}}>{k.validation} validation</span> · <span style={{color:typeColor("enforcement")}}>{k.enforcement} enforcement</span> · <span style={{color:typeColor("attestation")}}>{k.attestation} attestation</span>{reused>0&&<span style={{color:T.green,fontWeight:600}}> · {reused} already running</span>}</div>
-                <div style={{display:"flex",gap:6,marginTop:2}}><Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt</Btn><Btn small ghost onClick={()=>setSelFw(fw.id)}>Read the articles</Btn></div>
-              </div>); })}
-          </div></div>}
+        <div style={{fontSize:11,color:T.textMuted,marginBottom:18}}>Data governance readiness — not a legal compliance certification. Articles outside EDG's scope (identity, incident response, vendor management, legal disclosure) are excluded from these numbers.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {tracked.map(fwRow)}
+          {ql&&!tracked.length&&<div style={{fontSize:12,color:T.textMuted,padding:"8px 2px"}}>No tracked framework matches “{q}”.</div>}
+          <div onClick={()=>setAddFw({q:""})} style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"16px 18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:T.textMuted,fontSize:12.5,fontWeight:600}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+            {Ic.plus(12)} Add framework <span style={{fontWeight:400}}>— adopt a regulation or create your own</span></div>
+        </div>
       </div>
     );
   };
@@ -14032,7 +14016,6 @@ const PolicyManager2View = ({onToast, onNav}) => {
     const fw = pm2Fw(selFw); if(!fw) return renderFrameworks();
     const m = regMeta(fw.id); const adopted = !!st.adopted[fw.id]; const s = fwScore(fw); const sc = scoreColor(s); const tc = fwTypeColor(fw.type);
     const idx = fw.arts.map((a,i)=>i); const inIdx = idx.filter(i=>!fw.arts[i].out); const outIdx = idx.filter(i=>fw.arts[i].out);
-    const governing = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id));
     const meta = fw.custom ? [["Kind",fw.type],["Applies where",fw.jurisdiction||"—"],["Created",st.adopted[fw.id]?.at||fw.created||"—"],["Owner",st.adopted[fw.id]?.owner||fw.owner]]
       : [["Jurisdiction",m.jurisdiction],["Industry",m.industry],["Effective Date",m.effective],["Max Penalty",m.penalty]];
     const circle = st2 => { const ok=st2==="met"; const c=ok?T.green:["uncovered","findings","rejected"].includes(st2)?T.rose:T.amber;
@@ -14092,8 +14075,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
             const items = [
               line(noPol.length, `article${noPol.length>1?"s have":" has"} no policy — ${fw.custom?"create or map one below":"review the framework's policies to switch one on"}`, ()=>fw.custom?null:startAdopt(fw.id,2), T.rose),
               line(drafts.length, `polic${drafts.length>1?"ies are drafts":"y is a draft"} — the owner submits ${drafts.length>1?"them":"it"}`, ()=>openPolicy(drafts[0].id), T.textSub),
-              line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
-              line(tables, `table${tables>1?"s wait":" waits"} for its owner to approve enforcement`, ()=>{setTab("approvals");setSelFw(null);}, T.amber),
+              line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>onNav&&onNav("stewardship"), T.amber),
+              line(tables, `table${tables>1?"s wait":" waits"} for its owner to approve enforcement`, ()=>onNav&&onNav("stewardship"), T.amber),
               line(forms.length, `attestation form${forms.length>1?"s are":" is"} due — ${forms.map(x=>pm2Assignee(x.p,x.r)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")} fills ${forms.length>1?"them":"it"} in`, ()=>openPolicy(forms[0].p.id, fw.id, "activity"), typeColor("attestation")),
               line(inRev.length, `submitted form${inRev.length>1?"s wait":" waits"} for review`, ()=>openPolicy(inRev[0].p.id, fw.id, "activity"), T.amber),
               line(finds, `open finding${finds>1?"s":""} — stewards fix them or request exceptions`, ()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}, T.rose),
@@ -14102,19 +14085,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
               <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>What's left to reach Met</div>
               {items.length?items:<div style={{fontSize:12.5,color:T.green,padding:"10px 14px",background:`${T.green}0c`,border:`1px solid ${T.green}30`,borderRadius:9}}>Nothing — every in-scope article is met.</div>}
             </div>; })()}
-          {governing.length>0&&<div style={{marginBottom:20}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Governing Policies ({governing.length})</div>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {governing.map(p=>{ const h=polHealth(p,fw); return (
-                <div key={p.id} onClick={()=>openPolicy(p.id, fw.id)} style={{padding:"10px 14px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                  <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>{p.name}</div>
-                    <div style={{fontSize:11,color:T.textMuted,display:"flex",alignItems:"center",gap:6}}>{typeDots(p)} {p.rules.length} rule{p.rules.length===1?"":"s"} · {p.source==="regulation"?"Prebuilt policy":"Custom policy"} · owner {p.owner}{p.status==="Active"?` · ${h.label}`:""}</div></div>
-                  {pill(statusColor(p.status), p.status)}{Ic.chevRight(12)}
-                </div>); })}
-            </div></div>}
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Data governance scope ({inIdx.length})</div>
+            <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:10}}><span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Scope — articles ({inIdx.length})</span><span style={{fontSize:11,color:T.textMuted}}>Each article → the policies that satisfy it → the rules that count. Open an article to add a policy or a rule.</span></div>
             {inIdx.map(i=>{
               const art=fw.arts[i]; const stt=adopted?artState(fw,i):"uncovered"; const pols=polsForArt(fw,i,true);
               const recs=(art.c||[]).map(pm2ParseRef).filter(({tid})=>!pols.some(p=>p.id===pm2TplPolicyId(tid,fw)));
@@ -14131,6 +14103,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
                         <span style={{fontSize:13,color:T.text,lineHeight:1.5,fontWeight:700}}>{art.t}</span>
                       </div>
                       <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{art.ask}</div>
+                      {!open&&!pols.length&&adopted&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>No policy yet — open it to add one</div>}
                       {!open&&pols.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:6}}><span style={{fontSize:10.5,color:T.textMuted}}>→</span>{pols.map(p=><span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text}}>{typeDots(p)}{p.name}</span>)}</div>}
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
@@ -14147,10 +14120,11 @@ const PolicyManager2View = ({onToast, onNav}) => {
                           <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>POLICY</span>
                           <span onClick={()=>openPolicy(p.id, fw.id)} style={{fontSize:12.5,fontWeight:700,color:T.text,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>{p.name}</span>
                           <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
+                          <span style={{fontSize:11,color:T.textMuted}}>owner {p.owner}</span>
                           {mine&&pill(pend?T.amber:T.accent, pend?"Mapping awaiting approval":"Your interpretation")}
                           {p.status!=="Active"&&pill(statusColor(p.status), p.status)}
                           <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{p.status==="Active"?h.label:""}</span>
-                          {(fw.custom||mine)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Detach</button>}
+                          {(fw.custom||mine||link.added)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Detach</button>}
                         </div>
                         {rules.map(r=>{ const rh=p.status==="Active"?ruleHealth(p,r,fw):null; const as=r.type==="attestation"?pm2AttState(p,r):null;
                           const canFillR = as&&p.status==="Active"&&["due","overdue","rejected","soon"].includes(as.state)&&(pm2Assignee(p,r)===me||isAdmin);
@@ -14175,10 +14149,9 @@ const PolicyManager2View = ({onToast, onNav}) => {
                       Recommended policy <b style={{color:T.textSub}}>{PM2_TPL[tid].name}</b> ({(keys?PM2_TPL[tid].rules.filter(r=>keys.includes(r.key)):PM2_TPL[tid].rules).map(r=>PM2_TYPE_META[r.type].label.toLowerCase()).join(" + ")}) — {adopted?"switched off when adopted":"created when you adopt"}
                       {adopted&&!fw.custom&&<button onClick={()=>startAdopt(fw.id,2)} style={{marginLeft:8,fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>Switch on</button>}</div>)}
                     {!pols.length&&!recs.length&&<div style={{fontSize:12,color:T.rose,marginBottom:8}}>Nothing covers this article yet.</div>}
-                    {adopted&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                      <button onClick={()=>openEditor(null,{articles:[{fw:fw.id,i,ok:!!fw.custom,rules:null}], name:`${art.t} — ${fw.name} custom`, ruleType:art.expect&&art.expect!=="outside"?art.expect:"validation"})} style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>+ New custom policy for this article</button>
-                      {mappable.length>0&&<select value="" onChange={e=>{const id=e.target.value; if(id){ updPol(id,p=>addHist({...p,articles:[...p.articles,{fw:fw.id,i,ok:!!fw.custom,rules:null}]},`Mapped to ${fw.name} ${art.ref}`)); setTimeout(pm2Sync,0); onToast(fw.custom?"Mapped":"Mapped — it counts once the mapping is approved","success"); }}} style={{...selStyle,fontSize:11.5}}>
-                        <option value="">Use an existing policy here…</option>{mappable.map(p=><option key={p.id} value={p.id}>{p.name} ({p.source==="regulation"?"prebuilt":"custom"})</option>)}</select>}
+                    {adopted&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginTop:2}}>
+                      <button onClick={()=>setAddPol({fw:fw.id,i,sel:[],q:""})} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"5px 12px",borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}50`,color:T.accent,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add policy</button>
+                      <button onClick={()=>openArticleRule(fw,i,pols)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"5px 12px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>
                       {!fw.custom&&<span style={{fontSize:11,color:T.textMuted}}>A custom policy on a regulation article counts once {ap.mapping.approver} approves the mapping.</span>}
                     </div>}
                   </div>}
@@ -14613,7 +14586,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
     };
     return (
       <div>
-        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>Who approves what in Policy Manager 2. The requests themselves land in each approver's <b>Workspace</b> inbox, next to everything else they approve.</div>
+        {!settingsOnly&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>Who approves what in Policy Manager 2. The requests themselves land in each approver's <b>Workspace</b> inbox, next to everything else they approve.</div>}
         {ro&&<div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Only an admin can change these.</div>}
         <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
           {apCard("Policy activation & changes", "A new policy, or a change to an active one, goes live only after approval. A change runs as a new version; the old one keeps running until it's approved.", <>
@@ -14822,6 +14795,100 @@ const PolicyManager2View = ({onToast, onNav}) => {
       {["validation","enforcement","attestation"].map(k=><button key={k} onClick={()=>onAdd(k)} style={{flex:"1 1 150px",padding:"10px",borderRadius:9,border:`1px dashed ${typeColor(k)}60`,background:`${typeColor(k)}08`,color:typeColor(k),fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.plus(11)} {PM2_TYPE_META[k].label} rule</button>)}
     </div>);
 
+  // ═════ ARTICLE ACTIONS — Add policy (pick from the Policies section) · Add rule ═════
+  const sideDrawer = ({title, sub, body, foot, onClose, width}) => (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+    <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:width||620,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+      <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+          <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}</div></div>
+        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>{body}</div>
+      {foot&&<div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>{foot}</div>}
+    </div></>);
+  const usedBy = p => [...new Set(p.articles.filter(a=>a.ok!==false).map(a=>pm2Fw(a.fw)?.name).filter(Boolean))];
+  const renderAddPolicy = () => {
+    const fw = pm2Fw(addPol.fw); const art = fw.arts[addPol.i];
+    const onArt = new Set(polsForArt(fw, addPol.i, true).map(p=>p.id));
+    const ql = addPol.q.toLowerCase();
+    const list = livePols.filter(p=>!onArt.has(p.id)).filter(p=>!ql||[p.name, p.purpose, p.owner].join(" ").toLowerCase().includes(ql));
+    const toggle = id => setAddPol(x=>({...x, sel:x.sel.includes(id)?x.sel.filter(y=>y!==id):[...x.sel,id]}));
+    const add = () => {
+      addPol.sel.forEach(id=>updPol(id, p=>addHist({...p, articles:[...p.articles, {fw:fw.id, i:addPol.i, ok:!!fw.custom||p.source==="regulation", rules:null, added:true}]}, `Linked to ${fw.name} ${art.ref}`)));
+      setTimeout(pm2Sync,0);
+      const pend = !fw.custom && addPol.sel.some(id=>st.policies.find(p=>p.id===id)?.source==="custom");
+      onToast(`${addPol.sel.length} polic${addPol.sel.length===1?"y":"ies"} added to ${art.ref}${pend?` — custom ones count once ${ap.mapping.approver} approves the mapping`:""}`,"success");
+      setExpArt(x=>({...x,[fw.id+addPol.i]:true})); setAddPol(null);
+    };
+    return sideDrawer({title:"Add policy", sub:`${fw.name} ${art.ref} · ${art.t}`, onClose:()=>setAddPol(null),
+      body:<>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:12}}><span style={{color:T.textMuted,fontWeight:600}}>The article asks: </span>{art.ask}</div>
+        <div style={{marginBottom:12}}>{searchBox(addPol.q, v=>setAddPol(x=>({...x,q:v})), "Search policies…", 9999)}</div>
+        {list.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 2px"}}>{ql?"No policy matches.":"Every policy is already on this article."}</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {list.map(p=>{ const on=addPol.sel.includes(p.id); const ub=usedBy(p);
+            return (<label key={p.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgSurface,cursor:"pointer"}}>
+              <input type="checkbox" checked={on} onChange={()=>toggle(p.id)} style={{accentColor:T.accent,marginTop:2}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}><span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
+                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
+                  {p.status!=="Active"&&pill(statusColor(p.status), p.status)}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typeDots(p)} {p.rules.length} rule{p.rules.length===1?"":"s"} · owner {p.owner}{ub.length?` · already used by ${ub.join(", ")}`:" · not used by any framework yet"}</div>
+              </div>
+            </label>); })}
+        </div>
+        {!fw.custom&&<div style={{fontSize:11,color:T.textMuted,marginTop:12}}>Prebuilt policies count straight away. A custom policy on a regulation article counts once {ap.mapping.approver} approves the mapping.</div>}
+      </>,
+      foot:<>
+        <button onClick={()=>{ const i=addPol.i; setAddPol(null); openEditor(null,{articles:[{fw:fw.id,i,ok:!!fw.custom,rules:null}], name:`${art.t} — ${fw.name} custom`, ruleType:art.expect&&art.expect!=="outside"?art.expect:"validation"}); }} style={{marginRight:"auto",fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600,padding:0}}>Create a new policy instead</button>
+        <button onClick={()=>setAddPol(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+        {fBtn(addPol.sel.length?`Add ${addPol.sel.length} polic${addPol.sel.length===1?"y":"ies"}`:"Add", add, true, !addPol.sel.length)}
+      </>});
+  };
+  // Add rule from an article: pick which of its policies the rule joins, or start a new policy for the article.
+  const openArticleRule = (fw, i, pols) => {
+    const choices = pols.filter(p=>canEdit(p)&&p.status!=="Retired"&&!pendingReqOf(p)).map(p=>p.id);
+    setRuleEd({polId:choices[0]||"__new", isNew:true, rule:newRuleOfType("validation"), ctx:{fw:fw.id, i, choices}});
+  };
+  const createPolicyWithRule = (pv, rule) => {
+    const id = "p-cust-"+Date.now();
+    pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", name:pv.name, purpose:"", category:"", scope:pv.scope, domains:[], rules:[rule], articles:pv.articles, stewards:[], notify:["Owner","Steward"], owner:me, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created from ${pm2Fw(pv.articles[0].fw).name} ${pm2Fw(pv.articles[0].fw).arts[pv.articles[0].i].ref} with one ${rule.type} rule`}]}]}));
+    submitPolicy(id, "New policy"); setTimeout(pm2Sync,0);
+    setExpArt(x=>({...x,[pv.articles[0].fw+pv.articles[0].i]:true}));
+  };
+
+  // ═════ ADD FRAMEWORK — adopt a regulation from the catalogue, or create your own ═════
+  const renderAddFw = () => {
+    const ql = addFw.q.toLowerCase();
+    const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(f=>!ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql));
+    return sideDrawer({title:"Add framework", sub:"Adopt a regulation, or define your own standard.", width:680, onClose:()=>setAddFw(null),
+      body:<>
+        <div onClick={()=>{ setAddFw(null); openFwEditor(null); }} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:10,border:`1.5px dashed ${T.accent}60`,background:T.accentDim,cursor:"pointer",marginBottom:18}}>
+          <div style={{width:34,height:34,borderRadius:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.plus(14)}</div>
+          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>Create a custom framework</div><div style={{fontSize:11.5,color:T.textSub,marginTop:2}}>An internal standard, contract obligation or industry code — articles, policies and readiness, exactly like a regulation.</div></div>
+          {Ic.chevRight(12)}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Regulations ({avail.length})</span>
+          <span style={{marginLeft:"auto",flex:1,display:"flex",justifyContent:"flex-end"}}>{searchBox(addFw.q, v=>setAddFw(x=>({...x,q:v})), "Search regulations…", 260)}</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {avail.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))]; const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>PM2_TPL[t].rules.forEach(r=>k[r.type]++));
+            const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
+            return (<div key={fw.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"baseline",gap:8}}><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fw.name}</span><span style={{fontSize:11,color:T.textMuted}}>{m.jurisdiction}{m.industry?` · ${m.industry}`:""}</span></div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{fw.arts.filter(a=>!a.out).length} articles · {tids.length} policies · <span style={{color:typeColor("validation")}}>{k.validation} validation</span> · <span style={{color:typeColor("enforcement")}}>{k.enforcement} enforcement</span> · <span style={{color:typeColor("attestation")}}>{k.attestation} attestation</span>{reused>0&&<span style={{color:T.green,fontWeight:600}}> · {reused} already running</span>}</div>
+              </div>
+              <Btn small ghost onClick={()=>{ setAddFw(null); setSelFw(fw.id); }}>Read</Btn>
+              <Btn small variant="primary" onClick={()=>{ setAddFw(null); startAdopt(fw.id); }}>Adopt</Btn>
+            </div>); })}
+          {!avail.length&&<div style={{fontSize:12,color:T.textMuted}}>{ql?"No regulation matches.":"Every regulation in the catalogue is adopted."}</div>}
+        </div>
+      </>});
+  };
+
   // ═════ ADD / EDIT ONE RULE — the original's single-rule drawer ═════
   const openRuleEditor = (p, r, ctx) => {
     if(!canEdit(p)){ onToast(`Only ${p.owner} or a steward can change this policy`,"info"); return; }
@@ -14829,10 +14896,11 @@ const PolicyManager2View = ({onToast, onNav}) => {
     setRuleEd({polId:p.id, isNew:!r, rule: r ? JSON.parse(JSON.stringify(r)) : newRuleOfType("validation"), ctx});
   };
   const renderRuleEditor = () => {
-    const p = st.policies.find(x=>x.id===ruleEd.polId); if(!p) return null;
+    const fwA = ruleEd.ctx?.choices ? pm2Fw(ruleEd.ctx.fw) : null;
+    const p = ruleEd.polId==="__new" ? {id:"__new", name:`${fwA.arts[ruleEd.ctx.i].t} — ${fwA.name} custom`, status:"Draft", version:1, source:"custom", owner:me, stewards:[], scope:fwA.covers, domains:[], rules:[], articles:[{fw:fwA.id,i:ruleEd.ctx.i,ok:!!fwA.custom,rules:null}]} : st.policies.find(x=>x.id===ruleEd.polId); if(!p) return null;
     const r = ruleEd.rule; const locked = r.origin==="prebuilt"; const prob = ruleProblem(r);
     const setR = v => setRuleEd(x=>({...x, rule:v}));
-    const will = p.status==="Active" ? (ap.activation.autoValidation&&r.type==="validation" ? "The policy is active. A validation rule changes no data, so it goes live as soon as you save." : `The policy is active. Saving creates v${p.version+1}, which goes to ${pm2Approver(ap.activation.approver, me)} for approval; v${p.version} keeps running meanwhile.`) : "The policy is a draft — the rule is saved into it now.";
+    const will = p.id==="__new" ? `A new custom policy, “${p.name}”, is created with this rule and linked to ${fwA.name} ${fwA.arts[ruleEd.ctx.i].ref}. It goes to ${pm2Approver(ap.activation.approver, me)} for approval${ap.activation.autoValidation&&r.type==="validation"?" — or goes live at once, since it only validates":""}.` : p.status==="Active" ? (ap.activation.autoValidation&&r.type==="validation" ? "The policy is active. A validation rule changes no data, so it goes live as soon as you save." : `The policy is active. Saving creates v${p.version+1}, which goes to ${pm2Approver(ap.activation.approver, me)} for approval; v${p.version} keeps running meanwhile.`) : "The policy is a draft — the rule is saved into it now.";
     return (<>
       <div onClick={()=>setRuleEd(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
       <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:640,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
@@ -14842,6 +14910,11 @@ const PolicyManager2View = ({onToast, onNav}) => {
           <button onClick={()=>setRuleEd(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
+          {ruleEd.ctx?.choices&&<div style={{marginBottom:14}}><label style={lbl}>Add to policy</label>
+            <select value={ruleEd.polId} onChange={e=>setRuleEd(x=>({...x, polId:e.target.value}))} style={{...inp,background:T.bgSurface,cursor:"pointer"}}>
+              {ruleEd.ctx.choices.map(id=>{ const q=st.policies.find(x=>x.id===id); return <option key={id} value={id}>{q.name} ({q.source==="regulation"?"prebuilt":"custom"})</option>; })}
+              <option value="__new">+ New policy for this article</option></select>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The rule counts for {fwA.name} {fwA.arts[ruleEd.ctx.i].ref} through the policy it belongs to.</div></div>}
           {ruleEd.isNew&&<div style={{marginBottom:14}}><label style={lbl}>Rule type</label>{typeSeg(r, t=>setR(retype(r,t)), false)}<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{PM2_TYPE_META[r.type].hint}</div></div>}
           {ruleForm(r, setR, {locked, p})}
           <div style={{marginTop:16,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{will}{ruleEd.isNew&&p.articles.length>0?` A custom rule counts toward every article this policy satisfies (${p.articles.length}).`:""}</div>
@@ -14849,7 +14922,7 @@ const PolicyManager2View = ({onToast, onNav}) => {
         <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>
           {prob&&<span style={{fontSize:11,color:T.rose,marginRight:"auto"}}>{prob}</span>}
           <button onClick={()=>setRuleEd(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-          {fBtn(ruleEd.isNew?"Add rule":"Save rule", ()=>{ saveRule(p, r, ruleEd.isNew); setRuleEd(null); setPdTab("rules"); }, true, !!prob)}
+          {fBtn(ruleEd.isNew?"Add rule":"Save rule", ()=>{ if(p.id==="__new") createPolicyWithRule(p, r); else saveRule(p, r, ruleEd.isNew); setRuleEd(null); setPdTab("rules"); }, true, !!prob)}
         </div>
       </div></>);
   };
@@ -15147,6 +15220,9 @@ const PolicyManager2View = ({onToast, onNav}) => {
       onBack:()=>setF("step",Math.max(1,fwEd.step-1)), right: fwEd.step<3 ? continueBtn(()=>setF("step",fwEd.step+1), fwEd.step!==1||!!fwEd.name.trim()) : fBtn(fwEd.id?"Save framework":"Create framework", saveFw, true)});
   };
 
+  // Settings › Policy Approvals renders only the approval policies.
+  if(settingsOnly) return <div style={{maxWidth:760}}>{renderApprovalPolicies()}</div>;
+
   // ═════ PAGE — the original Policy Manager shell: breadcrumb, icon tab bar, content ═════
   const waiting = pm2StatusPending.filter(r=>r.kind!=="pm2attestdue").length + pm2EnfPending.length;
   const TAB_ICON = {
@@ -15184,6 +15260,8 @@ const PolicyManager2View = ({onToast, onNav}) => {
       {ed&&renderEditor()}
       {fwEd&&renderFwEditor()}
       {ruleEd&&renderRuleEditor()}
+      {addPol&&renderAddPolicy()}
+      {addFw&&renderAddFw()}
       {apOpen&&<>
         <div onClick={()=>setApOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
         <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
@@ -51203,6 +51281,7 @@ const SettingsView = ({onToast})=>{
     ]},
     {label:"Compliance", items:[
       {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable applicable compliance frameworks"},
+      {key:"policy_approvals", icon:"shield", label:"Policy Approvals",     desc:"Who approves policies, enforcement & attestations"},
     ]},
     {label:"Platform", items:[
       {key:"dataask",      icon:"bot",     label:"Copilot",              desc:"Answer Spaces, guardrails, privacy & credits"},
@@ -53311,6 +53390,12 @@ const SettingsView = ({onToast})=>{
                 </div>
               </div>
               <div style={{display:"flex",gap:8}}><button style={{padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Upgrade Plan</button><Btn ghost>Download Invoice</Btn></div>
+            </>}
+
+            {/* ══ POLICY APPROVALS (Policy Manager 2) ══ */}
+            {section==="policy_approvals"&&<>
+              <SettSH icon={Ic.shield(16)} title="Policy Approvals" desc="Who approves what in Policy Manager 2. Requests land in each approver's Workspace inbox."/>
+              <PolicyManager2View onToast={onToast} settingsOnly/>
             </>}
 
             {/* ══ GOVERNANCE ══ */}
