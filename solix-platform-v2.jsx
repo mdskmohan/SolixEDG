@@ -56509,24 +56509,21 @@ const aicContainer = a => (a.db||"").split(" / ").slice(0,2).join(" / ");
 const aicGlob = (pat) => new RegExp("^"+pat.trim().replace(/[.+?^${}()|[\]\\]/g,"\\$&").replace(/\*/g,".*")+"$","i");
 const aicPatterns = (txt) => (txt||"").split(",").map(x=>x.trim()).filter(Boolean).map(aicGlob);
 const aicClassifiable = () => ASSETS.filter(a=>(SCHEMA[a.name]||[]).length);
-const aicProfileAssets = (p) => {
-  const inc = aicPatterns(p.include), exc = aicPatterns(p.exclude);
-  return aicClassifiable().filter(a=>
-    (!p.connections.length || p.connections.includes(a.connectionLabel)) &&
-    (!p.containers.length  || p.containers.includes(aicContainer(a))) &&
-    (!p.objectTypes.length || p.objectTypes.includes(a.type)) &&
-    (!inc.length || inc.some(r=>r.test(a.name))) &&
-    !exc.some(r=>r.test(a.name)));
-};
+const aicProfileAssets = (p) => aicClassifiable().filter(a=>
+  (!p.connections.length || p.connections.includes(a.connectionLabel)) &&
+  (!p.containers.length  || p.containers.includes(aicContainer(a))) &&
+  (!(p.tables||[]).length || p.tables.includes(a.db)));
 const AIC_TAGS = [...new Set(AIC_DETECTORS.map(d=>d.tag))];
 const aicNewProfile = () => ({
   id:"prof_"+Date.now(), name:"", enabled:true,
-  connections:[], containers:[], objectTypes:[], include:"", exclude:"",
-  detectors: AIC_DETECTORS.map(d=>d.k), useDefaults:true,
-  tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
-  schedule:"ingest",
+  connections:[], containers:[], tables:[],
+  levels:{table:true, column:true},
+  mode:"existing", tags:["PII","PCI-DSS"],          // existing: recommend these · new: propose tags the taxonomy lacks
+  useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
+  schedule:null,                                     // the standard schedule object, set from the Schedule dialog
 });
-const AIC_SCHEDULES = {ingest:"On every ingest (new and changed columns)", daily:"Daily at 02:00", weekly:"Weekly, Sunday 02:00", manual:"Only when someone runs it"};
+const aicSchedOn = (p) => !!(p.schedule && p.schedule.enabled!==false && p.schedule.freq && p.schedule.freq!=="once");
+const aicSchedText = (p) => aicSchedOn(p) ? `Scheduled · ${contractScheduleShort(p.schedule)}` : "Manual only";
 
 const aicScan = (opts) => {
   const {tiers, domains, valueAllowed, assets, detectors} = opts;
@@ -56583,25 +56580,119 @@ const aicScan = (opts) => {
 
 // Every enabled profile, with the profile's own tiers and tags, under the
 // platform-wide data boundary. Off means off: no profile runs, nothing is read.
+// Existing tags without a column detector are recommended on TABLES from what the
+// table is about; tags with detectors (PII, PCI-DSS) also roll up from columns.
+const AIC_REGULATORY = ["GDPR","CCPA","DPDP"];
+const AIC_STOP = new Set(["data","domain","record","records","source","table","the","and","for","all","with","from","into","this","that"]);
+const aicWordsOf = (x) => (x||"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>2 && !AIC_STOP.has(w));
+const aicSlug = (x) => (x||"").toLowerCase().replace(/[^a-z0-9]+/g,"_");
+const aicTagDef = (name) => INITIAL_TAG_DEFS.find(t=>t.name===name) || null;
+// New-tag mode: concepts the taxonomy may be missing. Only proposed when no tag of
+// that name exists yet; accepting one creates it as a Draft tag.
+const AIC_NEW_COL = [
+  {tag:"Contact details", re:/(^|_)(email|eml|e_mail|phone|tel|mobile|msisdn|fax)($|_)/i, why:"a way to reach a person or company"},
+  {tag:"Location",        re:/(^|_)(address|addr|city|country|zip|postal|postcode|pcode|lat|latitude|lng|longitude|region|ship_to|geo)($|_)/i, why:"places something or someone on a map"},
+  {tag:"Monetary amount", re:/(^|_)(amount|amt|price|cost|revenue|salary|spend|balance|total|fee|tax|discount|margin|gmv)($|_)/i, why:"a money value — it needs a currency and rounding rules"},
+  {tag:"Status code",     re:/(^|_)(status|state|stage|lifecycle)($|_)/i, why:"a coded value from a fixed list"},
+];
+const AIC_NEW_TABLE = [
+  {tag:"Customer data",     re:/customer|(^|_)users?($|_)|account|member|client/i},
+  {tag:"Orders & sales",    re:/order|sale|transaction|invoice|purchase/i},
+  {tag:"Product analytics", re:/event|session|click|pageview|telemetry/i},
+  {tag:"Marketing",         re:/campaign|spend|attribution|promo/i},
+  {tag:"People data",       re:/employee|payroll|staff|(^|_)hr($|_)/i},
+  {tag:"Product catalog",   re:/product|sku|catalog/i},
+];
+
+const aicRunScan = (p, st) => {
+  const assets = aicProfileAssets(p);
+  const tiers = p.useDefaults ? st.settings.tiers : {
+    name: st.settings.tiers.name && p.tiers.name, value: st.settings.tiers.value && p.tiers.value, graph: st.settings.tiers.graph && p.tiers.graph};
+  const floor = p.useDefaults ? st.settings.minConfidence : p.minConfidence;
+  const out = [];
+  const taken = new Set([...INITIAL_TAG_DEFS.map(t=>t.name.toLowerCase()), ...(st.createdTags||[]).map(x=>x.toLowerCase())]);
+  if(p.mode==="new"){
+    assets.forEach(a=>{
+      if(p.levels.table){
+        const hay = `${a.name} ${a.description||""}`;
+        AIC_NEW_TABLE.filter(c=>!taken.has(c.tag.toLowerCase()) && c.re.test(hay)).slice(0,1).forEach(c=>{
+          const byName = c.re.test(a.name);
+          out.push({id:`n_${a.id}__${aicSlug(c.tag)}`, level:"table", kind:"proposed", newTag:true, assetId:a.id, asset:a, col:null, type:a.type,
+            tag:c.tag, det:null, detLabel:"New tag for the table", risk:"Low", conf: byName?0.82:0.72,
+            why:`${a.name} reads as ${c.tag.toLowerCase()}${byName?" from its name":" from its description"}, and your taxonomy has no tag for it yet.`,
+            tiers:[{t:"meaning", note: byName?`Table name "${a.name}"`:"Table description"}], valueRead:false});
+        });
+      }
+      if(p.levels.column){
+        (SCHEMA[a.name]||[]).forEach(col=>{
+          const c = AIC_NEW_COL.find(x=>!taken.has(x.tag.toLowerCase()) && x.re.test(col.name));
+          if(!c) return;
+          out.push({id:`n_${a.id}_${col.name}_${aicSlug(c.tag)}`, level:"column", kind:"proposed", newTag:true, assetId:a.id, asset:a, col:col.name, type:col.type,
+            desc:col.desc, tag:c.tag, det:null, detLabel:"New tag for the column", risk:"Low", conf:0.8,
+            why:`${col.name} is ${c.why}. Your taxonomy has no tag for this yet.`,
+            tiers:[{t:"meaning", note:`Column name "${col.name}"`}], valueRead:false});
+        });
+      }
+    });
+    return out.map(f=>({...f, floor}));
+  }
+  // existing-tag mode
+  const tags = p.tags || [];
+  const dets = AIC_DETECTORS.filter(d=>tags.includes(d.tag)).map(d=>d.k);
+  // Regulatory tags roll up from personal data, so PII is detected for them even when not chosen.
+  const needPII = p.levels.table && tags.some(t=>AIC_REGULATORY.includes(t));
+  const scanDets = [...new Set([...dets, ...(needPII ? AIC_DETECTORS.filter(d=>d.tag==="PII").map(d=>d.k) : [])])];
+  const colFind = scanDets.length ? aicScan({tiers, valueAllowed:st.settings.valueAllowed, assets, detectors:scanDets}) : [];
+  if(p.levels.column && dets.length) colFind.filter(f=>f.kind==="clear" || tags.includes(f.tag)).forEach(f=>out.push({...f, level:"column"}));
+  if(p.levels.table){
+    assets.forEach(a=>{
+      const cols = colFind.filter(f=>f.assetId===a.id && f.kind!=="clear");
+      const personal = cols.filter(f=>f.tag==="PII");
+      tags.forEach(tag=>{
+        const def = aicTagDef(tag);
+        let conf = 0, why = "", tier = "meaning", note = "";
+        const hits = cols.filter(f=>f.tag===tag);
+        if(hits.length){
+          conf = Math.min(0.95, 0.75 + 0.05*hits.length); tier = "rollup";
+          why = `${hits.length} column${hits.length>1?"s look":" looks"} like ${tag}: ${hits.slice(0,4).map(f=>f.col).join(", ")}.`;
+          note = `${hits.length} column${hits.length>1?"s":""} in this table`;
+        } else if(AIC_REGULATORY.includes(tag) && personal.length){
+          conf = 0.72; tier = "rollup";
+          why = `Holds personal data (${personal.slice(0,3).map(f=>f.col).join(", ")}). ${tag} applies if these people are in its jurisdiction — confirm before accepting.`;
+          note = "Personal data in this table";
+        } else if(!AIC_DETECTORS.some(d=>d.tag===tag)){
+          const tw = aicWordsOf(tag);
+          const dom = (a.domain||"").toLowerCase();
+          const aw = new Set([...aicWordsOf(a.name.replace(/_/g," ")), ...aicWordsOf(a.description)]);
+          if(tw.some(w=>w===dom)){ conf = 0.84; why = `${a.name} belongs to the ${a.domain} domain, which is what "${tag}" means.`; note = `Domain: ${a.domain}`; }
+          else { const m = tw.filter(w=>aw.has(w)); if(m.length){ conf = 0.74; why = `The table's name or description mentions "${m.join(", ")}", which matches "${tag}".`; note = `Matches "${m.join(", ")}"`; } }
+        }
+        if(!conf) return;
+        out.push({id:`t_${a.id}_${aicSlug(tag)}`, level:"table", kind:(a.tags||[]).includes(tag)?"confirmed":"proposed",
+          assetId:a.id, asset:a, col:null, type:a.type, tag, tagId:def&&def.id, det:null, detLabel:"Table-level tag",
+          risk: def&&def.category==="sensitivity" ? "High" : def&&def.category==="regulatory" ? "Medium" : "Low",
+          conf, why, tiers:[{t:tier, note}], valueRead:false});
+      });
+    });
+  }
+  return out.map(f=>({...f, floor}));
+};
+
+// Every enabled run that has completed at least once (results come from a job,
+// not from saving a definition). A job computes its own run with onlyIds.
 const aicScanAll = (st, onlyIds) => {
   if(!st.settings.enabled) return [];
   const byId = new Map();
-  st.profiles.filter(p=>p.enabled && (!onlyIds || onlyIds.includes(p.id))).forEach(p=>{
-    const tiers = p.useDefaults ? st.settings.tiers : {
-      name:  st.settings.tiers.name  && p.tiers.name,
-      value: st.settings.tiers.value && p.tiers.value,
-      graph: st.settings.tiers.graph && p.tiers.graph};
-    aicScan({tiers, valueAllowed:st.settings.valueAllowed, assets:aicProfileAssets(p), detectors:p.detectors})
-      .forEach(f=>{
+  st.profiles.filter(p=>p.enabled && (onlyIds ? onlyIds.includes(p.id) : (st.jobs||[]).some(j=>j.runId===p.id && j.status==="complete")))
+    .forEach(p=>{
+      aicRunScan(p, st).forEach(f=>{
         const key = f.id || `c_${f.assetId}_${f.col}`;
-        const floor = p.useDefaults ? st.settings.minConfidence : p.minConfidence;
         const prev = byId.get(key);
-        if(!prev){ byId.set(key, {...f, profiles:[p.id], floor}); return; }
-        // Two profiles on one column: keep the stronger reading, credit both.
+        if(!prev){ byId.set(key, {...f, profiles:[p.id]}); return; }
         const better = (f.kind!=="clear" && prev.kind==="clear") || (f.conf||0) > (prev.conf||0);
-        byId.set(key, {...(better?f:prev), profiles:[...prev.profiles, p.id], floor:Math.min(prev.floor, floor)});
+        byId.set(key, {...(better?f:prev), profiles:[...prev.profiles, p.id], floor:Math.min(prev.floor, f.floor)});
       });
-  });
+    });
   return [...byId.values()];
 };
 const aicProfileName = (st, id) => (st.profiles.find(p=>p.id===id)||{}).name || "Removed profile";
@@ -56656,14 +56747,14 @@ let _aicState = {
   // Every execution of a run is a background job — the same record Settings ›
   // Background Jobs shows. Results live on the findings; a job carries counts only.
   jobs:[
-    {id:"job-4127", runId:"prof_all", trigger:"After ingest · Snowflake DWH", by:"scheduler", status:"complete", at:"2026-09-28 02:14",
+    {id:"job-4127", runId:"prof_all", trigger:"Scheduled · daily", by:"scheduler", status:"complete", at:"2026-09-28 02:14",
      progress:100, phase:"Complete", ms:41200, assets:30, cols:184, proposed:21, confirmed:41, clear:122,
      log:[{lvl:"info",msg:"Job queued — Personal & card data — all sources"},{lvl:"info",msg:"Started · 30 objects in scope"},{lvl:"ok",msg:"Scanned 30 objects"},{lvl:"ok",msg:"Complete · 184 columns · 21 proposals"}]},
     {id:"job-4102", runId:"prof_stage", trigger:"Scheduled · weekly", by:"scheduler", status:"failed", at:"2026-09-27 02:00",
      progress:12, phase:"Failed", ms:6100, assets:0, cols:0, proposed:0, confirmed:0, clear:0,
      error:"Snowflake DWH: warehouse COMPUTE_WH is suspended and the service account is not allowed to resume it.",
-     log:[{lvl:"info",msg:"Job queued — Staging schemas — card numbers"},{lvl:"info",msg:"Connecting to Snowflake DWH"},{lvl:"err",msg:"Warehouse COMPUTE_WH is suspended — resume refused (insufficient privileges)"},{lvl:"err",msg:"Job failed after 6.1s · nothing was scanned"}]},
-    {id:"job-4088", runId:"prof_all", trigger:"After ingest · PostgreSQL Prod", by:"scheduler", status:"complete", at:"2026-09-21 02:09",
+     log:[{lvl:"info",msg:"Job queued — Snowflake finance — card numbers"},{lvl:"info",msg:"Connecting to Snowflake DWH"},{lvl:"err",msg:"Warehouse COMPUTE_WH is suspended — resume refused (insufficient privileges)"},{lvl:"err",msg:"Job failed after 6.1s · nothing was scanned"}]},
+    {id:"job-4088", runId:"prof_all", trigger:"Scheduled · daily", by:"scheduler", status:"complete", at:"2026-09-21 02:09",
      progress:100, phase:"Complete", ms:38900, assets:29, cols:174, proposed:24, confirmed:38, clear:105,
      log:[{lvl:"info",msg:"Job queued — Personal & card data — all sources"},{lvl:"ok",msg:"Complete · 174 columns · 24 proposals"}]},
     {id:"job-4051", runId:"prof_all", trigger:"Manual", by:"priya.nair", status:"complete", at:"2026-09-14 11:24",
@@ -56671,17 +56762,22 @@ let _aicState = {
      log:[{lvl:"info",msg:"Job queued — Personal & card data — all sources"},{lvl:"ok",msg:"Complete · 74 columns · 18 proposals"}]},
   ],
   findings:null,           // populated by the first scan
+  createdTags:[],          // tags created by accepting a new-tag suggestion
   profiles:[
     {id:"prof_all", name:"Personal & card data — all sources", enabled:true,
-     connections:[], containers:[], objectTypes:[], include:"", exclude:"*_tmp, *_bak",
-     detectors: AIC_DETECTORS.map(d=>d.k), useDefaults:true,
-     tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:"ingest",
+     connections:[], containers:[], tables:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
+     useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
+     schedule:{freq:"daily", time:"02:00", tz:"UTC", enabled:true},
      owner:"priya.nair", created:"2026-08-31"},
-    {id:"prof_stage", name:"Staging schemas — card numbers", enabled:false,
-     connections:["Snowflake DWH"], containers:[], objectTypes:["Table"], include:"stg_*, raw_*", exclude:"",
-     detectors:["card"], useDefaults:false,
-     tiers:{name:true, value:true, graph:false}, minConfidence:0.85, schedule:"weekly",
+    {id:"prof_stage", name:"Snowflake finance — card numbers", enabled:false,
+     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:false, column:true}, mode:"existing", tags:["PCI-DSS"],
+     useDefaults:false, tiers:{name:true, value:true, graph:false}, minConfidence:0.85,
+     schedule:{freq:"weekly", day:"sunday", time:"02:00", tz:"UTC", enabled:true},
      owner:"dev.patel", created:"2026-09-10"},
+    {id:"prof_new", name:"Commerce — find missing business tags", enabled:true,
+     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:true, column:true}, mode:"new", tags:[],
+     useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
+     owner:"maya.chen", created:"2026-09-29"},
   ],
 };
 const _aicSubs = new Set();
@@ -56700,7 +56796,7 @@ const aicApplied = () => Object.entries(_aicState.decisions).filter(([,d])=>d.ve
 const aicDecide = (finding, verdict, by) => aicSet(st=>{
   const prev = st.decisions[finding.id];
   const stats = {...st.stats};
-  const bump = (k, field, n) => { stats[k] = {...stats[k], [field]: Math.max(0, stats[k][field] + n)}; };
+  const bump = (k, field, n) => { if(!k || !stats[k]) return; stats[k] = {...stats[k], [field]: Math.max(0, stats[k][field] + n)}; };
   if(prev && prev.verdict!==verdict){                       // a changed mind corrects both counters
     bump(finding.det, prev.verdict==="accepted"?"accepted":"rejected", -1);
   }
@@ -56763,6 +56859,8 @@ let _bgJobJump = null;   // job id → Settings › Background Jobs, drawer open
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
 const AIC_TIER_META = {
+  rollup: {label:"Columns", color:"#7c3aed", title:"Rolled up from what was found in the table's columns"},
+  meaning:{label:"Meaning", color:"#0d9488", title:"Matched on what the table or column name means — reads no data"},
   name: {label:"Name",  color:"#9090a8", title:"Column name matched a pattern. Reads no data — and proves nothing on its own."},
   value:{label:"Value", color:"#0284c7", title:"Profiled value shapes were inspected. Requires data access."},
   graph:{label:"Graph", color:"#7c3aed", title:"Inherited from a referenced column that is already classified. EDG's own signal."},
@@ -56795,7 +56893,7 @@ const AICEvidence = ({f, onClose, onNav}) => {
         style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
         <div style={{flexShrink:0,padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9}}>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{f.asset.name}.{f.col}</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{f.asset.name}{f.col?`.${f.col}`:""} <span style={{fontSize:11,fontWeight:600,color:T.textMuted}}>· {f.col?"column":"table"}{f.newTag?" · new tag":""}</span></div>
             <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{f.asset.connectionLabel||f.asset.service} · {f.type}</div>
           </div>
           <AIConf conf={f.conf}/>
@@ -57438,10 +57536,14 @@ const AICJobPill = ({j}) => {
   );
 };
 const aicScopeText = (p) => [p.connections.length?p.connections.join(", "):"All connections",
-  p.containers.length?`${p.containers.length} schema${p.containers.length>1?"s":""}`:null,
-  p.objectTypes.length?p.objectTypes.join(", "):null,
-  p.include?`only ${p.include}`:null, p.exclude?`skip ${p.exclude}`:null].filter(Boolean).join(" · ");
-const aicRunTags = (p) => [...new Set(p.detectors.map(k=>aicDet(k).tag))];
+  p.containers.length?`${p.containers.length} database${p.containers.length>1?"s / schemas":" / schema"}`:null,
+  (p.tables||[]).length?`${p.tables.length} table${p.tables.length>1?"s":""}`:null].filter(Boolean).join(" · ");
+const aicLevelText = (p) => p.levels.table && p.levels.column ? "Tables and columns" : p.levels.table ? "Tables only" : "Columns only";
+const aicHasRun = (st, id) => st.jobs.some(j=>j.runId===id && j.status==="complete");
+const AICTagChips = ({p}) => p.mode==="new"
+  ? <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ New tags</span>
+  : <>{p.tags.slice(0,3).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}
+      {p.tags.length>3&&<span style={{fontSize:10,color:T.textMuted,alignSelf:"center"}}>+{p.tags.length-3}</span>}</>;
 const aicViewJob = (onNav, id) => { _bgJobJump = id; onNav && onNav("settings",{section:"bg_jobs"}); };
 
 const AICWorkspace = ({onToast, onNav}) => {
@@ -57459,6 +57561,21 @@ const AICWorkspace = ({onToast, onNav}) => {
   const [fDet, setFDet]   = useState("all");
   const [fTier, setFTier] = useState("all");
   const [sel, setSel]     = useState(new Set());
+  const [fTag, setFTag]   = useState("all");
+  const [fLevel, setFLevel] = useState("all");
+  const [schedFor, setSchedFor] = useState(null);
+  const tagCtx = useTagCtx();
+  const [toApply, setToApply] = useState([]);   // new tags waiting for the taxonomy to hand back an id
+  useEffect(()=>{
+    if(!toApply.length || !tagCtx) return;
+    const left = toApply.filter(x=>{
+      const t = tagCtx.tagDefs.find(y=>y.name===x.name);
+      if(!t) return true;
+      if(x.assetId) tagCtx.applyTag(x.assetId, t.id, {origin:"ai", appliedBy:me});
+      return false;
+    });
+    if(left.length!==toApply.length) setToApply(left);
+  },[tagCtx&&tagCtx.tagDefs, toApply]);
 
   const findings = st.findings || [];
   useEffect(()=>{ if(!st.findings) aicSet(s=>({...s, findings: aicScanAll(s)})); },[st.findings]);
@@ -57469,13 +57586,28 @@ const AICWorkspace = ({onToast, onNav}) => {
   const decide = (f, verdict) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
     aicDecide(f, verdict, me);
-    if(verdict==="accepted")
-      pushNotif({category:"Classifications", type:"tag", title:`${f.tag} applied · ${f.asset.name}.${f.col}`,
-        body:`${me} accepted an AI classification at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
+    if(verdict==="accepted") applyAccepted(f);
+  };
+  // What "accept" does to the taxonomy: a table-level suggestion is applied to the
+  // asset; a new tag is first created as a Draft; a column-level one is recorded
+  // on the column's classification.
+  const applyAccepted = (f) => {
+    const where = f.col ? `${f.asset.name}.${f.col}` : f.asset.name;
+    if(f.newTag && tagCtx && !tagCtx.tagDefs.some(t=>t.name===f.tag) && !toApply.some(x=>x.name===f.tag)){
+      tagCtx.createTagDef({name:f.tag, category:"business", color:"#fbbf24", propagationMode:"hierarchy", governanceRequired:false,
+        managedBy:me, description:`Created from an AI Classification suggestion on ${where}.`});
+      aicSet(x=>({...x, createdTags:[...(x.createdTags||[]), f.tag]}));
+    }
+    if(!f.col){
+      if(f.newTag) setToApply(q=>[...q, {name:f.tag, assetId:f.assetId}]);
+      else if(tagCtx){ const t = tagCtx.tagDefs.find(y=>y.name===f.tag); if(t) tagCtx.applyTag(f.assetId, t.id, {origin:"ai", appliedBy:me}); }
+    }
+    pushNotif({category:"Classifications", type:"tag", title:`${f.tag} ${f.newTag?"created and ":""}applied · ${where}`,
+      body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
   const decideMany = (list, verdict) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
-    list.forEach(f=>aicDecide(f, verdict, me));
+    list.forEach(f=>{ aicDecide(f, verdict, me); if(verdict==="accepted") applyAccepted(f); });
     onToast(`${list.length} classification${list.length>1?"s":""} ${verdict}`,"success"); setSel(new Set());
   };
   const runNow = (p) => {
@@ -57483,13 +57615,19 @@ const AICWorkspace = ({onToast, onNav}) => {
     const id = aicStartJob(p.id, "Manual", me);
     onToast(id ? `Started ${id} — it runs in the background; you can leave this page` : `"${p.name}" already has a job running`, id?"success":"info");
   };
-  const saveRun = (p, andRun) => {
+  const saveRun = (p, how) => {
     const isNew = !st.profiles.some(x=>x.id===p.id);
     aicSet(x=>({...x, findings:null,
       profiles: isNew ? [...x.profiles, {...p, owner:me, created:"just now"}] : x.profiles.map(q=>q.id===p.id?p:q)}));
-    setEdit(null);
-    if(andRun){ setTimeout(()=>{ const id=aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Run created":"Run saved"} — ${id} started`,"success"); },0); setOpenRun(p.id); setTab("runs"); }
-    else onToast(isNew?`Run "${p.name}" created`:`Run "${p.name}" saved`,"success");
+    setEdit(null); setOpenRun(p.id); setTab("runs");
+    if(how==="run") setTimeout(()=>{ const id=aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Run created":"Run saved"} — ${id} started in the background`,"success"); },0);
+    else if(how==="schedule"){ setSchedFor(p.id); onToast(isNew?`Run "${p.name}" created — set its schedule`:`Run "${p.name}" saved`,"success"); }
+    else onToast(`Run "${p.name}" saved`,"success");
+  };
+  const saveSchedule = (runId, sched) => {
+    aicSet(x=>({...x, profiles:x.profiles.map(q=>q.id===runId?{...q, schedule:sched}:q)}));
+    setSchedFor(null);
+    onToast(sched && sched.enabled!==false && sched.freq!=="once" ? `Scheduled · ${contractScheduleShort(sched)}` : "Schedule saved","success");
   };
   const removeRun = (p) => {
     aicSet(x=>({...x, findings:null, profiles:x.profiles.filter(q=>q.id!==p.id)}));
@@ -57524,15 +57662,18 @@ const AICWorkspace = ({onToast, onNav}) => {
       <button onClick={()=>setEvid(f)} style={{flex:1,minWidth:0,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
         <div style={{display:"flex",alignItems:"center",gap:7}}>
           <ServiceIcon service={f.asset.service} size={13}/>
-          <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>{f.asset.name}.{f.col}</code>
+          <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>{f.asset.name}{f.col?`.${f.col}`:""}</code>
+          <span style={{fontSize:9.5,fontWeight:700,padding:"0 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{f.col?"Column":"Table"}</span>
         </div>
         <div style={{fontSize:10,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {f.type} · {f.asset.domain} · from {(f.profiles||[]).map(aicRunName).join(", ")}
+          {f.type} · {f.asset.domain} · {f.why}
         </div>
       </button>
-      <div style={{width:130,flexShrink:0,display:"flex",alignItems:"center",gap:5}}>
-        <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>
-        <span style={{fontSize:9.5,color:AIC_RISK_COLOR(f.risk),fontWeight:700}}>{f.risk}</span>
+      <div style={{width:150,flexShrink:0,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+        {f.newTag
+          ? <span title="Not in your taxonomy yet — accepting creates it as a Draft tag" style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ {f.tag}</span>
+          : <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>}
+        {f.newTag&&<span style={{fontSize:9.5,color:T.violet,fontWeight:700}}>New</span>}
       </div>
       <div style={{width:150,flexShrink:0,display:"flex",gap:3,flexWrap:"wrap"}}>{f.tiers.map(t=><AICTier key={t.t} t={t.t} title={t.note}/>)}</div>
       <div style={{width:60,flexShrink:0,textAlign:"right"}}><AIConf conf={f.conf} small/></div>
@@ -57548,7 +57689,7 @@ const AICWorkspace = ({onToast, onNav}) => {
     <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
       {withSel&&<input type="checkbox" checked={list.length>0&&sel.size===list.length}
         onChange={e=>setSel(e.target.checked?new Set(list.map(f=>f.id)):new Set())} style={{cursor:"pointer"}}/>}
-      <div style={{flex:1}}>COLUMN</div><div style={{width:130}}>SUGGESTED TAG</div><div style={{width:150}}>WHY</div>
+      <div style={{flex:1}}>TABLE / COLUMN</div><div style={{width:150}}>SUGGESTED TAG</div><div style={{width:150}}>BASED ON</div>
       <div style={{width:60,textAlign:"right"}}>SURE</div><div style={{width:130}}/>
     </div>
   );
@@ -57578,11 +57719,12 @@ const AICWorkspace = ({onToast, onNav}) => {
             {!run.enabled&&<span style={{fontSize:10,fontWeight:700,padding:"1.5px 8px",borderRadius:99,background:T.bgHover,color:T.textMuted,border:`1px solid ${T.border}`}}>Paused</span>}
             <AICJobPill j={lj}/>
           </div>
-          <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>Created by {run.owner||"—"} · {AIC_SCHEDULES[run.schedule]}</div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>Created by {run.owner||"—"} · {aicSchedText(run)}</div>
         </div>
         {canRun&&<div style={{display:"flex",gap:7}}>
           <Btn small ghost onClick={()=>togglePause(run)}>{run.enabled?"Pause":"Resume"}</Btn>
           <Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(run)))}>Edit</Btn>
+          <ScheduleButton small schedule={run.schedule} onClick={()=>setSchedFor(run.id)}/>
           <Btn small variant="primary" disabled={aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>
         </div>}
       </div>
@@ -57591,12 +57733,12 @@ const AICWorkspace = ({onToast, onNav}) => {
         <div style={{...box,padding:"11px 14px"}}>
           <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>What it scans</div>
           <div style={{fontSize:12,color:T.text,lineHeight:1.55}}>{aicScopeText(run)}</div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{assets.length} objects · {assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0)} columns</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{assets.length} tables & views · {assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0)} columns</div>
         </div>
         <div style={{...box,padding:"11px 14px"}}>
-          <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>Tags it looks for</div>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{aicRunTags(run).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}</div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{run.detectors.length} of {AIC_DETECTORS.length} detectors</div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>{run.mode==="new"?"Suggests":"Recommends"}</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}><AICTagChips p={run}/></div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>On {aicLevelText(run).toLowerCase()}</div>
         </div>
       </div>
 
@@ -57622,14 +57764,14 @@ const AICWorkspace = ({onToast, onNav}) => {
       <H2>Latest results</H2>
       {!mine.length ? (
         <div style={{...box,padding:"22px",textAlign:"center",fontSize:12,color:T.textMuted}}>
-          {!run.enabled ? "This run is paused, so it has no current results." : "No results yet — run it to see what it finds."}
+          {!run.enabled ? "This run is paused, so it has no current results." : aicHasRun(st, run.id) ? "The last job found nothing to suggest." : "No results yet — click Run now to see what it finds."}
         </div>
       ) : (<>
         <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
           <AICStat label="Waiting for review" value={minePending.length} color={minePending.length?T.amber:T.green}/>
           <AICStat label="Already classified" value={mine.filter(f=>f.kind==="confirmed").length} sub="signals agree with the catalog"/>
-          <AICStat label="Checked, nothing found" value={mine.filter(f=>f.kind==="clear").length}/>
-          <AICStat label="Columns checked" value={mine.length}/>
+          <AICStat label="Tables suggested" value={minePending.filter(f=>!f.col).length}/>
+          <AICStat label="Columns suggested" value={minePending.filter(f=>f.col).length}/>
         </div>
         {minePending.length>0 && <div style={box}><PropHead/>{minePending.map((f,i)=><PropRow key={f.id} f={f} i={i}/>)}</div>}
       </>)}
@@ -57658,7 +57800,7 @@ const AICWorkspace = ({onToast, onNav}) => {
     body = (
       <div style={box}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-          <div style={{flex:1}}>RUN</div><div style={{width:130}}>LOOKS FOR</div><div style={{width:130}}>WHEN</div><div style={{width:150}}>LAST JOB</div>
+          <div style={{flex:1}}>RUN</div><div style={{width:130}}>TAGS</div><div style={{width:130}}>SCHEDULE</div><div style={{width:150}}>LAST JOB</div>
           <div style={{width:70,textAlign:"right"}}>TO REVIEW</div><div style={{width:84}}/>
         </div>
         {st.profiles.map((p,i)=>{
@@ -57669,10 +57811,10 @@ const AICWorkspace = ({onToast, onNav}) => {
               style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer",opacity:p.enabled?1:.6}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}{!p.enabled&&<span style={{fontSize:10,color:T.textMuted,fontWeight:600}}> · Paused</span>}</div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicScopeText(p)} · {aicProfileAssets(p).length} objects</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicScopeText(p)} · {aicProfileAssets(p).length} tables & views · {aicLevelText(p).toLowerCase()}</div>
               </div>
-              <div style={{width:130,display:"flex",gap:4,flexWrap:"wrap"}}>{aicRunTags(p).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}</div>
-              <div style={{width:130,fontSize:11,color:T.textSub}}>{AIC_SCHEDULES[p.schedule].split(" (")[0]}</div>
+              <div style={{width:130,display:"flex",gap:4,flexWrap:"wrap"}}><AICTagChips p={p}/></div>
+              <div style={{width:130,fontSize:11,color:aicSchedOn(p)?T.textSub:T.textMuted}}>{aicSchedOn(p)?contractScheduleShort(p.schedule):"Manual only"}</div>
               <div style={{width:150}}><AICJobPill j={lj}/>{lj&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{lj.at}</div>}</div>
               <div style={{width:70,textAlign:"right",fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:toReview?T.amber:T.textMuted}}>{toReview}</div>
               <div style={{width:84,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
@@ -57685,8 +57827,9 @@ const AICWorkspace = ({onToast, onNav}) => {
       </div>
     );
   } else {
-    const byDet = {}; pending.forEach(f=>{ (byDet[f.det]=byDet[f.det]||[]).push(f); });
-    const shown = pending.filter(f=>(fRun==="all"||(f.profiles||[]).includes(fRun)) && (fDet==="all"||f.det===fDet) && (fTier==="all"||f.tiers.some(t=>t.t===fTier)));
+    const byTag = {}; pending.forEach(f=>{ (byTag[f.tag]=byTag[f.tag]||[]).push(f); });
+    const shown = pending.filter(f=>(fRun==="all"||(f.profiles||[]).includes(fRun)) && (fTag==="all"||f.tag===fTag)
+      && (fLevel==="all"||(fLevel==="table")===!f.col) && (fTier==="all"||f.tiers.some(t=>t.t===fTier)));
     body = pending.length===0 ? (
       <div style={{padding:"60px 20px",textAlign:"center"}}>
         <div style={{color:T.green,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.check(28)}</div>
@@ -57699,12 +57842,16 @@ const AICWorkspace = ({onToast, onNav}) => {
           <option value="all">All runs</option>
           {st.profiles.map(p=><option key={p.id} value={p.id}>{p.name} ({pending.filter(f=>(f.profiles||[]).includes(p.id)).length})</option>)}
         </select>
-        <select value={fDet} onChange={e=>setFDet(e.target.value)} style={selStyle}>
-          <option value="all">All detectors</option>
-          {Object.keys(byDet).map(k=><option key={k} value={k}>{aicDet(k).label} ({byDet[k].length})</option>)}
+        <select value={fTag} onChange={e=>setFTag(e.target.value)} style={selStyle}>
+          <option value="all">All tags</option>
+          {Object.keys(byTag).sort().map(k=><option key={k} value={k}>{k} ({byTag[k].length})</option>)}
+        </select>
+        <select value={fLevel} onChange={e=>setFLevel(e.target.value)} style={selStyle}>
+          <option value="all">Tables and columns</option><option value="table">Tables only</option><option value="column">Columns only</option>
         </select>
         <select value={fTier} onChange={e=>setFTier(e.target.value)} style={selStyle}>
-          <option value="all">Any reason</option><option value="name">Column name</option><option value="value">Value shape</option><option value="graph">Linked column</option>
+          <option value="all">Any reason</option><option value="name">Column name</option><option value="value">Value shape</option>
+          <option value="graph">Linked column</option><option value="rollup">From its columns</option><option value="meaning">Meaning of the name</option>
         </select>
         <div style={{flex:1}}/>
         {sel.size>0&&(<>
@@ -57756,35 +57903,48 @@ const AICWorkspace = ({onToast, onNav}) => {
       <AICEvidence f={evid} onClose={()=>setEvid(null)} onNav={onNav}/>
       <AICRunDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
         onClose={()=>setEdit(null)} onSave={saveRun} onDelete={removeRun} platform={st.settings}/>
+      {schedFor&&(()=>{ const r = st.profiles.find(x=>x.id===schedFor); if(!r) return null; return (
+        <ScheduleControl schedule={r.schedule} title={`Schedule · ${r.name}`} subtitle="Each scheduled execution runs as a background job."
+          onClose={()=>setSchedFor(null)} onSave={sc=>saveSchedule(r.id, sc)} onRemove={()=>saveSchedule(r.id, null)}
+          onRunNow={()=>{ setSchedFor(null); runNow(r); }} running={st.jobs.some(j=>j.runId===r.id&&aicJobLive(j))}/>); })()}
     </div>
   );
 };
 
-// The run editor. Two questions up front — what to scan, which tags to look for —
-// and when; signal overrides sit under "More options" because most runs never
-// need them.
+// The run editor: what to scan (connection → database/schema → tables & views),
+// where to suggest (tables, columns), and which tags — recommend ones the taxonomy
+// already has, or propose new ones. Launch with the standard Schedule / Run now.
+const AIC_CAT_LABEL = {sensitivity:"Sensitivity", regulatory:"Regulatory", business:"Business", custom:"Custom"};
 const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) => {
+  const tagCtx = useTagCtx();
   const [d, setD] = useState(draft);
-  const [openTag, setOpenTag] = useState(null);
   const [more, setMore] = useState(false);
-  useEffect(()=>{ setD(draft); setOpenTag(null); setMore(false); },[draft]);
+  useEffect(()=>{ setD(draft); setMore(false); },[draft]);
   if(!draft || !d) return null;
 
   const all = aicClassifiable();
   const connections = [...new Set(all.map(a=>a.connectionLabel))].sort();
   const inConn = all.filter(a=>!d.connections.length || d.connections.includes(a.connectionLabel));
-  const containers = [...new Set(inConn.map(aicContainer))].sort();
-  const types = [...new Set(inConn.map(a=>a.type))].sort();
+  const schemaGroups = [...new Set(inConn.map(a=>a.connectionLabel))].sort().map(c=>({group:c,
+    ops:[...new Set(inConn.filter(a=>a.connectionLabel===c).map(aicContainer))].sort()}));
+  const inSchema = inConn.filter(a=>!d.containers.length || d.containers.includes(aicContainer(a)));
+  const tableGroups = [...new Set(inSchema.map(aicContainer))].sort().map(c=>({group:c,
+    ops:inSchema.filter(a=>aicContainer(a)===c).map(a=>a.db).sort()}));
   const assets = aicProfileAssets(d);
   const cols = assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0);
   const set = (patch) => setD(x=>({...x,...patch}));
-  const flip = (arr, v) => arr.includes(v) ? arr.filter(x=>x!==v) : [...arr, v];
+  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
+  const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
+  const tableOnly = d.mode==="existing" ? d.tags.filter(t=>!AIC_DETECTORS.some(x=>x.tag===t)) : [];
   const blocked = [...new Set(assets.map(a=>a.domain))].filter(dm=>!platform.valueAllowed.includes(dm));
-  const valid = d.name.trim() && d.detectors.length && assets.length;
-  const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
-  const lbl = {fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"12px 0 6px"};
+  const levelOk = d.levels.table || d.levels.column;
+  const tagsOk = d.mode==="new" || d.tags.length;
+  const colOnlyNoDet = d.mode==="existing" && !d.levels.table && d.tags.length && !d.tags.some(t=>AIC_DETECTORS.some(x=>x.tag===t));
+  const valid = d.name.trim() && assets.length && levelOk && tagsOk && !colOnlyNoDet;
+  const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
   const sec = (n, t, sub) => (
-    <div style={{margin:"22px 0 8px"}}>
+    <div style={{margin:"24px 0 12px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <span style={{width:20,height:20,borderRadius:6,background:T.accentDim,color:T.accent,fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{n}</span>
         <span style={{fontSize:13,fontWeight:700,color:T.text}}>{t}</span>
@@ -57792,18 +57952,24 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
       {sub&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,marginTop:4,marginLeft:28}}>{sub}</div>}
     </div>
   );
-  const check = (key, on, onChange, label, sub) => (
-    <label key={key} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 0",cursor:"pointer",fontSize:12,color:T.text}}>
-      <input type="checkbox" checked={on} onChange={onChange} style={{marginTop:2}}/>
-      <span style={{minWidth:0}}>{label}{sub&&<span style={{display:"block",fontSize:10.5,color:T.textMuted}}>{sub}</span>}</span>
+  const levelBox = (k, title, sub) => (
+    <label style={{flex:1,display:"flex",alignItems:"flex-start",gap:9,padding:"10px 12px",borderRadius:8,cursor:"pointer",
+      background:d.levels[k]?T.accentDim:T.bgElevated,border:`1.5px solid ${d.levels[k]?T.accent+"55":T.border}`}}>
+      <input type="checkbox" checked={d.levels[k]} onChange={()=>set({levels:{...d.levels,[k]:!d.levels[k]}})} style={{marginTop:2}}/>
+      <span><span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}>{title}</span><span style={{fontSize:11,color:T.textMuted}}>{sub}</span></span>
     </label>
   );
-  const list = {border:`1px solid ${T.border}`,borderRadius:8,padding:"4px 11px",background:T.bgElevated};
+  const btn = (primary, dis) => ({display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:700,fontFamily:"inherit",
+    cursor:dis?"default":"pointer",background:primary?(dis?T.bgHover:T.accent):T.bgSurface,border:primary?"none":`1px solid ${dis?T.border:T.borderLight||T.border}`,
+    color:primary?(dis?T.textMuted:"#fff"):(dis?T.textMuted:T.textSub)});
+  const clock = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>;
+  const play = <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>;
+  const out = (how) => valid && onSave({...d, name:d.name.trim(), enabled:how==="save"?d.enabled:true}, how);
 
   return createPortal(
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
       <div onClick={e=>e.stopPropagation()} className="slideInRight"
-        style={{position:"absolute",top:0,right:0,bottom:0,width:580,maxWidth:"96vw",background:T.bgSurface,
+        style={{position:"absolute",top:0,right:0,bottom:0,width:600,maxWidth:"96vw",background:T.bgSurface,
           borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
           <div style={{minWidth:0}}>
@@ -57813,94 +57979,92 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
           <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:"6px 22px 22px"}}>
-          <div style={lbl}>Name</div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 22px 24px"}}>
+          <label style={lbl}>Run name <span style={{color:T.rose}}>*</span></label>
           <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder="e.g. HR warehouse — personal data" style={inp}/>
 
-          {sec("1","What to scan","Leave a list empty to mean all of it.")}
-          <div style={lbl}>Connections</div>
-          <div style={list}>
-            {check("all", !d.connections.length, ()=>set({connections:[], containers:[]}), "All connections")}
-            {connections.map(c=>check(c, d.connections.includes(c), ()=>set({connections:flip(d.connections,c), containers:[]}), c, `${all.filter(a=>a.connectionLabel===c).length} objects`))}
+          {sec("1","What to scan","Leave a field empty to include everything in the level above it.")}
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <RuleMultiSelect label="Connections" flat={connections} selected={d.connections}
+              onChange={v=>set({connections:v, containers:[], tables:[]})} placeholder="All connections"/>
+            <RuleMultiSelect label="Databases / schemas" groups={schemaGroups} selected={d.containers}
+              onChange={v=>set({containers:v, tables:[]})} placeholder="All databases and schemas" mono/>
+            <RuleMultiSelect label="Tables & views" groups={tableGroups} selected={d.tables}
+              onChange={v=>set({tables:v})} placeholder="All tables and views" mono/>
           </div>
-          <div style={lbl}>Databases / schemas</div>
-          <div style={{...list,maxHeight:170,overflowY:"auto"}}>
-            {check("all", !d.containers.length, ()=>set({containers:[]}), "All in the selected connections")}
-            {containers.map(c=>check(c, d.containers.includes(c), ()=>set({containers:flip(d.containers,c)}), <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{c}</code>))}
-          </div>
-          <div style={lbl}>Object types</div>
-          <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-            {types.map(t=>check(t, !d.objectTypes.length || d.objectTypes.includes(t), ()=>{ const cur=d.objectTypes.length?d.objectTypes:types; const nx=flip(cur,t); set({objectTypes:nx.length===types.length?[]:nx}); }, t))}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <div><div style={lbl}>Only names like</div><input value={d.include} onChange={e=>set({include:e.target.value})} placeholder="e.g. dim_*, fct_*" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>
-            <div><div style={lbl}>Skip names like</div><input value={d.exclude} onChange={e=>set({exclude:e.target.value})} placeholder="e.g. *_tmp, *_bak" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>
-          </div>
-          <div style={{marginTop:10,padding:"9px 12px",borderRadius:8,background:assets.length?T.blueDim:T.amberDim,border:`1px solid ${assets.length?T.blue+"40":T.amber+"44"}`,fontSize:11.5,color:T.text,lineHeight:1.55}}>
-            <b>{assets.length} object{assets.length===1?"":"s"} · {cols} columns</b> will be scanned
-            {assets.length>0&&<span style={{color:T.textSub}}> — {assets.slice(0,5).map(a=>a.name).join(", ")}{assets.length>5?` +${assets.length-5} more`:""}</span>}
+          <div style={{marginTop:12,padding:"9px 12px",borderRadius:8,background:assets.length?T.blueDim:T.amberDim,border:`1px solid ${assets.length?T.blue+"40":T.amber+"44"}`,fontSize:11.5,color:T.text,lineHeight:1.55}}>
+            <b>{assets.length} table{assets.length===1?"":"s"} & views · {cols} columns</b> will be scanned
             {!assets.length&&<span style={{color:T.textSub}}> — nothing matches, so this run would scan nothing.</span>}
           </div>
 
-          {sec("2","Tags to look for","It only suggests the tags you tick. Open a tag to pick individual detectors.")}
-          {AIC_TAGS.map(tag=>{
-            const dets = AIC_DETECTORS.filter(x=>x.tag===tag);
-            const onN = dets.filter(x=>d.detectors.includes(x.k)).length;
-            const full = onN===dets.length, none = onN===0;
-            return (
-              <div key={tag} style={{border:`1px solid ${none?T.border:T.accent+"45"}`,borderRadius:8,marginBottom:7,background:T.bgElevated}}>
-                <div style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px"}}>
-                  <input type="checkbox" checked={full} ref={el=>{ if(el) el.indeterminate = !full && !none; }}
-                    onChange={()=>set({detectors: full ? d.detectors.filter(k=>!dets.some(x=>x.k===k)) : [...new Set([...d.detectors, ...dets.map(x=>x.k)])]})}/>
-                  <span style={{fontSize:11,fontWeight:700,padding:"1.5px 8px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{tag}</span>
-                  <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{onN} of {dets.length} detector{dets.length>1?"s":""}</span>
-                  <button onClick={()=>setOpenTag(openTag===tag?null:tag)} style={{background:"none",border:"none",color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{openTag===tag?"Hide":"Choose detectors"}</button>
-                </div>
-                {openTag===tag&&(
-                  <div style={{padding:"2px 11px 8px 33px",borderTop:`1px solid ${T.border}`}}>
-                    {dets.map(x=>check(x.k, d.detectors.includes(x.k), ()=>set({detectors:flip(d.detectors,x.k)}), x.label, x.why))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {sec("2","Suggest tags on")}
+          <div style={{display:"flex",gap:10}}>
+            {levelBox("table","Tables & views","One tag for the whole object")}
+            {levelBox("column","Columns","A tag on each matching column")}
+          </div>
+          {!levelOk&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>Pick at least one.</div>}
 
-          {sec("3","When")}
-          <select value={d.schedule} onChange={e=>set({schedule:e.target.value})} style={{...inp,cursor:"pointer"}}>
-            {Object.entries(AIC_SCHEDULES).map(([k,l])=><option key={k} value={k}>{l}</option>)}
+          {sec("3","Which tags")}
+          <label style={lbl}>How should it suggest tags?</label>
+          <select value={d.mode} onChange={e=>set({mode:e.target.value})} style={{...inp,cursor:"pointer"}}>
+            <option value="existing">Recommend tags from my taxonomy</option>
+            <option value="new">Suggest new tags my taxonomy doesn't have</option>
           </select>
+          {d.mode==="existing" ? (<>
+            <div style={{marginTop:14}}>
+              <RuleMultiSelect label="Tags to recommend" required groups={tagGroups} selected={d.tags}
+                onChange={v=>set({tags:v})} placeholder="Choose tags…"/>
+            </div>
+            {tableOnly.length>0&&d.levels.column&&(
+              <div style={{marginTop:8,fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
+                <b style={{color:T.text}}>{tableOnly.join(", ")}</b> {tableOnly.length>1?"are":"is"} recommended on tables only — column-level detection exists for PII and PCI-DSS.
+              </div>
+            )}
+            {colOnlyNoDet&&<div style={{marginTop:8,fontSize:11.5,color:T.amber}}>None of these tags can be found on columns. Turn on Tables & views, or add PII or PCI-DSS.</div>}
+          </>) : (
+            <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:T.violetDim,border:`1px solid ${T.violet}35`,fontSize:11.5,color:T.text,lineHeight:1.6}}>
+              It looks for things your taxonomy has no tag for yet — for example <b>Contact details</b>, <b>Monetary amount</b> or <b>Customer data</b>.
+              Accepting a suggestion creates the tag as a <b>Draft</b> in Classifications and applies it.
+            </div>
+          )}
 
-          <button onClick={()=>setMore(v=>!v)} style={{marginTop:20,background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+          <button onClick={()=>setMore(v=>!v)} style={{marginTop:22,background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
             {more?"▾":"▸"} More options</button>
           {more&&(
-            <div style={{marginTop:8,padding:"10px 12px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated}}>
-              {check("def", d.useDefaults, ()=>set({useDefaults:!d.useDefaults}), "Use the standard settings",
-                `Checks column names, value shapes and linked columns · shows suggestions from ${Math.round(platform.minConfidence*100)}% sure`)}
+            <div style={{marginTop:8,padding:"10px 12px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,fontSize:12}}>
+              <label style={{display:"flex",gap:8,alignItems:"flex-start",cursor:"pointer",color:T.text}}>
+                <input type="checkbox" checked={d.useDefaults} onChange={()=>set({useDefaults:!d.useDefaults})} style={{marginTop:2}}/>
+                <span>Use the standard settings<span style={{display:"block",fontSize:10.5,color:T.textMuted}}>Checks names, value shapes and linked columns · shows suggestions from {Math.round(platform.minConfidence*100)}% sure</span></span>
+              </label>
               {!d.useDefaults&&(<>
-                {["name","value","graph"].map(t=>check(t, d.tiers[t]&&platform.tiers[t], ()=>platform.tiers[t]&&set({tiers:{...d.tiers,[t]:!d.tiers[t]}}),
-                  t==="name"?"Check column names":t==="value"?"Check value shapes (reads sampled data)":"Check linked columns",
-                  platform.tiers[t]?null:"Turned off by an Admin in Settings › AI"))}
-                <div style={lbl}>Only show suggestions at least this sure</div>
+                {["name","value","graph"].map(t=>(
+                  <label key={t} style={{display:"flex",gap:8,alignItems:"center",marginTop:8,cursor:"pointer",color:T.text}}>
+                    <input type="checkbox" checked={d.tiers[t]&&platform.tiers[t]} disabled={!platform.tiers[t]} onChange={()=>set({tiers:{...d.tiers,[t]:!d.tiers[t]}})}/>
+                    {t==="name"?"Check column names":t==="value"?"Check value shapes (reads sampled data)":"Check linked columns"}
+                  </label>
+                ))}
+                <div style={{...lbl,marginTop:12}}>Only show suggestions at least this sure</div>
                 <div style={{display:"flex",alignItems:"center",gap:12}}>
                   <input type="range" min={Math.round(platform.minConfidence*100)} max="95" step="5" value={Math.round(d.minConfidence*100)}
                     onChange={e=>set({minConfidence:Number(e.target.value)/100})} style={{flex:1,accentColor:T.accent}}/>
                   <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:44,textAlign:"right"}}>{Math.round(d.minConfidence*100)}%</span>
                 </div>
               </>)}
-              {blocked.length>0&&<div style={{marginTop:8,fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
-                Values are never read in <b style={{color:T.amber}}>{blocked.join(", ")}</b> — an Admin rule. Objects there are checked on names and linked columns only.</div>}
+              {blocked.length>0&&<div style={{marginTop:8,fontSize:11.5,color:T.textSub,lineHeight:1.55}}>Values are never read in <b style={{color:T.amber}}>{blocked.join(", ")}</b> — an Admin rule.</div>}
             </div>
           )}
+          <div style={{marginTop:20,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+            <b style={{color:T.textSub}}>Launch:</b> <b style={{color:T.text}}>Run now</b> saves the run and starts it immediately. <b style={{color:T.text}}>Schedule</b> saves it and opens the recurring schedule. Every execution appears in Settings › Background Jobs.
+          </div>
         </div>
 
         <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
           {existing&&<button onClick={()=>onDelete(draft)} style={{padding:"8px 12px",borderRadius:8,background:"transparent",border:`1px solid ${T.rose}55`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>}
           <div style={{flex:1}}/>
-          <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-          <button onClick={()=>valid&&onSave({...d,name:d.name.trim()},false)} disabled={!valid}
-            style={{padding:"8px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${valid?T.accent+"66":T.border}`,color:valid?T.accent:T.textMuted,fontSize:12,fontWeight:700,cursor:valid?"pointer":"default",fontFamily:"inherit"}}>Save</button>
-          <button onClick={()=>valid&&onSave({...d,name:d.name.trim(),enabled:true},true)} disabled={!valid}
-            style={{padding:"8px 16px",borderRadius:8,background:valid?T.accent:T.bgHover,border:"none",color:valid?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:valid?"pointer":"default",fontFamily:"inherit"}}>Save & run now</button>
+          <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,background:"transparent",border:"none",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          {existing&&<button onClick={()=>out("save")} disabled={!valid} style={btn(false,!valid)}>Save</button>}
+          <button onClick={()=>out("schedule")} disabled={!valid} style={btn(false,!valid)}>{clock}Schedule</button>
+          <button onClick={()=>out("run")} disabled={!valid} style={btn(true,!valid)}>{play}Run now</button>
         </div>
       </div>
     </div>,
@@ -57925,7 +58089,7 @@ const AICJobsCard = ({onToast}) => {
   const ended = jobs.filter(j=>!aicJobLive(j)).length;
   const sr = ended ? Math.round(done/ended*100) : 100;
   const running = jobs.filter(aicJobLive).length;
-  const upcoming = st.settings.enabled ? st.profiles.filter(p=>p.enabled && p.schedule!=="manual") : [];
+  const upcoming = st.settings.enabled ? st.profiles.filter(p=>p.enabled && aicSchedOn(p)) : [];
   const j = jobId ? jobs.find(x=>x.id===jobId) : null;
   const shown = jobs.filter(x=>fStatus==="all" || x.status===fStatus);
   const lvl = {ok:T.green, info:T.textMuted, warn:T.amber, err:T.rose};
@@ -57990,7 +58154,7 @@ const AICJobsCard = ({onToast}) => {
                   {upcoming.map((p,i)=>(
                     <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
                       <span style={{flex:1,color:T.text,fontWeight:600}}>{p.name}</span>
-                      <span style={{color:T.textSub}}>{p.schedule==="ingest"?"Next: after the next ingest":p.schedule==="daily"?"Next: tomorrow 02:00":"Next: Sunday 02:00"}</span>
+                      <span style={{color:T.textSub}}>{contractScheduleShort(p.schedule)}</span>
                     </div>
                   ))}
                 </div>
