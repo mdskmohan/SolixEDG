@@ -16069,7 +16069,8 @@ const IcebergPanel = ({asset})=>{
 const AssetOverview = ({asset,data,setData,onToast})=>{
   const navFn = useNav();
   const [editingDesc,setEditingDesc]=useState(false);
-  const [descVal,setDescVal]=useState(data.description||asset.description);
+  const [descVal,setDescVal]=useState((aidApplied(asset.name)||{}).text||data.description||asset.description);
+  const ai = useAidAssetDraft({asset:data, onToast, onSaved:t=>{ setDescVal(t); setData(d=>({...d,description:t})); }});
   const [editingNotes,setEditingNotes]=useState(false);
   const [notesVal,setNotesVal]=useState(data.notes||(
     `The \`${asset.name}\` table is the source of truth for ${asset.domain.toLowerCase()} data.\n\nData is refreshed every ${asset.slaFreshness} via automated pipeline. All PII columns are tagged and subject to data retention policy.\n\nContact ${asset.owner} for access requests.`
@@ -16085,13 +16086,23 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
                 <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast("Description saved","success");}}>Save</Btn>
                 <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description);setEditingDesc(false);}}>Cancel</Btn>
               </div>
-            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+            : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                {ai.enabled&&!ai.pending&&ai.button(!!descVal)}
+                <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+              </div>
         }/>
         {editingDesc
           ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
               style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
-          : <p style={{fontSize:13,color:T.textSub,lineHeight:1.8,margin:0}}>{descVal}</p>
+          : <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,fontStyle:descVal?"normal":"italic",lineHeight:1.8,margin:0}}>{descVal||"No description yet."}</p>
         }
+        {!editingDesc&&ai.applied&&ai.applied.text===descVal&&<AIDescProvenance rec={ai.applied}/>}
+        {ai.pending&&(
+          <div style={{marginTop:9,fontSize:11.5,color:T.textSub,display:"flex",alignItems:"center",gap:6}}>
+            <AIBadge>AI DRAFT</AIBadge> A suggested description from {ai.pending.requestedBy} is waiting on {ai.pending.owner||"the owner"}'s approval.
+          </div>
+        )}
+        {!editingDesc&&ai.box}
       </div>
     </Card2>
     {/* Apache Iceberg — only for Iceberg tables; renders nothing otherwise. */}
@@ -16223,7 +16234,16 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
   const ice=icebergMetaFor(asset);
   const partCols=ice?new Map(ice.partitionSpec.map(p=>[p.col,p.transform])):null;
   const [schSearch,setSchSearch]=useState("");
-  const filtered=cols.filter(c=>!schSearch||c.name.toLowerCase().includes(schSearch.toLowerCase())||c.desc?.toLowerCase().includes(schSearch.toLowerCase())||c.type?.toLowerCase().includes(schSearch.toLowerCase()));
+  const [descOpen,setDescOpen]=useState(false);
+  const aid=useAid();
+  const aic=useAic();
+  const {role:schRole,roleCfg:schCfg}=useRole();
+  const canDecideCls=schRole==="admin"||schRole==="steward";
+  useEffect(()=>{ if(!aic.findings) aicSet(x=>({...x, findings: aicScanAll(x)})); },[aic.findings]);
+  // An AI classification still waiting on a steward, surfaced on the column itself.
+  const clsFor=c=>{ const f=(aic.findings||[]).find(x=>x.assetId===asset.id&&x.col===c.name); return f&&aicIsProposal(aic,f)&&!aic.decisions[f.id]?f:null; };
+  const colDesc=c=>(aid.applied[aidKey(asset.name,c.name)]||{}).text||c.desc;
+  const filtered=cols.filter(c=>!schSearch||c.name.toLowerCase().includes(schSearch.toLowerCase())||colDesc(c)?.toLowerCase().includes(schSearch.toLowerCase())||c.type?.toLowerCase().includes(schSearch.toLowerCase()));
   return <div className="fadeIn">
     <Card2 style={{overflow:"hidden",padding:0}}>
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
@@ -16237,6 +16257,13 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
         <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK{partCols?` · ${partCols.size} partition`:""}</span>
         {ice&&<span title={`Iceberg spec v${ice.specEvolution[0].v} — partitioning can change without rewriting data`} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:FORMAT_META.Iceberg.c,background:FORMAT_META.Iceberg.bg,padding:"2px 8px",borderRadius:99,border:`1px solid ${FORMAT_META.Iceberg.c}33`,whiteSpace:"nowrap"}}><IcebergMark size={10}/>Spec v{ice.specEvolution[0].v} · {ice.partitionSpec.map(p=>`${p.col}(${p.transform})`).join(", ")}</span>}
         {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
+        {aidCanAsk(schRole)&&SCHEMA[asset.name]&&(
+          <button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+            style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+                    background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
+          </button>
+        )}
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
         <thead><tr>{["Column","Type","Nullable","Description"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.05em",whiteSpace:"nowrap",background:T.bgElevated}}>{h}</th>)}</tr></thead>
@@ -16248,7 +16275,23 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
                 <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>{partCols&&partCols.has(c.name)&&<span title={`Iceberg partition column · ${partCols.get(c.name)} transform`} style={{fontSize:9,color:FORMAT_META.Iceberg.c,border:`1px solid ${FORMAT_META.Iceberg.c}40`,background:FORMAT_META.Iceberg.bg,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700,flexShrink:0}}>{partCols.get(c.name)}</span>}{c.pk&&<span style={{fontSize:9,color:T.amber,border:`1px solid ${T.amberDim}`,padding:"1px 5px",borderRadius:4,fontFamily:"'Geist Mono',monospace",fontWeight:700}}>PK</span>}<span style={{fontSize:13,fontFamily:"'Geist Mono',monospace",color:isSel?T.accent:T.text,fontWeight:500}}>{c.name}</span></div></td>
                 <td style={{padding:"10px 14px"}}><Badge color={T.blue} bg={T.blueDim}>{c.type}</Badge></td>
                 <td style={{padding:"10px 14px"}}><span style={{fontSize:11,color:c.nullable?T.textMuted:T.textSub}}>{c.nullable?"YES":"NOT NULL"}</span></td>
-                <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>{c.desc}</td>
+                <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>
+                  {colDesc(c)}
+                  {aid.applied[aidKey(asset.name,c.name)]&&<span title={`AI-drafted · accepted by ${aid.applied[aidKey(asset.name,c.name)].by}`} style={{marginLeft:5,color:T.violet,fontSize:10}}>✦</span>}
+                  {aidPendingFor(asset.name,c.name)&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>✦ Suggestion awaiting the owner</div>}
+                  {(()=>{ const f=clsFor(c); if(!f) return null; return (
+                    <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:5,marginTop:5,flexWrap:"wrap"}}>
+                      <span title={f.tiers.map(t=>t.note).join(" · ")} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px solid ${T.violet}38`}}>
+                        ✦ Suggested {f.tag} · {f.detLabel}</span>
+                      <AIConf conf={f.conf} small/>
+                      {canDecideCls&&<>
+                        <button onClick={()=>{ aicDecide(f,"accepted",aidMe(schCfg)); onToast&&onToast(`${f.tag} applied to ${c.name}`,"success"); }}
+                          style={{padding:"1px 8px",borderRadius:5,background:T.green,border:"none",color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer"}}>Accept</button>
+                        <button onClick={()=>{ aicDecide(f,"rejected",aidMe(schCfg)); onToast&&onToast(`Suggestion rejected for ${c.name}`,"info"); }}
+                          style={{padding:"1px 8px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:10,fontWeight:600,cursor:"pointer"}}>Reject</button>
+                      </>}
+                    </div>); })()}
+                </td>
               </tr>
             );
           })}
@@ -16256,6 +16299,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
         </tbody>
       </table>
     </Card2>
+    <AIDescColumnsDrawer open={descOpen} asset={asset} onClose={()=>setDescOpen(false)} onToast={onToast||(()=>{})}/>
   </div>;
 }
 // ─── Lineage colour map ───────────────────────────────────────────────────────
@@ -45489,7 +45533,7 @@ const TASK_TYPES = ["field_updated","stewardship_request","needs_attention","tag
 // Phase 3 — work-item categories (color-coded grouping by kind of work)
 const TYPE_CATEGORY = {
   policy_violation:"violation", dq_alert:"violation",
-  tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval", property_change:"approval",
+  tag_review:"approval", certification_review:"approval", term_review:"approval", contract_approval:"approval", property_change:"approval", description_change:"approval",
   assigned:"ownership", stewardship_request:"ownership", needs_attention:"ownership", orphan_assignment:"ownership", rbac_request:"ownership", delete_request:"ownership",
   kl_build_approval:"approval", kl_dial_approval:"approval",
   field_updated:"curation",
@@ -45508,7 +45552,7 @@ const ITEM_ROLE = {
   certification_review:"steward",  // status-change requests are approved by the STEWARD
   stewardship_request:"owner", orphan_assignment:"owner", needs_attention:"owner", rbac_request:"owner", delete_request:"owner",
   kl_build_approval:"owner", kl_dial_approval:"owner",  // engineer proposes a build / steward proposes a dial — the OWNER or admin decides
-  enforcement_approval:"owner", property_change:"owner",  // steward proposes a value; the OWNER decides
+  enforcement_approval:"owner", property_change:"owner", description_change:"owner",  // steward proposes a value; the OWNER decides
   field_updated:"fyi", assigned:"fyi",
 };
 const ROLE_META = {
@@ -45524,7 +45568,7 @@ const TYPE_ACTION = {
   tag_review:"Review tag", certification_review:"Review status change",
   orphan_assignment:"Assign owner", needs_attention:"Assign steward",
   stewardship_request:"Review role request", term_review:"Approve term", rbac_request:"Review platform role",
-  delete_request:"Approve deletion", enforcement_approval:"Approve enforcement", property_change:"Approve property change",
+  delete_request:"Approve deletion", enforcement_approval:"Approve enforcement", property_change:"Approve property change", description_change:"Approve description",
   kl_build_approval:"Approve governed build", kl_dial_approval:"Approve trust-dial change",
   field_updated:"Field updated", assigned:"Assigned to you",
 };
@@ -46036,6 +46080,14 @@ const InboxView = ({onToast}) => {
     body:`${r.requestedBy} set ${r.propName} → "${Array.isArray(r.requestedValue)?r.requestedValue.join(", "):r.requestedValue}" — "${r.note||""}"`,
     requestedBy:r.requestedBy, entity:r.entity, reqTargetId:r.targetId, propId:r.propId, propName:r.propName, requestedValue:r.requestedValue, reqId:r.id, readAt:null,
   }));
+  // AI-drafted descriptions a non-owner accepted — the owner decides whether they stand.
+  const aidSt = useAid();
+  const AID_REQ_ITEMS = aidSt.reqs.filter(r=>r.status==="pending").map(r=>({
+    id:"aidq-"+r.id, type:"description_change", severity:"low", section:"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.col?`${r.asset}.${r.col}`:r.asset, path:r.col?"Column description · AI draft":"Description · AI draft", type:r.col?"Column":"Table"},
+    body:`${r.requestedBy} accepted an AI-drafted description${r.edited?" (edited)":""}: "${r.text}"`,
+    requestedBy:r.requestedBy, assignee:r.owner, reqId:r.id, aidAsset:r.asset, readAt:null,
+  }));
   // Knowledge Layer approvals — a proposed governed build, or a trust-dial change
   // a non-admin wants applied. Both are decided by the owner/admin, not the requester.
   const klReqs = useKLReqs();
@@ -46047,7 +46099,7 @@ const InboxView = ({onToast}) => {
     body:r.body, requestedBy:r.requestedBy, klKind:r.kind, klTargetId:r.targetId,
     klPayload:r.payload, reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...KL_REQ_ITEMS, ...items];
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...AID_REQ_ITEMS, ...KL_REQ_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -46113,6 +46165,7 @@ const InboxView = ({onToast}) => {
     delete_request:      {icon:sz=>Ic.trash(sz||12),    label:"Deletion Request", shortLabel:"Delete"},
     enforcement_approval:{icon:sz=>Ic.policies(sz||12), label:"Enforcement Approval", shortLabel:"Enforce"},
     property_change:     {icon:sz=>Ic.props(sz||12),    label:"Property Change",  shortLabel:"Property"},
+    description_change:  {icon:sz=>Ic.bot(sz||12),      label:"AI Description",   shortLabel:"Description"},
     kl_build_approval:   {icon:sz=>Ic.knowledge(sz||12),label:"Governed Build",   shortLabel:"Build"},
     kl_dial_approval:    {icon:sz=>Ic.knowledge(sz||12),label:"Trust Dial",       shortLabel:"Dial"},
   };
@@ -46222,6 +46275,17 @@ const InboxView = ({onToast}) => {
       if(item.reqKind==="term")
         return <>{btn("Approve deletion",()=>{gtSet(prev=>prev.filter(t=>t.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (term)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"glossary"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this term was declined`,nav:"glossary",navArg:{termId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Glossary","glossary")}</>;
       return null;
+    }
+    if(item.type==="description_change"){
+      return <>{btn("Approve",()=>{
+        if(item.reqId)aidResolve(item.reqId,"approved",meHandle||"owner");
+        pushNotif({category:"Catalog",type:"cert",title:`Description updated · ${item.asset.name}`,body:`AI-drafted description approved by ${meHandle||"owner"}`,nav:"catalog",asset:item.aidAsset});
+        ack(item.id,`Description saved on ${item.asset.name} — ${item.requestedBy} notified`);
+      },true)}{btn("Reject",()=>{
+        if(item.reqId)aidResolve(item.reqId,"rejected",meHandle||"owner");
+        pushNotif({category:"Catalog",type:"field_updated",title:`Description suggestion declined · ${item.asset.name}`,body:`${item.requestedBy}'s AI-drafted description was not accepted`,nav:"catalog",asset:item.aidAsset});
+        ack(item.id,"Suggestion declined — requester notified");
+      },false,true)}{openIn("Open in Catalog","catalog")}</>;
     }
     if(item.type==="property_change"){
       const navTo = item.entity==="Tag"?"tags":item.entity==="Domain"?"domains":"catalog";
@@ -47561,7 +47625,7 @@ FROM   active GROUP BY region ORDER BY churn_pct DESC`,
       cls:"Restricted-HR",
       policy:"SOC2 Access Controls",
       cols:["employees.base_salary","employees.national_id","hr_records/*"],
-      where:"Settings › Copilot › Guardrails",
+      where:"Settings › AI › Copilot › Guardrails",
       requestable:true,
     },
     conf:0, latency:"0.4s", credits:0,
@@ -47651,7 +47715,7 @@ const DA_ACTIVITY_SEED = [
   {at:"2026-08-22 16:18", who:"dev.patel",   space:"sp_c360",     q:"Show me churn", mode:"hybrid", decision:"Clarified", masked:0, filtered:0, credits:2, ms:900},
 ];
 
-// ── Platform settings (Settings › Copilot) ─────────────────────────────────
+// ── Platform settings (Settings › AI › Copilot) ─────────────────────────────────
 const DA_SETTINGS_SEED = {
   // Keyed by EAI "app type / service" — the same activity list the EAI LLM
   // model-management screen exposes, so a customer running both products
@@ -47663,6 +47727,7 @@ const DA_SETTINGS_SEED = {
     enrich:   {provider:"anthropic", model:"claude-sonnet-5",        temp:0.3, maxTok:2048, fallback:"gpt-4o",          key:"shared"},
     synonym:  {provider:"anthropic", model:"claude-sonnet-5",        temp:0.3, maxTok:2048, fallback:"none",            key:"shared"},
     index:    {provider:"openai",    model:"text-embedding-3-large", temp:0,   maxTok:8191, fallback:"none",            key:"shared"},
+    describe: {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:1024, fallback:"gpt-4o-mini",     key:"shared"},
     sql:      {provider:"anthropic", model:"claude-opus-5",          temp:0,   maxTok:4096, fallback:"gpt-4o",          key:"shared"},
     search:   {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:2048, fallback:"gpt-4o-mini",     key:"shared"},
     router:   {provider:"anthropic", model:"claude-haiku-4-5",       temp:0,   maxTok:1024, fallback:"none",            key:"shared"},
@@ -47770,7 +47835,7 @@ const daBlockers = sp => {
   const bad = (sp.sources||[]).filter(x=>(x.tags||[]).some(t=>S.guards.blockedTags.includes(t)));
   if(bad.length) out.push({hard:true,
     t:`${bad.map(x=>x.name).join(", ")} carries a classification on the platform blocklist (${S.guards.blockedTags.join(", ")})`,
-    fix:"Settings › Copilot › Guardrails — an Admin must allow the classification before this space can be indexed"});
+    fix:"Settings › AI › Copilot › Guardrails — an Admin must allow the classification before this space can be indexed"});
   const uncert = (sp.sources||[]).filter(x=>x.cert && x.cert!=="Approved");
   if(uncert.length && sp.guards && sp.guards.requireCert) out.push({
     t:`${uncert.map(x=>`${x.name} is marked ${x.cert}`).join(", ")} in the catalog`,
@@ -47962,7 +48027,7 @@ const DASqlPanel = ({sql,canEdit,onRun,edited}) => {
             </>) : (<>
               {canEdit
                 ? <Btn small ghost icon={Ic.edit(10)} onClick={()=>setEditing(true)}>Edit SQL</Btn>
-                : <span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>Editing SQL is restricted to stewards — Settings › Copilot › Access</span>}
+                : <span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>Editing SQL is restricted to stewards — Settings › AI › Copilot › Access</span>}
               <Btn small ghost icon={Ic.copy(10)} onClick={()=>{navigator.clipboard&&navigator.clipboard.writeText(draft);}}>Copy</Btn>
             </>)}
           </div>
@@ -48141,7 +48206,7 @@ const DATrustDrawer = ({ans,space,role,onClose,onNav}) => {
             <Row l="Model — summary" v={_da.settings.models.summary.model} />
             <Row l="Prompt redaction" v={_da.settings.privacy.redactPrompts?"On — classified values stripped before the model call":"Off"}
                  c={_da.settings.privacy.redactPrompts?T.green:T.amber}/>
-            <Row l="Audit record" v="Written to Settings › Copilot › Activity and Settings › Audit Logs"/>
+            <Row l="Audit record" v="Written to Settings › AI › Copilot › Activity and Settings › Audit Logs"/>
           </div>
         </div>
       </div>
@@ -48627,7 +48692,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
   const blockReason =
       s.k==="connect" ? (!name.trim() ? "Give the space a name"
                  : (needsStruct&&picked.length===0) ? "Select at least one object"
-                 : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › Copilot › Guardrails`)
+                 : `${blockedPick.map(a=>a.n).join(", ")} carries a blocklisted classification — remove it, or have an Admin allow the classification in Settings › AI › Copilot › Guardrails`)
     : s.k==="docs"    ? "No documents survive the current filters"
     : s.k==="rel"     ? "Confirm or drop every join below the 80% confidence threshold"
     : s.k==="enrich"  ? "Approve or reject every proposed description"
@@ -48814,7 +48879,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                   <div style={{padding:"10px 13px",borderRadius:8,background:T.roseDim,border:`1px solid ${T.rose}55`,fontSize:12,color:T.text,lineHeight:1.6}}>
                     <b>{blockedPick.map(a=>a.n).join(", ")}</b> carries the <b>{S.guards.blockedTags.join(", ")}</b> classification,
                     which is on the platform blocklist. The Copilot cannot index it. Remove it from scope, or ask an Admin to
-                    allow the classification in <b>Settings › Copilot › Guardrails</b>.
+                    allow the classification in <b>Settings › AI › Copilot › Guardrails</b>.
                   </div>
                 )}
                 {uncertified.length>0&&blockedPick.length===0&&(
@@ -49348,7 +49413,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 </div>
                 <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
                   <b style={{color:T.text}}>Blocked classifications:</b> {S.guards.blockedTags.join(", ")||"none"} — set platform-wide in
-                  Settings › Copilot › Guardrails and not overridable per space.
+                  Settings › AI › Copilot › Guardrails and not overridable per space.
                 </div>
               </div>
             )}
@@ -49389,7 +49454,7 @@ const DAWizard = ({me,onClose,onToast,onCreated}) => {
                 <KLNote tone="quiet">
                   This first build processes everything in scope. Every build after it is incremental by default — only
                   objects added or altered since this one are re-processed, so you are not re-billed for work already done.
-                  That behaviour is set in <b>Settings › Copilot › Refresh</b>.
+                  That behaviour is set in <b>Settings › AI › Copilot › Refresh</b>.
                 </KLNote>
               </div>
             )}
@@ -49880,7 +49945,7 @@ const DASpaceProfile = ({sp,me,role,onBack,onToast,onNav,onAsk,embedded}) => {
               <Toggle on={g.requireCert} disabled={!canManage} onChange={()=>setG(x=>({...x,requireCert:!x.requireCert}))}/>
             </div>
             <div style={{padding:"11px 13px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:16}}>
-              <b style={{color:T.text}}>Blocked classifications:</b> {(g.blockedTags||[]).join(", ")||"none"} — platform-wide, set in Settings › Copilot › Guardrails.
+              <b style={{color:T.text}}>Blocked classifications:</b> {(g.blockedTags||[]).join(", ")||"none"} — platform-wide, set in Settings › AI › Copilot › Guardrails.
             </div>
             {canManage&&<div style={{display:"flex",alignItems:"center",gap:10}}>
               <Btn variant="primary" small onClick={()=>{daUpdSpace(sp.id,{guards:g});setGSaved(true);onToast("Guardrails saved");setTimeout(()=>setGSaved(false),2200);}}>Save guardrails</Btn>
@@ -50115,7 +50180,7 @@ const DataAskView = ({onToast, onNav, tab:tabProp, setTab:setTabProp}) => {
   const {role, roleCfg} = useRole();
   const me = roleCfg && roleCfg.email ? roleCfg.email.split("@")[0] : "alex.rivera";
   // Asking lives in the Copilot now. What remains is the management of what the
-  // Copilot may answer from, and it is hosted by Settings › Copilot, which owns
+  // Copilot may answer from, and it is hosted by Settings › AI › Copilot, which owns
   // the tab strip.
   const cp = useContext(CopilotCtx);
   const [tabS,setTabS] = useState("spaces");
@@ -50243,7 +50308,7 @@ const DataAskView = ({onToast, onNav, tab:tabProp, setTab:setTabProp}) => {
 
             <KLNote tone="quiet">
               Models, retrieval defaults, the classification blocklist, credit caps and who may ask are platform-wide
-              settings in <b>Settings › Copilot</b>. A space can tighten those limits but never loosen them.
+              settings in <b>Settings › AI › Copilot</b>. A space can tighten those limits but never loosen them.
             </KLNote>
           </>)}
 
@@ -50360,7 +50425,7 @@ const DataAskView = ({onToast, onNav, tab:tabProp, setTab:setTabProp}) => {
                   ]}
                   rows={activity}/>}
             <KLNote tone="quiet">
-              Retained for {st.settings.privacy.retainDays} days per <b>Settings › Copilot › Privacy</b>. The same events are
+              Retained for {st.settings.privacy.retainDays} days per <b>Settings › AI › Copilot › Privacy</b>. The same events are
               mirrored into <b>Settings › Audit Logs</b> for long-term retention.
             </KLNote>
           </>)}
@@ -50375,7 +50440,7 @@ const DataAskView = ({onToast, onNav, tab:tabProp, setTab:setTabProp}) => {
 };
 
 
-// ── Settings › Copilot ─────────────────────────────────────────────────────
+// ── Settings › AI › Copilot ─────────────────────────────────────────────────────
 // Platform-wide configuration. Everything here is a ceiling: an Answer Space
 // may tighten a limit but never loosen one, which is what makes the section
 // safe to delegate to space owners.
@@ -50391,13 +50456,13 @@ const DA_PROVIDERS = {
 // recommendation was measured at, and whether the activity sends data values or
 // only metadata to the provider — the question every DPO asks first.
 const DA_ACTIVITIES = [
-  {k:"idc",      area:"Classification", l:"IDC — Intelligent Data Classification",
+  {k:"idc",      area:"Document classification", l:"IDC — Intelligent Data Classification",
    d:"Categorises documents and detects sensitivity, data classifiers, retention and responsible values. Feeds the document picker for every Documents space.",
    rec:"gpt-4o", acc:94, cost:"$$", sends:"content"},
-  {k:"taxonomy", area:"Classification", l:"Human taxonomy evaluation",
+  {k:"taxonomy", area:"Document classification", l:"Human taxonomy evaluation",
    d:"Scores an uploaded category taxonomy against a sample set so you can iterate to an accuracy you accept before deploying it. Your taxonomy always takes precedence over model-generated categories.",
    rec:"gpt-4o", acc:92, cost:"$$", sends:"content"},
-  {k:"rot",      area:"Classification", l:"ROT semantic analysis",
+  {k:"rot",      area:"Document classification", l:"ROT semantic analysis",
    d:"The two AI rules in redundant / obsolete / trivial detection — semantic keyword and trivial taxonomy. The other eight rules are deterministic and cost nothing.",
    rec:"gpt-4o-mini", acc:88, cost:"$", sends:"content"},
   {k:"enrich",   area:"Answer Spaces",  l:"AI enrichment",
@@ -50409,6 +50474,9 @@ const DA_ACTIVITIES = [
   {k:"index",    area:"Answer Spaces",  l:"Index build — embeddings",
    d:"Vectorises documents and questions for semantic retrieval. Changing this model invalidates every document index and forces a rebuild.",
    rec:"text-embedding-3-large", acc:93, cost:"$", sends:"content"},
+  {k:"describe", area:"Catalog",       l:"Description suggestions",
+   d:"Drafts a description for a table or column when someone asks for one. It reads names, types, tags, glossary terms and lineage — never a data value — and nothing is saved until a person accepts it.",
+   rec:"claude-sonnet-5", acc:90, cost:"$", sends:"metadata"},
   {k:"sql",      area:"Copilot",       l:"Prompt → SQL",
    d:"Turns a question into a query plan over the governed schema. The most accuracy-sensitive call in the product — use your strongest model. Only schema is sent, never values.",
    rec:"claude-opus-5", acc:95, cost:"$$$", sends:"metadata"},
@@ -50435,20 +50503,24 @@ const DA_ROLE_LIST = [
 ];
 const DA_ALL_TAGS = ["Restricted-HR","PII","GDPR","confidential","legal-hold","PCI"];
 
-// Settings › Copilot. One page for everything that decides what the Copilot may
+// Settings › AI › Copilot. One page for everything that decides what the Copilot may
 // answer about data: the Answer Spaces it answers from, the answers owners have
 // verified, the queue of answers people flagged, the audit trail, and the
 // platform ceilings. It is Settings because it is a control surface — the only
 // place anyone asks a question is the Copilot itself.
-const CopilotSettingsSection = ({onToast}) => {
+const CopilotSettingsSection = ({onToast, embedded}) => {
   const st = useDA();
   const onNav = useNav();
   const [top,setTop] = useState("spaces");
   const openReviews = st.review.filter(r=>r.status==="Open").length;
   return (
     <>
-      <SettSH icon={Ic.bot(16)} title="Copilot"
-        desc="The Copilot answers two kinds of question in one conversation: about your metadata (ownership, policy, lineage, quality) and about your data. Data answers come only from a published Answer Space, and everything that governs them is managed here."/>
+      {!embedded&&<SettSH icon={Ic.bot(16)} title="Copilot"
+        desc="The Copilot answers two kinds of question in one conversation: about your metadata (ownership, policy, lineage, quality) and about your data. Data answers come only from a published Answer Space, and everything that governs them is managed here."/>}
+      {embedded&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14,maxWidth:860}}>
+        The Copilot answers two kinds of question in one conversation: about your metadata (ownership, policy, lineage, quality) and about your data.
+        Data answers come only from a published Answer Space, and everything that governs them is managed here.
+      </div>}
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"spaces",   label:`Answer Spaces (${st.spaces.length})`},
@@ -50459,15 +50531,27 @@ const CopilotSettingsSection = ({onToast}) => {
         ]} active={top} onChange={setTop}/>
       </div>
       {top==="config"
-        ? <DASettingsSection onToast={onToast} embedded/>
+        ? <DASettingsSection onToast={onToast} embedded hide={["models"]}/>
         : <DataAskView tab={top} setTab={setTop} onToast={onToast} onNav={onNav}/>}
     </>
   );
 };
 
-const DASettingsSection = ({onToast, embedded}) => {
+// `only` / `hide` let Settings › AI show the Models sub-tab on its own (it governs
+// every AI activity, not just the Copilot) and drop it from the Copilot's config.
+const DA_SUB_TABS = [
+  {key:"models",   label:"Models"},
+  {key:"retrieval",label:"Retrieval"},
+  {key:"guards",   label:"Guardrails"},
+  {key:"privacy",  label:"Privacy"},
+  {key:"cost",     label:"Cost & Credits"},
+  {key:"refresh",  label:"Refresh"},
+  {key:"access",   label:"Access"},
+];
+const DASettingsSection = ({onToast, embedded, only, hide=[]}) => {
   const st = useDA();
-  const [sub,setSub]   = useState("models");
+  const subTabs = DA_SUB_TABS.filter(t=>(!only || only.includes(t.key)) && !hide.includes(t.key));
+  const [sub,setSub]   = useState(subTabs[0].key);
   const [d,setD]       = useState(()=>JSON.parse(JSON.stringify(st.settings)));
   const [xfer,setXfer] = useState({from:"Platform",to:"Commerce",amount:1000});
   // Commits a cost mutation to the store and the draft at once.
@@ -50518,32 +50602,27 @@ const DASettingsSection = ({onToast, embedded}) => {
     <>
       {!embedded&&<SettSH icon={Ic.bot(16)} title="Copilot"
         desc="Models, retrieval, guardrails, privacy and cost for governed conversational access. Every value here is a ceiling — an Answer Space can tighten it but never loosen it."/>}
-      {embedded&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-        Models, retrieval, guardrails, privacy and cost for every data question the Copilot answers. Each value is a ceiling — an Answer Space can tighten it but never loosen it.
+      {embedded&&!only&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
+        Retrieval, guardrails, privacy and cost for every data question the Copilot answers. Each value is a ceiling — an Answer Space can tighten it but never loosen it.
+        The models behind these calls are set in the Models tab of Settings › AI.
       </div>}
 
-      <div style={{marginBottom:18}}>
-        <SegTabs tabs={[
-          {key:"models",   label:"Models"},
-          {key:"retrieval",label:"Retrieval"},
-          {key:"guards",   label:"Guardrails"},
-          {key:"privacy",  label:"Privacy"},
-          {key:"cost",     label:"Cost & Credits"},
-          {key:"refresh",  label:"Refresh"},
-          {key:"access",   label:"Access"},
-        ]} active={sub} onChange={setSub}/>
-      </div>
+      {subTabs.length>1&&<div style={{marginBottom:18}}>
+        <SegTabs tabs={subTabs} active={sub} onChange={setSub}/>
+      </div>}
 
       {/* ── MODELS ── */}
       {sub==="models"&&(<>
         <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-          Every AI activity in the platform routes to its own model, so a cheap model can classify while the strongest one
-          plans a query. Solix publishes a recommendation per activity — measured on mixed real documents, not benchmarks —
-          and you can accept it, pick another model, or register your own provider key and use that instead.
+          Every AI activity in the platform routes to its own model, so a cheap model can route a question while the strongest one
+          plans a query. By default every activity runs on a model Solix manages, on the shared platform key — nobody has to
+          bring a key for AI to work. Solix publishes a recommendation per activity, measured on mixed real documents rather than
+          benchmarks; you can accept it, pick another model, or point an activity at your own key or inference endpoint.
+          Column classification is not listed: its detectors, value shapes and reference inheritance run without a model.
         </div>
 
         <Card title="Apply every Solix recommendation"
-          desc="Sets all ten activities to the recommended model. Accuracy and cost were measured together — the recommendation is the best accuracy inside a sensible cost, not the best accuracy at any price.">
+          desc={`Sets all ${DA_ACTIVITIES.length} activities to the recommended model. Accuracy and cost were measured together — the recommendation is the best accuracy inside a sensible cost, not the best accuracy at any price.`}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <Btn small variant="primary" onClick={()=>setD(x=>({...x,models:Object.fromEntries(
               DA_ACTIVITIES.map(a=>{
@@ -50579,7 +50658,7 @@ const DASettingsSection = ({onToast, embedded}) => {
           )}
         </Card>
 
-        {["Classification","Answer Spaces","Copilot"].map(area=>(
+        {["Catalog","Copilot","Answer Spaces","Document classification"].map(area=>(
           <div key={area}>
             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",
               margin:"20px 0 10px"}}>{area}</div>
@@ -51187,6 +51266,7 @@ const DASettingsSection = ({onToast, embedded}) => {
 // Other screens deep-link into a Settings section (the Copilot's "Manage Answer
 // Spaces"). Read once when Settings mounts, then cleared.
 let _settingsJump = null;
+let _aiTabJump = null;   // which tab Settings › AI opens on (set by deep links)
 const SettingsView = ({onToast})=>{
   const {isDark, toggleTheme:onThemeToggle} = useTheme();
   const tagCtx = useTagCtx();
@@ -51201,7 +51281,14 @@ const SettingsView = ({onToast})=>{
   const [rsSourceFilter, setRsSourceFilter] = useState("all");
   const [rsDateFilter, setRsDateFilter] = useState("all"); // all | today | 7d | 30d
   const rsRelTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
-  const [section,   setSection]   = useState(()=>{ const s=_settingsJump||"connections"; _settingsJump=null; return s; });
+  const [section,   setSection]   = useState(()=>{
+    // Copilot settings now live inside Settings › AI; old "dataask" jumps land on its Copilot tab.
+    // Read-only here: StrictMode runs initialisers twice, so clearing the jump
+    // inside one would send the second run to Connections. Cleared in an effect.
+    let s=_settingsJump||"connections";
+    if(s==="dataask"){ s="ai"; _aiTabJump="copilot"; }
+    return s; });
+  useEffect(()=>{ _settingsJump=null; },[]);
   const [svcSel,    setSvcSel]    = useState(null);
   const [appSel,    setAppSel]    = useState(null);
   const [filterSvc, setFilterSvc] = useState("all");
@@ -51284,7 +51371,7 @@ const SettingsView = ({onToast})=>{
       {key:"policy_approvals", icon:"shield", label:"Policy Approvals",     desc:"Who approves policies, enforcement & attestations"},
     ]},
     {label:"Platform", items:[
-      {key:"dataask",      icon:"bot",     label:"Copilot",              desc:"Answer Spaces, guardrails, privacy & credits"},
+      {key:"ai",           icon:"bot",     label:"AI",                   desc:"Copilot, classification, descriptions & models"},
       {key:"notifications",icon:"notif",   label:"Notifications",        desc:"Alerts & channels"},
       {key:"preferences",  icon:"palette", label:"Preferences",          desc:"Theme & display"},
       {key:"custom_props", icon:"props",   label:"Custom Properties",    desc:"Extend asset metadata"},
@@ -51456,27 +51543,8 @@ const SettingsView = ({onToast})=>{
   // Applications are POST-INGESTION automation that runs on already-indexed metadata.
   // They are NOT connectors. They analyze, enrich, and report on what's already in the catalog.
   const APPLICATIONS = [
-    {
-      id:"app1", name:"MetaPilot", icon:"bot", status:"active", ver:"2.1.0", category:"AI Enrichment",
-      desc:"AI assistant that automatically generates asset descriptions, suggests tags, detects anomalies, and answers natural-language queries about your data.",
-      lastRun:"2 min ago", nextRun:"Continuous", runsToday:1284,
-      config:{
-        tabs:[
-          {key:"general",label:"General",fields:[
-            {type:"toggle",label:"Auto-generate descriptions",key:"autoDesc",val:true,hint:"Uses GPT-4 to write asset descriptions on first ingest"},
-            {type:"toggle",label:"Auto-suggest tags",key:"autoTags",val:true,hint:"Suggests business tags based on column names and sample data"},
-            {type:"toggle",label:"Anomaly detection",key:"anomaly",val:true,hint:"Flags unusual schema changes or data drift"},
-            {type:"select",label:"LLM Model",key:"model",val:"gpt-4o",opts:["gpt-4o","gpt-4-turbo","claude-3-5-sonnet"],hint:"Model used for description generation"},
-            {type:"select",label:"Confidence threshold",key:"confidence",val:"High (>85%)",opts:["Low (>50%)","Medium (>70%)","High (>85%)"],hint:"Min confidence before auto-applying suggestions"},
-          ]},
-          {key:"scope",label:"Scope",fields:[
-            {type:"select",label:"Apply to domains",key:"domains",val:"All domains",opts:["All domains","Commerce only","Finance only","Custom…"]},
-            {type:"toggle",label:"Skip already-described assets",key:"skipExisting",val:true},
-            {type:"toggle",label:"Re-generate on schema change",key:"regenOnChange",val:false},
-          ]},
-        ],
-      },
-    },
+    // MetaPilot and AI Classification used to be cards here. Everything the AI layer
+    // does is now configured in one place — Settings › AI.
     {
       id:"app2", name:"Data Insights", icon:"analytics", status:"active", ver:"1.4.2", category:"Analytics",
       desc:"Runs nightly analytics over your catalog to produce quality trend reports, usage heatmaps, orphaned asset detection, and ownership coverage scores.",
@@ -51512,16 +51580,6 @@ const SettingsView = ({onToast})=>{
           ]},
         ],
       },
-    },
-    {
-      id:"app4", name:"AI Classification", icon:"bot", status:"active", ver:"2.0.0", category:"Compliance",
-      desc:"Proposes classifications for every profiled column from three signals — column name, profiled value shape, and inheritance from an already-classified column it references. Proposals are reviewed in Classifications; this is where the detectors, the data boundary and the auto-apply gate are set.",
-      lastRun:"2 min ago", nextRun:"On every ingest", runsToday:842,
-      // Rendered by AICControlPanel instead of the generic field list: the
-      // accuracy table and the per-detector auto-apply gate do not reduce to
-      // toggles and selects.
-      custom:"aiclassify",
-      config:{tabs:[]},
     },
     {
       id:"app5", name:"Lineage Scanner", icon:"lineage", status:"inactive", ver:"1.2.0", category:"Lineage",
@@ -52872,7 +52930,7 @@ const SettingsView = ({onToast})=>{
             </>}
 
             {/* ══ NOTIFICATIONS ══ */}
-            {section==="dataask"&&<CopilotSettingsSection onToast={onToast}/>}
+            {section==="ai"&&<AISettingsSection onToast={onToast}/>}
 
             {section==="notifications"&&<>
               <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which in-app alerts reach you. Today notifications are delivered in-app; email & Slack are coming soon."/>
@@ -55160,6 +55218,165 @@ const aiCall = (trace, name, args) => {
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// AI LAYER · 4 — DESCRIPTION SUGGESTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+// Asked for, never automatic. Someone presses Suggest on a table or a column, gets
+// a draft, and decides: accept, edit, regenerate or discard. The draft is built
+// from METADATA ONLY — names, types, keys, tags, glossary terms, lineage — read
+// through the Governed Tool API, so the trace under every draft is the literal
+// list of what was sent. No data value, sample or profile is ever read.
+//
+// Who saves: an owner (or an Admin) saves directly. Anyone else's accepted draft
+// becomes a description_change item in the owner's Inbox — the same steward→owner
+// rule custom properties use.
+
+let _aidState = {
+  settings:{
+    enabled:true,
+    roles:["admin","steward","engineer"],        // who may ask for a suggestion
+    length:"short",                               // short | detailed
+    instructions:"Write for business users, not engineers. Say what one row represents before anything else. Never repeat the column name back as the description.",
+    sources:{tags:true, glossary:true, lineage:true},
+  },
+  applied:{},     // key -> {text, by, at, edited, conf}
+  reqs:[],        // steward drafts awaiting the owner
+  stats:{suggested:214, accepted:131, edited:52, discarded:31},
+};
+const _aidSubs = new Set();
+const aidSet = (fn) => { _aidState = fn(_aidState); _aidSubs.forEach(f=>f()); };
+const useAid = () => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const f=()=>force(n=>n+1); _aidSubs.add(f); return ()=>_aidSubs.delete(f); },[]);
+  return _aidState;
+};
+const aidKey = (asset, col) => col ? `c:${asset}.${col}` : `a:${asset}`;
+const aidApplied = (asset, col) => _aidState.applied[aidKey(asset, col)] || null;
+const aidPendingFor = (asset, col) => _aidState.reqs.find(r=>r.key===aidKey(asset,col) && r.status==="pending") || null;
+const aidCanAsk = (role) => _aidState.settings.enabled && _aidState.settings.roles.includes(role);
+
+const aidApply = (asset, col, text, by, meta={}) => aidSet(s=>({...s,
+  applied:{...s.applied, [aidKey(asset,col)]:{text, by, at:"just now", ...meta}},
+  stats:{...s.stats, accepted:s.stats.accepted+(meta.edited?0:1), edited:s.stats.edited+(meta.edited?1:0)}}));
+const aidRequest = (asset, col, text, by, owner, meta={}) => aidSet(s=>({...s,
+  reqs:[...s.reqs, {id:"aidq_"+Date.now()+"_"+(col||"t"), key:aidKey(asset,col), asset, col:col||null, text, requestedBy:by, owner, status:"pending", at:"just now", ...meta}]}));
+const aidResolve = (id, verdict, by) => aidSet(s=>{
+  const r = s.reqs.find(x=>x.id===id);
+  const reqs = s.reqs.map(x=>x.id===id?{...x, status:verdict, decidedBy:by}:x);
+  if(!r || verdict!=="approved") return {...s, reqs};
+  return {...s, reqs, applied:{...s.applied, [r.key]:{text:r.text, by:`${r.requestedBy}, approved by ${by}`, at:"just now", edited:r.edited, conf:r.conf}},
+          stats:{...s.stats, accepted:s.stats.accepted+(r.edited?0:1), edited:s.stats.edited+(r.edited?1:0)}};
+});
+const aidDiscard = () => aidSet(s=>({...s, stats:{...s.stats, discarded:s.stats.discarded+1}}));
+
+// ── Words ─────────────────────────────────────────────────────────────────────
+const AID_ABBR = {id:"identifier", amt:"amount", qty:"quantity", dt:"date", ts:"timestamp", num:"number", no:"number", nbr:"number",
+  cust:"customer", eml:"email", tel:"telephone", pcode:"postcode", addr:"address", ref:"reference", mgr:"manager", emp:"employee",
+  desc:"description", cd:"code", txn:"transaction", acct:"account", pct:"percentage", avg:"average", cnt:"count", src:"source",
+  dob:"date of birth", ssn:"social security number", ip:"IP", url:"URL", sku:"SKU", usd:"USD", utc:"UTC", fk:"foreign key", nm:"name",
+  prod:"product", org:"organisation", dept:"department", yr:"year", mo:"month"};
+const AID_KNOWN = new Set(["order","orders","customer","status","created","updated","deleted","total","price","amount","email","name","first","last","full",
+  "date","time","at","type","code","country","city","region","state","zip","phone","user","session","event","product","category","channel","value",
+  "revenue","cost","count","quantity","is","has","flag","active","start","end","duration","source","segment","score","rate","tier","plan","currency",
+  "address","line","street","postal","birth","gender","salary","department","title","manager","employee","hire","account","balance","transaction",
+  "campaign","click","page","device","platform","version","key","hash","created_at","updated_at","region","id","ref","reference","number","description",
+  "shipped","placed","paid","cancelled","closed","opened","signup","login","last_seen","discount","tax","net","gross","margin","unit","units"]);
+const aidTitle = w => w ? w[0].toUpperCase()+w.slice(1) : w;
+const aidSingular = w => /ies$/.test(w) ? w.slice(0,-3)+"y" : /sses$/.test(w) ? w.slice(0,-2) : (/s$/.test(w) && w.length>3 && !/ss$/.test(w)) ? w.slice(0,-1) : w;
+const aidEntity = (assetName) => {
+  const parts = assetName.toLowerCase().replace(/\.[a-z0-9]+$/,"").replace(/^(dim|fct|fact|stg|raw|int|mart|vw|v)_/,"").split("_").filter(Boolean);
+  if(!parts.length) return "record";
+  parts[parts.length-1] = aidSingular(parts[parts.length-1]);
+  return parts.map(w=>AID_ABBR[w]||w).join(" ");
+};
+const aidWords = (colName) => colName.replace(/([a-z])([A-Z])/g,"$1_$2").toLowerCase().split(/_+/).filter(Boolean);
+const AID_VERBS = /^(created|updated|deleted|placed|shipped|paid|cancelled|closed|opened|modified|loaded|ingested|processed|signed|hired|started|ended|expired|delivered|refunded)$/;
+
+// Returns {text, conf, used:[...], unknown:[...]}. `variant` rotates phrasing so
+// Regenerate gives a genuinely different draft rather than the same sentence.
+const aidColumnText = ({col, asset, entity, glossary, sensitive, variant=0}) => {
+  const w = aidWords(col.name);
+  const unknown = w.filter(x=>!AID_KNOWN.has(x) && !AID_ABBR[x] && !/^\d+$/.test(x) && x.length<=4);
+  const expanded = w.map(x=>AID_ABBR[x]||x);
+  const last = w[w.length-1];
+  const head = expanded.slice(0,-1).join(" ");
+  const type = (col.type||"").toUpperCase();
+  const ref = /Reference to ([a-zA-Z_0-9]+)\.([a-zA-Z_0-9]+)/.exec(col.desc||"");
+  let t;
+  if(col.pk) t = variant%2 ? `Uniquely identifies each ${entity}; the primary key of ${asset}.` : `Primary key — one value per ${entity}, never reused.`;
+  else if(ref) { const target = aidEntity(ref[1]);
+    t = variant%2 ? `Links the ${entity} to its ${target} (${ref[1]}.${ref[2]}).` : `Identifier of the ${target} this ${entity} belongs to; references ${ref[1]}.${ref[2]}.`; }
+  else if(["id","key","ref"].includes(last)) t = `Identifier of the ${head||entity} for this ${entity}.`;
+  else if(["at","ts","timestamp","time"].includes(last) || /TIMESTAMP/.test(type)) {
+    const verb = w.find(x=>AID_VERBS.test(x));
+    t = verb ? (variant%2 ? `When the ${entity} was ${verb}.` : `Timestamp at which the ${entity} was ${verb}.`)
+             : `Point in time recorded for the ${head||entity}.`; }
+  else if(["date","dt"].includes(last) || type==="DATE") {
+    const verb = w.find(x=>AID_VERBS.test(x));
+    t = verb ? `Calendar date the ${entity} was ${verb}.` : `${aidTitle(head||"Recorded")} date of the ${entity}.`; }
+  else if(w[0]==="is" || w[0]==="has" || last==="flag" || /BOOL/.test(type))
+    t = `Whether the ${entity} ${w[0]==="has"?"has":"is"} ${expanded.filter(x=>!["is","has","flag"].includes(x)).join(" ")}.`;
+  else if(["amt","amount","total","price","cost","revenue","value","balance","salary","tax","discount","net","gross","margin"].includes(last) || /DECIMAL|NUMERIC|MONEY/.test(type) && !["count","cnt","qty","quantity","num","number"].includes(last))
+    t = variant%2 ? `${aidTitle(expanded.join(" "))} of the ${entity}, in the source currency.` : `Monetary ${expanded.join(" ")} for the ${entity}.`;
+  else if(["count","cnt","qty","quantity","num","number","nbr"].includes(last))
+    t = `Number of ${head||"items"} for the ${entity}.`;
+  else if(["status","type","code","cd","category","tier","segment","channel","plan"].includes(last))
+    t = `${aidTitle(expanded.join(" "))} of the ${entity} — a coded value from a fixed list.`;
+  else t = variant%2 ? `The ${entity}'s ${expanded.join(" ")}.` : `${aidTitle(expanded.join(" "))} recorded for the ${entity}.`;
+  const used = ["column name","type"];
+  if(ref) used.push("reference");
+  if(glossary){ t += ` Business term: ${glossary.term}.`; used.push("glossary"); }
+  if(sensitive){ t += " Personal data — masked for roles below Steward."; used.push("classification"); }
+  const conf = unknown.length ? 0.58 : (w.some(x=>AID_ABBR[x]) ? 0.78 : 0.9) + (glossary?0.04:0) + (col.pk||ref?0.03:0);
+  return {text:t, conf:Math.min(0.96, conf), used, unknown};
+};
+
+const aidGlossaryFor = (trace, phrase) => {
+  const p = phrase.toLowerCase();
+  return aiCall(trace, "glossary.lookup", {q:p}).find(t=>
+    t.term.toLowerCase()===p || (t.abbr||"").toLowerCase()===p || (t.synonyms||[]).some(x=>x.toLowerCase()===p)) || null;
+};
+
+const aidDraftColumn = ({assetName, colName, role, variant=0, trace=[]}) => {
+  const S = _aidState.settings;
+  const a = aiCall(trace, "asset.get", {name:assetName})[0];
+  const cols = aiCall(trace, "asset.columns", {name:assetName, role});
+  const col = cols.find(c=>c.name===colName);
+  if(!a || !col) return null;
+  const entity = aidEntity(a.name);
+  const glossary = S.sources.glossary ? aidGlossaryFor(trace, aidWords(col.name).map(x=>AID_ABBR[x]||x).join(" ")) : null;
+  const r = aidColumnText({col, asset:a.name, entity, glossary, sensitive:S.sources.tags && col.sensitive, variant});
+  return {...r, trace, sent:["Column name and type","Key and reference flags",S.sources.glossary&&"Glossary term lookups",S.sources.tags&&"Sensitivity classification","Your organisation instructions"].filter(Boolean)};
+};
+
+const aidDraftAsset = ({assetName, role, variant=0, trace=[]}) => {
+  const S = _aidState.settings;
+  const a = aiCall(trace, "asset.get", {name:assetName})[0];
+  if(!a) return null;
+  const cols = aiCall(trace, "asset.columns", {name:assetName, role});
+  const entity = aidEntity(a.name);
+  const pks = cols.filter(c=>c.pk).map(c=>c.name);
+  const sens = S.sources.tags ? cols.filter(c=>c.sensitive) : [];
+  const biz = cols.filter(c=>!c.pk && !/(_id|_at|_ts|_key)$/.test(c.name) && !c.sensitive).slice(0,3).map(c=>c.name);
+  const down = S.sources.lineage ? aiCall(trace, "lineage.impact", {asset:a}) : [];
+  const glossary = S.sources.glossary ? aidGlossaryFor(trace, entity) : null;
+  const kind = (a.type||"table").toLowerCase();
+  const out = [];
+  out.push(variant%2
+    ? `${aidTitle(a.domain||"")} ${kind} in ${a.connectionLabel||a.service} with one row per ${entity}.`
+    : `One row per ${entity}${glossary && glossary.term.toLowerCase()!==entity ?` (${glossary.term})`:""} — the ${(a.domain||"").toLowerCase()} ${kind} for ${entity} records in ${a.connectionLabel||a.service}.`);
+  if(cols.length) out.push(`${pks.length?`Keyed on ${pks.join(", ")}; `:""}${cols.length} columns${biz.length?`, including ${biz.join(", ")}`:""}.`);
+  if(sens.length) out.push(`${sens.length} column${sens.length>1?"s carry":" carries"} personal data (${sens.slice(0,4).map(c=>c.name).join(", ")}) and ${sens.length>1?"are":"is"} masked for roles below Steward.`);
+  if(down.length) out.push(`Feeds ${down.length} downstream asset${down.length>1?"s":""}, including ${down.slice(0,2).map(d=>d.label).join(" and ")}.`);
+  if(a.owner) out.push(`Owned by ${a.owner}.`);
+  const text = (S.length==="short" ? out.slice(0,2) : out).join(" ");
+  const used = ["names","types",pks.length&&"keys",sens.length&&"classifications",down.length&&"lineage",glossary&&"glossary"].filter(Boolean);
+  const conf = Math.min(0.94, 0.72 + (cols.length?0.08:0) + (pks.length?0.04:0) + (down.length?0.04:0) + (glossary?0.04:0));
+  return {text, conf, used, unknown:[], trace,
+    sent:["Asset name, type, domain and connection",`${cols.length} column names and types`,S.sources.tags&&"Sensitivity classifications",S.sources.lineage&&"Downstream lineage",S.sources.glossary&&"Glossary term lookups","Your organisation instructions"].filter(Boolean)};
+};
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // AI LAYER · 1 — TALK TO METADATA (Copilot)
 // ═══════════════════════════════════════════════════════════════════════════════
 // One assistant, two kinds of answer, one conversation:
@@ -55170,7 +55387,7 @@ const aiCall = (trace, name, args) => {
 //     About the DATA — rows, business questions — answered only from a
 //     published Answer Space, role-projected, credit-metered. This used to be a
 //     separate Data Ask page; asking now happens here, and the spaces themselves
-//     are managed in Settings › Copilot.
+//     are managed in Settings › AI › Copilot.
 //
 // It is a dock rather than a page on purpose: its whole advantage over a search
 // box is that it already knows which asset you are looking at.
@@ -55235,7 +55452,7 @@ const aiAsk = (q, ctx) => {
     const hit = aiCall(trace, "answer.resolve", {q, space:spaceId})[0];
     if(hit || spaceId){
       if(!_da.settings.access.ask.includes(role)){
-        push({kind:"text", text:`Your role (${(ROLES_CONFIG[role]||{}).label}) can ask me about metadata, but not about data. An Admin grants data questions in **Settings › Copilot › Access**.`});
+        push({kind:"text", text:`Your role (${(ROLES_CONFIG[role]||{}).label}) can ask me about metadata, but not about data. An Admin grants data questions in **Settings › AI › Copilot › Access**.`});
         return R("data-denied", "Data questions not permitted");
       }
       const proj = hit ? aiCall(trace, "answer.project", {id:hit.id, q, role})[0] : null;
@@ -55870,7 +56087,7 @@ const CPTeach = ({q, role, onToast}) => {
             daAddReview({id:"rv"+Date.now(), kind:"Missing synonym", q, space:"—", by:me, at:daNow(),
               assignee:"alex.rivera", status:"Open", sev:"Low",
               note:"The Copilot could not ground this in the graph or in any published Answer Space.", fixes:["addSynonym","dismiss"]});
-            setSent(true); onToast && onToast("Sent to a steward — tracked in Settings › Copilot › Review Queue");
+            setSent(true); onToast && onToast("Sent to a steward — tracked in Settings › AI › Copilot › Review Queue");
           }}>Ask a steward to teach this</Btn>}
     </div>
   );
@@ -56071,7 +56288,7 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
             </>)}
             {scope!=="metadata" && !canData && (
               <div style={{marginTop:14,padding:"9px 11px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11,color:T.textSub,lineHeight:1.55}}>
-                Your role can ask about metadata only. An Admin grants data questions in Settings › Copilot › Access.
+                Your role can ask about metadata only. An Admin grants data questions in Settings › AI › Copilot › Access.
               </div>
             )}
             {!scopeSp && (<>
@@ -56321,21 +56538,52 @@ const aicBlend = (nameHit, valHit, graphHit, w=1) => {
 // `confirmed` (already classified and the signals agree), `proposed` (new), and
 // `clear` (scanned, nothing fired) — the last one matters, because "we looked and
 // found nothing" is a compliance answer and "we did not look" is not.
+// ── Scan profiles ─────────────────────────────────────────────────────────────
+// A profile answers four questions: which objects, which tags to recommend, how
+// (tiers + confidence floor), and when. Different sources need different tags, so
+// there can be several; a column two profiles cover is scanned once and credited
+// to both. Nothing outside every enabled profile is read at all.
+const aicContainer = a => (a.db||"").split(" / ").slice(0,2).join(" / ");
+const aicGlob = (pat) => new RegExp("^"+pat.trim().replace(/[.+?^${}()|[\]\\]/g,"\\$&").replace(/\*/g,".*")+"$","i");
+const aicPatterns = (txt) => (txt||"").split(",").map(x=>x.trim()).filter(Boolean).map(aicGlob);
+const aicClassifiable = () => ASSETS.filter(a=>(SCHEMA[a.name]||[]).length);
+const aicProfileAssets = (p) => {
+  const inc = aicPatterns(p.include), exc = aicPatterns(p.exclude);
+  return aicClassifiable().filter(a=>
+    (!p.connections.length || p.connections.includes(a.connectionLabel)) &&
+    (!p.containers.length  || p.containers.includes(aicContainer(a))) &&
+    (!p.objectTypes.length || p.objectTypes.includes(a.type)) &&
+    (!inc.length || inc.some(r=>r.test(a.name))) &&
+    !exc.some(r=>r.test(a.name)));
+};
+const AIC_TAGS = [...new Set(AIC_DETECTORS.map(d=>d.tag))];
+const aicNewProfile = () => ({
+  id:"prof_"+Date.now(), name:"", enabled:true,
+  connections:[], containers:[], objectTypes:[], include:"", exclude:"",
+  detectors: AIC_DETECTORS.map(d=>d.k), useDefaults:true,
+  tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
+  schedule:"ingest",
+});
+const AIC_SCHEDULES = {ingest:"On every ingest (new and changed columns)", daily:"Daily at 02:00", weekly:"Weekly, Sunday 02:00", manual:"Only when someone runs it"};
+
 const aicScan = (opts) => {
-  const {tiers, domains, valueAllowed} = opts;
+  const {tiers, domains, valueAllowed, assets, detectors} = opts;
+  const dets = detectors ? AIC_DETECTORS.filter(d=>detectors.includes(d.k)) : AIC_DETECTORS;
   const findings = [];
-  ASSETS.forEach(a=>{
+  (assets || ASSETS).forEach(a=>{
     const cols = SCHEMA[a.name] || [];
     if(!cols.length) return;
     if(domains && domains.length && !domains.includes(a.domain)) return;
     const canReadValues = tiers.value && valueAllowed.includes(a.domain);
     cols.forEach(col=>{
-      const nameDet  = tiers.name ? AIC_DETECTORS.find(d=>d.name.test(col.name)) : null;
+      const nameDet  = tiers.name ? dets.find(d=>d.name.test(col.name)) : null;
       const profile  = COL_PROFILES[col.name] || null;
       const valDet   = canReadValues
-        ? AIC_DETECTORS.map(d=>({d, r:d.value(profile)})).filter(x=>x.r).sort((x,y)=>y.r.s-x.r.s)[0]
+        ? dets.map(d=>({d, r:d.value(profile)})).filter(x=>x.r).sort((x,y)=>y.r.s-x.r.s)[0]
         : null;
-      const graphHit = tiers.graph ? aicGraphSignal(col) : null;
+      const graphHitRaw = tiers.graph ? aicGraphSignal(col) : null;
+      // Inheritance only proposes a tag this profile is asking for.
+      const graphHit = graphHitRaw && (!detectors || detectors.includes(graphHitRaw.detector)) ? graphHitRaw : null;
 
       const det = nameDet || (valDet && valDet.d) || (graphHit && aicDet(graphHit.detector)) || null;
       if(!det){
@@ -56371,6 +56619,33 @@ const aicScan = (opts) => {
   return findings;
 };
 
+// Every enabled profile, with the profile's own tiers and tags, under the
+// platform-wide data boundary. Off means off: no profile runs, nothing is read.
+const aicScanAll = (st, onlyIds) => {
+  if(!st.settings.enabled) return [];
+  const byId = new Map();
+  st.profiles.filter(p=>p.enabled && (!onlyIds || onlyIds.includes(p.id))).forEach(p=>{
+    const tiers = p.useDefaults ? st.settings.tiers : {
+      name:  st.settings.tiers.name  && p.tiers.name,
+      value: st.settings.tiers.value && p.tiers.value,
+      graph: st.settings.tiers.graph && p.tiers.graph};
+    aicScan({tiers, valueAllowed:st.settings.valueAllowed, assets:aicProfileAssets(p), detectors:p.detectors})
+      .forEach(f=>{
+        const key = f.id || `c_${f.assetId}_${f.col}`;
+        const floor = p.useDefaults ? st.settings.minConfidence : p.minConfidence;
+        const prev = byId.get(key);
+        if(!prev){ byId.set(key, {...f, profiles:[p.id], floor}); return; }
+        // Two profiles on one column: keep the stronger reading, credit both.
+        const better = (f.kind!=="clear" && prev.kind==="clear") || (f.conf||0) > (prev.conf||0);
+        byId.set(key, {...(better?f:prev), profiles:[...prev.profiles, p.id], floor:Math.min(prev.floor, floor)});
+      });
+  });
+  return [...byId.values()];
+};
+const aicProfileName = (st, id) => (st.profiles.find(p=>p.id===id)||{}).name || "Removed profile";
+// A proposal counts once it clears the floor of the profile that raised it.
+const aicIsProposal = (st, f) => f.kind==="proposed" && f.conf >= (f.floor!=null ? f.floor : st.settings.minConfidence);
+
 // ── Store ─────────────────────────────────────────────────────────────────────
 // Module-level so a run survives navigation, following the same pattern the
 // Knowledge Layer and Data Ask already use.
@@ -56402,6 +56677,9 @@ const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS &
 
 let _aicState = {
   settings:{
+    // The master switch. A new tenant starts with this OFF and no profile; this
+    // demo tenant has been running for a month, so it is on with two.
+    enabled:true,
     tiers:{name:true, value:true, graph:true},
     // Value inspection reads sample data, and some domains cannot permit that.
     // Platform holds the HR tables, where sampling salary and name columns is
@@ -56422,6 +56700,18 @@ let _aicState = {
      assets:12, cols:74,  proposed:18, confirmed:22, clear:34,  autoApplied:0, ms:16400, status:"complete"},
   ],
   findings:null,           // populated by the first scan
+  profiles:[
+    {id:"prof_all", name:"Personal & card data — all warehouses", enabled:true,
+     connections:[], containers:[], objectTypes:[], include:"", exclude:"*_tmp, *_bak",
+     detectors: AIC_DETECTORS.map(d=>d.k), useDefaults:true,
+     tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:"ingest",
+     owner:"priya.nair", created:"2026-08-31"},
+    {id:"prof_stage", name:"Staging schemas — card numbers only", enabled:false,
+     connections:["Snowflake DWH"], containers:[], objectTypes:["Table"], include:"stg_*, raw_*", exclude:"",
+     detectors:["card"], useDefaults:false,
+     tiers:{name:true, value:true, graph:false}, minConfidence:0.85, schedule:"weekly",
+     owner:"dev.patel", created:"2026-09-10"},
+  ],
 };
 const _aicSubs = new Set();
 const aicSet = (fn) => { _aicState = fn(_aicState); _aicSubs.forEach(f=>f()); };
@@ -56573,21 +56863,46 @@ const AICEvidence = ({f, onClose, onNav}) => {
 
 // ── The screen ────────────────────────────────────────────────────────────────
 
-// The admin surface: what the classifier looks for, where it is allowed to look,
+// The admin surface: whether the classifier runs at all, which objects it scans and
+// which tags it recommends there (scan profiles), where it is allowed to read values,
 // and which detectors have earned the right to apply without a human. It lives in
-// Settings › Applications — the home this product already had for post-ingestion
-// automation — rather than in the steward's daily surface. Different person,
+// Settings › AI rather than in the steward's daily surface. Different person,
 // different frequency, different question.
 const AICControlPanel = ({onToast}) => {
   const st = useAic();
-  const [tab, setTab] = useState("settings");
+  const [tab, setTab] = useState("profiles");
+  const on = st.settings.enabled;
+  const live = st.profiles.filter(p=>p.enabled);
+  const inScope = new Set(live.flatMap(aicProfileAssets).map(a=>a.id)).size;
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100%",minHeight:0}}>
-      <div style={{flexShrink:0,padding:"0 20px"}}>
-        <Tabs2 tabs={[{key:"settings",label:"Signals & boundaries"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
+    <div>
+      {/* Master switch — off means nothing is read and nothing is proposed */}
+      <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
+                   background:on?T.bgSurface:T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}>
+            AI Classification
+            <span style={{fontSize:10,fontWeight:700,padding:"1.5px 7px",borderRadius:99,
+              background:on?T.green+"18":T.bgHover,color:on?T.green:T.textMuted,border:`1px solid ${on?T.green+"40":T.border}`}}>{on?"On":"Off"}</span>
+          </div>
+          <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
+            {on
+              ? <>Scanning <b style={{color:T.text}}>{inScope} object{inScope===1?"":"s"}</b> through {live.length} active scan profile{live.length===1?"":"s"}. Proposals go to Classifications › AI proposals; nothing is applied without a steward.</>
+              : "Off — no object is scanned and nothing is proposed. Turning it on runs the active scan profiles below; review what each one covers first."}
+          </div>
+        </div>
+        <Toggle on={on} onChange={()=>{
+          aicSet(x=>({...x, settings:{...x.settings, enabled:!on}, findings:null}));
+          onToast(on?"AI Classification turned off — nothing will be scanned":"AI Classification turned on",on?"info":"success");
+        }}/>
+      </div>
+
+      <div style={{marginBottom:14}}>
+        <Tabs2 tabs={[{key:"profiles",label:`Scan profiles (${st.profiles.length})`},{key:"settings",label:"Signals & boundaries"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
           active={tab} onChange={setTab}/>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
+      <div style={{opacity:on?1:.55,transition:"opacity .15s"}}>
+        {tab==="profiles"&&<AICProfilesTab onToast={onToast}/>}
         {tab==="accuracy"&&(
           <div>
             <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,maxWidth:760}}>
@@ -56650,6 +56965,10 @@ const AICControlPanel = ({onToast}) => {
         )}
         {tab==="settings"&&(
           <div style={{maxWidth:820}}>
+            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>
+              Platform-wide ceilings. A scan profile can use fewer signals or a higher confidence floor than these, never more.
+              A signal switched off here is off in every profile.
+            </div>
             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:9}}>SIGNAL TIERS</div>
             {["name","value","graph"].map(t=>{
               const m = AIC_TIER_META[t]; const on = st.settings.tiers[t];
@@ -56720,6 +57039,625 @@ const AICControlPanel = ({onToast}) => {
   );
 };
 
+// ── Scan profiles ─────────────────────────────────────────────────────────────
+// Settings › AI › Classification › Scan profiles. Each profile says which objects
+// to scan and which tags to recommend on them. The list is the "what is covered"
+// answer an auditor asks for; the drawer is where one profile is shaped.
+const AICProfilesTab = ({onToast}) => {
+  const st = useAic();
+  const {roleCfg} = useRole();
+  const me = (roleCfg?.email||"you@jnj").split("@")[0];
+  const [edit, setEdit] = useState(null);     // a profile draft, or null
+  const covered = new Set(st.profiles.filter(p=>p.enabled).flatMap(aicProfileAssets).map(a=>a.id));
+  const uncovered = aicClassifiable().filter(a=>!covered.has(a.id));
+
+  const save = (p) => {
+    const isNew = !st.profiles.some(x=>x.id===p.id);
+    aicSet(x=>({...x, findings:null,
+      profiles: isNew ? [...x.profiles, {...p, owner:me, created:"just now"}] : x.profiles.map(q=>q.id===p.id?p:q)}));
+    setEdit(null);
+    onToast(isNew?`Scan profile "${p.name}" created`:`Scan profile "${p.name}" saved`,"success");
+  };
+  const remove = (p) => {
+    aicSet(x=>({...x, findings:null, profiles:x.profiles.filter(q=>q.id!==p.id)}));
+    setEdit(null);
+    onToast(`Scan profile "${p.name}" deleted — its pending proposals leave the queue`,"info");
+  };
+  const toggle = (p) => {
+    aicSet(x=>({...x, findings:null, profiles:x.profiles.map(q=>q.id===p.id?{...q,enabled:!q.enabled}:q)}));
+    onToast(p.enabled?`"${p.name}" paused`:`"${p.name}" active`,"success");
+  };
+
+  return (
+    <div style={{maxWidth:980}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:14}}>
+        <div style={{flex:1,fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
+          A scan profile picks <b style={{color:T.textSub}}>which objects</b> to scan and <b style={{color:T.textSub}}>which tags to recommend</b> on them.
+          Different sources need different tags, so there can be several. An object no active profile covers is never read.
+        </div>
+        <AddBtn label="New scan profile" onClick={()=>setEdit(aicNewProfile())}/>
+      </div>
+
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"7px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+          <div style={{flex:1}}>PROFILE</div>
+          <div style={{width:150}}>RECOMMENDS</div>
+          <div style={{width:80,textAlign:"right"}}>OBJECTS</div>
+          <div style={{width:140}}>WHEN</div>
+          <div style={{width:50}}>ACTIVE</div>
+          <div style={{width:50}}/>
+        </div>
+        {st.profiles.map((p,i)=>{
+          const assets = aicProfileAssets(p);
+          const tags = [...new Set(p.detectors.map(k=>aicDet(k).tag))];
+          const where = [p.connections.length?p.connections.join(", "):"All connections",
+                         p.containers.length?`${p.containers.length} schema${p.containers.length>1?"s":""}`:null,
+                         p.include?`include ${p.include}`:null, p.exclude?`exclude ${p.exclude}`:null].filter(Boolean).join(" · ");
+          return (
+            <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none",opacity:p.enabled?1:.6}}>
+              <button onClick={()=>setEdit(JSON.parse(JSON.stringify(p)))}
+                style={{flex:1,minWidth:0,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{where}</div>
+              </button>
+              <div style={{width:150,flexShrink:0,display:"flex",gap:4,flexWrap:"wrap"}}>
+                {tags.map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}
+                <span style={{fontSize:10,color:T.textMuted,alignSelf:"center"}}>{p.detectors.length}/{AIC_DETECTORS.length}</span>
+              </div>
+              <div style={{width:80,flexShrink:0,textAlign:"right",fontSize:12,fontFamily:"'Geist Mono',monospace",color:assets.length?T.text:T.amber,fontWeight:600}}>{assets.length}</div>
+              <div style={{width:140,flexShrink:0,fontSize:11,color:T.textSub}}>{AIC_SCHEDULES[p.schedule].split(" (")[0]}</div>
+              <div style={{width:50,flexShrink:0}}><Toggle on={p.enabled} onChange={()=>toggle(p)}/></div>
+              <div style={{width:50,flexShrink:0,textAlign:"right"}}>
+                <Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(p)))}>Edit</Btn>
+              </div>
+            </div>
+          );
+        })}
+        {st.profiles.length===0&&(
+          <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.textMuted}}>
+            No scan profile yet — so nothing is scanned. Create one to choose the objects and the tags to recommend.
+          </div>
+        )}
+      </div>
+
+      {/* The coverage answer — what nobody is looking at */}
+      <div style={{marginTop:12,padding:"10px 13px",borderRadius:9,fontSize:11.5,lineHeight:1.6,
+                   background:uncovered.length?T.amberDim:T.bgElevated,border:`1px solid ${uncovered.length?T.amber+"44":T.border}`,color:T.textSub}}>
+        {uncovered.length
+          ? <><b style={{color:T.text}}>{uncovered.length} profiled object{uncovered.length>1?"s are":" is"} outside every active profile</b> and will not be scanned: {uncovered.slice(0,6).map(a=>a.name).join(", ")}{uncovered.length>6?` and ${uncovered.length-6} more`:""}.</>
+          : <>Every profiled object is covered by at least one active profile.</>}
+      </div>
+
+      <AICProfileDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
+        onClose={()=>setEdit(null)} onSave={save} onDelete={remove} platform={st.settings}/>
+    </div>
+  );
+};
+
+const AICProfileDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) => {
+  const [d, setD] = useState(draft);
+  const [openTag, setOpenTag] = useState(null);
+  useEffect(()=>{ setD(draft); setOpenTag(null); },[draft]);
+  if(!draft || !d) return null;
+
+  const all = aicClassifiable();
+  const connections = [...new Set(all.map(a=>a.connectionLabel))].sort();
+  const inConn = all.filter(a=>!d.connections.length || d.connections.includes(a.connectionLabel));
+  const containers = [...new Set(inConn.map(aicContainer))].sort();
+  const types = [...new Set(inConn.map(a=>a.type))].sort();
+  const assets = aicProfileAssets(d);
+  const cols = assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0);
+  const set = (patch) => setD(x=>({...x,...patch}));
+  const flip = (arr, v) => arr.includes(v) ? arr.filter(x=>x!==v) : [...arr, v];
+  const blocked = [...new Set(assets.map(a=>a.domain))].filter(dm=>!platform.valueAllowed.includes(dm));
+  const valid = d.name.trim() && d.detectors.length;
+
+  const H = ({n, t, sub}) => (
+    <div style={{margin:"22px 0 10px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{width:20,height:20,borderRadius:6,background:T.accentDim,color:T.accent,fontSize:11,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center"}}>{n}</span>
+        <span style={{fontSize:13,fontWeight:700,color:T.text}}>{t}</span>
+      </div>
+      {sub&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.55,marginTop:4,marginLeft:28}}>{sub}</div>}
+    </div>
+  );
+  const Lbl = ({children}) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"12px 0 6px"}}>{children}</div>;
+  const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const Check = ({on, onChange, children, sub}) => (
+    <label style={{display:"flex",alignItems:"flex-start",gap:8,padding:"5px 0",cursor:"pointer",fontSize:12,color:T.text}}>
+      <input type="checkbox" checked={on} onChange={onChange} style={{marginTop:2}}/>
+      <span style={{minWidth:0}}>{children}{sub&&<span style={{display:"block",fontSize:10.5,color:T.textMuted}}>{sub}</span>}</span>
+    </label>
+  );
+
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight"
+        style={{position:"absolute",top:0,right:0,bottom:0,width:580,maxWidth:"96vw",background:T.bgSurface,
+          borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>AI Classification · Scan profile</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text,marginTop:2}}>{existing?(draft.name||"Untitled profile"):"New scan profile"}</div>
+          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"6px 22px 22px"}}>
+          <Lbl>Name</Lbl>
+          <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder="e.g. HR warehouse — personal data" style={inp} autoFocus={!existing}/>
+
+          <H n="1" t="Which objects" sub="Narrow from the connection down. Leave a list empty to mean all of it."/>
+          <Lbl>Connections</Lbl>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,padding:"4px 11px",background:T.bgElevated}}>
+            <Check on={!d.connections.length} onChange={()=>set({connections:[], containers:[]})}>All connections</Check>
+            {connections.map(c=>(
+              <Check key={c} on={d.connections.includes(c)} onChange={()=>set({connections:flip(d.connections,c), containers:[]})}
+                sub={`${all.filter(a=>a.connectionLabel===c).length} profiled objects`}>{c}</Check>
+            ))}
+          </div>
+          <Lbl>Databases / schemas</Lbl>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,padding:"4px 11px",background:T.bgElevated,maxHeight:170,overflowY:"auto"}}>
+            <Check on={!d.containers.length} onChange={()=>set({containers:[]})}>All in the selected connections</Check>
+            {containers.map(c=>(
+              <Check key={c} on={d.containers.includes(c)} onChange={()=>set({containers:flip(d.containers,c)})}>
+                <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{c}</code>
+              </Check>
+            ))}
+          </div>
+          <Lbl>Object types</Lbl>
+          <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+            {types.map(t=><Check key={t} on={!d.objectTypes.length || d.objectTypes.includes(t)}
+              onChange={()=>{ const cur = d.objectTypes.length?d.objectTypes:types; const nx = flip(cur,t); set({objectTypes: nx.length===types.length?[]:nx}); }}>{t}</Check>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div><Lbl>Include names</Lbl><input value={d.include} onChange={e=>set({include:e.target.value})} placeholder="e.g. dim_*, fct_*" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>
+            <div><Lbl>Exclude names</Lbl><input value={d.exclude} onChange={e=>set({exclude:e.target.value})} placeholder="e.g. *_tmp, *_bak" style={{...inp,fontFamily:"'Geist Mono',monospace"}}/></div>
+          </div>
+          <div style={{marginTop:10,padding:"9px 12px",borderRadius:8,background:assets.length?T.blueDim:T.amberDim,border:`1px solid ${assets.length?T.blue+"40":T.amber+"44"}`,fontSize:11.5,color:T.text,lineHeight:1.55}}>
+            <b>{assets.length} object{assets.length===1?"":"s"} · {cols} columns</b> in scope
+            {assets.length>0&&<span style={{color:T.textSub}}> — {assets.slice(0,5).map(a=>a.name).join(", ")}{assets.length>5?` +${assets.length-5} more`:""}</span>}
+            {!assets.length&&<span style={{color:T.textSub}}> — nothing matches these filters, so this profile would scan nothing.</span>}
+          </div>
+
+          <H n="2" t="Which tags to recommend" sub="The classifier only proposes tags you pick here, and only tags that already exist in your taxonomy. Open a tag to choose its individual detectors."/>
+          {AIC_TAGS.map(tag=>{
+            const dets = AIC_DETECTORS.filter(x=>x.tag===tag);
+            const onN = dets.filter(x=>d.detectors.includes(x.k)).length;
+            const full = onN===dets.length, none = onN===0;
+            return (
+              <div key={tag} style={{border:`1px solid ${none?T.border:T.accent+"45"}`,borderRadius:8,marginBottom:7,background:none?T.bgElevated:T.accentDim+"55"}}>
+                <div style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px"}}>
+                  <input type="checkbox" checked={full} ref={el=>{ if(el) el.indeterminate = !full && !none; }}
+                    onChange={()=>set({detectors: full ? d.detectors.filter(k=>!dets.some(x=>x.k===k)) : [...new Set([...d.detectors, ...dets.map(x=>x.k)])]})}/>
+                  <span style={{fontSize:11,fontWeight:700,padding:"1.5px 8px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{tag}</span>
+                  <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{onN} of {dets.length} detector{dets.length>1?"s":""}</span>
+                  <button onClick={()=>setOpenTag(openTag===tag?null:tag)}
+                    style={{background:"none",border:"none",color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{openTag===tag?"Hide":"Choose detectors"}</button>
+                </div>
+                {openTag===tag&&(
+                  <div style={{padding:"2px 11px 8px 33px",borderTop:`1px solid ${T.border}`}}>
+                    {dets.map(x=><Check key={x.k} on={d.detectors.includes(x.k)} onChange={()=>set({detectors:flip(d.detectors,x.k)})} sub={x.why}>{x.label}</Check>)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!d.detectors.length&&<div style={{fontSize:11.5,color:T.amber,marginTop:4}}>Pick at least one tag — a profile with nothing to recommend cannot be saved.</div>}
+
+          <H n="3" t="How" sub="Which signals to use and how sure a proposal must be before a steward sees it."/>
+          <Check on={d.useDefaults} onChange={()=>set({useDefaults:!d.useDefaults})}
+            sub={`Signals: ${["name","value","graph"].filter(t=>platform.tiers[t]).map(t=>AIC_TIER_META[t].label).join(", ")} · floor ${Math.round(platform.minConfidence*100)}%`}>
+            Use the platform defaults
+          </Check>
+          {!d.useDefaults&&(
+            <div style={{marginTop:6,padding:"10px 12px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated}}>
+              {["name","value","graph"].map(t=>(
+                <Check key={t} on={d.tiers[t] && platform.tiers[t]} onChange={()=>platform.tiers[t] && set({tiers:{...d.tiers,[t]:!d.tiers[t]}})}
+                  sub={platform.tiers[t] ? AIC_TIER_META[t].title : "Switched off platform-wide in Signals & boundaries"}>
+                  {t==="name"?"Column-name patterns":t==="value"?"Profiled value shapes":"Reference inheritance"}
+                </Check>
+              ))}
+              <Lbl>Confidence floor</Lbl>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <input type="range" min={Math.round(platform.minConfidence*100)} max="95" step="5" value={Math.round(d.minConfidence*100)}
+                  onChange={e=>set({minConfidence:Number(e.target.value)/100})} style={{flex:1,accentColor:T.accent}}/>
+                <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:44,textAlign:"right"}}>{Math.round(d.minConfidence*100)}%</span>
+              </div>
+            </div>
+          )}
+          {blocked.length>0&&(d.useDefaults?platform.tiers.value:d.tiers.value)&&(
+            <div style={{marginTop:8,fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
+              Value inspection is blocked in <b style={{color:T.amber}}>{blocked.join(", ")}</b> by the data boundary — objects there are scanned on name and inheritance only.
+            </div>
+          )}
+
+          <H n="4" t="When"/>
+          <select value={d.schedule} onChange={e=>set({schedule:e.target.value})} style={{...inp,cursor:"pointer"}}>
+            {Object.entries(AIC_SCHEDULES).map(([k,l])=><option key={k} value={k}>{l}</option>)}
+          </select>
+          <div style={{marginTop:14}}>
+            <Check on={d.enabled} onChange={()=>set({enabled:!d.enabled})} sub="A paused profile keeps its settings but scans nothing.">Active</Check>
+          </div>
+        </div>
+
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
+          {existing&&<button onClick={()=>onDelete(draft)}
+            style={{padding:"8px 12px",borderRadius:8,background:"transparent",border:`1px solid ${T.rose}55`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>}
+          <div style={{flex:1}}/>
+          <button onClick={onClose}
+            style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={()=>valid&&onSave({...d, name:d.name.trim()})} disabled={!valid}
+            style={{padding:"8px 18px",borderRadius:8,background:valid?T.accent:T.bgHover,border:"none",color:valid?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:valid?"pointer":"default",fontFamily:"inherit"}}>
+            {existing?"Save profile":"Create profile"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ── AI Descriptions · on the object ──────────────────────────────────────────
+// The ✦ button on a Description field and the draft box it opens. `onSaved`
+// receives the text when it is saved directly, so the host field updates at once.
+const aidMe = (roleCfg) => ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+const aidIsOwner = (role, me, owners=[]) => role==="admin" || owners.includes(me);
+
+const AIDescSuggestBtn = ({hasText, onClick, busy}) => (
+  <button onClick={onClick} disabled={busy} title="Draft a description from this asset's metadata — nothing is saved until you accept it"
+    style={{display:"inline-flex",alignItems:"center",gap:5,height:26,padding:"0 10px",borderRadius:7,cursor:busy?"default":"pointer",fontFamily:"inherit",
+            background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700}}>
+    <span style={{fontSize:12,lineHeight:1}}>✦</span>{busy?"Drafting…":hasText?"Rewrite":"Suggest description"}
+  </button>
+);
+
+// Provenance line under a description that started as an AI draft.
+const AIDescProvenance = ({rec}) => rec ? (
+  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,fontSize:10.5,color:T.textMuted}}>
+    <AIBadge title="This description started as an AI draft">AI-DRAFTED</AIBadge>
+    <span>{rec.edited?"edited and ":""}accepted by {rec.by} · {rec.at}</span>
+  </div>
+) : null;
+
+const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owner, busy}) => {
+  const [text, setText] = useState(draft.text);
+  const [editing, setEditing] = useState(false);
+  const [showSent, setShowSent] = useState(false);
+  useEffect(()=>{ setText(draft.text); setEditing(false); },[draft]);
+  const edited = text.trim()!==draft.text.trim();
+  const btn = (primary) => ({padding:"5px 12px",borderRadius:7,fontSize:11.5,fontWeight:primary?700:600,cursor:"pointer",fontFamily:"inherit",
+    background:primary?T.violet:T.bgSurface,border:primary?"none":`1px solid ${T.border}`,color:primary?"#fff":T.textSub});
+  return (
+    <div style={{marginTop:10,padding:"11px 13px",borderRadius:9,background:T.violetDim,border:`1px solid ${T.violet}38`}}>
+      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+        <AIBadge>AI DRAFT</AIBadge>
+        <AIConf conf={draft.conf} small/>
+        <span style={{fontSize:10.5,color:T.textMuted}}>built from {draft.used.join(", ")} · no data values read</span>
+        <div style={{flex:1}}/>
+        <button onClick={()=>setShowSent(v=>!v)} style={{background:"none",border:"none",padding:0,color:T.violet,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+          {showSent?"Hide":"What was sent"}</button>
+      </div>
+      {editing
+        ? <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} autoFocus
+            style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.violet}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit",boxSizing:"border-box"}}/>
+        : <div style={{fontSize:12.5,color:T.text,lineHeight:1.65}}>{text}</div>}
+      {draft.unknown&&draft.unknown.length>0&&(
+        <div style={{fontSize:10.5,color:T.amber,marginTop:6}}>Could not read {draft.unknown.map(u=>`“${u}”`).join(", ")} — check the wording before accepting.</div>
+      )}
+      {showSent&&(
+        <div style={{marginTop:9,padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,fontSize:10.5,color:T.textSub,lineHeight:1.6}}>
+          <div style={{fontWeight:700,color:T.text,marginBottom:3}}>Sent to the model</div>
+          {draft.sent.map(x=><div key={x}>· {x}</div>)}
+          <div style={{color:T.green,marginTop:3}}>· Never sent: data values, samples, profiles</div>
+          <div style={{fontWeight:700,color:T.text,margin:"6px 0 3px"}}>Governed tool calls</div>
+          <div style={{fontFamily:"'Geist Mono',monospace"}}>{draft.trace.map((c,i)=><div key={i}>{c.name} → {c.rows} row{c.rows===1?"":"s"}</div>)}</div>
+        </div>
+      )}
+      <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,flexWrap:"wrap"}}>
+        <button onClick={()=>onAccept(text.trim(), edited)} disabled={!text.trim()} style={btn(true)}>
+          {canSave ? (edited?"Save edited":"Accept") : `Send to ${owner||"the owner"}`}</button>
+        {!editing&&<button onClick={()=>setEditing(true)} style={btn(false)}>Edit</button>}
+        <button onClick={onRegenerate} disabled={busy} style={btn(false)}>{busy?"Drafting…":"Regenerate"}</button>
+        <button onClick={onDiscard} style={{...btn(false),border:"none",background:"transparent"}}>Discard</button>
+        {!canSave&&<span style={{fontSize:10.5,color:T.textMuted}}>You don't own this asset, so {owner||"the owner"} approves it in their Inbox.</span>}
+      </div>
+    </div>
+  );
+};
+
+// The Description card's AI half for a table/view. Keeps its own draft state.
+const useAidAssetDraft = ({asset, onToast, onSaved}) => {
+  const aid = useAid();
+  const {role, roleCfg} = useRole();
+  const me = aidMe(roleCfg);
+  const owners = asset.owners || [asset.owner].filter(Boolean);
+  const canSave = aidIsOwner(role, me, owners);
+  const [draft, setDraft] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [variant, setVariant] = useState(0);
+  const ask = (v=variant) => {
+    setBusy(true);
+    setTimeout(()=>{
+      const d = aidDraftAsset({assetName:asset.name, role, variant:v, trace:[]});
+      aidSet(s=>({...s, stats:{...s.stats, suggested:s.stats.suggested+1}}));
+      setDraft(d); setBusy(false);
+      if(!d) onToast("Nothing to draft from — this asset has no metadata in the catalog","error");
+    }, 650);
+  };
+  const accept = (text, edited) => {
+    if(canSave){
+      aidApply(asset.name, null, text, me, {edited, conf:draft.conf});
+      onSaved(text); onToast("Description saved","success");
+      pushNotif({category:"Catalog", type:"field_updated", title:`Description updated · ${asset.name}`, body:`${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"catalog", asset:asset.name});
+    } else {
+      aidRequest(asset.name, null, text, me, owners[0], {edited, conf:draft.conf});
+      onToast(`Sent to ${owners[0]||"the owner"} for approval`,"success");
+    }
+    setDraft(null);
+  };
+  return {
+    enabled: aidCanAsk(role),
+    pending: aidPendingFor(asset.name, null),
+    applied: aid.applied[aidKey(asset.name,null)] || null,
+    button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
+    box: draft ? <AIDescDraftBox draft={draft} canSave={canSave} owner={owners[0]} busy={busy}
+      onAccept={accept}
+      onRegenerate={()=>{ const v=variant+1; setVariant(v); ask(v); }}
+      onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null,
+  };
+};
+
+// Bulk: every column of one table in a drawer, one checkbox per row.
+const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
+  const {role, roleCfg} = useRole();
+  const me = aidMe(roleCfg);
+  const owners = asset.owners || [asset.owner].filter(Boolean);
+  const canSave = aidIsOwner(role, me, owners);
+  const [rows, setRows] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [onlyEmpty, setOnlyEmpty] = useState(false);
+  useEffect(()=>{
+    if(!open) return;
+    setBusy(true);
+    const t = setTimeout(()=>{
+      const cols = SCHEMA[asset.name] || [];
+      const out = cols.map(c=>{
+        const d = aidDraftColumn({assetName:asset.name, colName:c.name, role, trace:[]});
+        const cur = (aidApplied(asset.name,c.name)||{}).text || c.desc || "";
+        return {col:c.name, type:c.type, cur, text:d?d.text:"", conf:d?d.conf:0, unknown:d?d.unknown:[],
+                pending:!!aidPendingFor(asset.name,c.name), sel:!cur || cur.length<18};
+      });
+      aidSet(s=>({...s, stats:{...s.stats, suggested:s.stats.suggested+out.length}}));
+      setRows(out); setBusy(false);
+    }, 700);
+    return ()=>clearTimeout(t);
+  },[open, asset.name]);
+  if(!open) return null;
+  const shown = rows.filter(r=>!onlyEmpty || !r.cur);
+  const selected = rows.filter(r=>r.sel && r.text.trim() && !r.pending);
+  const commit = () => {
+    selected.forEach(r=>{
+      if(canSave) aidApply(asset.name, r.col, r.text.trim(), me, {conf:r.conf});
+      else aidRequest(asset.name, r.col, r.text.trim(), me, owners[0], {conf:r.conf});
+    });
+    onToast(canSave ? `${selected.length} column description${selected.length>1?"s":""} saved`
+                    : `${selected.length} column description${selected.length>1?"s":""} sent to ${owners[0]||"the owner"}`,"success");
+    onClose();
+  };
+  const setRow = (col, patch) => setRows(rs=>rs.map(r=>r.col===col?{...r,...patch}:r));
+  return createPortal(
+    <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
+      <div onClick={e=>e.stopPropagation()} className="slideInRight"
+        style={{position:"absolute",top:0,right:0,bottom:0,width:760,maxWidth:"96vw",background:T.bgSurface,
+          borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>✦ Describe columns</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{asset.name}</div>
+          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{padding:"10px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:12,flexShrink:0,fontSize:11.5,color:T.textSub}}>
+          <span>Drafted from column names, types, keys, references and glossary terms — no data values. Tick the rows to keep; edit any draft inline.</span>
+          <div style={{flex:1}}/>
+          <label style={{display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",cursor:"pointer"}}>
+            <input type="checkbox" checked={onlyEmpty} onChange={()=>setOnlyEmpty(v=>!v)}/> Only columns without a description
+          </label>
+        </div>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {busy ? (
+            <div style={{padding:"60px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>
+              <span style={{color:T.violet,fontSize:18}}>✦</span><div style={{marginTop:8}}>Drafting {(SCHEMA[asset.name]||[]).length} column descriptions…</div>
+            </div>
+          ) : (
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr>
+                <th style={{width:34,padding:"8px 0 8px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                  <input type="checkbox" checked={shown.length>0 && shown.every(r=>r.sel||r.pending)}
+                    onChange={e=>{ const v=e.target.checked; setRows(rs=>rs.map(r=>shown.some(x=>x.col===r.col)&&!r.pending?{...r,sel:v}:r)); }}/>
+                </th>
+                {["Column","Current","Suggested",""].map(h=><th key={h} style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:".05em",textTransform:"uppercase",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {shown.map(r=>(
+                  <tr key={r.col} style={{borderBottom:`1px solid ${T.border}`,opacity:r.pending?.55:1,background:r.sel?T.violetDim+"66":"transparent"}}>
+                    <td style={{padding:"9px 0 9px 16px",verticalAlign:"top"}}>
+                      <input type="checkbox" checked={r.sel} disabled={r.pending} onChange={()=>setRow(r.col,{sel:!r.sel})}/>
+                    </td>
+                    <td style={{padding:"9px 12px",verticalAlign:"top",width:150}}>
+                      <div style={{fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{r.col}</div>
+                      <div style={{fontSize:10,color:T.textMuted}}>{r.type}</div>
+                    </td>
+                    <td style={{padding:"9px 12px",verticalAlign:"top",width:190,fontSize:11.5,color:r.cur?T.textSub:T.textMuted,fontStyle:r.cur?"normal":"italic"}}>{r.cur||"none"}</td>
+                    <td style={{padding:"7px 12px",verticalAlign:"top"}}>
+                      <textarea value={r.text} rows={2} disabled={r.pending} onChange={e=>setRow(r.col,{text:e.target.value, sel:true})}
+                        style={{width:"100%",padding:"6px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                      {r.unknown.length>0&&<div style={{fontSize:10,color:T.amber,marginTop:2}}>Could not read {r.unknown.map(u=>`“${u}”`).join(", ")}</div>}
+                      {r.pending&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>A suggestion for this column is already waiting on the owner.</div>}
+                    </td>
+                    <td style={{padding:"9px 14px 9px 0",verticalAlign:"top",width:52,textAlign:"right"}}><AIConf conf={r.conf} small/></td>
+                  </tr>
+                ))}
+                {shown.length===0&&<tr><td colSpan={5} style={{padding:"30px",textAlign:"center",fontSize:12,color:T.textMuted}}>Every column already has a description.</td></tr>}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
+          <span style={{fontSize:11.5,color:T.textMuted}}>
+            {selected.length} selected{!canSave&&` · you don't own ${asset.name}, so ${owners[0]||"the owner"} approves these in their Inbox`}
+          </span>
+          <div style={{flex:1}}/>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={commit} disabled={!selected.length||busy}
+            style={{padding:"8px 18px",borderRadius:8,background:selected.length?T.violet:T.bgHover,border:"none",color:selected.length?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:selected.length?"pointer":"default",fontFamily:"inherit"}}>
+            {canSave?`Accept ${selected.length}`:`Send ${selected.length} to owner`}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ── AI Descriptions · Settings › AI › Descriptions ───────────────────────────
+const AIDCard = ({title, desc, children}) => (
+  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16,marginBottom:14}}>
+    <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:desc?3:11}}>{title}</div>
+    {desc&&<div style={{fontSize:11,color:T.textMuted,lineHeight:1.6,marginBottom:12}}>{desc}</div>}
+    {children}
+  </div>
+);
+const AIDRow = ({l, d, on, set, locked}) => (
+  <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{l}</div>
+      {d&&<div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,marginTop:1}}>{d}</div>}
+    </div>
+    {locked ? <span style={{fontSize:10.5,fontWeight:700,color:on?T.green:T.textMuted,display:"flex",alignItems:"center",gap:4}}>{Ic.shield(11)} {on?"Always":"Never"}</span>
+            : <Toggle on={on} onChange={set}/>}
+  </div>
+);
+const AIDescSettings = ({onToast, onModels}) => {
+  const aid = useAid();
+  const da = useDA();
+  const S = aid.settings;
+  const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
+  const m = (da.settings.models||{}).describe || {};
+  const prov = (DA_PROVIDERS[m.provider]||{}).label || m.provider;
+  const st = aid.stats;
+  const [instr, setInstr] = useState(S.instructions);
+  const pct = n => st.suggested ? Math.round(n/st.suggested*100) : 0;
+  return (
+    <div style={{maxWidth:860}}>
+      <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
+                   background:S.enabled?T.bgSurface:T.bgElevated,border:`1px solid ${S.enabled?T.green+"45":T.border}`}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}>
+            AI Descriptions
+            <span style={{fontSize:10,fontWeight:700,padding:"1.5px 7px",borderRadius:99,
+              background:S.enabled?T.green+"18":T.bgHover,color:S.enabled?T.green:T.textMuted,border:`1px solid ${S.enabled?T.green+"40":T.border}`}}>{S.enabled?"On":"Off"}</span>
+          </div>
+          <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
+            {S.enabled
+              ? "A ✦ Suggest button appears on the Description of tables and views, and a Describe columns action on their Columns tab. Nothing is written until a person accepts it — descriptions are never generated automatically."
+              : "Off — no Suggest button appears anywhere. Existing descriptions, including ones that started as AI drafts, are unchanged."}
+          </div>
+        </div>
+        <Toggle on={S.enabled} onChange={()=>{ put({enabled:!S.enabled}); onToast(S.enabled?"AI Descriptions turned off":"AI Descriptions turned on","success"); }}/>
+      </div>
+
+      <div style={{opacity:S.enabled?1:.55}}>
+        <AIDCard title="Who can ask for a suggestion"
+          desc="Asking is harmless — it reads metadata only. Saving is not: an asset's owner, or an Admin, saves directly; anyone else's accepted draft goes to the owner's Inbox for approval.">
+          <div style={{display:"flex",gap:18,flexWrap:"wrap"}}>
+            {DA_ROLE_LIST.map(r=>(
+              <label key={r.k} style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.text,cursor:r.k==="admin"?"default":"pointer"}}>
+                <input type="checkbox" checked={S.roles.includes(r.k)} disabled={r.k==="admin"}
+                  onChange={()=>put({roles:S.roles.includes(r.k)?S.roles.filter(x=>x!==r.k):[...S.roles,r.k]})}/>{r.l}
+              </label>
+            ))}
+          </div>
+        </AIDCard>
+
+        <AIDCard title="What the model may read" desc="The draft is only as good as the metadata behind it. Data values are not a setting — they are never sent.">
+          <AIDRow l="Names, types, keys and references" d="The minimum a draft needs." on locked/>
+          <AIDRow l="Tags and classifications" d="Lets a draft say a column holds personal data and is masked." on={S.sources.tags} set={()=>put({sources:{...S.sources,tags:!S.sources.tags}})}/>
+          <AIDRow l="Glossary terms" d="Names the business term a table or column matches, in the glossary's own words." on={S.sources.glossary} set={()=>put({sources:{...S.sources,glossary:!S.sources.glossary}})}/>
+          <AIDRow l="Lineage" d="Lets a table's draft say what it feeds downstream." on={S.sources.lineage} set={()=>put({sources:{...S.sources,lineage:!S.sources.lineage}})}/>
+          <AIDRow l="Data values, samples and profiles" d="Blocked by design. A description is written about the data, not from it." on={false} locked/>
+        </AIDCard>
+
+        <AIDCard title="Style">
+          <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:16,alignItems:"start"}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Length</div>
+              <select value={S.length} onChange={e=>put({length:e.target.value})}
+                style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>
+                <option value="short">Short — one or two sentences</option>
+                <option value="detailed">Detailed — a full paragraph</option>
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Organisation instructions</div>
+              <textarea value={instr} onChange={e=>setInstr(e.target.value)} onBlur={()=>instr!==S.instructions&&(put({instructions:instr}),onToast("Instructions saved","success"))} rows={3}
+                style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.55,fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Sent with every request — your vocabulary, audience and house style.</div>
+            </div>
+          </div>
+        </AIDCard>
+
+        <AIDCard title="Model">
+          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <code style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:600}}>{m.model||"—"}</code>
+            <span style={{fontSize:11.5,color:T.textSub}}>{prov} · {m.key==="shared"?"Solix-managed, shared platform key":m.key==="own"?"your registered key":"your own endpoint"} · metadata only</span>
+            <div style={{flex:1}}/>
+            <Btn small ghost onClick={onModels}>Change in Models</Btn>
+          </div>
+        </AIDCard>
+
+        <AIDCard title="How the drafts are landing" desc="Last 30 days. A high edit rate means the instructions or the metadata need work, not the reviewers.">
+          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+            <AICStat label="Drafts produced" value={st.suggested} sub="tables and columns"/>
+            <AICStat label="Accepted as-is" value={`${pct(st.accepted)}%`} sub={`${st.accepted} drafts`} color={T.green}/>
+            <AICStat label="Edited, then saved" value={`${pct(st.edited)}%`} sub={`${st.edited} drafts`}/>
+            <AICStat label="Discarded" value={`${pct(st.discarded)}%`} sub={`${st.discarded} drafts`} color={T.textMuted}/>
+          </div>
+        </AIDCard>
+      </div>
+    </div>
+  );
+};
+
+// ── Settings › AI ─────────────────────────────────────────────────────────────
+// One place for everything the AI layer does and the models behind it. The
+// surfaces stay on their objects (the Copilot dock, the AI proposals tab, the ✦
+// button on a description); only their controls live here.
+const AISettingsSection = ({onToast}) => {
+  const aic = useAic();
+  const aid = useAid();
+  const [tab, setTab] = useState(()=>_aiTabJump||"copilot");
+  useEffect(()=>{ _aiTabJump=null; },[]);
+  const dot = (on) => on ? " · On" : " · Off";
+  return (
+    <>
+      <SettSH icon={Ic.bot(16)} title="AI"
+        desc="Everything the platform's AI does — the Copilot, classification proposals and description suggestions — and the models behind them. AI proposes; a person decides."/>
+      <div style={{marginBottom:18}}>
+        <SegTabs tabs={[
+          {key:"copilot",        label:"Copilot"},
+          {key:"classification", label:`Classification${dot(aic.settings.enabled)}`},
+          {key:"descriptions",   label:`Descriptions${dot(aid.settings.enabled)}`},
+          {key:"models",         label:"Models"},
+        ]} active={tab} onChange={setTab}/>
+      </div>
+      {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
+      {tab==="classification" && <AICControlPanel onToast={onToast}/>}
+      {tab==="descriptions"   && <AIDescSettings onToast={onToast} onModels={()=>setTab("models")}/>}
+      {tab==="models"         && <DASettingsSection onToast={onToast} embedded only={["models"]}/>}
+    </>
+  );
+};
+
 // The steward's surface: what the classifier is proposing, and what it has run.
 // It is a tab inside Classifications rather than a screen of its own — proposals
 // belong where the objects they are about already live.
@@ -56736,28 +57674,31 @@ const AICProposalsPanel = ({onToast, onNav}) => {
   const [fTier, setFTier]   = useState("all");
   const [sel, setSel]       = useState(new Set());
   const [scopeOpen, setScopeOpen] = useState(false);
-  const [scopeDomains, setScopeDomains] = useState([]);
+  const [fProf, setFProf]   = useState("all");
+  const liveProfiles = st.profiles.filter(p=>p.enabled);
+  const [scopeProfiles, setScopeProfiles] = useState([]);   // empty = every enabled profile
 
   // The findings the UI works from. Computed once, then kept on the store so a
   // decision does not re-run the scan underneath the user.
   const findings = st.findings || [];
   useEffect(()=>{
     if(st.findings) return;
-    aicSet(s=>({...s, findings: aicScan({tiers:s.settings.tiers, domains:null, valueAllowed:s.settings.valueAllowed})}));
+    aicSet(s=>({...s, findings: aicScanAll(s)}));
   },[st.findings]);
 
-  const proposals = findings.filter(f=>f.kind==="proposed" && f.conf >= st.settings.minConfidence);
+  const proposals = findings.filter(f=>aicIsProposal(st,f));
   const confirmed = findings.filter(f=>f.kind==="confirmed");
   const clear     = findings.filter(f=>f.kind==="clear");
   const pending   = proposals.filter(f=>!st.decisions[f.id]);
 
   const shown = pending.filter(f =>
+    (fProf==="all" || (f.profiles||[]).includes(fProf)) &&
     (fDet==="all"  || f.det===fDet) &&
     (fTier==="all" || f.tiers.some(t=>t.t===fTier)));
 
   const runScan = () => {
-    const targets = ASSETS.filter(a=>(SCHEMA[a.name]||[]).length &&
-      (!scopeDomains.length || scopeDomains.includes(a.domain)));
+    const runIds = scopeProfiles.length ? scopeProfiles : liveProfiles.map(p=>p.id);
+    const targets = [...new Set(liveProfiles.filter(p=>runIds.includes(p.id)).flatMap(aicProfileAssets))];
     setRunning({phase:"Connecting", pct:0, asset:""});
     const steps = targets.slice(0,14);
     steps.forEach((a,i)=>setTimeout(()=>setRunning({
@@ -56765,19 +57706,22 @@ const AICProposalsPanel = ({onToast, onNav}) => {
       pct: Math.round(((i+1)/steps.length)*100), asset:a.name,
     }), 180 + i*190));
     setTimeout(()=>{
-      const next = aicScan({tiers:st.settings.tiers, domains:scopeDomains.length?scopeDomains:null, valueAllowed:st.settings.valueAllowed});
-      const p = next.filter(f=>f.kind==="proposed").length;
-      const c = next.filter(f=>f.kind==="confirmed").length;
-      const cl= next.filter(f=>f.kind==="clear").length;
+      // A partial run refreshes only its own profiles' columns; the rest of the queue stays.
+      const fresh = aicScanAll(_aicState, runIds);
+      const freshIds = new Set(fresh.map(f=>f.id||`c_${f.assetId}_${f.col}`));
+      const next = scopeProfiles.length
+        ? [...(_aicState.findings||[]).filter(f=>!freshIds.has(f.id||`c_${f.assetId}_${f.col}`)), ...fresh]
+        : fresh;
       aicSet(s=>({...s, findings: next, runs:[{
         id:"run_"+Date.now(), at:"just now", by:me,
-        scope: scopeDomains.length ? scopeDomains.join(", ") : "All connections",
-        assets:new Set(next.map(f=>f.assetId)).size, cols:next.length,
-        proposed:p, confirmed:c, clear:cl, autoApplied:0,
+        scope: runIds.map(id=>aicProfileName(_aicState,id)).join(", "),
+        assets:new Set(fresh.map(f=>f.assetId)).size, cols:fresh.length,
+        proposed:fresh.filter(f=>f.kind==="proposed").length, confirmed:fresh.filter(f=>f.kind==="confirmed").length,
+        clear:fresh.filter(f=>f.kind==="clear").length, autoApplied:0,
         ms: 1400 + steps.length*190, status:"complete",
       }, ...s.runs]}));
       setRunning(null); setSel(new Set()); setTab("queue");
-      onToast(`Scan complete — ${p} proposals from ${next.length} columns`,"success");
+      onToast(`Scan complete — ${fresh.filter(f=>f.kind==="proposed").length} proposals from ${fresh.length} columns`,"success");
     }, 400 + steps.length*190);
   };
 
@@ -56798,11 +57742,35 @@ const AICProposalsPanel = ({onToast, onNav}) => {
   const byDet = {};
   pending.forEach(f=>{ (byDet[f.det] = byDet[f.det]||[]).push(f); });
 
+  const openSettings = () => onNav && onNav("settings",{section:"ai", aiTab:"classification"});
+  if(!st.settings.enabled || !liveProfiles.length) return (
+    <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
+      <div style={{maxWidth:460,textAlign:"center"}}>
+        <div style={{color:T.violet,display:"flex",justifyContent:"center",marginBottom:12}}>{Ic.bot(30)}</div>
+        <div style={{fontSize:15,fontWeight:700,color:T.text}}>
+          {!st.settings.enabled ? "AI Classification is off" : "No scan profile is enabled"}
+        </div>
+        <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,marginTop:6}}>
+          {!st.settings.enabled
+            ? "Nothing is being scanned and nothing is proposed. An Admin turns it on in Settings › AI, then chooses which objects to scan and which tags to recommend."
+            : "The classifier is on, but every scan profile is paused — so no object is in scope. Enable a profile, or create one, in Settings › AI."}
+        </div>
+        {role==="admin"&&<button onClick={openSettings}
+          style={{marginTop:16,padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+          Open Settings › AI</button>}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"14px 24px 40px"}}>
 
-        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:10,marginBottom:12}}>
+          <span style={{fontSize:11.5,color:T.textMuted}}>
+            {liveProfiles.length} scan profile{liveProfiles.length>1?"s":""} active
+            {role==="admin"&&<> · <button onClick={openSettings} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Manage in Settings › AI</button></>}
+          </span>
           <button onClick={()=>setScopeOpen(true)} disabled={!!running}
             style={{display:"flex",alignItems:"center",gap:6,height:30,padding:"0 12px",borderRadius:8,
                     background:running?T.bgElevated:T.accent,border:"none",color:running?T.textMuted:"#fff",
@@ -56837,7 +57805,7 @@ const AICProposalsPanel = ({onToast, onNav}) => {
             color={confirmed.filter(f=>f.uncovered).length ? T.amber : undefined}/>
           <AICStat label="Scanned, no signal" value={clear.length}     sub="looked, found nothing"/>
           <AICStat label="Columns in scope"  value={findings.length}  sub={`${new Set(findings.map(f=>f.assetId)).size} assets profiled`}/>
-          <AICStat label="Detectors on"      value={`${AIC_DETECTORS.length}`} sub={`${Object.keys(st.settings.autoApply).filter(k=>st.settings.autoApply[k]).length} auto-applying`}/>
+          <AICStat label="Detectors on"      value={`${new Set(liveProfiles.flatMap(p=>p.detectors)).size}`} sub={`${Object.keys(st.settings.autoApply).filter(k=>st.settings.autoApply[k]).length} auto-applying`}/>
         </div>
 
         {running&&(
@@ -56873,6 +57841,13 @@ const AICProposalsPanel = ({onToast, onNav}) => {
         ) : (<>
           {/* Filters */}
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+            {liveProfiles.length>1&&(
+              <select value={fProf} onChange={e=>setFProf(e.target.value)}
+                style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"}}>
+                <option value="all">All profiles</option>
+                {liveProfiles.map(p=><option key={p.id} value={p.id}>{p.name} ({pending.filter(f=>(f.profiles||[]).includes(p.id)).length})</option>)}
+              </select>
+            )}
             <select value={fDet} onChange={e=>setFDet(e.target.value)}
               style={{padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"}}>
               <option value="all">All detectors</option>
@@ -56915,7 +57890,7 @@ const AICProposalsPanel = ({onToast, onNav}) => {
                     <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>{f.asset.name}.{f.col}</code>
                   </div>
                   <div style={{fontSize:10,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                    {f.type} · {f.asset.domain} · {f.desc||"no description"}
+                    {f.type} · {f.asset.domain} · {(f.profiles||[]).map(id=>aicProfileName(st,id)).join(", ")}
                   </div>
                 </button>
                 <div style={{width:130,flexShrink:0,display:"flex",alignItems:"center",gap:5}}>
@@ -56983,20 +57958,25 @@ const AICProposalsPanel = ({onToast, onNav}) => {
             The scan reads column metadata for every profiled asset in scope, and sampled value shapes only where the
             data boundary permits it. It proposes; it does not apply.
           </div>
-          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>DOMAINS</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
-            {AIC_ALL_DOMAINS.map(d=>{
-              const on = scopeDomains.includes(d);
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:8}}>SCAN PROFILES</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
+            {liveProfiles.map(p=>{
+              const on = scopeProfiles.includes(p.id);
+              const n = aicProfileAssets(p).length;
               return (
-                <button key={d} onClick={()=>setScopeDomains(s=>on?s.filter(x=>x!==d):[...s,d])}
-                  style={{padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
-                          background:on?T.accentDim:T.bgElevated,border:`1px solid ${on?T.accent+"45":T.border}`,
-                          color:on?T.accent:T.textSub,fontSize:11.5,fontWeight:600}}>{d}</button>
+                <label key={p.id} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",borderRadius:8,cursor:"pointer",
+                  background:on?T.accentDim:T.bgElevated,border:`1px solid ${on?T.accent+"45":T.border}`}}>
+                  <input type="checkbox" checked={on} onChange={()=>setScopeProfiles(s=>on?s.filter(x=>x!==p.id):[...s,p.id])}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
+                    <div style={{fontSize:10.5,color:T.textMuted}}>{n} object{n===1?"":"s"} · recommends {[...new Set(p.detectors.map(k=>aicDet(k).tag))].join(", ")}</div>
+                  </div>
+                </label>
               );
             })}
           </div>
           <div style={{fontSize:11.5,color:T.textMuted,marginBottom:16}}>
-            {scopeDomains.length ? `${scopeDomains.length} domains selected.` : "No domain selected — the scan covers everything profiled."}
+            {scopeProfiles.length ? `${scopeProfiles.length} profile${scopeProfiles.length>1?"s":""} selected.` : "None selected — every active profile runs."}
             {" "}Value inspection will be skipped in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"no domain"}.
           </div>
           <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
@@ -57033,12 +58013,12 @@ const ClassificationsView = ({onToast, onNav, deepLinkTagId}) => {
   // before anyone opens the tab, or it is not a badge.
   useEffect(()=>{
     if(st.findings) return;
-    aicSet(x=>({...x, findings: aicScan({tiers:x.settings.tiers, domains:null, valueAllowed:x.settings.valueAllowed})}));
+    aicSet(x=>({...x, findings: aicScanAll(x)}));
   },[st.findings]);
   useEffect(()=>{ if(deepLinkTagId) setFace("taxonomy"); },[deepLinkTagId]);
 
   const pending = (st.findings||[])
-    .filter(f=>f.kind==="proposed" && f.conf >= st.settings.minConfidence && !st.decisions[f.id]).length;
+    .filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]).length;
 
   const bar = (
     <div style={{flexShrink:0,padding:"10px 24px 0",borderBottom:`1px solid ${T.border}`,background:T.bgSurface}}>
@@ -58177,7 +59157,7 @@ export default function App(){
     // Data Ask is no longer a page: asking happens in the Copilot, and what used
     // to live on the page (Answer Spaces and their review) lives in Settings.
     if(id==="dataask"){ id="settings"; payload={...(payload||{}), section:"dataask"}; }
-    if(id==="settings"){ _settingsJump = payload?.section || null; setSettingsKey(k=>k+1); }
+    if(id==="settings"){ _settingsJump = payload?.section || null; if(payload?.aiTab) _aiTabJump = payload.aiTab; setSettingsKey(k=>k+1); }
     // Guard: redirect disallowed pages to home
     if(!allowedNav.includes(id) && id!=="profile") { setNav("home"); return; }
     // Catalog deep-links to a specific asset (not just the list) when we know its name.
