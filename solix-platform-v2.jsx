@@ -14003,9 +14003,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {tracked.map(fwRow)}
           {ql&&!tracked.length&&<div style={{fontSize:12,color:T.textMuted,padding:"8px 2px"}}>No tracked framework matches “{q}”.</div>}
-          <div onClick={()=>setAddFw({q:""})} style={{border:`1.5px dashed ${T.border}`,borderRadius:10,padding:"16px 18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:T.textMuted,fontSize:12.5,fontWeight:600}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-            {Ic.plus(12)} Add framework <span style={{fontWeight:400}}>— adopt a regulation or create your own</span></div>
+          {!adoptedFws.length&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 2px"}}>No frameworks enabled yet.</div>}
+          <div style={{fontSize:11.5,color:T.textMuted,padding:"6px 2px"}}>Regulations are enabled, and custom frameworks created, in <button onClick={()=>onNav&&onNav("settings",{section:"frameworks"})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>Settings › Regulations</button>.</div>
         </div>
       </div>
     );
@@ -15220,8 +15219,57 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       onBack:()=>setF("step",Math.max(1,fwEd.step-1)), right: fwEd.step<3 ? continueBtn(()=>setF("step",fwEd.step+1), fwEd.step!==1||!!fwEd.name.trim()) : fBtn(fwEd.id?"Save framework":"Create framework", saveFw, true)});
   };
 
-  // Settings › Policy Approvals renders only the approval policies.
-  if(settingsOnly) return <div style={{maxWidth:760}}>{renderApprovalPolicies()}</div>;
+  // Settings › Regulations: enabling a regulation adopts it; your own frameworks are created and edited here too.
+  if(settingsOnly){
+    const ql = q.toLowerCase(); const match = f => !ql||[f.name, f.fullName, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
+    const regs = PM2_FW.filter(match); const customs = PM2_CUSTOM_FW.filter(match);
+    const onCt = PM2_FW.filter(f=>st.adopted[f.id]).length;
+    const sw = (on, go, title) => <div title={title} onClick={go} style={{position:"relative",width:40,height:22,borderRadius:11,background:on?T.green:"rgba(100,100,120,.2)",border:`1.5px solid ${on?T.green:T.border}`,cursor:"pointer",transition:"all .2s",flexShrink:0}}>
+      <div style={{position:"absolute",top:2,left:on?20:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/></div>;
+    const row = (fw, i, n, main, right) => <div key={fw.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderBottom:i<n-1?`1px solid ${T.border}`:"none"}}><div style={{flex:1,minWidth:0}}>{main}</div>{right}</div>;
+    const box = kids => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{kids}</div>;
+    return (<div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+        {searchBox(q, setQ, "Search by name or jurisdiction…", 400)}
+        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}><strong style={{color:T.text}}>{onCt}</strong> of {PM2_FW.length} regulations enabled</span>
+        <span style={{marginLeft:"auto"}}><Btn small icon={Ic.plus(11)} onClick={()=>openFwEditor(null)}>New framework</Btn></span>
+      </div>
+      {secLabel(`Your frameworks (${customs.length})`)}
+      {customs.length ? box(customs.map((fw,i)=>{ const who=canFw(fw)?null:`Only ${st.adopted[fw.id]?.owner||fw.owner} or an admin`; const rm=fwMenu(fw)[3];
+        return row(fw, i, customs.length, <>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fw.name}</span><span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,letterSpacing:"0.04em"}}>CUSTOM</span></div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{fw.fullName||`${fw.type} framework`} · {fw.arts.length} articles · owner {st.adopted[fw.id]?.owner||fw.owner}</div></>,
+          <div style={{display:"flex",gap:6}}><Btn small ghost disabled={!!who} onClick={()=>openFwEditor(fw)}>Edit</Btn><Btn small ghost disabled={!!who} onClick={rm.on}>Delete</Btn></div>); }))
+        : <div style={{fontSize:12,color:T.textMuted,padding:"4px 2px"}}>None yet — <button onClick={()=>openFwEditor(null)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:12,fontWeight:600}}>create one</button> for an internal standard, contract obligation or industry code.</div>}
+      {secLabel(`Regulations (${regs.length})`)}
+      {box(regs.map((fw,i)=>{ const m=regMeta(fw.id); const on=!!st.adopted[fw.id];
+        const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))]; const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
+        const who=on&&!canFw(fw)?`Only ${st.adopted[fw.id]?.owner} or an admin`:null;
+        return row(fw, i, regs.length, <>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:on?T.text:T.textSub}}>{fw.name}</span>
+            {m.jurisdiction&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textSub,fontWeight:600,border:`1px solid ${T.border}`}}>{m.jurisdiction}</span>}</div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{m.fullName}</div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{fw.arts.filter(a=>!a.out).length} articles · {tids.length} prebuilt policies{on?` · readiness ${fwScore(fw)}%`:reused?` · ${reused} already running`:""}</div></>,
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {on&&<Btn small ghost disabled={!!who} onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn>}
+            {sw(on, ()=>{ if(who){ onToast(who,"info"); return; } on ? fwMenu(fw)[3].on() : startAdopt(fw.id); }, on?"Disable — stop tracking this regulation":"Enable — adopt it and switch on its policies")}
+          </div>); }))}
+      {!regs.length&&!customs.length&&<div style={{textAlign:"center",padding:"36px 0",color:T.textMuted,fontSize:13}}>Nothing matches “{q}”</div>}
+      {wiz&&renderWizard()}
+      {fwEd&&renderFwEditor()}
+      {confirm&&<>
+        <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
+        <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{confirm.title}</div>
+          <div style={{fontSize:12.5,color:T.textSub,marginTop:8,lineHeight:1.6}}>{confirm.body}</div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}>
+            <Btn ghost onClick={()=>setConfirm(null)}>Cancel</Btn>
+            <Btn variant={confirm.danger?"danger":"primary"} onClick={()=>{ const f=confirm.onYes; setConfirm(null); f(); }}>{confirm.yesLabel}</Btn>
+          </div>
+        </div></>}
+    </div>);
+  }
+
 
   // ═════ PAGE — the original Policy Manager shell: breadcrumb, icon tab bar, content ═════
   const waiting = pm2StatusPending.filter(r=>r.kind!=="pm2attestdue").length + pm2EnfPending.length;
@@ -51367,8 +51415,7 @@ const SettingsView = ({onToast})=>{
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
     ]},
     {label:"Compliance", items:[
-      {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable applicable compliance frameworks"},
-      {key:"policy_approvals", icon:"shield", label:"Policy Approvals",     desc:"Who approves policies, enforcement & attestations"},
+      {key:"frameworks",   icon:"shield",  label:"Regulations",           desc:"Enable regulations & create custom frameworks"},
     ]},
     {label:"Platform", items:[
       {key:"ai",           icon:"bot",     label:"AI",                   desc:"Copilot, classification, descriptions & models"},
@@ -53041,73 +53088,10 @@ const SettingsView = ({onToast})=>{
               </div>
             </>}
 
-            {section==="frameworks"&&(()=>{
-              const TYPE_COLOR = {Privacy:T.violet,Healthcare:T.rose,Financial:T.amber,Security:T.blue};
-              const STATUS_COLOR = {Passing:T.green,Partial:T.amber,"Not Started":T.textMuted};
-              const filtered = REGS_META.filter(r=>!fwSearch||r.name.toLowerCase().includes(fwSearch.toLowerCase())||r.fullName.toLowerCase().includes(fwSearch.toLowerCase())||r.jurisdiction.toLowerCase().includes(fwSearch.toLowerCase())||r.type.toLowerCase().includes(fwSearch.toLowerCase()));
-              const activeCount = Object.values(localEnabled).filter(Boolean).length;
-              const groups = ["Privacy","Healthcare","Financial","Security"];
-              return (
-                <>
-                  <SettSH icon={Ic.shield(16)} title="Regulations" desc="Configure which compliance frameworks and regulations apply to your organisation. Active regulations appear in Policy Manager and asset governance panels."/>
-                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
-                    <div style={{position:"relative",flex:1,maxWidth:400}}>
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                      <input value={fwSearch} onChange={e=>setFwSearch(e.target.value)} placeholder="Search by name, jurisdiction, type…"
-                        style={{width:"100%",padding:"8px 10px 8px 30px",background:T.bgElevated,border:`1.5px solid ${fwSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=fwSearch?T.accent:T.border}/>
-                      {fwSearch&&<button onClick={()=>setFwSearch("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
-                    </div>
-                    <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}><strong style={{color:T.text}}>{activeCount}</strong> of {REGS_META.length} active</span>
-                    <button onClick={()=>setLocalEnabled(Object.fromEntries(REGS_META.map(r=>[r.id,true])))}
-                      style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>Enable All</button>
-                    <button onClick={()=>setLocalEnabled(Object.fromEntries(REGS_META.map(r=>[r.id,false])))}
-                      style={{fontSize:11.5,padding:"5px 12px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textMuted,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>Disable All</button>
-                  </div>
-                  {groups.map(grp=>{
-                    const grpRegs = filtered.filter(r=>r.type===grp);
-                    if(!grpRegs.length) return null;
-                    const tc = TYPE_COLOR[grp]||T.accent;
-                    return (
-                      <div key={grp} style={{marginBottom:22}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                          <div style={{width:3,height:14,borderRadius:2,background:tc}}/>
-                          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{grp}</span>
-                          <span style={{fontSize:10.5,color:T.textMuted}}>({grpRegs.length})</span>
-                        </div>
-                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                          {grpRegs.map((reg,i)=>{
-                            const isOn = localEnabled[reg.id]||false;
-                            const stc = STATUS_COLOR[reg.status]||T.textMuted;
-                            return (
-                              <div key={reg.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderBottom:i<grpRegs.length-1?`1px solid ${T.border}`:"none",transition:"background .12s"}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                <div style={{flex:1,minWidth:0}}>
-                                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3,flexWrap:"wrap"}}>
-                                    <span style={{fontSize:13,fontWeight:700,color:isOn?T.text:T.textMuted}}>{reg.name}</span>
-                                    <span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${tc}15`,color:tc,fontWeight:600,border:`1px solid ${tc}25`}}>{reg.jurisdiction}</span>
-                                    {reg.status&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:`${stc}12`,color:stc,fontWeight:600}}>{reg.status}</span>}
-                                  </div>
-                                  <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5}}>{reg.fullName}</div>
-                                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>Max penalty: {reg.penalty} · {reg.requirements.length} requirements</div>
-                                </div>
-                                {/* Toggle switch */}
-                                <div onClick={()=>setLocalEnabled(p=>({...p,[reg.id]:!p[reg.id]}))}
-                                  style={{position:"relative",width:40,height:22,borderRadius:11,background:isOn?T.green:"rgba(100,100,120,.2)",border:`1.5px solid ${isOn?T.green:T.border}`,cursor:"pointer",transition:"all .2s",flexShrink:0}}>
-                                  <div style={{position:"absolute",top:2,left:isOn?20:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {filtered.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:T.textMuted,fontSize:13}}>No frameworks match "{fwSearch}"</div>}
-                </>
-              );
-            })()}
+            {section==="frameworks"&&<>
+              <SettSH icon={Ic.shield(16)} title="Regulations" desc="Enable the regulations that apply to your organisation and create your own frameworks. Enabled frameworks appear in Policy Manager 2 with their articles, policies and readiness."/>
+              <PolicyManager2View onToast={onToast} settingsOnly/>
+            </>}
 
             {/* ══ AUDIT ══ */}
             {section==="audit"&&(()=>{
@@ -53448,12 +53432,6 @@ const SettingsView = ({onToast})=>{
                 </div>
               </div>
               <div style={{display:"flex",gap:8}}><button style={{padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Upgrade Plan</button><Btn ghost>Download Invoice</Btn></div>
-            </>}
-
-            {/* ══ POLICY APPROVALS (Policy Manager 2) ══ */}
-            {section==="policy_approvals"&&<>
-              <SettSH icon={Ic.shield(16)} title="Policy Approvals" desc="Who approves what in Policy Manager 2. Requests land in each approver's Workspace inbox."/>
-              <PolicyManager2View onToast={onToast} settingsOnly/>
             </>}
 
             {/* ══ GOVERNANCE ══ */}
