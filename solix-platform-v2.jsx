@@ -13821,7 +13821,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     return [
       {label:"Open", on:()=>openPolicy(p.id)},
       {label:"Edit", on:()=>openEditor(p), disabled:!canEdit(p)?`Only ${p.owner} or a steward can edit it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
-      {label:"Add a rule", on:()=>openRuleEditor(p,null), disabled:!canEdit(p)?`Only ${p.owner} or a steward can change it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
+      {label:"Add rule", on:()=>openRuleEditor(p,null), disabled:!canEdit(p)?`Only ${p.owner} or a steward can change it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
       {label:p.source==="regulation"?"Duplicate as custom":"Duplicate", on:()=>duplicateAsCustom(p)},
       "-",
       (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:!p.rules.length?"Add at least one rule first":null},
@@ -14148,7 +14148,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                           </div>); })}
                         {!rules.length&&<div style={{padding:"8px 12px",fontSize:11.5,color:T.rose,borderTop:`1px solid ${T.border}`}}>This policy has no rules yet — add one.</div>}
                         {canEdit(p)&&p.status!=="Retired"&&!pendingReqOf(p)&&<div style={{padding:"6px 12px",borderTop:`1px solid ${T.border}`}}>
-                          <button onClick={()=>openRuleEditor(p,null,{fw:fw.id,i})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>+ Add a custom rule to this policy</button></div>}
+                          <button onClick={()=>openRuleEditor(p,null,{fw:fw.id,i})} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 11px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button></div>}
                       </div>); })}
                     {recs.map(({tid,keys})=><div key={tid} style={{fontSize:11.5,padding:"8px 12px",borderRadius:8,border:`1px dashed ${T.border}`,color:T.textMuted,marginBottom:8}}>
                       Recommended policy <b style={{color:T.textSub}}>{PM2_TPL[tid].name}</b> ({(keys?PM2_TPL[tid].rules.filter(r=>keys.includes(r.key)):PM2_TPL[tid].rules).map(r=>PM2_TYPE_META[r.type].label.toLowerCase()).join(" + ")}) — {adopted?"switched off when adopted":"created when you adopt"}
@@ -14336,7 +14336,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
               : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
             {banner}
-            {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>+ Add rule</button>}<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button></span>)}
+            {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button></span>)}
             <div style={{marginBottom:20}}>{p.rules.map(r=>ruleCardView(r,true))}{!p.rules.length&&<div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet — add one.</div>}</div>
             {sideLabel("Scope")}
             <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"12px 14px"}}>
@@ -14463,7 +14463,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>p.rules.length?submitPolicy(p.id):onToast("Add at least one rule first","info")}>Submit for approval</Btn>}
               {pr&&!canDecide(pr)&&(pr.requestedBy===me||canSubmit(p))&&<Btn small ghost onClick={()=>withdrawRequest(p)}>Withdraw request</Btn>}
               {p.status==="Retired"&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>restorePolicy(p)}>Restore</Btn>}
-              {canChange&&<Btn small ghost icon={Ic.plus(10)} onClick={()=>openRuleEditor(p,null)}>Rule</Btn>}
+              {canChange&&<Btn small ghost icon={Ic.plus(10)} onClick={()=>openRuleEditor(p,null)}>Add rule</Btn>}
               {p.status==="Active"
                 ? <div title={h.label} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:`${hc}12`,border:`1px solid ${hc}30`}}>
                     <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1L2 4v3c0 2.5 1.8 4 4 4.5C8.2 11 10 9.5 10 7V4L6 1z" stroke={hc} strokeWidth="1.3" strokeLinejoin="round"/></svg>
