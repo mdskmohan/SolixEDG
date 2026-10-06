@@ -95,7 +95,7 @@ const makeValidator = (schema) => {
   };
   const KNOWN = new Set(["$schema","$id","title","description","examples","$defs",
     "$ref","type","properties","required","additionalProperties","enum","const",
-    "items","minItems","oneOf"]);
+    "items","minItems","minLength","oneOf"]);
 
   const check = (v, s, p, errs) => {
     Object.keys(s).forEach(k => { if (!KNOWN.has(k)) throw new Error("unsupported schema keyword: " + k); });
@@ -108,6 +108,8 @@ const makeValidator = (schema) => {
     if (s.type && !TYPE_OK[s.type](v)) { errs.push(`${p}: expected ${s.type}`); return; }
     if (s.const !== undefined && v !== s.const) errs.push(`${p}: must equal ${JSON.stringify(s.const)}`);
     if (s.enum && !s.enum.includes(v)) errs.push(`${p}: ${JSON.stringify(v)} not in enum`);
+    if (s.minLength != null && typeof v === "string" && v.length < s.minLength)
+      errs.push(`${p}: must not be empty`);
     if (Array.isArray(v)) {
       if (s.minItems != null && v.length < s.minItems) errs.push(`${p}: needs at least ${s.minItems} item(s)`);
       if (s.items) v.forEach((x, i) => check(x, s.items, `${p}[${i}]`, errs));
