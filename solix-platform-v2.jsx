@@ -36175,7 +36175,7 @@ const slUndeclaredDims = (mets, dims) => {
   return out;
 };
 
-// Columns on an entity that are not yet a dimension or a fact — what you can still add.
+// Columns on a dataset that are not yet a field — what you can still declare.
 const slSpareColumns = (ent, dims, facts) => {
   if (!ent) return [];
   const used = new Set([...(dims||[]).filter(d=>d.entity===ent.id).map(d=>d.column),
@@ -36500,12 +36500,12 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
                 {m.type==="simple" && <div style={{display:"flex",gap:14}}>
                   <div style={{flex:1}}><SLField label="Aggregation"><SLSelect value={m.agg} onChange={e=>patch({agg:e.target.value})} options={SL_AGGS}/></SLField></div>
-                  <div style={{flex:1}}><SLField label="Fact"
+                  <div style={{flex:1}}><SLField label="Measure"
                     hint={ent && entFacts.length===0
-                      ? `No facts declared on ${ent.name}. Declare one on the Model tab first — a metric aggregates a fact.`
+                      ? `No measures declared on ${ent.name}. Add one under Definitions → Fields first — a metric adds up a measure.`
                       : "The row-level number this metric aggregates."}>
                     <SLSelect value={m.col} onChange={e=>patch({col:e.target.value})}
-                      placeholder={ent?(entFacts.length?"Select a fact":"No facts on this dataset"):"Pick a dataset first"}
+                      placeholder={ent?(entFacts.length?"Select a measure":"No measures on this dataset"):"Pick a dataset first"}
                       options={entFacts.map(x=>({v:x.column,l:`${x.name} — ${x.column}${x.additive?"":" · not additive"}`}))}/></SLField></div>
                 </div>}
 
@@ -38394,7 +38394,7 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
       <Sec>
         <SLMetaLabel>Details</SLMetaLabel>
         {[["Domain",mdl.domain],["Datasets",String(ents.length)],["Dimensions",String(dims.length)],
-          ["Facts",String(facts.length)],["Metrics",String(mets.length)],
+          ["Measures",String(facts.length)],["Metrics",String(mets.length)],
           ["Created",mdl.created],["Published",mdl.lastPublished||"Never"],["Synced",mdl.lastSynced||"Never"],
           ["Format",`Ossie ${OSSIE_VERSION}`]].map(([k,v])=>(
           <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
@@ -38503,8 +38503,8 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
 const SL_RENAME_KINDS = {
   entity:    {l:"dataset",   physical:"source"},
   dimension: {l:"dimension", physical:"column"},
-  fact:      {l:"fact",      physical:"column"},
-  metric:    {l:"metric",    physical:"fact"},
+  fact:      {l:"measure",   physical:"column"},
+  metric:    {l:"metric",    physical:"measure"},
 };
 
 const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
@@ -38688,7 +38688,13 @@ const SL_ENT_KIND = {
 };
 // What a column is used AS inside the model — the legend on the Relationships canvas.
 const SL_COL_ROLE = {
-  key: {c:"#7c3aed", l:"Key"}, fact: {c:"#16a34a", l:"Fact"}, dim: {c:"#d97706", l:"Dimension"},
+  key: {c:"#7c3aed", l:"Key"}, fact: {c:"#16a34a", l:"Measure"}, dim: {c:"#d97706", l:"Dimension"},
+};
+// The same three, keyed the way the Fields list names them.
+const SL_FIELD_ROLE = {
+  key:       {l:"Key",       c:"#7c3aed"},
+  dimension: {l:"Dimension", c:"#d97706"},
+  measure:   {l:"Measure",   c:"#16a34a"},
 };
 
 const SLRelNode = ({data}) => {
@@ -38898,7 +38904,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
       metricCount: metrics.filter(m=>m.entity===e.id).length,
       ...(()=>{
         // Every column the model actually uses, and what it is used AS — the key it is
-        // grained on, a dimension you can slice by, or a fact a metric aggregates.
+        // grained on, a dimension you can slice by, or a measure a metric adds up.
         const ds = dims.filter(d=>d.entity===e.id);
         const fs = facts.filter(x=>x.entity===e.id);
         const rows = [];
@@ -39034,7 +39040,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 
                 <div style={{marginTop:14}}><SLabel>Declared here</SLabel></div>
                 <div style={{display:"flex",gap:14,marginBottom:10}}>
-                  {[["Dimensions",selDims.length,"#d97706"],["Facts",selFacts.length,"#16a34a"],["Metrics",selMets.length,"#6366f1"]].map(([k,v,c])=>(
+                  {[["Dimensions",selDims.length,"#d97706"],["Measures",selFacts.length,"#16a34a"],["Metrics",selMets.length,"#6366f1"]].map(([k,v,c])=>(
                     <div key={k}>
                       <div style={{fontSize:15,fontWeight:700,color:v?c:"#94a3b8",fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
                       <div style={{fontSize:10,color:"#64748b",marginTop:2}}>{k}</div>
@@ -39063,13 +39069,14 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 };
 
 
-// ── Declare a dimension or a fact. One drawer, because the only real difference is
+// ── Declare a field. One drawer with a role, because Ossie has one field type and
 //    what the column is for: slicing, or being aggregated.
 const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
-  useEffect(()=>{ if(open) setD({entity:"", name:"", column:"", expr:"", mode:"column", type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
+  useEffect(()=>{ if(open) setD({role:kind==="fact"?"measure":"dimension", entity:"", name:"", column:"", expr:"", mode:"column",
+                                 type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
   if(!open || !d) return null;
-  const isDim = kind === "dimension";
+  const isDim = d.role === "dimension";
   const ent = entities.find(e=>e.id===d.entity);
   const spare = slSpareColumns(ent, dims, facts);
   const dimTerms = (gTerms||[]).filter(t=>t.termType==="Dimension");
@@ -39095,16 +39102,28 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
         style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isDim?"Add a dimension":"Add a fact"}</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Add a field</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
-              {isDim ? "Something a metric can be sliced by. Declared once, reusable by every metric on this dataset."
-                     : "A row-level number a metric aggregates. The SUM lives on the metric, not here."}
+              A column this model exposes, and what it is used as.
             </div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <Field label="Used as"
+            hint={isDim ? "A dimension is something a metric can be sliced by. Declared once, reusable by every metric on this dataset."
+                        : "A measure is the row-level number a metric adds up. The SUM lives on the metric, not here — which is what lets several metrics share one measure."}>
+            <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,width:"fit-content"}}>
+              {[["dimension","Dimension"],["measure","Measure"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setD(p=>({...p, role:v, type:"categorical", termId:"", additive:true}))}
+                  style={{padding:"5px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,
+                    fontWeight:d.role===v?700:500, background:d.role===v?T.bgSurface:"transparent",
+                    color:d.role===v?T.text:T.textMuted, boxShadow:d.role===v?"0 1px 2px rgba(0,0,0,.06)":"none"}}>{l}</button>
+              ))}
+            </div>
+          </Field>
+
           <Field label="Dataset" hint="Which dataset this field belongs to.">
             <SLSelect value={d.entity} onChange={e=>setD({...d,entity:e.target.value,column:""})} placeholder="Select a dataset"
               options={entities.map(e=>({v:e.id,l:`${e.name} — ${e.table}`}))}/>
@@ -39215,17 +39234,17 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
 
         <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
           <span style={{fontSize:11.5,color:ready?T.green:T.textMuted}}>
-            {ready?"Ready.":!d.entity?"Pick an entity.":!d.column?"Pick a column.":"Give it a name."}
+            {ready?"Ready.":!d.entity?"Pick a dataset.":!d.column?(d.mode==="calculation"?"Write the calculation and name the field.":"Pick a column."):"Give it a name."}
           </span>
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
             <Btn variant="primary" disabled={!ready} onClick={()=>{
               const expr = computed ? d.expr.trim() : "";
-              onSave(kind, isDim
+              onSave(isDim?"dimension":"fact", isDim
                 ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, type:d.type, termId:d.termId||null, desc:d.desc}
                 : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive, desc:d.desc});
               onToast && onToast(`${d.name.trim()} added`,"success");
-            }}>Add {isDim?"dimension":"fact"}</Btn>
+            }}>Add field</Btn>
           </div>
         </div>
       </div>
@@ -40085,68 +40104,96 @@ const SemanticLayerView = ({onToast, onNav}) => {
             })()}
 
             {tab==="definitions" && (()=>{
+              // Apache Ossie has datasets with FIELDS, and metrics. It has no separate
+              // fact — a measure is a field a metric aggregates, and a key is a field
+              // named in the primary key. So this is one list of fields with the roles
+              // each one plays, which is exactly what the model file says.
+              const fieldMap = {};
+              const touch = (entity, column) => {
+                const id = `${entity}.${column}`;
+                if(!fieldMap[id]) fieldMap[id] = {id, entity, column, roles:[], name:null, desc:null, dim:null, fact:null};
+                return fieldMap[id];
+              };
+              mEnts.forEach(e => slKeys(e).forEach(k => { const f = touch(e.id, k); f.roles.push("key"); f.keyOf = e.name; }));
+              mFacts.forEach(x => { const f = touch(x.entity, x.column); f.roles.push("measure");
+                                    f.fact = x; f.name = f.name || x.name; f.desc = f.desc || x.desc; });
+              mDims .forEach(d => { const f = touch(d.entity, d.column); f.roles.push("dimension");
+                                    f.dim = d; f.name = f.name || d.name; f.desc = f.desc || d.desc; });
+              const allFields = Object.values(fieldMap);
+
               const DEFT = [
-                {key:"dimensions", short:"Dimensions", count:mDims.length},
-                {key:"facts",      short:"Facts",      count:mFacts.length},
-                {key:"metrics",    short:"Metrics",    count:mMetrics.length},
+                {key:"fields",  short:"Fields",  count:allFields.length},
+                {key:"metrics", short:"Metrics", count:mMetrics.length},
               ];
               const dq = defQ.trim().toLowerCase();
-              const shownDims  = dq ? mDims.filter(d=>`${d.name} ${d.column} ${d.desc}`.toLowerCase().includes(dq)) : mDims;
-              const shownFacts = dq ? mFacts.filter(x=>`${x.name} ${x.column} ${x.desc}`.toLowerCase().includes(dq)) : mFacts;
-              const shownMets  = dq ? mMetrics.filter(m=>`${m.name} ${m.definition}`.toLowerCase().includes(dq)) : mMetrics;
+              const shownFields = dq
+                ? allFields.filter(f=>`${f.name||""} ${f.column} ${f.desc||""}`.toLowerCase().includes(dq)) : allFields;
+              const shownMets = dq ? mMetrics.filter(m=>`${m.name} ${m.definition}`.toLowerCase().includes(dq)) : mMetrics;
               return (
               <>
               <div style={{marginBottom:16}}>
                 <SegTabs tabs={DEFT.map(t=>({key:t.key,label:t.short,count:t.count}))}
-                  active={defTab} onChange={k=>{setDefTab(k);setDefQ("");}}/>
+                  active={defTab==="metrics"?"metrics":"fields"} onChange={k=>{setDefTab(k);setDefQ("");}}/>
               </div>
 
-              {/* Search and the action live inside the tab they belong to */}
               <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
                 <div style={{flex:1,maxWidth:380}}>
-                  <Input2 placeholder={`Search ${defTab}…`} value={defQ} onChange={e=>setDefQ(e.target.value)} icon={Ic.search(12)}/>
+                  <Input2 placeholder={`Search ${defTab==="metrics"?"metrics":"fields"}…`} value={defQ} onChange={e=>setDefQ(e.target.value)} icon={Ic.search(12)}/>
                 </div>
                 <Btn variant="primary" icon={Ic.plus(12)}
-                  onClick={()=>defTab==="metrics"?setBuilderOpen(true):setDfKind(defTab==="facts"?"fact":"dimension")}>
-                  Add {defTab==="metrics"?"Metric":defTab==="facts"?"Fact":"Dimension"}
+                  onClick={()=>defTab==="metrics"?setBuilderOpen(true):setDfKind("dimension")}>
+                  Add {defTab==="metrics"?"Metric":"Field"}
                 </Btn>
               </div>
 
               <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6,maxWidth:820,marginBottom:20}}>
-                {defTab==="dimensions" && "What a metric can be sliced by. Declared once against a dataset and reused by every metric — a dimension typed inside one metric is invisible to the next."}
-                {defTab==="facts"      && "The row-level numbers metrics aggregate. A fact is the column; the SUM belongs to the metric, which is what lets several metrics share one fact."}
-                {defTab==="metrics"    && "The numbers themselves. A metric aggregates one declared fact, filters it, and can be broken down by any dimension on the same dataset."}
+                {defTab!=="metrics" && "Every column this model exposes, and what each one is used as. A dimension is something you slice by, a measure is a row-level number a metric adds up, and a key identifies a row. One column can do more than one job."}
+                {defTab==="metrics" && "The numbers themselves. A metric aggregates one measure, filters it, and can be broken down by any dimension on the same dataset."}
               </div>
 
-              {defTab==="dimensions" && <div>
-                {shownDims.length===0
+              {defTab!=="metrics" && <div>
+                {shownFields.length===0
                   ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      {dq ? `No dimension matches "${defQ.trim()}".` : "No dimensions declared. Metrics can still be built, but nothing can be sliced."}
+                      {dq ? `No field matches "${defQ.trim()}".` : "No fields declared. Metrics can still be built, but nothing can be sliced or added up."}
                     </div>
                   : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {shownDims.map((d,i)=>{
-                        const e = mEnts.find(x=>x.id===d.entity);
-                        const dt = SL_DIM_TYPES[d.type]||SL_DIM_TYPES.categorical;
-                        const term = d.termId ? gTerms.find(t=>t.id===d.termId) : null;
-                        const usedBy = mMetrics.filter(m=>(m.dims||[]).includes(d.column)).length;
+                      {shownFields.map((f,i)=>{
+                        const e = mEnts.find(x=>x.id===f.entity);
+                        const editable = f.dim || f.fact;
+                        const dt = f.dim ? (SL_DIM_TYPES[f.dim.type]||SL_DIM_TYPES.categorical) : null;
+                        const term = f.dim && f.dim.termId ? gTerms.find(t=>t.id===f.dim.termId) : null;
+                        const usedBy = f.dim  ? mMetrics.filter(m=>(m.dims||[]).includes(f.column)).length
+                                     : f.fact ? mMetrics.filter(m=>m.col===f.column && m.entity===f.entity).length : 0;
                         return (
-                          <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<shownDims.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div key={f.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<shownFields.length-1?`1px solid ${T.border}`:"none"}}>
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{d.name}</span>
-                                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${dt.c}18`,color:dt.c,border:`1px solid ${dt.c}35`}}>{dt.l}</span>
+                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{f.name || f.column}</span>
+                                {f.roles.filter((r,j,a)=>a.indexOf(r)===j).map(r=>{
+                                  const m = SL_FIELD_ROLE[r];
+                                  return <span key={r} style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:`${m.c}18`,color:m.c,border:`1px solid ${m.c}33`}}>{m.l}</span>;
+                                })}
+                                {dt && <span style={{fontSize:10,color:T.textMuted}}>{dt.l}</span>}
+                                {f.fact && f.fact.additive===false && <span style={{fontSize:10,color:T.amber}}>not additive</span>}
+                                {slIsComputed(editable) && <span style={{fontSize:10,color:T.textMuted}}>calculated</span>}
                                 {term && <span style={{fontSize:10.5,color:T.violet}}>◆ {term.term}</span>}
                               </div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{d.desc}</div>
+                              <div style={{fontSize:11,color:T.textMuted}}>
+                                {f.desc || (f.keyOf ? `Identifies one row of ${f.keyOf}.` : "No description.")}
+                              </div>
                             </div>
-                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{d.column}</span>
-                            <span style={{width:80,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
-                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
+                            <span style={{width:170,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {e?e.table:"—"}.{f.column}
                             </span>
-                            <button onClick={()=>setRenameFor({kind:"dimension",obj:d})} title="Rename and set synonyms"
-                              style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              {Ic.edit(12)}
-                            </button>
+                            <span style={{width:80,flexShrink:0,fontSize:11,color:editable ? (usedBy?T.textMuted:T.amber) : T.textMuted}}>
+                              {!editable ? "primary key" : usedBy ? `${usedBy} metric${usedBy===1?"":"s"}` : "unused"}
+                            </span>
+                            {editable
+                              ? <button onClick={()=>setRenameFor({kind:f.dim?"dimension":"fact", obj:editable})} title="Rename and set synonyms"
+                                  style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                  {Ic.edit(12)}
+                                </button>
+                              : <span style={{width:26,flexShrink:0}}/>}
                           </div>
                         );
                       })}
@@ -40161,43 +40208,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
                         {undec.length} column{undec.length===1?"":"s"} sliced by a metric but never declared
                       </div>
                       <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>
-                        {undec.map(u=>u.column).join(", ")} — the model cannot say what {undec.length===1?"it means":"they mean"}, and platforms that need dimensions declared up front will drop {undec.length===1?"it":"them"}.
+                        {undec.map(u=>u.column).join(", ")} — the model cannot say what {undec.length===1?"it means":"they mean"}, and platforms that need fields declared up front will drop {undec.length===1?"it":"them"}.
                       </div>
                     </div>
                   );
                 })()}
-              </div>}
-
-              {defTab==="facts" && <div>
-                {shownFacts.length===0
-                  ? <div style={{padding:"22px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
-                      {dq ? `No fact matches "${defQ.trim()}".` : "No facts declared. There is nothing for a metric to aggregate."}
-                    </div>
-                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {shownFacts.map((x,i)=>{
-                        const e = mEnts.find(y=>y.id===x.entity);
-                        const usedBy = mMetrics.filter(m=>m.col===x.column && m.entity===x.entity).length;
-                        return (
-                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 15px",borderBottom:i<shownFacts.length-1?`1px solid ${T.border}`:"none"}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
-                                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</span>
-                                {!x.additive && <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>not additive</span>}
-                              </div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{x.desc}</div>
-                            </div>
-                            <span style={{width:150,flexShrink:0,fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{e?e.table:"—"}.{x.column}</span>
-                            <span style={{width:80,flexShrink:0,fontSize:11,color:usedBy?T.textMuted:T.amber}}>
-                              {usedBy?`${usedBy} metric${usedBy===1?"":"s"}`:"unused"}
-                            </span>
-                            <button onClick={()=>setRenameFor({kind:"fact",obj:x})} title="Rename and set synonyms"
-                              style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                              {Ic.edit(12)}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>}
               </div>}
 
               {defTab==="metrics" && <div>
