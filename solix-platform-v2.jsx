@@ -2163,17 +2163,23 @@ GLOSSARY_TERMS.forEach(t => { t.termType = _GT_TYPES[t.id] || "Term"; });
 // Semantic Models hold their taxonomy, relationships and realisation — the same
 // two-faces-one-object split used for metrics.
 const _GT_CONCEPTS = [
-  ["tc1","Customer","c_customer","Commerce","maya.chen","A person or organisation that has placed at least one order with the group.",["Client","Account","Buyer","Purchaser"]],
-  ["tc2","Party","c_party","Commerce","maya.chen","Any legal person the group deals with — a customer, a supplier, or both.",["Legal entity","Counterparty"]],
-  ["tc3","Order","c_order","Commerce","maya.chen","A commitment by a customer to buy goods or services at an agreed price.",["Sales order","Purchase","Booking"]],
-  ["tc4","Transaction","c_transaction","Finance","sarah.kim","A single posted movement of value in the general ledger.",["Ledger entry","Posting","Journal line"]],
-  ["tc5","Product","c_product","Commerce","dev.patel","A sellable item or service in the group catalogue.",["SKU","Item","Article"]],
-  ["tc6","Supplier","c_supplier","Procurement","sarah.kim","A legal entity from which the group purchases goods or services.",["Vendor","Provider"]],
+  ["tc1","Customer","Commerce","maya.chen","A person or organisation that has placed at least one order with the group.",["Client","Account","Buyer","Purchaser"],"tc2",
+   "The most overloaded word in the business. Marketing means a lead, Finance means a payer, Support means a contact."],
+  ["tc2","Party","Commerce","maya.chen","Any legal person the group deals with — a customer, a supplier, or both.",["Legal entity","Counterparty"],null,
+   "The root of the party hierarchy. Nothing is measured at this grain; it exists so Customer and Supplier share a parent."],
+  ["tc3","Order","Commerce","maya.chen","A commitment by a customer to buy goods or services at an agreed price.",["Sales order","Purchase","Booking"],null,
+   "An order is not revenue. Revenue is recognised from an order, which is why they are separate concepts."],
+  ["tc4","Transaction","Finance","sarah.kim","A single posted movement of value in the general ledger.",["Ledger entry","Posting","Journal line"],null,
+   "Posted, not committed. A cancelled order never becomes a transaction."],
+  ["tc5","Product","Commerce","dev.patel","A sellable item or service in the group catalogue.",["SKU","Item","Article"],null,
+   "Declared but not yet carried by any dataset — no table in any model has product grain."],
+  ["tc6","Supplier","Procurement","sarah.kim","A legal entity from which the group purchases goods or services.",["Vendor","Provider"],"tc2",
+   "Shares the Party parent with Customer. The same legal entity is often both."],
 ];
-_GT_CONCEPTS.forEach(([id,name,cid,dom,owner,def,syn]) => {
+_GT_CONCEPTS.forEach(([id,name,dom,owner,def,syn,broader,note]) => {
   GLOSSARY_TERMS.push({
     id, term:name, abbr:"—", glossary:"g1", category:"c2", domain:dom, owner, steward:owner,
-    linked:0, cert:"Approved", status:"Approved", termType:"Concept", conceptId:cid,
+    linked:0, cert:"Approved", status:"Approved", termType:"Concept", broader, note,
     synonyms:syn, conflictWith:null, deprecationReason:null, successorId:null,
     reviewedAt:"2026-09-18", proposedVersion:null,
     auditLog:[{action:"Created",by:owner,at:"2026-09-18",note:"Declared as a business concept"}],
@@ -35702,51 +35708,29 @@ const SL_REL_TYPES = {
 // A concept is a business thing. It has no table, no key and no SQL — that is the
 // point. Entities realise it; several entities in different systems may realise the
 // same concept, which is precisely what a physical-only model cannot express.
-const SL_CONCEPTS = [
-  {id:"c_customer", name:"Customer", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:"t1",
-   definition:"A person or organisation that has placed at least one order with the group.",
-   synonyms:["Client","Account","Buyer","Purchaser"], broader:"c_party",
-   note:"The most overloaded word in the business. Marketing means a lead, Finance means a payer, Support means a contact."},
-
-  {id:"c_party", name:"Party", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:null,
-   definition:"Any legal person the group deals with — a customer, a supplier, or both.",
-   synonyms:["Legal entity","Counterparty"], broader:null,
-   note:"The root of the party hierarchy. Nothing is measured at this grain; it exists so Customer and Supplier share a parent."},
-
-  {id:"c_order", name:"Order", domain:"Commerce", owner:"maya.chen", status:"Approved", termId:null,
-   definition:"A commitment by a customer to buy goods or services at an agreed price.",
-   synonyms:["Sales order","Purchase","Booking"], broader:null,
-   note:"An order is not revenue. Revenue is recognised from an order, which is why they are separate concepts."},
-
-  {id:"c_transaction", name:"Transaction", domain:"Finance", owner:"sarah.kim", status:"Approved", termId:null,
-   definition:"A single posted movement of value in the general ledger.",
-   synonyms:["Ledger entry","Posting","Journal line"], broader:null,
-   note:"Posted, not committed. A cancelled order never becomes a transaction."},
-
-  {id:"c_product", name:"Product", domain:"Commerce", owner:"dev.patel", status:"Draft", termId:null,
-   definition:"A sellable item or service in the group catalogue.",
-   synonyms:["SKU","Item","Article"], broader:null,
-   note:"Declared but not yet realised by any entity — no table in the model carries product grain."},
-
-  {id:"c_supplier", name:"Supplier", domain:"Procurement", owner:"sarah.kim", status:"Draft", termId:null,
-   definition:"A legal entity from which the group purchases goods or services.",
-   synonyms:["Vendor","Provider"], broader:"c_party",
-   note:"Shares the Party parent with Customer. The same legal entity is often both."},
-];
+// ── Concepts ARE Glossary terms. Not a copy of them, not synced with them — the same
+//    record, read through a shape the semantic model already understands. A concept is
+//    business meaning, the Glossary is where business meaning is owned and approved, so
+//    there is nothing here to author and nothing to drift.
+const SL_CONCEPTS = GLOSSARY_TERMS.filter(t => t.termType === "Concept").map(t => ({
+  id: t.id, name: t.term, domain: t.domain, owner: t.owner, status: t.status,
+  definition: t.definition, synonyms: t.synonyms || [], broader: t.broader || null,
+  note: t.note || "", termId: t.id,
+}));
 
 // Business relationships, in business language. These are NOT joins. A join is how a
 // relationship happens to be implemented once you pick a table; the relationship is
 // true whether or not anyone has modelled it physically.
 const SL_CONCEPT_RELS = [
-  {id:"cr1", from:"c_order",       to:"c_customer", type:"placed_by",
+  {id:"cr1", from:"tc3",       to:"tc1", type:"placed_by",
    note:"Every order is placed by exactly one customer. Holds in every system, however it is joined."},
-  {id:"cr2", from:"c_transaction", to:"c_customer", type:"paid_by",
+  {id:"cr2", from:"tc4", to:"tc1", type:"paid_by",
    note:"A ledger posting settles against the account holder."},
-  {id:"cr3", from:"c_order",       to:"c_product",  type:"part_of",
+  {id:"cr3", from:"tc3",       to:"tc5",  type:"part_of",
    note:"Order lines reference products. Not yet realised — Product has no entity."},
-  {id:"cr4", from:"c_customer",    to:"c_party",    type:"part_of",
+  {id:"cr4", from:"tc1",    to:"tc2",    type:"part_of",
    note:"Taxonomy: Customer is a kind of Party."},
-  {id:"cr5", from:"c_supplier",    to:"c_party",    type:"part_of",
+  {id:"cr5", from:"tc6",    to:"tc2",    type:"part_of",
    note:"Taxonomy: Supplier is a kind of Party."},
 ];
 
@@ -35819,17 +35803,17 @@ const slConceptLayout = (concepts, crels) => {
 //    distinctPct 100 with no nulls is a candidate key. Without a declared grain a metric
 //    cannot be certified, because a number with no grain is what makes BI disagree.
 const SL_ENTITIES = [
-  {id:"e_order", assetId:1, concept:"c_order", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_order", assetId:1, concept:"tc3", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","updated_at"], desc:"One row per placed order. The grain every revenue metric resolves to.",
    evidence:"order_id · 100% distinct · 0% null over 48.2M rows",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.ORDERS", databricks:"main.commerce.orders",
              dbt:"ref('fct_orders')", powerbi:"Orders", tableau:"Orders_Certified"}},
-  {id:"e_customer", assetId:133, concept:"c_customer", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
+  {id:"e_customer", assetId:133, concept:"tc1", name:"Customer", table:"users", key:"user_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","last_login"], desc:"One row per registered user account.",
    evidence:"user_id · unique constraint · 0% null",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.USERS", databricks:"main.commerce.users",
              dbt:"ref('dim_customers')", powerbi:"Customers", tableau:"Customers"}},
-  {id:"e_txn", assetId:105, concept:"c_transaction", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
+  {id:"e_txn", assetId:105, concept:"tc4", name:"Transaction", table:"transactions", key:"txn_id", domain:"Finance", owner:"sarah.kim",
    timeDims:["txn_date","created_at"], desc:"One row per general-ledger transaction.",
    evidence:"txn_id · primary key · 0% null",
    bindings:{snowflake:"ORACLE_FIN.GL.TRANSACTIONS", databricks:"main.finance.transactions",
@@ -39891,7 +39875,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
                 <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <SH title="Concepts this model realises"
-                      sub="The business meaning behind each dataset. Synonyms declared here compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
+                      sub="The business meaning behind each dataset, owned in the Glossary. Edit a concept there and every model realising it follows — there is one record, not a copy per model. Its synonyms compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {mEnts.map(e=>{
                       const c = concepts.find(x=>x.id===e.concept);
