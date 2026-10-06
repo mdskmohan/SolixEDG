@@ -36729,6 +36729,8 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
     {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
     {k:"assets",   l:"Datasets",  d:"The catalogue assets this model is built from"},
     {k:"joins",    l:"Joins",     d:"How those tables connect"},
+    {k:"fields",   l:"Fields",    d:"What each column is used as"},
+    {k:"metrics",  l:"Metrics",   d:"The numbers this model is for"},
     {k:"review",   l:"Review",    d:isEdit?"What will change":"What will be created"},
   ];
   const [sec, setSec] = useState("identity");
@@ -36737,12 +36739,14 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
   const [srcF, setSrcF] = useState("all");
   const [domF, setDomF] = useState("all");
   const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
+  const [nm, setNm]   = useState({name:"",col:"",agg:"sum",timeDim:""});
 
   useEffect(()=>{ if(!open) return;
     setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
     setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
     if(!model){
-      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[]});
+      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[],fields:{},metrics:[]});
+      setNm({name:"",col:"",agg:"sum",timeDim:""});
       return;
     }
     // An existing model is described by the same four things, so it is loaded into the
@@ -36752,7 +36756,9 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
     const assetIds = ids.map(id=>((existingEntities||[]).find(e=>e.id===id)||{}).assetId).filter(x=>x!=null);
     setD({name:model.name||"", desc:model.desc||"", domain:model.domain||"Finance",
           owner:model.owner||"", steward:model.steward||"", targets:[...(model.targets||[])],
-          assetIds, joins:(existingRels||[]).filter(r=>ids.includes(r.from)&&ids.includes(r.to)).map(r=>({...r}))});
+          assetIds, joins:(existingRels||[]).filter(r=>ids.includes(r.from)&&ids.includes(r.to)).map(r=>({...r})),
+          fields:{}, metrics:[]});
+    setNm({name:"",col:"",agg:"sum",timeDim:""});
   },[open, model]);
   if(!open || !d) return null;
 
@@ -36797,6 +36803,26 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
       note:`Declared by hand${full.length>1?` on ${full.length} column pairs`:""}. ${jCheck&&jCheck.fanOut?"Flagged: the right-hand column is not unique.":"Checked against column profiles."}`}]}));
     setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
     onToast&&onToast("Join added","success");
+  };
+
+  // Measures the user has just declared, which is what a metric can add up. Derived
+  // rather than stored, so going back and changing a role updates the list.
+  const measureChoices = Object.entries(d.fields||{})
+    .filter(([,role])=>role==="measure")
+    .map(([fid])=>{
+      const [entityId, column] = [fid.slice(0, fid.indexOf(".")), fid.slice(fid.indexOf(".")+1)];
+      const ent = (derived.find(x=>x.entity.id===entityId)||{}).entity;
+      return ent ? {entityId, column, entityName:ent.name} : null;
+    }).filter(Boolean);
+  const timeChoices = [...new Set(derived.flatMap(({entity})=>
+    (SCHEMA[entity.table]||[]).filter(c=>/DATE|TIMESTAMP/i.test(c.type)).map(c=>c.name)))];
+  const addMetric = () => {
+    if(!nm.name.trim() || !nm.col){ onToast&&onToast("A metric needs a name and something to add up.","error"); return; }
+    const [entityId, column] = [nm.col.slice(0, nm.col.indexOf(".")), nm.col.slice(nm.col.indexOf(".")+1)];
+    setD(p=>({...p, metrics:[...p.metrics, {id:"m_"+Date.now(), name:nm.name.trim(), entity:entityId,
+      col:column, agg:nm.agg, timeDim:nm.timeDim || timeChoices[0] || ""}]}));
+    setNm({name:"",col:"",agg:"sum",timeDim:""});
+    onToast&&onToast("Metric added","success");
   };
 
   const noKey = derived.filter(x=>!slKeys(x.entity).length);
@@ -37012,6 +37038,127 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                 </>}
             </>}
 
+            {sec==="fields" && <>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
+                Say what each column is for. A <b style={{color:T.text}}>dimension</b> is something you slice by, a <b style={{color:T.text}}>measure</b> is a row-level number a metric adds up. EDG reads the column profiles and proposes a role for each — change any of them. Columns left blank are simply not part of the model.
+              </div>
+              {derived.length===0
+                ? <div style={{fontSize:12,color:T.textMuted}}>Pick at least one dataset first.</div>
+                : derived.map(({entity})=>{
+                    const cols = SCHEMA[entity.table] || [];
+                    const keys = slKeys(entity);
+                    return (
+                      <div key={entity.id} style={{marginBottom:18}}>
+                        <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{entity.name}</span>
+                          <span style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{entity.table}</span>
+                          <span style={{flex:1}}/>
+                          <button onClick={()=>setD(p=>({...p, fields:{...p.fields,
+                            ...Object.fromEntries(cols.filter(c=>!keys.includes(c.name))
+                              .map(c=>[`${entity.id}.${c.name}`, slIsFactish(entity,c.name)?"measure":"dimension"]))}}))}
+                            style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0}}>
+                            Accept all proposals
+                          </button>
+                          <button onClick={()=>setD(p=>({...p, fields:Object.fromEntries(
+                            Object.entries(p.fields).filter(([k])=>!k.startsWith(entity.id+".")))}))}
+                            style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0}}>
+                            Clear
+                          </button>
+                        </div>
+                        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                          {cols.map((c,i)=>{
+                            const fid = `${entity.id}.${c.name}`;
+                            const isKey = keys.includes(c.name);
+                            const role = d.fields[fid] || "";
+                            const proposed = slIsFactish(entity, c.name) ? "measure" : "dimension";
+                            const p = COL_PROFILES[c.name] || {};
+                            return (
+                              <div key={c.name} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 13px",borderBottom:i<cols.length-1?`1px solid ${T.border}`:"none"}}>
+                                <span style={{fontSize:11.5,fontWeight:600,color:T.text,fontFamily:"ui-monospace,monospace",width:160,flexShrink:0,overflow:"hidden",textOverflow:"ellipsis"}}>{c.name}</span>
+                                <span style={{fontSize:10.5,color:T.textMuted,width:120,flexShrink:0}}>{c.type}</span>
+                                <span style={{fontSize:10.5,color:T.textMuted,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {isKey ? "part of the primary key"
+                                         : p.topValues ? p.topValues.slice(0,3).join(", ")
+                                         : p.distinctCount ? `${p.distinctCount} distinct` : c.desc||""}
+                                </span>
+                                {c.pii && <span style={{fontSize:9.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,flexShrink:0}}>PII</span>}
+                                {isKey
+                                  ? <span style={{fontSize:10.5,color:T.violet,width:188,textAlign:"right",flexShrink:0}}>Key — always in the model</span>
+                                  : <div style={{display:"flex",gap:2,padding:2,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,flexShrink:0}}>
+                                      {[["","—"],["dimension","Dimension"],["measure","Measure"]].map(([v,l])=>(
+                                        <button key={v||"none"} onClick={()=>setD(p2=>({...p2, fields:{...p2.fields, [fid]:v}}))}
+                                          title={!v?"Not part of the model":v===proposed?"What the profile suggests":""}
+                                          style={{padding:"3px 10px",borderRadius:5,border:"none",cursor:"pointer",fontSize:10.5,
+                                            fontWeight:role===v?700:500,
+                                            background:role===v?T.bgSurface:"transparent",
+                                            color:role===v?T.text:(v===proposed&&!role?T.accent:T.textMuted),
+                                            boxShadow:role===v?"0 1px 2px rgba(0,0,0,.06)":"none"}}>{l}</button>
+                                      ))}
+                                    </div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+            </>}
+
+            {sec==="metrics" && <>
+              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
+                The numbers this model is for. Each one adds up a measure you declared, and can be trended over a time dimension. Ratios, period-over-period and running totals are built in the full metric editor once the model exists — these are the straightforward ones you already know you need.
+              </div>
+              {measureChoices.length===0
+                ? <div style={{padding:"18px 16px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,fontSize:12,color:T.textSub,lineHeight:1.6}}>
+                    No measures declared yet. Go back to <b style={{color:T.text}}>Fields</b> and mark at least one numeric column as a measure — a metric has to have something to add up.
+                  </div>
+                : <>
+                  <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:14}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:10}}>ADD A METRIC</div>
+                    <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+                      <div style={{flex:2,minWidth:170}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Name</div>
+                        <Input2 value={nm.name} onChange={e=>setNm({...nm,name:e.target.value})} placeholder="e.g. Daily Revenue"/>
+                      </div>
+                      <div style={{flex:1,minWidth:110}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Adds up</div>
+                        <SLSelect value={nm.col} onChange={e=>setNm({...nm,col:e.target.value})} placeholder="measure"
+                          options={measureChoices.map(x=>({v:`${x.entityId}.${x.column}`,l:`${x.column} · ${x.entityName}`}))}/>
+                      </div>
+                      <div style={{flex:1,minWidth:100}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>How</div>
+                        <SLSelect value={nm.agg} onChange={e=>setNm({...nm,agg:e.target.value})}
+                          options={["sum","count","count distinct","average","min","max"]}/>
+                      </div>
+                      <div style={{flex:1,minWidth:120}}>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Trended over</div>
+                        <SLSelect value={nm.timeDim} onChange={e=>setNm({...nm,timeDim:e.target.value})} placeholder="time column"
+                          options={timeChoices}/>
+                      </div>
+                      <Btn small variant="primary" icon={Ic.plus(11)} onClick={addMetric}>Add</Btn>
+                    </div>
+                  </div>
+
+                  {d.metrics.length===0
+                    ? <div style={{fontSize:12,color:T.textMuted}}>No metrics yet. A model can be created without any — you can add them whenever the numbers are agreed.</div>
+                    : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                        {d.metrics.map((x,i)=>(
+                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<d.metrics.length-1?`1px solid ${T.border}`:"none"}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</div>
+                              <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginTop:2}}>
+                                {x.agg}({x.col}){x.timeDim?` · by ${x.timeDim}`:""}
+                              </div>
+                            </div>
+                            <span style={{fontSize:10.5,color:T.textMuted}}>Draft</span>
+                            <button onClick={()=>setD(p=>({...p,metrics:p.metrics.filter(y=>y.id!==x.id)}))}
+                              style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:4}}>{Ic.x(13)}</button>
+                          </div>
+                        ))}
+                      </div>}
+                </>}
+            </>}
+
             {sec==="review" && <>
               <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:9}}>{isEdit?"WHAT WILL CHANGE":"WHAT WILL BE CREATED"}</div>
               <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:16}}>
@@ -37020,6 +37167,12 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                   ["Assets", d.assetIds.length ? derived.map(x=>x.asset.name).join(", ") : "none"],
                   ["Datasets", derived.length ? `${derived.filter(x=>x.created).length} new · ${derived.filter(x=>!x.created).length} reused` : "none"],
                   ["Joins", d.joins.length ? `${d.joins.length} declared` : "none — every metric sits on one table"],
+                  ["Fields", (()=>{
+                    const n = Object.values(d.fields||{}).filter(Boolean).length;
+                    const m = Object.values(d.fields||{}).filter(r=>r==="measure").length;
+                    return n ? `${n} declared · ${m} measure${m===1?"":"s"}` : "none yet";
+                  })()],
+                  ["Metrics", d.metrics.length ? `${d.metrics.length} drafted` : "none yet"],
                   ["Publishes to", (d.targets||[]).length ? d.targets.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ") : "nothing yet"],
                 ].map(([k,v],i,a)=>(
                   <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
@@ -37061,6 +37214,28 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
               newEntities: derived.filter(x=>x.created).map(x=>x.entity),
               joins: d.joins,
               entityIds: derived.map(x=>x.entity.id),
+              // The roles chosen on the Fields step, turned into the dimensions and
+              // measures the rest of the product already understands.
+              newDims: Object.entries(d.fields||{}).filter(([,r])=>r==="dimension").map(([fid])=>{
+                const ent = fid.slice(0, fid.indexOf(".")), col = fid.slice(fid.indexOf(".")+1);
+                return {id:`d_${ent}_${col}`, entity:ent, column:col, expr:"",
+                        name:col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
+                        type:slSuggestDimType(col), termId:null,
+                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||""};
+              }),
+              newFacts: Object.entries(d.fields||{}).filter(([,r])=>r==="measure").map(([fid])=>{
+                const ent = fid.slice(0, fid.indexOf(".")), col = fid.slice(fid.indexOf(".")+1);
+                return {id:`f_${ent}_${col}`, entity:ent, column:col, expr:"", additive:true,
+                        name:col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
+                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||""};
+              }),
+              newMetrics: d.metrics.map(x=>({
+                id:x.id, name:x.name, type:"simple", status:"Draft", termId:null,
+                domain:d.domain, owner:d.owner, steward:d.steward||d.owner, unit:"count",
+                entity:x.entity, agg:x.agg, col:x.col, timeDim:x.timeDim, timeGrain:"day",
+                filters:[], dims:[], bindings:[], basedOn:[], formula:"", expr:"", examples:[],
+                definition:`${x.name} is the ${x.agg} of ${x.col}.`,
+              })),
             })}>{isEdit?"Save changes":"Create model"}</Btn>
           </div>
         </div>
@@ -39558,7 +39733,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
   // One save path for both, because they are the same operation: a model is its
   // identity, its datasets, its joins and where it publishes, whether or not it
   // existed a moment ago.
-  const saveModel = ({isEdit, model, newEntities, joins, entityIds}) => {
+  const saveModel = ({isEdit, model, newEntities, joins, entityIds, newDims, newFacts, newMetrics}) => {
     setStore(prev=>{
       const keptIds = new Set(joins.map(j=>j.id));
       // A join between two datasets this model no longer contains is not this model's
@@ -39569,12 +39744,20 @@ const SemanticLayerView = ({onToast, onNav}) => {
         entities: [...prev.entities, ...newEntities],
         rels:     [...prev.rels.filter(r=>!inScope(r) || keptIds.has(r.id)).map(r=>joins.find(j=>j.id===r.id)||r),
                    ...joins.filter(j=>!prev.rels.some(r=>r.id===j.id))],
+        // Fields and metrics declared in the drawer. Anything already declared on the
+        // same column wins — the drawer proposes, it does not overwrite what exists.
+        dims:    [...prev.dims,  ...(newDims ||[]).filter(d=>!prev.dims .some(x=>x.entity===d.entity&&x.column===d.column))],
+        facts:   [...prev.facts, ...(newFacts||[]).filter(f=>!prev.facts.some(x=>x.entity===f.entity&&x.column===f.column))],
+        metrics: [...prev.metrics, ...(newMetrics||[]).map(m=>({...m, model:model.id}))],
       };
     });
     setMdlDrawer(null); setSelMdl(model.id); setTab("overview");
     if(isEdit){ onToast && onToast(`${model.name} updated`,"success"); return; }
+    const nf = (newDims||[]).length + (newFacts||[]).length;
     const bits = [`${newEntities.length} dataset${newEntities.length===1?"":"s"} derived`];
     if(joins.length) bits.push(`${joins.length} join${joins.length===1?"":"s"}`);
+    if(nf) bits.push(`${nf} field${nf===1?"":"s"}`);
+    if((newMetrics||[]).length) bits.push(`${newMetrics.length} metric${newMetrics.length===1?"":"s"}`);
     onToast && onToast(`${model.name} created · ${bits.join(" · ")}`,"success");
   };
 
