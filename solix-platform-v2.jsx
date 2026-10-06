@@ -35864,6 +35864,7 @@ const SL_METRICS = [
    filters:[{col:"status", op:"is not", val:"cancelled"}],
    dims:["status","region","customer_id"],
    definition:"Net revenue from orders placed in a calendar day, excluding cancelled orders, in USD.",
+   examples:["What was revenue yesterday?","Show daily revenue by region for last quarter","How much did we make on completed orders this month?"],
    bindings:[{id:"b1", system:"snowflake", object:"SNOWFLAKE_PROD / COMMERCE / orders", expr:"SUM(amount)", confirmed:true,
               evidence:"Column amount · DECIMAL(12,2) · 0% null · avg $127.43 · classified `revenue`"}],
    certifiedBy:"alex.wu", certifiedAt:"2026-07-02"},
@@ -36474,6 +36475,12 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                 </SLField>
                 <SLField label="What it means" hint="Plain English, for a business reader. Not a formula.">
                   <Input2 multiline rows={3} value={m.definition} onChange={e=>patch({definition:e.target.value})} placeholder="Net revenue from orders placed in a calendar day, excluding cancelled orders."/>
+                </SLField>
+                <SLField label="Questions this answers"
+                  hint="One per line. These travel in the file as ai_context.examples — what an assistant matches a question against to know this is the metric to use. Write what people actually ask; a guessed example is worse than none, because an agent will trust it.">
+                  <Input2 multiline rows={3} value={(m.examples||[]).join("\n")}
+                    onChange={e=>patch({examples:e.target.value.split("\n")})}
+                    placeholder={"What was revenue last month?\nShow me daily revenue by region"}/>
                 </SLField>
                 <div style={{display:"flex",gap:14}}>
                   <div style={{flex:1}}><SLField label="Domain"><SLSelect value={m.domain} onChange={e=>patch({domain:e.target.value})} options={["Finance","Commerce","Product","Marketing"]}/></SLField></div>
@@ -37514,10 +37521,14 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
   const ext  = (o) => [{vendor_name: OSSIE_VENDOR, data: JSON.stringify(o, null, 2)}];
   const carried = (path) => ((mdl.ossieExt||{})[path]||[]);
   const term = (id) => { const t = GLOSSARY_TERMS.find(x=>x.id===id); return t ? t.term : null; };
-  const ai   = (instructions, synonyms) => {
+  const ai   = (instructions, synonyms, examples) => {
     const syn = (synonyms||[]).filter(Boolean).filter((s,i,a)=>a.indexOf(s)===i);
-    if(!instructions && !syn.length) return undefined;
-    const o = {}; if(instructions) o.instructions = instructions; if(syn.length) o.synonyms = syn;
+    const ex  = (examples||[]).map(x=>String(x).trim()).filter(Boolean).filter((s,i,a)=>a.indexOf(s)===i);
+    if(!instructions && !syn.length && !ex.length) return undefined;
+    const o = {};
+    if(instructions) o.instructions = instructions;
+    if(syn.length)   o.synonyms     = syn;
+    if(ex.length)    o.examples     = ex;
     return o;
   };
 
@@ -37525,7 +37536,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
     version: OSSIE_VERSION,
     name: slSlug(mdl.name),
     description: mdl.desc || undefined,
-    ai_context: ai(mdl.desc, (mdl.terms||[])),
+    ai_context: ai(mdl.desc, (mdl.terms||[]), mdl.examples),
     datasets: [],
   };
 
@@ -37627,7 +37638,7 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       expression: {dialects},
       description: m.definition || undefined,
       datatype: slOssieMetricType({...m, _table:e?e.table:null}) || undefined,
-      ai_context: ai(m.definition, [m.name, term(m.termId)]),
+      ai_context: ai(m.definition, [m.name, term(m.termId)], m.examples),
       custom_extensions: [...ext({
         label: m.name,
         metric_type: m.type,
@@ -38050,6 +38061,11 @@ const slApplyOssie = (doc, ctx) => {
     const ox = ext(om); const g = ox.governance || {}; const next = {...m};
     if(ox.label && ox.label!==m.name){ changes.push(`Metric ${m.name} renamed to ${ox.label}`); next.name = ox.label; }
     if(om.description && om.description!==m.definition){ changes.push(`Metric ${next.name} definition updated`); next.definition = om.description; }
+    const ex = ((om.ai_context||{}).examples)||[];
+    if(ex.join("|")!==((m.examples||[]).join("|"))){
+      changes.push(ex.length ? `Metric ${next.name}: ${ex.length} example question${ex.length===1?"":"s"}` : `Metric ${next.name} example questions cleared`);
+      next.examples = ex;
+    }
     if(ox.unit && ox.unit!==m.unit){ changes.push(`Metric ${next.name} unit → ${ox.unit}`); next.unit = ox.unit; }
     if(ox.time_grain && ox.time_grain!==m.timeGrain){ changes.push(`Metric ${next.name} grain → ${ox.time_grain}`); next.timeGrain = ox.time_grain; }
     if(ox.time_dimension && ox.time_dimension!==m.timeDim){ changes.push(`Metric ${next.name} time dimension → ${ox.time_dimension}`); next.timeDim = ox.time_dimension; }
