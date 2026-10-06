@@ -3271,6 +3271,57 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
 
+            {/* BUILT BY — the reverse of the link the model already holds. A term could
+                always point INTO a model; nothing pointed back, so the Glossary could not
+                answer the question everyone arrives with: is this built, and where. */}
+            {(()=>{
+              const mets = (slStore.metrics||[]).filter(m=>m.termId===term.id);
+              const dims = (slStore.dims||[]).filter(d=>d.termId===term.id);
+              const ents = (slStore.entities||[]).filter(e=>e.concept===term.id);
+              const modelOf   = (id) => (slStore.models||[]).find(m=>m.id===id);
+              const modelsFor = (e)  => (slStore.models||[]).filter(m=>(m.entityIds||[]).includes(e.id));
+              const any = mets.length || dims.length || ents.length;
+              return (
+                <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                  <SideLabel ch="Built by"/>
+                  {!any
+                    ? <div style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>
+                        Nothing computes this yet. It is agreed and owned, but no semantic model implements it.
+                      </div>
+                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                        {mets.map(m=>{
+                          const md = modelOf(m.model);
+                          const tg = md ? (md.targets||[]).filter(t=>t!=="ossie") : [];
+                          return (
+                            <div key={m.id} style={{fontSize:11.5,lineHeight:1.5}}>
+                              <span style={{color:T.text,fontWeight:600}}>{m.name}</span>
+                              <span style={{color:T.textMuted}}> · metric in {md?md.name:"a model"}</span>
+                              {tg.length>0 && <div style={{color:T.textMuted,fontSize:10.5,marginTop:1}}>
+                                published to {tg.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")}
+                              </div>}
+                            </div>
+                          );
+                        })}
+                        {dims.map(d=>{
+                          const e = (slStore.entities||[]).find(x=>x.id===d.entity);
+                          return (
+                            <div key={d.id} style={{fontSize:11.5,lineHeight:1.5}}>
+                              <span style={{color:T.text,fontWeight:600}}>{d.name}</span>
+                              <span style={{color:T.textMuted}}> · dimension on {e?e.name:"a dataset"}</span>
+                            </div>
+                          );
+                        })}
+                        {ents.map(e=>(
+                          <div key={e.id} style={{fontSize:11.5,lineHeight:1.5}}>
+                            <span style={{color:T.text,fontWeight:600}}>{e.name}</span>
+                            <span style={{color:T.textMuted}}> · dataset {e.table}{modelsFor(e).length?` in ${modelsFor(e).map(m=>m.name).join(", ")}`:""}</span>
+                          </div>
+                        ))}
+                      </div>}
+                </div>
+              );
+            })()}
+
             {/* LINKED ASSETS */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
               <SideLabel ch="Linked Assets"/>
