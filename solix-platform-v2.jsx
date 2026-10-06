@@ -40131,13 +40131,11 @@ const SemanticLayerView = ({onToast, onNav}) => {
               const shownMets = dq ? mMetrics.filter(m=>`${m.name} ${m.definition}`.toLowerCase().includes(dq)) : mMetrics;
               return (
               <>
-              <div style={{marginBottom:16}}>
+              {/* Tabs, search and the action on one row — the Data Quality arrangement */}
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
                 <SegTabs tabs={DEFT.map(t=>({key:t.key,label:t.short,count:t.count}))}
                   active={defTab==="metrics"?"metrics":"fields"} onChange={k=>{setDefTab(k);setDefQ("");}}/>
-              </div>
-
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-                <div style={{flex:1,maxWidth:380}}>
+                <div style={{flex:1,minWidth:200,maxWidth:360}}>
                   <Input2 placeholder={`Search ${defTab==="metrics"?"metrics":"fields"}…`} value={defQ} onChange={e=>setDefQ(e.target.value)} icon={Ic.search(12)}/>
                 </div>
                 <Btn variant="primary" icon={Ic.plus(12)}
