@@ -14338,9 +14338,27 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const pendMaps = p.articles.filter(x=>x.ok===false).length; const mapReq = reqById(p.mapReqId);
     const isReg = p.source==="regulation";
     const canChange = canEdit(p) && p.status!=="Retired" && !pr;
-    const openFindN = ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length;
+    const openF = ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)); const openFindN = openF.length;
+    const vR = p.rules.filter(r=>r.type==="validation"), eR = p.rules.filter(r=>r.type==="enforcement");
     const attRules = p.rules.filter(r=>r.type==="attestation"); const dueN = attRules.filter(r=>["due","overdue","rejected"].includes(pm2AttState(p,r).state)).length;
-    const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Rules",badge:p.rules.length},{k:"activity",l:"Activity",badge:(openFindN+dueN)||null,danger:openFindN+dueN>0},{k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
+    const curN = attRules.filter(r=>["current","soon"].includes(pm2AttState(p,r).state)).length;
+    const runN = ev.targets.filter(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="approved").length;
+    const inScope = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p));
+    const assetRows = [...new Map([...inScope, ...ev.targets.map(t=>t.asset), ...ev.held].map(a=>[a.name,a])).values()];
+    const failing = new Set(openF.map(f=>f.asset.name));
+    // One compliance number, as in the original: validation pass rate, else enforcement coverage, else evidence currency.
+    const pct = vR.length ? (inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100)
+      : eR.length ? (ev.targets.length?Math.round(runN/ev.targets.length*100):100)
+      : attRules.length ? Math.round(curN/attRules.length*100) : 100;
+    const healthColor = pct>=80?T.green:pct>=60?T.amber:T.rose;
+    const healthLabel = pct>=80?"Healthy":pct>=60?"Needs attention":"Critical";
+    // "activity" (used by inbox and framework links) opens the matching tab.
+    const tab = pdTab==="activity" ? (attRules.length&&(fill?.polId===p.id||dueN||!vR.length) ? "evidence" : vR.length ? "violations" : "assets") : pdTab;
+    const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Rules",badge:p.rules.length},
+      ...(vR.length?[{k:"violations",l:"Violations",badge:openFindN||null,danger:true}]:[]),
+      {k:"assets",l:"Assets",badge:assetRows.length||null},
+      ...(attRules.length?[{k:"evidence",l:"Evidence",badge:(p.status==="Active"&&dueN)||null,danger:true}]:[]),
+      {k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
     const myReqs = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&String(r.targetId||"").split("|")[0]===p.id);
     const initials = u => u.split(".").map(x=>x[0]?.toUpperCase()).join("");
     const ownerChip = u => <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,border:`1px solid ${T.accent}20`}}>
@@ -14349,42 +14367,70 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706"}}>{initials(u)}</div><span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{u}</span>
       {canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==u)},`Removed steward ${u}`))} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,lineHeight:1,opacity:.6}}>×</button>}</div>;
     const SB = (label, onEdit, children) => <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>{sideLabel(label,onEdit)}{children}</div>;
+    const kv = (k, v, c) => <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"3px 0"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:c||T.text,fontWeight:500,textAlign:"right"}}>{v}</span></div>;
     const secHd = (label, n, right) => <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
       <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}{n>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{n}</span>}</div>{right}</div>;
-    // A rule as a row: type, origin, name, sentence, where it counts, state, actions.
-    const ruleCardView = (r, compact) => { const rh=p.status==="Active"?ruleHealth(p,r):null; const arts=artsOfRule(p,r);
+    const logicBadge = () => { if(vR.length<2) return null; const rl=p.ruleLogic||"independent"; const c=rl==="and"?T.green:rl==="or"?T.violet:T.textSub;
+      return <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:8,marginBottom:14,background:rl==="independent"?T.bgElevated:`${c}10`,border:`1px solid ${rl==="independent"?T.border:c+"30"}`}}>
+        <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:rl==="independent"?T.bgBase:c,color:rl==="independent"?T.textMuted:"#fff"}}>{PM2_LOGIC[rl].short}</span>
+        <span style={{fontSize:11.5,color:c}}>{PM2_LOGIC[rl].hint}</span>
+        {canChange&&<button onClick={()=>openEditor(p,null,3)} style={{marginLeft:"auto",fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600}}>Change</button>}
+      </div>; };
+    // A rule as a card (Rules tab): type, origin, name, sentence, where it counts, state, actions.
+    const ruleCardView = r => { const rh=p.status==="Active"?ruleHealth(p,r):null; const arts=artsOfRule(p,r);
       const editable = canChange && (r.origin==="custom" || (r.type==="validation"&&(r.conds||[]).some(c=>c.edit)) || r.type==="enforcement" || r.type==="attestation");
-      return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:9,padding:compact?"9px 12px":"12px 14px",marginBottom:8}}>
+      return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:9,padding:"12px 14px",marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
           {typePill(r.type)}{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text,flex:1,minWidth:160}}>{r.name}</span>
           {rh&&<span style={{fontSize:11,fontWeight:600,color:ART_META[rh.state]?.c||T.textMuted}}>{rh.label}</span>}
-          {!compact&&editable&&<button onClick={()=>openRuleEditor(p,r)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{r.origin==="custom"?"Edit":"Edit values"}</button>}
-          {!compact&&canChange&&r.origin==="custom"&&<button onClick={()=>ask(`Remove “${r.name}”?`, p.status==="Active"?"The policy's next version drops this rule; the current version keeps running until that's approved.":"The rule is removed from this draft.", "Remove", ()=>removeRule(p,r), true)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}40`,color:T.rose,cursor:"pointer"}}>Remove</button>}
+          {editable&&<button onClick={()=>openRuleEditor(p,r)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{r.origin==="custom"?"Edit":"Edit values"}</button>}
+          {canChange&&r.origin==="custom"&&<button onClick={()=>ask(`Remove “${r.name}”?`, p.status==="Active"?"The policy's next version drops this rule; the current version keeps running until that's approved.":"The rule is removed from this draft.", "Remove", ()=>removeRule(p,r), true)} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}40`,color:T.rose,cursor:"pointer"}}>Remove</button>}
         </div>
         <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:6}}>{ruleSentence(p,r)}</div>
-        {!compact&&arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
+        {arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
       </div>); };
+    // A rule as a compact row (Overview), like the original's RULE rows.
+    const ruleRow = r => { const tail = r.type==="validation" ? (r.severity||"Medium") : r.type==="enforcement" ? (r.enf?.action==="hold"?"Legal hold":"Retention") : `Every ${r.att?.every||12} mo`;
+      const sc = r.type==="validation" ? (SEV_COLOR[r.severity||"Medium"]||T.textMuted) : typeColor(r.type);
+      return <div key={r.id} onClick={()=>setPdTab("rules")} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer"}}>
+        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:4,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`,flexShrink:0}}>RULE</span>
+        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${typeColor(r.type)}14`,color:typeColor(r.type),flexShrink:0}}>{PM2_TYPE_META[r.type].label}</span>
+        <span style={{fontSize:12,color:T.textSub,flex:1,lineHeight:1.5,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
+        {r.origin==="custom"&&originPill(r)}
+        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${sc}14`,color:sc,flexShrink:0}}>{tail}</span>
+      </div>; };
     let body;
-    if(pdTab==="overview"){
-      const inScope = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p));
-      const col = (k, big, sub, c, go) => <div style={{padding:"14px 16px",borderRight:`1px solid ${T.border}`,flex:1,minWidth:150}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{PM2_TYPE_META[k].label}</span></div>
-        <div style={{fontSize:22,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{big}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{sub}</div>
-        {go&&<button onClick={go} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,marginTop:6,fontWeight:500}}>View →</button>}</div>;
-      const vR=p.rules.filter(r=>r.type==="validation"), eR=p.rules.filter(r=>r.type==="enforcement");
-      const failing = new Set(ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)).map(f=>f.asset.name)); const pct = inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100;
-      const run = ev.targets.filter(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="approved").length;
-      const cur = attRules.filter(r=>["current","soon"].includes(pm2AttState(p,r).state)).length;
-      const banner = p.status!=="Active"
+    if(tab==="overview"){
+      const metricBtn = (n, label, c, go, chips) => <button onClick={go} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:`${c}10`,border:`1px solid ${c}25`,cursor:"pointer",textAlign:"left",marginBottom:6}}>
+        <span style={{fontSize:11,fontWeight:600,color:c}}>{n} {label}</span>{chips}</button>;
+      const crit = openF.filter(f=>f.severity==="Critical").length, high = openF.filter(f=>f.severity==="High").length;
+      const results = p.status!=="Active"
         ? <div style={{marginBottom:20,padding:"12px 14px",borderRadius:10,border:`1.5px dashed ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
             <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg></div>
-            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Not running yet</div><div style={{fontSize:11.5,color:T.textMuted}}>{nextText(p)}</div></div></div>
-        : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${T.border}`,background:T.bgElevated,overflow:"hidden"}}>
-            <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"flex",justifyContent:"space-between"}}>Results<span style={{textTransform:"none",letterSpacing:0,fontWeight:500}}>{st.lastRun[p.id]?`Last run today ${st.lastRun[p.id]}`:`Continuous · since ${p.activatedAt||p.created}`}</span></div>
-            <div style={{display:"flex",flexWrap:"wrap"}}>
-              {vR.length>0&&col("validation", `${pct}%`, `${inScope.length-failing.size} of ${inScope.length} assets pass · ${openFindN} finding${openFindN===1?"":"s"}`, pct>=80?T.green:pct>=60?T.amber:T.rose, ()=>setPdTab("activity"))}
-              {eR.length>0&&col("enforcement", `${run}/${ev.targets.length}`, ev.targets.length-run?`${ev.targets.length-run} waiting for their table owner`:"running on every table", ev.targets.length-run?T.amber:T.green, ()=>setPdTab("activity"))}
-              {attRules.length>0&&col("attestation", `${cur}/${attRules.length}`, dueN?`${dueN} form${dueN>1?"s":""} due`:"all forms current", dueN?T.violet:T.green, ()=>setPdTab("activity"))}
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Policy not running yet</div><div style={{fontSize:11.5,color:T.textMuted}}>{nextText(p)}</div></div></div>
+        : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${healthColor}30`,background:`${healthColor}10`,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${healthColor}20`}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:healthColor,boxShadow:`0 0 0 3px ${healthColor}25`}}/><span style={{fontSize:11,fontWeight:700,color:healthColor,textTransform:"uppercase",letterSpacing:"0.07em"}}>Evaluation Results</span></div>
+              <button onClick={()=>setPdTab("assets")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all assets →</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+              <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Compliance Score</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:32,fontWeight:800,color:healthColor,lineHeight:1,fontFamily:"'Geist Mono',monospace"}}>{pct}%</span>
+                  <span style={{fontSize:11,color:healthColor,fontWeight:600,marginBottom:4,padding:"1px 7px",borderRadius:99,background:`${healthColor}18`,border:`1px solid ${healthColor}30`}}>{healthLabel}</span></div>
+                <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,borderRadius:3,background:healthColor}}/></div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>{vR.length?`${inScope.length-failing.size} of ${inScope.length} assets passing`:eR.length?`${runN} of ${ev.targets.length} tables enforced`:`${curN} of ${attRules.length} forms current`}</div>
+              </div>
+              <div style={{padding:"14px 16px"}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Last Evaluation</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{st.lastRun[p.id]?`Today ${st.lastRun[p.id]}`:"Continuous"}</div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:10}}>since {p.activatedAt||p.created} · {inScope.length} assets in scope</div>
+                {vR.length>0&&(openFindN ? metricBtn(openFindN, `open violation${openFindN!==1?"s":""}`, T.rose, ()=>setPdTab("violations"), <div style={{display:"flex",gap:4}}>{crit>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.rose,color:"#fff"}}>{crit} Crit</span>}{high>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.amber,color:"#fff"}}>{high} High</span>}</div>)
+                  : <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:T.green}}>✓ All assets compliant</span></div>)}
+                {eR.length>0&&metricBtn(`${runN}/${ev.targets.length}`, ev.targets.length-runN?`tables enforced — ${ev.targets.length-runN} awaiting their owner`:"tables enforced", ev.targets.length-runN?T.amber:T.green, ()=>setPdTab("assets"))}
+                {attRules.length>0&&metricBtn(`${curN}/${attRules.length}`, dueN?`forms current — ${dueN} due`:"forms current", dueN?T.violet:T.green, ()=>setPdTab("evidence"))}
+              </div>
             </div></div>;
       body = (
         <div style={{display:"flex",minHeight:"100%"}}>
@@ -14394,58 +14440,133 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               ? <><textarea value={descEdit} onChange={e=>setDescEdit(e.target.value)} rows={5} autoFocus style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
               : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
-            {banner}
-            {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button></span>)}
-            <div style={{marginBottom:20}}>{p.rules.map(r=>ruleCardView(r,true))}{!p.rules.length&&<div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet — add one.</div>}</div>
-            {sideLabel("Scope")}
-            <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:"12px 14px"}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data classes</div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>{p.scope.map(classChip)}</div>
-              <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domains</div>
-              <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div>
-              <div style={{fontSize:11.5,color:T.textSub}}>{inScope.length} assets in scope today.</div>
+            {results}
+            {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10,alignItems:"center"}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}{p.rules.length>0&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</span>)}
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
+              {vR.length>1&&(p.ruleLogic||"independent")!=="independent"&&<div style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,background:(p.ruleLogic==="and"?T.green:T.violet)+"18",color:p.ruleLogic==="and"?T.green:T.violet,border:`1px solid ${(p.ruleLogic==="and"?T.green:T.violet)}30`,alignSelf:"flex-start"}}>{p.ruleLogic==="and"?"AND — all rules must pass":"OR — any rule passing is enough"}</div>}
+              {p.rules.slice(0,4).map(ruleRow)}
+              {p.rules.length>4&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11.5,color:T.accent,background:"none",border:`1px solid ${T.accent}30`,borderRadius:7,cursor:"pointer",padding:"6px 12px",fontWeight:500}}>+{p.rules.length-4} more rules — view all</button>}
+              {!p.rules.length&&<div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules defined for this policy.</div>}
+            </div>
+            {sideLabel("Scope", canChange?()=>openEditor(p,null,2):null)}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data classes</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{p.scope.map(classChip)}</div></div>
+              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domains</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div></div>
+              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Assets</div>
+                <div style={{fontSize:12,color:T.textSub}}>{inScope.length} assets in scope today <button onClick={()=>setPdTab("assets")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500,marginLeft:6}}>View →</button></div></div>
             </div>
           </div>
           <div style={{width:250,flexShrink:0}}>
             {SB("Status", null, <>
               <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,padding:"3px 10px",borderRadius:6,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`}}>{p.status==="Active"?"✓ ":""}{p.status}{p.draft?` · v${p.draft.version} in review`:""}</span>
               <div style={{fontSize:11.5,color:T.textSub,marginTop:8,lineHeight:1.55}}>{nextText(p)}</div></>)}
-            {SB("Rules", null, <div style={{display:"flex",flexDirection:"column",gap:4}}>
-              {["validation","enforcement","attestation"].map(k=>{ const n=p.rules.filter(r=>r.type===k).length; return n>0&&<div key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>{n} {PM2_TYPE_META[k].label.toLowerCase()}</div>; })}
-              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{p.rules.filter(r=>r.origin==="prebuilt").length} prebuilt · {p.rules.filter(r=>r.origin==="custom").length} custom</div></div>)}
             {SB("Category", canEdit(p)?()=>setSideEdit(sideEdit==="cat"?null:"cat"):null, sideEdit==="cat"
               ? <select autoFocus value={p.category||""} onChange={e=>{const v=e.target.value; updPol(p.id,x=>addHist({...x,category:v},`Category set to ${v||"Not set"}`)); setSideEdit(null);}} style={{...selStyle,width:"100%"}}><option value="">Not set</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
               : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:`${catColor(p.category)}14`,color:catColor(p.category),border:`1px solid ${catColor(p.category)}30`}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
+            {SB("Domain", null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div>)}
             {SB("Owners", (isAdmin||p.owner===me)?()=>setSideEdit(sideEdit==="own"?null:"own"):null, sideEdit==="own"
               ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");}) : ownerChip(p.owner))}
             {SB("Stewards", canSubmit(p)?()=>setSideEdit(sideEdit==="stw"?null:"stw"):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
               {(p.stewards||[]).map(stewardChip)}{!(p.stewards||[]).length&&<span style={{fontSize:12,color:T.textMuted}}>None</span>}
               {sideEdit==="stw"&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`)); setSideEdit(null);}} style={{...selStyle,width:"100%",marginTop:4}}><option value="">+ add a steward</option>{PM2_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}</div>)}
             {SB("Frameworks", canChange?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-              {[...new Set(p.articles.map(a=>a.fw))].map(id=>{ const f=pm2Fw(id); const n=p.articles.filter(a=>a.fw===id).length; const pend=p.articles.some(a=>a.fw===id&&a.ok===false);
-                return f&&<span key={id} title={pend?"Mapping awaiting approval":""} onClick={()=>{setTab("frameworks");setSelFw(id);}} style={{fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:pend?`${T.amber}12`:`${T.blue}10`,color:pend?T.amber:T.blue,border:`1px solid ${pend?T.amber:T.blue}30`,cursor:"pointer"}}>{f.name} · {n}</span>; })}
+              {[...new Set(p.articles.map(a=>a.fw))].map(id=>{ const f=pm2Fw(id); const pend=p.articles.some(a=>a.fw===id&&a.ok===false);
+                return f&&<span key={id} title={pend?"Mapping awaiting approval":"Open the framework"} onClick={()=>{setTab("frameworks");setSelFw(id);}} style={{fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:pend?`${T.amber}12`:`${T.blue}10`,color:pend?T.amber:T.blue,border:`1px solid ${pend?T.amber:T.blue}30`,cursor:"pointer"}}>{f.name}</span>; })}
               {!p.articles.length&&<span style={{fontSize:12,color:T.textMuted}}>Internal — no framework</span>}</div>)}
-            {SB("Source", null, <div style={{fontSize:12,color:T.textSub,lineHeight:1.55}}>{isReg?<>Prebuilt policy · template “{PM2_TPL[p.template].name}” v{p.tplVersion||1}{upd&&<div style={{color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>:p.basedOn?<>Custom · duplicated from {st.policies.find(x=>x.id===p.basedOn)?.name||"a prebuilt policy"}</>:"Custom policy"}</div>)}
+            {SB("Compliance", null, <>
+              {kv("Score", p.status==="Active"?`${pct}%`:"—", p.status==="Active"?healthColor:T.textMuted)}
+              {kv("Assets in scope", inScope.length)}
+              {vR.length>0&&kv("Open violations", openFindN, openFindN?T.rose:T.green)}
+              {eR.length>0&&kv("Tables enforced", `${runN} of ${ev.targets.length}`)}
+              {attRules.length>0&&kv("Forms current", `${curN} of ${attRules.length}`, dueN?T.violet:T.green)}</>)}
+            {SB("Details", null, <>
+              {kv("Created", p.created||"—")}
+              {kv("Updated", (p.history||[])[0]?.when||"—")}
+              {kv("Version", `v${p.version||1}`)}
+              {kv("Source", isReg?"Prebuilt":p.basedOn?"Custom (duplicated)":"Custom")}
+              {isReg&&kv("Template", `v${p.tplVersion||1}`)}
+              {upd&&<div style={{fontSize:11.5,color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>)}
           </div>
         </div>);
     }
-    if(pdTab==="rules") body = <>
+    if(tab==="rules") body = <>
       <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:14}}>
         <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.6}}>{isReg?<>Prebuilt rules are locked to the regulation — you can edit the values it leaves open. Add your own <b>custom rules</b> next to them; they're marked and go through approval like any change.</>:<>Every rule in this policy. Validation rules check metadata, enforcement rules retain or hold data through CDP, attestation rules ask a person for evidence.</>}</div>
         {canChange&&<Btn small variant="primary" icon={Ic.plus(11)} onClick={()=>openRuleEditor(p,null)}>Add rule</Btn>}
       </div>
-      {p.rules.filter(r=>r.type==="validation").length>1&&(()=>{ const rl=p.ruleLogic||"independent"; const c=rl==="and"?T.green:rl==="or"?T.violet:T.textSub;
-        return <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:8,marginBottom:14,background:rl==="independent"?T.bgElevated:`${c}10`,border:`1px solid ${rl==="independent"?T.border:c+"30"}`}}>
-          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:rl==="independent"?T.bgBase:c,color:rl==="independent"?T.textMuted:"#fff"}}>{PM2_LOGIC[rl].short}</span>
-          <span style={{fontSize:11.5,color:c}}>{PM2_LOGIC[rl].hint}</span>
-          {canChange&&<button onClick={()=>openEditor(p,null,3)} style={{marginLeft:"auto",fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600}}>Change</button>}
-        </div>; })()}
+      {logicBadge()}
       {["validation","enforcement","attestation"].map(k=>{ const rs=p.rules.filter(r=>r.type===k); return rs.length>0&&<div key={k} style={{marginBottom:14}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{PM2_TYPE_META[k].label} ({rs.length})</span></div>
-        {rs.map(r=>ruleCardView(r))}</div>; })}
+        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>{PM2_TYPE_META[k].label} ({rs.length})</div>
+        {rs.map(ruleCardView)}</div>; })}
       {!p.rules.length&&<div style={{padding:"28px 16px",borderRadius:10,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet.</div>}
     </>;
-    if(pdTab==="satisfies") body = <>
+    if(tab==="violations") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Nothing is evaluated until the policy is active. {nextText(p)}</div>
+      : ev.findings.length===0 ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",borderRadius:9,background:`${T.green}10`,border:`1px solid ${T.green}25`,fontSize:12.5,color:T.green,fontWeight:600}}>✓ No violations — every in-scope asset passes.</div>
+      : <><div style={{fontSize:12,color:T.textSub,marginBottom:12}}>{openFindN} open violation{openFindN===1?"":"s"} from the validation rules. Stewards fix them, or request an exception.</div>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div></>;
+    if(tab==="assets"){
+      const th = {padding:"9px 12px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
+      body = <>
+        <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>{assetRows.length} asset{assetRows.length===1?"":"s"} this policy governs — picked by classification, so newly classified data joins automatically.{p.status!=="Active"?" Nothing runs on them until the policy is active.":""}</div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr>{["Asset","Classifications",...(vR.length?["Validation"]:[]),...(eR.length?["Enforcement"]:[]),"Owner"].map(x=><th key={x} style={th}>{x}</th>)}</tr></thead>
+            <tbody>{assetRows.map(a=>{ const fN=openF.filter(f=>f.asset.name===a.name).length; const tg=ev.targets.filter(t=>t.asset.name===a.name); const held=ev.held.some(x=>x.name===a.name);
+              return (<tr key={a.name} style={{borderBottom:`1px solid ${T.border}`}}>
+                <td style={{padding:"9px 12px"}}><div style={{fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{a.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{a.service} · {a.env}</div></td>
+                <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm2Classes(a).map(classChip)}</div></td>
+                {vR.length>0&&<td style={{padding:"9px 12px"}}>{p.status!=="Active"?<span style={{color:T.textMuted}}>—</span>:fN?<button onClick={()=>setPdTab("violations")} style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${T.rose}12`,color:T.rose,border:`1px solid ${T.rose}30`,cursor:"pointer"}}>{fN} violation{fN>1?"s":""}</button>:<span style={{fontSize:11,fontWeight:700,color:T.green}}>✓ Pass</span>}</td>}
+                {eR.length>0&&<td style={{padding:"9px 12px"}}>{held?<span style={{fontSize:11,color:T.amber,fontWeight:600}}>Disposal suspended — legal hold</span>
+                  : tg.length ? <div style={{display:"flex",flexDirection:"column",gap:3}}>{tg.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.rule.id,t.asset.name); const rq=enfReqs.filter(x=>x.ruleId===`pm2:${p.id}:${t.rule.id}:${t.asset.name}`).slice(-1)[0];
+                      return <div key={i} title={`${t.rule.name} · ${t.detail}`} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:11,color:T.textSub}}>{t.verb}</span>{pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${rq?.approver||"owner"}`:ts==="rejected"?"Rejected":"Not requested")}</div>; })}</div>
+                  : <span style={{color:T.textMuted}}>—</span>}</td>}
+                <td style={{padding:"9px 12px",color:a.owner?T.textSub:T.textMuted}}>{a.owner||<i>none</i>}</td>
+              </tr>); })}
+              {!assetRows.length&&<tr><td colSpan={5} style={{padding:22,textAlign:"center",color:T.textMuted}}>No assets in scope yet.</td></tr>}</tbody>
+          </table>
+        </div>
+        {ev.targets.some(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve enforcement in their Workspace inbox; a table without an owner goes to {ap.enforcement.fallback}.</div>}
+      </>;
+    }
+    if(tab==="evidence") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Forms come due once the policy is active. {nextText(p)}</div> : <>
+      <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>Each attestation rule is a form someone fills in on schedule; a reviewer approves it before it counts.</div>
+      {attRules.map(r=>{ const as=pm2AttState(p,r); const canFill=(pm2Assignee(p,r)===me||isAdmin)&&as.state!=="review"; const filling=fill&&fill.polId===p.id&&fill.ruleId===r.id;
+        return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:200}}><div style={{display:"flex",gap:6,alignItems:"center"}}>{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.name}</span></div>
+              <div style={{fontSize:11.5,color:T.textSub,marginTop:3}}>Filled in by {pm2Assignee(p,r)} · reviewed by {pm2Reviewer(p,r)} · every {r.att.every} months</div></div>
+            <span style={{fontSize:12,fontWeight:700,color:ART_META[ruleHealth(p,r).state]?.c}}>{as.label}</span>
+            {canFill&&!filling&&<Btn small variant="primary" onClick={()=>setFill({polId:p.id, ruleId:r.id, values:{}})}>Fill in the form</Btn>}
+          </div>
+          {filling&&<div style={{padding:"14px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+            <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12,fontSize:12,color:T.textSub,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{r.att.instructions}</div>
+            {formView(r.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
+          </div>}
+          {(r.submissions||[]).map(sb=>{ const rq=reqById(sb.reqId); const open=openSub===sb.id;
+            return (<div key={sb.id} style={{borderTop:`1px solid ${T.border}`}}>
+              <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer"}}>
+                <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
+                <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
+                {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+                {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?","The reviewer's request is cancelled and the form is due again.","Withdraw",()=>withdrawSubmission(p,r,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
+              </div>
+              {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
+                {r.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
+                {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}</div>}
+              {sb.status==="pending"&&rq&&rq.status==="pending"&&canDecide(rq)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
+                <input value={review?.reqId===rq.id?review.comment:""} onChange={e=>setReview({reqId:rq.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
+                <Btn small variant="primary" onClick={()=>decideReq(rq,true,review?.reqId===rq.id?review.comment:"")}>Approve</Btn>
+                <Btn small ghost onClick={()=>{ const c=review?.reqId===rq.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(rq,false,c); }}>Reject</Btn></div>}
+            </div>); })}
+        </div>); })}
+    </>;
+    if(tab==="satisfies") body = <>
       {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not attached to any article — it's an internal policy. Edit it to attach it to a regulation or your own framework.</div>}
       {artsOfPol(p,true).map((x,i)=>{ const rules=pm2RulesForLink(p,x.link); return (
         <div key={i} style={{padding:"10px 0",borderBottom:`1px dashed ${T.border}`}}>
@@ -14454,87 +14575,28 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
             <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text,cursor:"pointer"}} onClick={()=>{setTab("frameworks");setSelFw(x.fw.id);}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
             {!x.ok?pill(T.amber,"Awaiting approval"):p.source==="custom"&&!x.fw.custom?pill(T.accent,"Your interpretation"):null}
           </div>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0 0 140px"}}><span style={{fontSize:10.5,color:T.textMuted}}>Counted rules:</span>{rules.map(r=><span key={r.id} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:T.textSub}}><span style={{width:6,height:6,borderRadius:"50%",background:typeColor(r.type)}}/>{r.name}</span>)}</div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0 0 140px"}}><span style={{fontSize:10.5,color:T.textMuted}}>Counted rules:</span>{rules.map(r=><span key={r.id} style={{fontSize:11,color:T.textSub}}>{r.name}{" "}<span style={{color:typeColor(r.type)}}>({PM2_TYPE_META[r.type].label.toLowerCase()})</span></span>)}</div>
         </div>); })}
     </>;
-    if(pdTab==="activity"){
-      const sec = (k, n, children) => <div style={{marginBottom:22}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{k==="validation"?"Findings":k==="enforcement"?"Enforcement":"Evidence"} ({n})</span></div>{children}</div>;
-      if(p.status!=="Active") body = <div style={{fontSize:12.5,color:T.textMuted}}>Nothing runs until the policy is active. {nextText(p)}</div>;
-      else body = <>
-        {p.rules.some(r=>r.type==="validation")&&sec("validation", ev.findings.length, ev.findings.length===0?<div style={{fontSize:12.5,color:T.green}}>Nothing found — passing.</div>
-          : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div>)}
-        {p.rules.some(r=>r.type==="enforcement")&&sec("enforcement", ev.targets.length, <>
-          {ev.targets.map((t,i)=>{ const ts=pm2TargetStatus(p.id,t.rule.id,t.asset.name); const rq=enfReqs.filter(x=>x.ruleId===`pm2:${p.id}:${t.rule.id}:${t.asset.name}`).slice(-1)[0];
-            return (<div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px dashed ${T.border}`}}>
-              {pill(typeColor("enforcement"), t.verb)}
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{t.asset.name}</div><div style={{fontSize:11,color:T.textMuted}}>{t.rule.name} · {t.detail}</div></div>
-              <span style={{fontSize:11,color:T.textMuted}}>table owner {t.asset.owner||<i>none → {ap.enforcement.fallback}</i>}</span>
-              {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${rq?.approver}`:ts==="rejected"?"Rejected":"Not requested")}
-            </div>); })}
-          {ev.targets.length===0&&<div style={{fontSize:12.5,color:T.textMuted}}>No tables in scope yet.</div>}
-          {ev.held.length>0&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:10}}>Disposal suspended by legal hold on: {ev.held.map(a=>a.name).join(", ")}.</div>}
-          {ev.targets.some(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve these in their Workspace inbox.</div>}
-        </>)}
-        {attRules.length>0&&sec("attestation", attRules.length, attRules.map(r=>{ const as=pm2AttState(p,r); const canFill=(pm2Assignee(p,r)===me||isAdmin)&&as.state!=="review"; const filling=fill&&fill.polId===p.id&&fill.ruleId===r.id;
-          return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",flexWrap:"wrap"}}>
-              <div style={{flex:1,minWidth:200}}><div style={{display:"flex",gap:6,alignItems:"center"}}>{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.name}</span></div>
-                <div style={{fontSize:11.5,color:T.textSub,marginTop:3}}>Filled in by {pm2Assignee(p,r)} · reviewed by {pm2Reviewer(p,r)} · every {r.att.every} months</div></div>
-              <span style={{fontSize:12,fontWeight:700,color:ART_META[ruleHealth(p,r).state]?.c}}>{as.label}</span>
-              {canFill&&!filling&&<Btn small variant="primary" onClick={()=>setFill({polId:p.id, ruleId:r.id, values:{}})}>Fill in the form</Btn>}
-            </div>
-            {filling&&<div style={{padding:"14px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
-              <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12,fontSize:12,color:T.textSub,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{r.att.instructions}</div>
-              {formView(r.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
-              <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
-            </div>}
-            {(r.submissions||[]).map(sb=>{ const rq=reqById(sb.reqId); const open=openSub===sb.id;
-              return (<div key={sb.id} style={{borderTop:`1px solid ${T.border}`}}>
-                <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer"}}>
-                  <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
-                  <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
-                  {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
-                  {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?","The reviewer's request is cancelled and the form is due again.","Withdraw",()=>withdrawSubmission(p,r,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
-                </div>
-                {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
-                  {r.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
-                  {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}</div>}
-                {sb.status==="pending"&&rq&&rq.status==="pending"&&canDecide(rq)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
-                  <input value={review?.reqId===rq.id?review.comment:""} onChange={e=>setReview({reqId:rq.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
-                  <Btn small variant="primary" onClick={()=>decideReq(rq,true,review?.reqId===rq.id?review.comment:"")}>Approve</Btn>
-                  <Btn small ghost onClick={()=>{ const c=review?.reqId===rq.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(rq,false,c); }}>Reject</Btn></div>}
-              </div>); })}
-          </div>); }))}
-      </>;
-    }
-    if(pdTab==="history") body = <>
+    if(tab==="history") body = <>
       {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:r.status==="withdrawn"?T.textMuted:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
       {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
     </>;
-    const hc = ART_META[h.state]?.c||T.textMuted;
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,marginBottom:4}}>{p.name}</div>
-              <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                {isReg ? <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Prebuilt · {pm2LinkedFws(p).filter(f=>!f.custom).map(f=>f.name).join(", ")||"—"}</span>
-                  : <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Custom</span>}
-                {typeDots(p)}<span style={{fontSize:11,color:T.textMuted}}>{p.rules.length} rule{p.rules.length===1?"":"s"} · {p.articles.length} article{p.articles.length===1?"":"s"}</span>
-              </div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0}}>
+              {srcBox(p)}
+              <span style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+              {p.status!=="Active"&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`,flexShrink:0}}>{p.status}</span>}
+              {p.status==="Active"&&<span title="Compliance score" style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${healthColor}12`,color:healthColor,border:`1px solid ${healthColor}30`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{pct}%</span>}
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>v{p.version||1}</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
               {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>p.rules.length?submitPolicy(p.id):onToast("Add at least one rule first","info")}>Submit for approval</Btn>}
               {pr&&!canDecide(pr)&&(pr.requestedBy===me||canSubmit(p))&&<Btn small ghost onClick={()=>withdrawRequest(p)}>Withdraw request</Btn>}
               {p.status==="Retired"&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>restorePolicy(p)}>Restore</Btn>}
-              {canChange&&<Btn small ghost icon={Ic.plus(10)} onClick={()=>openRuleEditor(p,null)}>Add rule</Btn>}
-              {p.status==="Active"
-                ? <div title={h.label} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 9px",borderRadius:5,background:`${hc}12`,border:`1px solid ${hc}30`}}>
-                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1L2 4v3c0 2.5 1.8 4 4 4.5C8.2 11 10 9.5 10 7V4L6 1z" stroke={hc} strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                    <span style={{fontSize:11,fontWeight:700,color:hc}}>{h.state==="met"?"Met":h.label}</span></div>
-                : <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`}}>{p.status}</span>}
-              <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>v{p.version||1}</span>
               {menuBtn("pd:"+p.id, policyMenu(p))}
               <button onClick={()=>setSelPol(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,lineHeight:1}}>{Ic.x(13)}</button>
             </div>
@@ -14546,11 +14608,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         {pendMaps>0&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text}}>{mapReq&&mapReq.status==="pending"?<>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.</>:<>{pendMaps} regulation article mapping{pendMaps>1?"s go":" goes"} to {ap.mapping.approver} for approval once the policy is submitted.</>}{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>}
         <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto",marginTop:(pr&&canDecide(pr))||upd||pendMaps?8:0}}>
           {tabs.map(({k,l,badge,danger})=>(
-            <button key={k} onClick={()=>setPdTab(k)} style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${pdTab===k?T.accent:"transparent"}`,color:pdTab===k?T.accent:T.textMuted,fontSize:12,fontWeight:pdTab===k?600:500,cursor:"pointer",whiteSpace:"nowrap",marginBottom:-1}}>
-              {l}{badge!=null&&badge>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:pdTab===k?T.accent:danger?`${T.rose}18`:T.bgElevated,color:pdTab===k?"#fff":danger?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{badge}</span>}
+            <button key={k} onClick={()=>setPdTab(k)} style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted,fontSize:12,fontWeight:tab===k?600:500,cursor:"pointer",whiteSpace:"nowrap",marginBottom:-1}}>
+              {l}{badge!=null&&badge>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:tab===k?T.accent:danger?`${T.rose}18`:T.bgElevated,color:tab===k?"#fff":danger?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{badge}</span>}
             </button>))}
         </div>
-        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{pdTab==="overview" ? body : <div style={{padding:"20px 22px 40px"}}>{body}</div>}</div>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{tab==="overview" ? body : <div style={{padding:"20px 22px 40px"}}>{body}</div>}</div>
       </div>
     );
   };
@@ -35807,6 +35869,17 @@ const SL_MODELS = [
    owners:["sarah.kim"], stewards:["alex.wu"], tags:["finance"], terms:[],
    lastPublished:null, created:"2026-09-08", sync:{enabled:false, targets:["snowflake"], frequency:"daily", onDrift:"notify"},
    desc:"General-ledger transaction grain for recurring revenue. Not yet published anywhere."},
+
+  {id:"mdl_store", name:"Store Sales", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
+   status:"Approved", entityIds:["e_order"], targets:[], icon:"▦", color:"#29b5e8",
+   owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue"], terms:[],
+   lastPublished:null, created:"2026-08-04",
+   // Harvested, not authored. EDG mirrors what Snowflake says; it does not write back.
+   source:{platform:"snowflake", connection:"Snowflake DWH", object:"SNOWFLAKE_PROD.COMMERCE.STORE_SALES_SV",
+           asset:"store_sales_sv", lastRead:"2026-10-06 07:15", writable:false},
+   sync:{enabled:true, targets:["snowflake"], frequency:"daily", onDrift:"notify",
+         connections:{snowflake:"Snowflake DWH"}},
+   desc:"Store sales semantic view, built by the Commerce analytics team in Snowflake. EDG reads it; Snowflake owns it."},
 ];
 
 // ── The register. Each metric is the semantic facet of a Glossary term (termId), or
@@ -39702,6 +39775,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{mdl.name}</h1>
                 <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                   <SLStatusChip status={mdl.status}/>
+                  {mdl.source && <SLSysChip system={mdl.source.platform}/>}
                   <span style={{fontSize:11,color:T.textMuted}}>{mdl.domain} · {mdl.owner}</span>
                   <span style={{fontSize:11,color:T.textMuted}}>· {st.entities} dataset{st.entities===1?"":"s"} · {st.metrics} metric{st.metrics===1?"":"s"}</span>
                   {st.disagree>0 && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{st.disagree} out of step</span>}
@@ -40506,6 +40580,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                     <span style={{width:26,height:26,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
                       fontSize:14,fontWeight:700,background:`${slMdlColour(m)}18`,border:`1px solid ${slMdlColour(m)}45`,color:slMdlColour(m)}}>{slMdlIcon(m)}</span>
                     <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{m.name}</span>
+                    {m.source && <SLSysChip system={m.source.platform}/>}
                     <SLStatusChip status={m.status}/>
                     {!m.lastPublished && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>never published</span>}
                   </div>
