@@ -41,6 +41,8 @@ const span = (startsWith, endStartsWith) => {
   return lines.slice(i, j).join("\n");
 };
 
+const RE_SCHEMA_ASSIGN = /^Object\.assign\(SCHEMA,\s*\{/;
+
 const block = [
   "const SCHEMA = {",
   "const GLOSSARY_TERMS = [",
@@ -57,12 +59,24 @@ const block = [
   "const SL_DIMENSIONS = ",
   "const SL_FACTS = ",
   "const SL_DIM_TYPES = ",
+  // The worked example is seeded as its own block and pushed onto the arrays above,
+  // so it has to be carried across, or the one model with composite keys, a composite
+  // join and a role-playing dimension is the one model nothing tests.
+  "const RETAIL_ENTITIES = ",
+  "const RETAIL_RELS = ",
+  "const RETAIL_DIMS = ",
+  "const RETAIL_FACTS = ",
+  "const RETAIL_METRICS = ",
+  "const RETAIL_MODEL = ",
 ].map(grab).join("\n\n")
   // SCHEMA is declared holding one table and extended by Object.assign blocks. Without
   // them the sandbox sees a catalogue with almost no columns, and every datatype the
   // export should carry comes back empty for the wrong reason.
-  + "\n\n" + lines.map((l, i) => l.startsWith("Object.assign(SCHEMA,{") ? grabFrom(i) : null)
+  + "\n\n" + lines.map((l, i) => RE_SCHEMA_ASSIGN.test(l) ? grabFrom(i) : null)
                   .filter(Boolean).join("\n\n")
+  + "\n\n" + "SL_ENTITIES.push(...RETAIL_ENTITIES); SL_RELATIONSHIPS.push(...RETAIL_RELS);"
+  + "SL_DIMENSIONS.push(...RETAIL_DIMS); SL_FACTS.push(...RETAIL_FACTS);"
+  + "SL_METRICS.push(...RETAIL_METRICS); SL_MODELS.push(RETAIL_MODEL);"
   + "\n\n" + grab("let _slState = ")
   + "\n\n" + ["const slSlug ", "const slKeys ", "const slPK ", "const slPKText ",
               "const slUniqueKeys ", "const slFromCols ", "const slToCols ", "const slJoinPairs ",
@@ -176,6 +190,13 @@ M.SL_MODELS.forEach(mdl => {
   ok(`${mdl.name}: relationships point at datasets that exist`,
      (doc.relationships || []).every(r =>
         doc.datasets.some(d => d.name === r.from) && doc.datasets.some(d => d.name === r.to)));
+
+  // Two datasets can be joined twice — a role-playing date is the ordinary case — and a
+  // reader keyed by name would silently keep one of them.
+  const relNames = (doc.relationships || []).map(r => r.name);
+  ok(`${mdl.name}: every relationship has its own name`,
+     new Set(relNames).size === relNames.length,
+     relNames.filter((n, i2) => relNames.indexOf(n) !== i2));
 
   // The serialiser has to survive a round trip through the eyes, at least structurally.
   const body = M.slAdaptOssie(ctx)[0].body;

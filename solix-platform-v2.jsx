@@ -2174,9 +2174,23 @@ const _GT_CONCEPTS = [
   ["tc4","Transaction","Finance","sarah.kim","A single posted movement of value in the general ledger.",["Ledger entry","Posting","Journal line"],null,
    "Posted, not committed. A cancelled order never becomes a transaction."],
   ["tc5","Product","Commerce","dev.patel","A sellable item or service in the group catalogue.",["SKU","Item","Article"],null,
-   "Declared but not yet carried by any dataset — no table in any model has product grain."],
+   "Carried at product grain by the Product dataset in Retail Sales 360."],
   ["tc6","Supplier","Procurement","sarah.kim","A legal entity from which the group purchases goods or services.",["Vendor","Provider"],"tc2",
    "Shares the Party parent with Customer. The same legal entity is often both."],
+  ["tc7","Order Line","Commerce","maya.chen","A single product on an order, at an agreed quantity and price.",["Line item","Order detail","Order line item"],"tc3",
+   "The finest commercial grain there is. An order is a commitment; a line is what was actually bought."],
+  ["tc8","Product Category","Commerce","dev.patel","A node of the merchandising hierarchy a product is classified into.",["Category","Merchandise class","Product class"],null,
+   "A hierarchy, not a label. It is its own concept because it is owned and renamed independently of the products in it."],
+  ["tc9","Store","Commerce","maya.chen","A location or channel through which goods are sold.",["Location","Outlet","Selling channel"],null,
+   "The online channel is a store. Treating it as one is what lets the same measure compare physical and digital trade."],
+  ["tc10","Calendar Day","Commerce","sarah.kim","A single day, carrying both the calendar and the fiscal year.",["Date","Day","Business date"],null,
+   "It exists as a concept because the fiscal calendar is not the calendar calendar, and every period comparison depends on which one is meant."],
+  ["tc11","Inventory Position","Commerce","dev.patel","The quantity of a product held at a location at a point in time.",["Stock on hand","Stock position","On hand"],null,
+   "A position, not an event. It is true at an instant and does not add up over time, which is the whole reason it is modelled apart from sales."],
+  ["tc12","Shipment","Commerce","dev.patel","A parcel despatched to fulfil part or all of an order.",["Parcel","Delivery","Consignment"],null,
+   "Several shipments can fulfil one order. That is a fact about the business before it is a problem in a join."],
+  ["tc13","Promotion","Commerce","maya.chen","A time-bounded commercial offer that reduces the price paid.",["Offer","Campaign","Markdown"],null,
+   "An order can carry several and a promotion runs across many orders, which is why the two are bridged rather than joined."],
 ];
 _GT_CONCEPTS.forEach(([id,name,dom,owner,def,syn,broader,note]) => {
   GLOSSARY_TERMS.push({
@@ -36409,6 +36423,354 @@ const SL_FACTS = [
    desc:"Counting key. Not additive — summing it is meaningless, only counting is."},
 ];
 
+// ═══════════════════════════════════════════════════════════════════════════
+// THE WORKED EXAMPLE — Retail Sales 360
+// ───────────────────────────────────────────────────────────────────────────
+// Three datasets and one join is enough to show the screen works. It is not
+// enough to show why relationships are the part of a semantic model that has to
+// be governed. This one is deliberately complex, and every join in it is a
+// pattern someone has to be told about:
+//
+//   a chain          Order Line → Order → Customer, so a customer attribute
+//                    reaches a line-grain measure through two hops
+//   a snowflake      Product → Product Category, kept as a second hop rather
+//                    than flattened, so a category rename happens once
+//   role-playing     Calendar Date joined TWICE from the same dataset, once as
+//                    the order date and once as the ship date
+//   a composite      Order Line → Inventory on (store_id, sku) — two column
+//                    pairs, because neither one identifies a row on its own
+//   a fan-out trap   Shipment → Order. Perfectly valid, and it silently
+//                    multiplies order revenue by the number of parcels
+//   a bridge         Order Promotion between Order and Promotion, which is how
+//                    a many-to-many is expressed without a many-to-many join
+//
+// It is kept in one block so the example can be read, explained and changed as
+// one thing rather than hunted for across six arrays.
+// ═══════════════════════════════════════════════════════════════════════════
+
+Object.assign(SCHEMA, {
+  order_lines:[
+    {name:"order_id",        type:"BIGINT",        desc:"The order this line belongs to", pii:false,nullable:false,quality:"FK valid",  pk:true},
+    {name:"line_no",         type:"INT",           desc:"Line number within the order",   pii:false,nullable:false,quality:"NOT NULL",  pk:true},
+    {name:"product_id",      type:"BIGINT",        desc:"Product sold on this line",      pii:false,nullable:false,quality:"FK valid",  pk:false},
+    {name:"sku",             type:"VARCHAR(32)",   desc:"Stock-keeping unit as sold",     pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"store_id",        type:"BIGINT",        desc:"Store or channel that sold it",  pii:false,nullable:false,quality:"FK valid",  pk:false},
+    {name:"order_date",      type:"DATE",          desc:"Date the order was placed",      pii:false,nullable:false,quality:"Not future",pk:false},
+    {name:"ship_date",       type:"DATE",          desc:"Date the line shipped",          pii:false,nullable:true, quality:">= order_date",pk:false},
+    {name:"quantity",        type:"INT",           desc:"Units sold on this line",        pii:false,nullable:false,quality:"> 0",       pk:false},
+    {name:"unit_price",      type:"DECIMAL(12,2)", desc:"Price per unit at point of sale",pii:false,nullable:false,quality:"> 0",       pk:false},
+    {name:"discount_amount", type:"DECIMAL(12,2)", desc:"Discount applied to this line",  pii:false,nullable:false,quality:">= 0",      pk:false},
+  ],
+  products:[
+    {name:"product_id",   type:"BIGINT",        desc:"Unique product identifier",    pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"sku",          type:"VARCHAR(32)",   desc:"Stock-keeping unit",           pii:false,nullable:false,quality:"Unique",  pk:false},
+    {name:"product_name", type:"VARCHAR(200)",  desc:"Display name",                 pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"category_id",  type:"BIGINT",        desc:"Category this product sits in", pii:false,nullable:false,quality:"FK valid",pk:false},
+    {name:"brand",        type:"VARCHAR(80)",   desc:"Brand the product is sold under",pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"list_price",   type:"DECIMAL(12,2)", desc:"Recommended retail price",     pii:false,nullable:false,quality:"> 0",     pk:false},
+  ],
+  product_categories:[
+    {name:"category_id",   type:"BIGINT",       desc:"Unique category identifier", pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"category_name", type:"VARCHAR(120)", desc:"Category display name",      pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"department",    type:"VARCHAR(80)",  desc:"Merchandising department",   pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"is_seasonal",   type:"BOOLEAN",      desc:"Whether the category is seasonal",pii:false,nullable:false,quality:"NOT NULL",pk:false},
+  ],
+  stores:[
+    {name:"store_id",     type:"BIGINT",       desc:"Unique store identifier",     pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"store_name",   type:"VARCHAR(120)", desc:"Store display name",          pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"region",       type:"VARCHAR(40)",  desc:"Sales region",                pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"country",      type:"CHAR(2)",      desc:"ISO 3166 country code",       pii:false,nullable:false,quality:"Valid ISO",pk:false},
+    {name:"store_format", type:"VARCHAR(40)",  desc:"Flagship, outlet, online or franchise",pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"opened_on",    type:"DATE",         desc:"Date the store opened",       pii:false,nullable:false,quality:"Not future",pk:false},
+  ],
+  calendar_date:[
+    {name:"date_day",       type:"DATE",       desc:"One row per calendar day",  pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"day_of_week",    type:"VARCHAR(10)",desc:"Monday through Sunday",     pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"month_name",     type:"VARCHAR(12)",desc:"Calendar month name",       pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"fiscal_quarter", type:"VARCHAR(8)", desc:"Fiscal quarter, e.g. FY26 Q3",pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"fiscal_year",    type:"INT",        desc:"Fiscal year",               pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"is_holiday",     type:"BOOLEAN",    desc:"Public holiday in the primary market",pii:false,nullable:false,quality:"NOT NULL",pk:false},
+  ],
+  inventory_snapshot:[
+    {name:"store_id",      type:"BIGINT", desc:"Store the stock sits in",        pii:false,nullable:false,quality:"FK valid",pk:true},
+    {name:"sku",           type:"VARCHAR(32)",desc:"Stock-keeping unit",         pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"snapshot_date", type:"DATE",   desc:"Date the count was taken",       pii:false,nullable:false,quality:"Daily",   pk:true},
+    {name:"on_hand_qty",   type:"INT",    desc:"Units physically in the store",  pii:false,nullable:false,quality:">= 0",    pk:false},
+    {name:"on_order_qty",  type:"INT",    desc:"Units on order but not received",pii:false,nullable:false,quality:">= 0",    pk:false},
+  ],
+  shipments:[
+    {name:"shipment_id",  type:"BIGINT",       desc:"Unique shipment identifier",  pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"order_id",     type:"BIGINT",       desc:"Order this parcel is part of",pii:false,nullable:false,quality:"FK valid",pk:false},
+    {name:"carrier",      type:"VARCHAR(40)",  desc:"Carrier the parcel went with",pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"shipped_at",   type:"TIMESTAMP",    desc:"When the parcel left",        pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"delivered_at", type:"TIMESTAMP",    desc:"When it was delivered",       pii:false,nullable:true, quality:"—",      pk:false},
+    {name:"shipping_cost",type:"DECIMAL(10,2)",desc:"Cost of this parcel",         pii:false,nullable:false,quality:">= 0",   pk:false},
+  ],
+  promotions:[
+    {name:"promo_id",     type:"BIGINT",      desc:"Unique promotion identifier", pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"promo_name",   type:"VARCHAR(120)",desc:"Promotion display name",      pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"promo_type",   type:"VARCHAR(40)", desc:"Markdown, bundle, coupon or loyalty",pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"starts_on",    type:"DATE",        desc:"First day the promotion runs",pii:false,nullable:false,quality:"NOT NULL",pk:false},
+    {name:"ends_on",      type:"DATE",        desc:"Last day the promotion runs", pii:false,nullable:false,quality:">= starts_on",pk:false},
+  ],
+  order_promotions:[
+    {name:"order_id",       type:"BIGINT",       desc:"Order the promotion was applied to",pii:false,nullable:false,quality:"FK valid",pk:true},
+    {name:"promo_id",       type:"BIGINT",       desc:"Promotion that was applied",        pii:false,nullable:false,quality:"FK valid",pk:true},
+    {name:"applied_amount", type:"DECIMAL(12,2)",desc:"Value of the discount given",       pii:false,nullable:false,quality:">= 0",   pk:false},
+  ],
+});
+
+// Profiles for the new columns. slCheckJoin reads these, which is how it can say
+// a join will fan out before anyone runs it.
+Object.assign(COL_PROFILES, {
+  line_no:        {nullPct:0, nullCount:"0", distinctPct:0.001,distinctCount:"48",     min:"1", max:"48",  avg:"2.7", topValues:null, dataType:"numeric"},
+  product_id:     {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"184,021",min:"1", max:"184,021", avg:null, topValues:null, dataType:"numeric"},
+  category_id:    {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"412",    min:"1", max:"412", avg:null, topValues:null, dataType:"numeric"},
+  store_id:       {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"2,184",  min:"1", max:"2,184", avg:null, topValues:null, dataType:"numeric"},
+  promo_id:       {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"3,096",  min:"1", max:"3,096", avg:null, topValues:null, dataType:"numeric"},
+  shipment_id:    {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"71.4M",  min:"1", max:"71,400,000", avg:null, topValues:null, dataType:"numeric"},
+  sku:            {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"184,021",min:null,max:null, avg:null, topValues:null, dataType:"string", samples:["SKU-10044821","SKU-30019002","SKU-77120043"]},
+  date_day:       {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"3,653",  min:"2018-01-01", max:"2027-12-31", avg:null, topValues:null, dataType:"datetime"},
+  snapshot_date:  {nullPct:0, nullCount:"0", distinctPct:0.08, distinctCount:"1,096",  min:"2023-10-01", max:"2026-10-06", avg:null, topValues:null, dataType:"datetime"},
+  order_date:     {nullPct:0, nullCount:"0", distinctPct:0.004,distinctCount:"2,104",  min:"2021-01-01", max:"2026-10-06", avg:null, topValues:null, dataType:"datetime"},
+  ship_date:      {nullPct:3.8,nullCount:"4.9M",distinctPct:0.004,distinctCount:"2,110",min:"2021-01-02",max:"2026-10-07", avg:null, topValues:null, dataType:"datetime"},
+  quantity:       {nullPct:0, nullCount:"0", distinctPct:0.001,distinctCount:"38",     min:"1", max:"38", avg:"1.9", topValues:null, dataType:"numeric"},
+  unit_price:     {nullPct:0, nullCount:"0", distinctPct:0.4,  distinctCount:"52,118", min:"$0.49", max:"$4,299.00", avg:"$38.72", topValues:null, dataType:"numeric"},
+  discount_amount:{nullPct:0, nullCount:"0", distinctPct:0.2,  distinctCount:"24,880", min:"$0.00", max:"$1,720.00", avg:"$4.11", topValues:null, dataType:"numeric"},
+  on_hand_qty:    {nullPct:0, nullCount:"0", distinctPct:0.01, distinctCount:"1,842",  min:"0", max:"18,420", avg:"61.4", topValues:null, dataType:"numeric"},
+  region:         {nullPct:0, nullCount:"0", distinctPct:0.3,  distinctCount:"6",      min:null,max:null, avg:null, topValues:["NA (41%)","EMEA (28%)","APAC (19%)","LATAM (12%)"], dataType:"categorical"},
+  brand:          {nullPct:0, nullCount:"0", distinctPct:0.6,  distinctCount:"1,104",  min:null,max:null, avg:null, topValues:null, dataType:"categorical"},
+  carrier:        {nullPct:0, nullCount:"0", distinctPct:0.001,distinctCount:"7",      min:null,max:null, avg:null, topValues:["DHL (34%)","UPS (29%)","FedEx (21%)"], dataType:"categorical"},
+  store_format:   {nullPct:0, nullCount:"0", distinctPct:0.002,distinctCount:"4",      min:null,max:null, avg:null, topValues:["Flagship (12%)","Outlet (31%)","Online (9%)","Franchise (48%)"], dataType:"categorical"},
+  fiscal_quarter: {nullPct:0, nullCount:"0", distinctPct:1.1,  distinctCount:"40",     min:null,max:null, avg:null, topValues:null, dataType:"categorical"},
+  promo_type:     {nullPct:0, nullCount:"0", distinctPct:0.1,  distinctCount:"4",      min:null,max:null, avg:null, topValues:["Markdown (46%)","Coupon (27%)","Bundle (18%)","Loyalty (9%)"], dataType:"categorical"},
+  category_name:  {nullPct:0, nullCount:"0", distinctPct:100,  distinctCount:"412",    min:null,max:null, avg:null, topValues:null, dataType:"categorical"},
+  department:     {nullPct:0, nullCount:"0", distinctPct:2.9,  distinctCount:"12",     min:null,max:null, avg:null, topValues:["Apparel (24%)","Home (19%)","Beauty (14%)"], dataType:"categorical"},
+  applied_amount: {nullPct:0, nullCount:"0", distinctPct:0.9,  distinctCount:"18,204", min:"$0.50", max:"$890.00", avg:"$12.80", topValues:null, dataType:"numeric"},
+  shipping_cost:  {nullPct:0, nullCount:"0", distinctPct:0.1,  distinctCount:"6,210",  min:"$0.00", max:"$340.00", avg:"$7.92", topValues:null, dataType:"numeric"},
+});
+
+const RETAIL_ENTITIES = [
+  {id:"e_line", assetId:null, concept:"tc7", name:"Order Line", table:"order_lines", keys:["order_id","line_no"],
+   domain:"Commerce", owner:"maya.chen", timeDims:["order_date","ship_date"],
+   desc:"One row per product on an order. The finest grain in the model, and the grain every sales measure is declared at.",
+   evidence:"order_id + line_no · 100% distinct together · neither unique alone over 192M rows",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.ORDER_LINES", databricks:"main.retail.order_lines",
+             dbt:"ref('fct_order_lines')", powerbi:"Order Lines", tableau:"Order_Lines"}},
+  {id:"e_product", assetId:null, concept:"tc5", name:"Product", table:"products", key:"product_id", uniqueKeys:[["sku"]],
+   domain:"Commerce", owner:"maya.chen", timeDims:[],
+   desc:"One row per sellable product. SKU is unique too, which is why it can be joined on.",
+   evidence:"product_id · primary key · sku · 100% distinct · 0% null",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.PRODUCTS", databricks:"main.retail.products",
+             dbt:"ref('dim_products')", powerbi:"Products", tableau:"Products"}},
+  {id:"e_category", assetId:null, concept:"tc8", name:"Product Category", table:"product_categories", key:"category_id",
+   domain:"Commerce", owner:"maya.chen", timeDims:[],
+   desc:"The merchandising hierarchy a product sits in. Kept as its own dataset rather than flattened onto Product, so renaming a category is one edit.",
+   evidence:"category_id · primary key · 412 rows",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.PRODUCT_CATEGORIES", databricks:"main.retail.product_categories",
+             dbt:"ref('dim_product_categories')", powerbi:"Categories", tableau:"Categories"}},
+  {id:"e_store", assetId:null, concept:"tc9", name:"Store", table:"stores", key:"store_id",
+   domain:"Commerce", owner:"maya.chen", timeDims:["opened_on"],
+   desc:"One row per selling location, including the online channel.",
+   evidence:"store_id · primary key · 2,184 rows",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.STORES", databricks:"main.retail.stores",
+             dbt:"ref('dim_stores')", powerbi:"Stores", tableau:"Stores"}},
+  {id:"e_date", assetId:null, concept:"tc10", name:"Calendar Date", table:"calendar_date", key:"date_day",
+   domain:"Commerce", owner:"sarah.kim", timeDims:["date_day"],
+   desc:"One row per day, carrying the fiscal calendar. Joined more than once from the same dataset — a date dimension plays a different role each time.",
+   evidence:"date_day · primary key · 3,653 rows · no gaps",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.CALENDAR_DATE", databricks:"main.retail.calendar_date",
+             dbt:"ref('dim_date')", powerbi:"Date", tableau:"Calendar"}},
+  {id:"e_inv", assetId:null, concept:"tc11", name:"Inventory Snapshot", table:"inventory_snapshot", keys:["store_id","sku","snapshot_date"],
+   domain:"Commerce", owner:"dev.patel", timeDims:["snapshot_date"],
+   desc:"A daily count of stock on hand. A snapshot, so its measures do not add up across dates — only across stores and products.",
+   evidence:"store_id + sku + snapshot_date · 100% distinct together · 2.1M rows per day",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.INVENTORY_SNAPSHOT", databricks:"main.retail.inventory_snapshot",
+             dbt:"ref('fct_inventory_snapshot')", powerbi:"Inventory", tableau:"—"}},
+  {id:"e_ship", assetId:null, concept:"tc12", name:"Shipment", table:"shipments", key:"shipment_id",
+   domain:"Commerce", owner:"dev.patel", timeDims:["shipped_at","delivered_at"],
+   desc:"One row per parcel. An order can have several, which is what makes the join to Order a trap.",
+   evidence:"shipment_id · primary key · 1.48 parcels per order on average",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.SHIPMENTS", databricks:"main.retail.shipments",
+             dbt:"ref('fct_shipments')", powerbi:"Shipments", tableau:"—"}},
+  {id:"e_promo", assetId:null, concept:"tc13", name:"Promotion", table:"promotions", key:"promo_id",
+   domain:"Commerce", owner:"maya.chen", timeDims:["starts_on","ends_on"],
+   desc:"One row per promotion campaign.",
+   evidence:"promo_id · primary key · 3,096 rows",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.PROMOTIONS", databricks:"main.retail.promotions",
+             dbt:"ref('dim_promotions')", powerbi:"Promotions", tableau:"Promotions"}},
+  {id:"e_ordpromo", assetId:null, name:"Order Promotion", table:"order_promotions", keys:["order_id","promo_id"],
+   domain:"Commerce", owner:"maya.chen", timeDims:[],
+   desc:"The bridge. An order can carry several promotions and a promotion runs across many orders — this dataset is how that many-to-many is expressed as two ordinary joins.",
+   evidence:"order_id + promo_id · 100% distinct together · 1.3 promotions per promoted order",
+   bindings:{snowflake:"SNOWFLAKE_PROD.RETAIL.ORDER_PROMOTIONS", databricks:"main.retail.order_promotions",
+             dbt:"ref('fct_order_promotions')", powerbi:"Order Promotions", tableau:"—"}},
+];
+
+// from = the many side, to = the one side. Every one of these is a decision somebody
+// has to be able to see, which is the reason they are governed rather than inferred.
+const RETAIL_RELS = [
+  {id:"rr_line_order", from:"e_line", to:"e_order", fromKey:"order_id", toKey:"order_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"A line belongs to exactly one order. This is the first hop of the chain that reaches Customer — a line-grain measure can be sliced by a customer attribute two joins away without anyone writing the join."},
+  {id:"rr_line_product", from:"e_line", to:"e_product", fromKey:"product_id", toKey:"product_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Each line sells one product."},
+  {id:"rr_product_category", from:"e_product", to:"e_category", fromKey:"category_id", toKey:"category_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"The snowflake. Category sits a second hop out instead of being copied onto Product, so a category rename is one edit and every model that uses Product follows."},
+  {id:"rr_line_store", from:"e_line", to:"e_store", fromKey:"store_id", toKey:"store_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Each line was sold by one store or channel."},
+  {id:"rr_line_orderdate", from:"e_line", to:"e_date", fromKey:"order_date", toKey:"date_day", role:"Order date",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Role-playing, first role. Trending a measure over this join answers \"when was it sold\"."},
+  {id:"rr_line_shipdate", from:"e_line", to:"e_date", fromKey:"ship_date", toKey:"date_day", role:"Ship date",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Role-playing, second role — the same Calendar Date, joined again on a different column. The same measure trended over this one answers \"when did it leave\", and 3.8% of lines drop out because they have not shipped."},
+  {id:"rr_line_inventory", from:"e_line", to:"e_inv", fromKeys:["store_id","sku"], toKeys:["store_id","sku"],
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"A composite join. Neither store nor SKU identifies a row of the snapshot on its own — only the pair does, so both columns are part of the join and not just the first one."},
+  {id:"rr_ship_order", from:"e_ship", to:"e_order", fromKey:"order_id", toKey:"order_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:false,
+   note:"The trap. The join itself is correct, but an order averages 1.48 parcels, so an order-grain measure read through it is counted once per parcel. Shipment measures are safe here; order measures are not, and that is exactly the kind of thing that makes two dashboards disagree."},
+  {id:"rr_ordpromo_order", from:"e_ordpromo", to:"e_order", fromKey:"order_id", toKey:"order_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"Half of the bridge. An order can carry several promotions, so the many side is the bridge, not the order."},
+  {id:"rr_ordpromo_promo", from:"e_ordpromo", to:"e_promo", fromKey:"promo_id", toKey:"promo_id",
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   note:"The other half. Two many-to-one joins through a bridge is how a many-to-many gets expressed without a join that would fan out both sides."},
+];
+
+const RETAIL_DIMS = [
+  {id:"rd_line_orddate", entity:"e_line", name:"Order Date", column:"order_date", type:"time", termId:null,
+   desc:"When the line was sold. One of two time columns on this dataset, which is why Calendar Date is joined twice."},
+  {id:"rd_line_shipdate", entity:"e_line", name:"Ship Date", column:"ship_date", type:"time", termId:null,
+   desc:"When the line left the warehouse. Null until it ships."},
+  {id:"rd_line_sku", entity:"e_line", name:"SKU", column:"sku", type:"identifier", termId:null,
+   desc:"The SKU as sold. Carried on the line as well as the product because it is half of the join to inventory."},
+  {id:"rd_prod_name", entity:"e_product", name:"Product", column:"product_name", type:"categorical", termId:null,
+   desc:"The product name customers see."},
+  {id:"rd_prod_brand", entity:"e_product", name:"Brand", column:"brand", type:"categorical", termId:null,
+   desc:"The brand the product is sold under."},
+  {id:"rd_cat_name", entity:"e_category", name:"Category", column:"category_name", type:"categorical", termId:null,
+   desc:"Reached from a line through two joins: line to product, product to category."},
+  {id:"rd_cat_dept", entity:"e_category", name:"Department", column:"department", type:"categorical", termId:null,
+   desc:"The merchandising department above the category."},
+  {id:"rd_store_region", entity:"e_store", name:"Region", column:"region", type:"categorical", termId:null,
+   desc:"The sales region the store reports into."},
+  {id:"rd_store_format", entity:"e_store", name:"Store Format", column:"store_format", type:"categorical", termId:null,
+   desc:"Flagship, outlet, online or franchise."},
+  {id:"rd_date_day", entity:"e_date", name:"Date", column:"date_day", type:"time", termId:null,
+   desc:"The calendar day. Which date it means depends on which of the two joins a query came through."},
+  {id:"rd_date_fq", entity:"e_date", name:"Fiscal Quarter", column:"fiscal_quarter", type:"categorical", termId:null,
+   desc:"The fiscal quarter, which is not the calendar quarter — the reason a date dataset exists at all."},
+  {id:"rd_date_hol", entity:"e_date", name:"Holiday", column:"is_holiday", type:"categorical", termId:null,
+   desc:"Whether the day is a public holiday in the primary market."},
+  {id:"rd_ship_carrier", entity:"e_ship", name:"Carrier", column:"carrier", type:"categorical", termId:null,
+   desc:"Who carried the parcel."},
+  {id:"rd_promo_type", entity:"e_promo", name:"Promotion Type", column:"promo_type", type:"categorical", termId:null,
+   desc:"Markdown, bundle, coupon or loyalty."},
+  {id:"rd_inv_snap", entity:"e_inv", name:"Snapshot Date", column:"snapshot_date", type:"time", termId:null,
+   desc:"The day the stock was counted. Part of the primary key, because the same store and SKU appear on every day."},
+];
+
+const RETAIL_FACTS = [
+  {id:"rf_line_qty", entity:"e_line", name:"Quantity", column:"quantity", additive:true,
+   desc:"Units sold on the line."},
+  {id:"rf_line_price", entity:"e_line", name:"Unit Price", column:"unit_price", additive:false,
+   desc:"Price per unit at point of sale. Not additive — summing prices across lines is meaningless, which is why the metric over it is an average and not a sum."},
+  {id:"rf_line_disc", entity:"e_line", name:"Discount Amount", column:"discount_amount", additive:true,
+   desc:"Money given away on the line."},
+  {id:"rf_line_ext", entity:"e_line", name:"Extended Price", column:"extended_price", additive:true,
+   expr:"quantity * unit_price - discount_amount",
+   desc:"A calculated field, not a column. Row-level, so the calculation holds whatever a metric later groups it by."},
+  {id:"rf_inv_onhand", entity:"e_inv", name:"On Hand Quantity", column:"on_hand_qty", additive:false,
+   desc:"Units in the store on the snapshot date. Semi-additive: it adds across stores and SKUs, never across dates — adding Monday's stock to Tuesday's counts the same unit twice."},
+  {id:"rf_ship_cost", entity:"e_ship", name:"Shipping Cost", column:"shipping_cost", additive:true,
+   desc:"What the parcel cost to send."},
+  {id:"rf_op_applied", entity:"e_ordpromo", name:"Promotion Amount", column:"applied_amount", additive:true,
+   desc:"The discount the promotion gave on that order."},
+];
+
+const RETAIL_METRICS = [
+  {id:"rm_units", model:"mdl_retail", name:"Units Sold", type:"simple", status:"Approved", termId:null,
+   domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"units",
+   entity:"e_line", agg:"sum", col:"quantity", timeDim:"order_date", timeGrain:"day",
+   filters:[], dims:["region","category_name","brand","store_format"],
+   definition:"Units sold, at order-line grain, trended over the date the order was placed.",
+   examples:["How many units did we sell last week?","Units sold by category and region this quarter"],
+   bindings:[{id:"rb1", system:"snowflake", object:"SNOWFLAKE_PROD / RETAIL / order_lines", expr:"SUM(quantity)", confirmed:true,
+              evidence:"Column quantity · INT · 0% null · avg 1.9 units per line"}],
+   certifiedBy:"dev.patel", certifiedAt:"2026-09-12"},
+
+  {id:"rm_gross", model:"mdl_retail", name:"Gross Sales", type:"simple", status:"Approved", termId:null,
+   domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"USD",
+   entity:"e_line", agg:"sum", col:"extended_price", timeDim:"order_date", timeGrain:"day",
+   filters:[], dims:["region","category_name","department","store_format"],
+   definition:"Line value after discount, summed. Adds up the calculated field rather than recomputing the arithmetic in every tool.",
+   examples:["Gross sales by department last month","What did the outlet stores sell in Q3?"],
+   bindings:[{id:"rb2", system:"snowflake", object:"SNOWFLAKE_PROD / RETAIL / order_lines", expr:"SUM(quantity * unit_price - discount_amount)", confirmed:true,
+              evidence:"Calculated field · row-level · no aggregation inside the expression"}],
+   certifiedBy:"dev.patel", certifiedAt:"2026-09-12"},
+
+  {id:"rm_aup", model:"mdl_retail", name:"Average Unit Price", type:"simple", status:"Approved", termId:null,
+   domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"USD",
+   entity:"e_line", agg:"average", col:"unit_price", timeDim:"order_date", timeGrain:"day",
+   additive:false,
+   filters:[], dims:["brand","category_name"],
+   definition:"The average price a unit actually sold for. An average and not a sum, because the field underneath it does not add up.",
+   bindings:[{id:"rb3", system:"snowflake", object:"SNOWFLAKE_PROD / RETAIL / order_lines", expr:"AVG(unit_price)", confirmed:true,
+              evidence:"Column unit_price · declared non-additive · avg $38.72"}]},
+
+  {id:"rm_onhand", model:"mdl_retail", name:"Units On Hand", type:"simple", status:"Approved", termId:null,
+   domain:"Commerce", owner:"dev.patel", steward:"dev.patel", unit:"units",
+   entity:"e_inv", agg:"sum", col:"on_hand_qty", timeDim:"snapshot_date", timeGrain:"day",
+   additive:false,
+   filters:[], dims:["region","category_name"],
+   definition:"Stock in store on a given day. Semi-additive — it sums across stores and SKUs but takes the last value over time, never a sum.",
+   bindings:[{id:"rb4", system:"snowflake", object:"SNOWFLAKE_PROD / RETAIL / inventory_snapshot", expr:"SUM(on_hand_qty)", confirmed:true,
+              evidence:"Snapshot grain · 2.1M rows per day · non-additive over snapshot_date"}],
+   certifiedBy:"dev.patel", certifiedAt:"2026-09-20"},
+
+  {id:"rm_sellthru", model:"mdl_retail", name:"Sell-Through Rate", type:"ratio", status:"In Review", termId:null,
+   domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"%",
+   entity:"e_line", timeDim:"order_date", timeGrain:"week",
+   numerator:{agg:"sum", col:"quantity", label:"units sold"},
+   denominator:{agg:"sum", col:"quantity", label:"units sold plus units still on hand"},
+   filters:[], dims:["category_name","region"],
+   definition:"The share of available stock that sold. Spans two datasets at different grains, which is the whole reason the join to Inventory is declared rather than written per query.",
+   bindings:[]},
+
+  {id:"rm_discrate", model:"mdl_retail", name:"Discount Rate", type:"ratio", status:"Draft", termId:null,
+   domain:"Commerce", owner:"maya.chen", steward:"dev.patel", unit:"%",
+   entity:"e_line", timeDim:"order_date", timeGrain:"month",
+   numerator:{agg:"sum", col:"discount_amount", label:"discount given"},
+   denominator:{agg:"sum", col:"extended_price", label:"gross sales"},
+   filters:[], dims:["promo_type","category_name"],
+   definition:"Money given away as a share of what was sold. Sliced by promotion type, which only reaches this metric through the bridge.",
+   bindings:[]},
+];
+
+const RETAIL_MODEL = {
+  id:"mdl_retail", name:"Retail Sales 360", domain:"Commerce", owner:"maya.chen", steward:"dev.patel",
+  status:"Approved", icon:"◈", color:"#0ea5e9",
+  entityIds:["e_line","e_order","e_customer","e_product","e_category","e_store","e_date","e_inv","e_ship","e_promo","e_ordpromo"],
+  targets:["ossie","dbt","snowflake","powerbi"],
+  owners:["maya.chen"], stewards:["dev.patel"], tags:["revenue","retail","KPI"], terms:[],
+  lastPublished:"2026-09-29", created:"2026-05-14",
+  sync:{enabled:true, targets:["dbt","snowflake","powerbi"], frequency:"daily", onDrift:"work_item",
+        connections:{dbt:"dbt Cloud", snowflake:"Snowflake DWH", powerbi:"Power BI Service"}},
+  desc:"The full retail star: sales at order-line grain, joined out to product, category, store, date, inventory, shipment and promotion. Every join pattern a semantic model has to express is in here once — a chain, a snowflake, a role-playing date, a composite key, a fan-out trap and a bridge."
+};
+
+SL_ENTITIES.push(...RETAIL_ENTITIES);
+SL_RELATIONSHIPS.push(...RETAIL_RELS);
+SL_DIMENSIONS.push(...RETAIL_DIMS);
+SL_FACTS.push(...RETAIL_FACTS);
+SL_METRICS.push(...RETAIL_METRICS);
+SL_MODELS.splice(1, 0, RETAIL_MODEL);
+
 
 // A metric that slices by a column nobody declared still works, but the model cannot
 // say what that column means, and it will not reach a platform that needs dimensions
@@ -38032,10 +38394,19 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
     });
   });
 
+  // Two datasets can be joined more than once — a date dimension playing the order
+  // date and the ship date is the ordinary case. Naming a relationship after its two
+  // ends alone then emits the same name twice, and a reader keyed by name keeps one.
+  const relNames = {};
   if((rels||[]).length) doc.relationships = rels.map(r=>{
     const f = ents.find(x=>x.id===r.from), t = ents.find(x=>x.id===r.to);
+    const stem = `${f?slSlug(f.table):r.from}_to_${t?slSlug(t.table):r.to}`;
+    relNames[stem] = (relNames[stem]||0) + 1;
+    // The second and later ones are qualified by what they join ON, which is the thing
+    // that actually distinguishes them.
+    const name = relNames[stem]===1 ? stem : `${stem}_on_${slFromCols(r).map(slSlug).join("_")}`;
     return {
-      name: `${f?slSlug(f.table):r.from}_to_${t?slSlug(t.table):r.to}`,
+      name,
       from: f ? slSlug(f.table) : r.from,   // many side
       to:   t ? slSlug(t.table) : r.to,     // one side
       from_columns: slFromCols(r),
@@ -39128,6 +39499,8 @@ const SLRelNode = ({data}) => {
   );
 };
 const SL_REL_NODE_TYPES = {slRelNode: SLRelNode};
+// Vertical pitch between datasets in one column of the graph.
+const SL_REL_ROW = 196;
 
 // ── Edit a join after the model exists. Declaring one only at creation meant the
 //    single most consequential thing in the model — what joins to what, and whether
@@ -39276,20 +39649,52 @@ const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}
 const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, onOpenMetric, onRename, onEditJoin}) => {
   const [rf, setRf] = useState(null);
 
+  // Two columns held up at three datasets. A real model snowflakes, so lay it out by
+  // how many joins a dataset sits from the fact: the many side first, then everything
+  // one hop out, then everything two hops out. A dataset nothing points at is a fact.
   const layout = useMemo(()=>{
-    const hasOut = id => rels.some(r => r.from === id);
-    const left  = entities.filter(e => hasOut(e.id));
-    const right = entities.filter(e => !hasOut(e.id));
+    const depth = {};
+    entities.forEach(e=>{ depth[e.id] = rels.some(r=>r.to===e.id) ? null : 0; });
+    // Everything downstream of a level-0 dataset, breadth first, guarded against cycles.
+    for(let pass=0; pass<entities.length; pass++){
+      let moved = false;
+      rels.forEach(r=>{
+        if(depth[r.from]!==null && depth[r.from]!==undefined &&
+           (depth[r.to]===null || depth[r.to] < depth[r.from]+1)){
+          depth[r.to] = depth[r.from] + 1; moved = true;
+        }
+      });
+      if(!moved) break;
+    }
+    // A dataset in a cycle never resolves. Put it at the front rather than nowhere.
+    entities.forEach(e=>{ if(depth[e.id]===null || depth[e.id]===undefined) depth[e.id] = 0; });
+
+    const cols = {};
+    entities.forEach(e=>{ (cols[depth[e.id]] = cols[depth[e.id]] || []).push(e.id); });
     const pos = {};
-    left.forEach((e,i)  => { pos[e.id] = {x: 0,   y: i * 230}; });
-    right.forEach((e,i) => { pos[e.id] = {x: 430, y: i * 230}; });
+    Object.keys(cols).sort((a,b)=>a-b).forEach(d=>{
+      const col = cols[d];
+      // Centre each column against the tallest one so the graph reads as a fan.
+      const tallest = Math.max(...Object.values(cols).map(c=>c.length));
+      const offset  = (tallest - col.length) * (SL_REL_ROW/2);
+      col.forEach((id,i)=>{ pos[id] = {x: Number(d) * 430, y: offset + i * SL_REL_ROW}; });
+    });
     return pos;
   },[entities.map(e=>e.id).join(), rels.map(r=>r.id).join()]);
+
+  // A three-dataset model fits in 520px. An eleven-dataset one does not, and a graph
+  // you have to pan around to see is a graph nobody reads.
+  const tallestCol = useMemo(()=>{
+    const n = {};
+    entities.forEach(e=>{ const x = Math.round((layout[e.id]||{x:0}).x); n[x] = (n[x]||0)+1; });
+    return Math.max(1, ...Object.values(n));
+  },[layout, entities.map(e=>e.id).join()]);
+  const canvasH = Math.max(520, Math.min(800, tallestCol * SL_REL_ROW + 60));
 
   const rfNodes = useMemo(()=>entities.map(e=>({
     id: e.id, type: "slRelNode", position: layout[e.id] || {x:0,y:0},
     data: {
-      name: e.name, table: e.table, grain: e.key,
+      name: e.name, table: e.table, grain: slPKText(e),
       metricCount: metrics.filter(m=>m.entity===e.id).length,
       ...(()=>{
         // Every column the model actually uses, and what it is used AS — the key it is
@@ -39297,7 +39702,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
         const ds = dims.filter(d=>d.entity===e.id);
         const fs = facts.filter(x=>x.entity===e.id);
         const rows = [];
-        if(e.key) rows.push({name:e.key, role:"key", color:"#7c3aed"});
+        slKeys(e).forEach(k=>rows.push({name:k, role:"key", color:"#7c3aed"}));
         fs.forEach(x=>{ if(!rows.some(r=>r.name===x.column)) rows.push({name:x.column, role:"fact", color:"#16a34a"}); });
         ds.forEach(d=>{ if(!rows.some(r=>r.name===d.column)) rows.push({name:d.column, role:"dim", color:"#d97706"}); });
         return {cols: rows.slice(0,6), moreCols: Math.max(0, rows.length-6)};
@@ -39307,16 +39712,32 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
     },
   })),[entities.map(e=>e.id).join(), layout, metrics.length, dims.map(d=>d.id).join(), facts.map(x=>x.id).join(), selected]);
 
-  const rfEdges = useMemo(()=>rels.map(r=>({
-    id: r.id, source: r.from, target: r.to,
-    label: slJoinPairs(r).map(([a,b])=>`${a} → ${b}`).join(" · "),
-    type: "smoothstep", animated: false,
-    style: {stroke: selected && r.from!==selected && r.to!==selected ? "#e2e8f0" : "#94a3b8", strokeWidth: 1.6},
-    labelStyle: {fontSize: 9.5, fill: "#64748b", fontWeight: 600},
-    labelBgStyle: {fill: "#ffffff", stroke: "#e2e8f0"},
-    labelBgPadding: [6, 3], labelBgBorderRadius: 8,
-    markerEnd: {type: MarkerType.ArrowClosed, color: "#94a3b8", width: 16, height: 16},
-  })),[rels.map(r=>r.id).join(), selected]);
+  const rfEdges = useMemo(()=>{
+    // A role-playing dimension is joined more than once from the same dataset. Drawn
+    // with the same geometry the two edges land on top of each other and the second
+    // role becomes invisible, so each one after the first is stepped further out.
+    const seen = {};
+    return rels.map(r=>{
+      const pair = `${r.from}|${r.to}`;
+      const nth  = seen[pair] = (seen[pair]===undefined ? 0 : seen[pair]+1);
+      const dim  = selected && r.from!==selected && r.to!==selected;
+      // A join that fans out is correct SQL and a wrong number. It is drawn as the
+      // exception it is rather than left to be discovered in a dashboard.
+      const risky = r.fanOutSafe === false;
+      const c = dim ? "#e2e8f0" : risky ? "#dc2626" : "#94a3b8";
+      return {
+        id: r.id, source: r.from, target: r.to,
+        label: (r.role ? `${r.role}: ` : "") + slJoinPairs(r).map(([a,b])=>`${a} → ${b}`).join(" · ") + (risky ? "  ⚠ fans out" : ""),
+        type: "smoothstep", animated: false,
+        pathOptions: {borderRadius: 10, offset: 24 + nth * 34},
+        style: {stroke: c, strokeWidth: risky ? 2 : 1.6, strokeDasharray: risky ? "5 3" : undefined},
+        labelStyle: {fontSize: 9.5, fill: dim ? "#cbd5e1" : risky ? "#dc2626" : "#64748b", fontWeight: 600},
+        labelBgStyle: {fill: "#ffffff", stroke: dim ? "#e2e8f0" : risky ? "#fecaca" : "#e2e8f0"},
+        labelBgPadding: [6, 3], labelBgBorderRadius: 8,
+        markerEnd: {type: MarkerType.ArrowClosed, color: c, width: 16, height: 16},
+      };
+    });
+  },[rels.map(r=>r.id).join(), selected]);
 
   const sel      = selected ? entities.find(e=>e.id===selected) : null;
   const selDims  = sel ? dims.filter(d=>d.entity===sel.id) : [];
@@ -39326,7 +39747,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
   const SLabel = ({children}) => <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{children}</div>;
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:520}}>
+    <div style={{display:"flex",flexDirection:"column",height:canvasH}}>
       {/* Toolbar — the strip the Lineage tab opens with */}
       <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",
         background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:"10px 10px 0 0",
@@ -39414,7 +39835,11 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                     return (
                       <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
                         <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a",flex:1}}>{r.from===sel.id?"→":"←"} {other?other.name:"—"}</div>
+                          <div style={{fontSize:11.5,fontWeight:600,color:"#0f172a",flex:1}}>
+                            {r.from===sel.id?"→":"←"} {other?other.name:"—"}
+                            {/* Two joins to the same dataset are told apart by the role, not the arrow. */}
+                            {r.role && <span style={{fontSize:10,fontWeight:600,color:"#7c3aed",background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.28)",borderRadius:5,padding:"1px 6px",marginLeft:6}}>{r.role}</span>}
+                          </div>
                           {onEditJoin && <button onClick={()=>onEditJoin(r)} title="Edit this join"
                             style={{width:22,height:22,borderRadius:5,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                             {Ic.edit(11)}
