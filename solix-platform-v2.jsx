@@ -14297,12 +14297,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                   style={{display:"flex",alignItems:"center",background:on?T.accentDim:hov?T.bgHover:"transparent",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`}}>
                   <button onClick={()=>{ if(on){setSelPol(null);} else {setSelPol(p.id);setSelFolder(fd.id);} setPdTab("overview");setFill(null);setDescEdit(null);setSideEdit(null);}}
                     style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
-                    {typeDots(p)}
+                    {srcBox(p)}
                     <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                     {pend&&<span title="Mapping to this framework awaits approval" style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:`${T.amber}18`,color:T.amber,flexShrink:0}}>pending</span>}
                     {p.status!=="Active"&&p.status!=="Retired"&&<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700,flexShrink:0}}>{p.status}</span>}
-                    {n>0&&<span style={{minWidth:16,height:16,borderRadius:8,background:T.rose,color:"#fff",fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",flexShrink:0}}>{n}</span>}
-                    {srcBox(p)}
                   </button>
                   <div style={{width:26,display:"flex",justifyContent:"center",opacity:hov?1:0}}>{menuBtn("pl:"+fd.id+p.id, policyMenu(p), "right", true)}</div>
                 </div>); };
@@ -14311,13 +14309,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                   <span style={{width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,transform:exp?"rotate(90deg)":"none",transition:"transform .15s"}}><svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
                   <svg width="13" height="12" viewBox="0 0 16 14" fill="none" style={{flexShrink:0,color:fd.color}}><path d="M1 3a1 1 0 011-1h4.5L8 4h7a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.2"/></svg>
                   <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fd.label}</span>
-                  <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{rows.length}</span>
                 </button>
                 {exp&&(fd.flat ? rows.map(row) : [...pre, ...cus].map(row))}
               </div>); })}
           </div>
           <div style={{padding:"8px 12px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap"}}>
-            {["validation","enforcement","attestation"].map(k=><span key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>{PM2_TYPE_META[k].label}</span>)}
             <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"regulation"})}Prebuilt</span>
             <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"custom"})}Custom</span>
           </div>
