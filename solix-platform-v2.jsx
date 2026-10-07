@@ -13357,8 +13357,20 @@ const pm2AddDays = (d, n) => { const x=new Date(d+"T00:00:00Z"); x.setUTCDate(x.
 const pm2Classes = a => [...new Set([...(a.classes||[]),...Object.values(a.cols||{})])];
 const pm2InScope = (a, covers) => covers.includes("ALL") ? pm2Classes(a).length>0 : pm2Classes(a).some(c=>covers.includes(c));
 const pm2SuspectIn = (a, covers) => !!a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
+// Source and object type scoping, as in the original Policy Manager's Scope step.
+const PM2_SOURCES = ["CDP","ECS","Snowflake","Databricks","PostgreSQL","MySQL","Oracle","BigQuery","Redshift","AWS Glue","dbt","Amazon S3","ADLS","Google Cloud Storage"];
+const PM2_SRC_OF = {cdp:"CDP", ecs:"ECS", snowflake:"Snowflake", databricks:"Databricks", postgres:"PostgreSQL", postgresql:"PostgreSQL", mysql:"MySQL", oracle:"Oracle", bigquery:"BigQuery", redshift:"Redshift", glue:"AWS Glue", dbt:"dbt", s3:"Amazon S3", adls:"ADLS", gcs:"Google Cloud Storage"};
+const PM2_SRC_OBJ = {"Amazon S3":["Bucket","Iceberg Table"], "ADLS":["Container","Iceberg Table"], "Google Cloud Storage":["Bucket","Iceberg Table"], "dbt":["Model"]};
+const PM2_OBJ_ORDER = ["Table","View","Model","Iceberg Table","Bucket","Container"];
+const pm2SourceOf = a => PM2_SRC_OF[a.service]||a.service;
+const pm2ObjOf = a => a.service==="dbt" ? "Model" : ["s3","gcs"].includes(a.service) ? "Bucket" : a.service==="adls" ? "Container" : "Table";
+const pm2ObjFor = srcs => [...new Set((srcs.length?srcs:PM2_SOURCES).flatMap(x=>PM2_SRC_OBJ[x]||["Table","View"]))].sort((x,y)=>PM2_OBJ_ORDER.indexOf(x)-PM2_OBJ_ORDER.indexOf(y));
+const PM2_TAGS = ["PII","PHI","financial","sensitive","regulated","internal","public","confidential","customer-data","healthcare"];
+const PM2_DATE_COLS = ["created_at","updated_at","last_activity_at","closed_at","transaction_date","contract_end_date"];
 const pm2AssetInPolicy = (a, p, r) => {
   if((p.domains||[]).length && !p.domains.includes(a.domain)) return false;
+  if((p.sources||[]).length && !p.sources.includes(pm2SourceOf(a))) return false;
+  if((p.objectTypes||[]).length && !p.objectTypes.includes(pm2ObjOf(a))) return false;
   return r&&r.scopeBy==="suspect" ? pm2SuspectIn(a,p.scope) : pm2InScope(a,p.scope);
 };
 const pm2AssetInFw = (a, p, fw, r) => r&&r.scopeBy==="suspect" ? pm2SuspectIn(a,fw.covers)
@@ -13395,13 +13407,14 @@ function pm2EvalRule(p, r){
     PM2_ASSETS.forEach(a=>{ if(fails(r,a) && others.every(v=>!pm2AssetInPolicy(a,p,v)||!(v.conds||[]).length||fails(v,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
   } else if(r.type==="enforcement" && r.enf){
     const e = r.enf; const eff = pm2EffectivePeriod(p, r);
+    const clsOk = a => !(e.classes||[]).length || pm2Classes(a).some(c=>e.classes.includes(c));
     PM2_ASSETS.forEach(a=>{
       if(e.action==="hold"){
-        const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm2AssetInPolicy(a,p));
+        const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm2AssetInPolicy(a,p) && clsOk(a));
         if(pick) out.targets.push({asset:a, rule:r, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
         return;
       }
-      if(e.select==="assets" ? !(e.assets||[]).includes(a.name) : !pm2AssetInPolicy(a,p)) return;
+      if(e.select==="assets" ? !(e.assets||[]).includes(a.name) : (!pm2AssetInPolicy(a,p)||!clsOk(a))) return;
       if(e.mode==="dispose"){
         if(a.env!=="prod") return;
         const personalScope = e.select!=="assets" && (p.scope.includes("ALL")||p.scope.some(c=>PM2_PERSONAL.includes(c)));
@@ -14496,6 +14509,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domains</div>
                 <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div></div>
               <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Sources</div>
+                <div style={{fontSize:12,color:(p.sources||[]).length?T.text:T.textMuted,marginBottom:10}}>{(p.sources||[]).join(", ")||"All sources"}</div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Object types</div>
+                <div style={{fontSize:12,color:(p.objectTypes||[]).length?T.text:T.textMuted,marginBottom:10}}>{(p.objectTypes||[]).join(", ")||"All types"}</div>
                 <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Assets</div>
                 <div style={{fontSize:12,color:T.textSub}}>{inScope.length} assets in scope today <button onClick={()=>setPdTab("assets")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500,marginLeft:6}}>View →</button></div></div>
             </div>
@@ -14517,6 +14534,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {[...new Set(p.articles.map(a=>a.fw))].map(id=>{ const f=pm2Fw(id); const pend=p.articles.some(a=>a.fw===id&&a.ok===false);
                 return f&&<span key={id} title={pend?"Mapping awaiting approval":"Open the framework"} onClick={()=>{setTab("frameworks");setSelFw(id);}} style={{fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:pend?`${T.amber}12`:`${T.blue}10`,color:pend?T.amber:T.blue,border:`1px solid ${pend?T.amber:T.blue}30`,cursor:"pointer"}}>{f.name}</span>; })}
               {!p.articles.length&&<span style={{fontSize:12,color:T.textMuted}}>Internal — no framework</span>}</div>)}
+            {SB("Tags", canChange?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.tags||[]).length?p.tags.map(t=><span key={t} style={{fontSize:11.5,padding:"2px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>):<span style={{fontSize:12,color:T.textMuted}}>None</span>}</div>)}
             {SB("Compliance", null, <>
               {kv("Score", p.status==="Active"?`${pct}%`:"—", p.status==="Active"?healthColor:T.textMuted)}
               {kv("Assets in scope", inScope.length)}
@@ -14934,7 +14952,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
             {[["flag",e.action==="hold"?"Assets flagged for the matter":"By classification"],["assets","Specific assets"]].map(([k,l2],ix)=>{ const on=(e.select||"flag")===k;
               return <button key={k} disabled={locked} onClick={()=>setEnf({...e,select:k})} style={{flex:1,padding:"7px 8px",fontSize:11.5,fontWeight:600,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accent:T.bgSurface,color:on?"#fff":T.textSub,cursor:locked?"default":"pointer",borderRadius:ix===0?"7px 0 0 7px":"0 7px 7px 0"}}>{l2}</button>; })}</div></div>
         </div>
-        {e.select==="assets"&&<div style={{marginBottom:12}}><CatFieldDropdown label="Assets" required options={PM2_ASSETS.map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets…"/></div>}
+        {e.select==="assets"&&<div style={{marginBottom:12}}><CatFieldDropdown label="Assets" required options={PM2_ASSETS.filter(a=>!(pv.sources||[]).length||pv.sources.includes(pm2SourceOf(a))).map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets…"/></div>}
+        {(e.select||"flag")==="flag"&&e.action==="retention"&&(()=>{ const keys=Object.keys(PM2_CLASS_META).filter(k=>(pv.scope||[]).includes("ALL")||(pv.scope||[]).includes(k)); return (
+          <div style={{marginBottom:12}}><CatFieldDropdown label="Classification" options={keys.map(k=>PM2_CLASS_META[k].label)} selected={(e.classes||[]).map(k=>PM2_CLASS_META[k]?.label).filter(Boolean)}
+            onChange={v=>!locked&&setEnf({...e,classes:v.map(l=>keys.find(k=>PM2_CLASS_META[k].label===l)).filter(Boolean)})} placeholder="All of the policy's data classes"/>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Optional — narrow this rule to some of the policy's data classes. Every matching asset's owner approves before CDP acts.</div></div>); })()}
         {e.action==="retention"&&<div style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:"8px 12px",alignItems:"center"}}>
           <span style={{fontSize:11.5,color:T.textSub}}>Mode</span>
           <select disabled={locked} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select>
@@ -14945,8 +14967,22 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           <select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select>
           <span style={{fontSize:11.5,color:T.textSub}}>At the end</span>
           <select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11.5,color:T.textSub}}>Criteria type</span>
+          <div style={{display:"flex",gap:6}}>{[["date","Datewise"],["text","Criteriawise"],["both","Both"]].map(([v,l2])=>{ const on=(e.critType||"date")===v;
+            return <button key={v} onClick={()=>setEnf({...e,critType:v})} style={{flex:1,padding:"7px 4px",borderRadius:7,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgSurface,color:on?T.accent:T.textSub,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l2}</button>; })}</div>
+          {(e.critType||"date")!=="text"&&<><span style={{fontSize:11.5,color:T.textSub}}>Retain by</span>
+            <select value={e.dateCol||""} onChange={x=>setEnf({...e,dateCol:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="">Whole object · creation date</option>{PM2_DATE_COLS.map(c=><option key={c} value={c}>{c}</option>)}</select></>}
+          {(e.critType||"date")!=="date"&&<><span style={{fontSize:11.5,color:T.textSub}}>Table criteria</span>
+            <input value={e.critText||""} onChange={x=>setEnf({...e,critText:x.target.value})} placeholder="e.g. status = 'closed'" style={{...inp,background:T.bgSurface,padding:"7px 9px"}}/></>}
         </div>}
         {e.action==="hold"&&<><label style={lbl}>Legal matter <span style={{color:T.rose}}>*</span></label><input value={e.matter||""} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={{...inp,background:T.bgSurface}}/>
+          <label style={{...lbl,marginTop:12}}>Hold rule</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            <select value={e.holdCol||""} onChange={x=>setEnf({...e,holdCol:x.target.value})} style={{...inp,width:"auto",flex:"1 1 180px",background:T.bgSurface,padding:"7px 9px"}}><option value="">Hold the entire object</option>{["customer_id","account_id","employee_id","order_id","region",...PM2_DATE_COLS].map(c=><option key={c} value={c}>Rows where {c}</option>)}</select>
+            {e.holdCol&&<><select value={e.holdOp||"="} onChange={x=>setEnf({...e,holdOp:x.target.value})} style={{...inp,width:"auto",background:T.bgSurface,padding:"7px 9px"}}>{["=","!=","in",">","<"].map(o=><option key={o}>{o}</option>)}</select>
+              <select value={e.holdType||"Text"} onChange={x=>setEnf({...e,holdType:x.target.value})} style={{...inp,width:"auto",background:T.bgSurface,padding:"7px 9px"}}>{["Text","Number","Date"].map(o=><option key={o}>{o}</option>)}</select>
+              <input value={e.holdVal||""} onChange={x=>setEnf({...e,holdVal:x.target.value})} placeholder="value" style={{...inp,width:"auto",flex:"1 1 110px",background:T.bgSurface,padding:"7px 9px"}}/></>}
+          </div>
           <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"}.</div></>}
         <div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.text,lineHeight:1.6}}>{enfText(pv,r)} <span style={{color:T.textMuted}}>Only retention and legal hold are enforced — masking is checked by a validation rule.</span></div>
       </>; }
@@ -15216,26 +15252,30 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     if(p){ setEd({id:p.id, step:startStep||1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template,
       name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], domains:[...(p.domains||[])],
       rules:JSON.parse(JSON.stringify(p.rules)), articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])],
-      fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"], ruleLogic:p.ruleLogic||"independent"});
+      fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"], ruleLogic:p.ruleLogic||"independent",
+      sources:[...(p.sources||[])], objectTypes:[...(p.objectTypes||[])], tags:[...(p.tags||[])], sched:p.sched||null});
       return; }
     setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, name:preset?.name||"", purpose:"", category:"", scope:["PII"], domains:[],
       rules: preset?.ruleType ? [newRuleOfType(preset.ruleType)] : [], ruleLogic:"independent",
-      articles:preset?.articles||[], owner:me, stewards:[], fwSel:[...new Set((preset?.articles||[]).map(a=>a.fw))], notify:["Owner","Steward"]});
+      articles:preset?.articles||[], owner:me, stewards:[], fwSel:[...new Set((preset?.articles||[]).map(a=>a.fw))], notify:["Owner","Steward"],
+      sources:[], objectTypes:[], tags:[], sched:{freq:"daily", time:"08:00", day:"monday", cron:"0 8 * * *", tz:"UTC", enabled:true}});
   };
-  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
+  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, sources:ed.sources, objectTypes:ed.objectTypes, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
   const rulesProblem = () => { if(!ed.rules.length) return "Add at least one rule"; for(let i=0;i<ed.rules.length;i++){ const x=ruleProblem(ed.rules[i], i+1); if(x) return x; } return null; };
   const saveEditor = submit => {
     if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
     if(!ed.scope.length){ onToast("Pick at least one data class","info"); setEd(e=>({...e,step:2})); return; }
     const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
-    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, sources:ed.sources, objectTypes:ed.objectTypes, tags:ed.tags, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
+    // The evaluation schedule applies straight away (it only decides when an active policy runs).
+    const schedFields = ed.sched ? {sched:ed.sched, schedule:contractCron(ed.sched), nextRun:scheduleNextRun(ed.sched), schedEnabled:ed.sched.enabled!==false} : {sched:null, schedule:null, nextRun:null};
     let id = ed.id;
     if(!id){
       id = "p-cust-"+Date.now();
-      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", ...fields, owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created (custom policy, ${ed.rules.length} rule${ed.rules.length===1?"":"s"})`}]}]}));
+      pm2Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", ...fields, ...schedFields, runs:[], owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm2Today(), history:[{when:pm2Today(), who:me, what:`Created (custom policy, ${ed.rules.length} rule${ed.rules.length===1?"":"s"})`}]}]}));
     } else if(ed.isActive){
-      updPol(id, p=>addHist({...p, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
-    } else updPol(id, p=>addHist({...p, ...fields, owner:ed.owner, status:"Draft"}, "Edited"));
+      updPol(id, p=>addHist({...p, ...schedFields, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
+    } else updPol(id, p=>addHist({...p, ...fields, ...schedFields, owner:ed.owner, status:"Draft"}, "Edited"));
     if(submit) submitPolicy(id, ed.isActive?"Change to an active policy":"New policy"); else onToast("Saved as draft","success");
     setTimeout(pm2Sync,0);
     setEd(null); setSelFw(null); setTab("policies"); setSelPol(id); setPdTab("overview");
@@ -15267,7 +15307,15 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         {!ed.scope.length&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>Select at least one data class to continue.</div>}</div>
       <div><CatFieldDropdown label="Domain" options={PM2_DOMAINS} selected={ed.domains} onChange={v=>setE("domains",v)} placeholder="All domains"/>
         <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave empty to cover every domain.</div></div>
-      <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:11.5,color:T.textSub}}><b style={{color:T.text}}>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets</b> in scope today.</div>
+      <div><CatFieldDropdown label="Source" options={PM2_SOURCES} selected={ed.sources} placeholder="All sources — search and select…"
+          onChange={v=>{ const ok=new Set(pm2ObjFor(v)); setEd(e=>({...e, sources:v, objectTypes:e.objectTypes.filter(t=>ok.has(t))})); }}
+          renderChip={o=><span>{o}</span>}/>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave empty to cover every connected source.</div></div>
+      <div><CatFieldDropdown label="Object Types" options={pm2ObjFor(ed.sources)} selected={ed.objectTypes} onChange={v=>setE("objectTypes",v)} placeholder="All object types…"/>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>{ed.sources.length?"Filtered by your sources.":"Showing every object type — pick a Source above to narrow this."} Object stores govern at the <b>Bucket</b> / <b>Container</b> level; an <b>Iceberg Table</b> has columns like a warehouse table.</div></div>
+      <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,fontSize:12,color:T.accent,lineHeight:1.7}}>
+        <b>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets</b> in scope today
+        <span style={{color:T.textSub}}> — {ed.scope.map(c=>c==="ALL"?"all classified data":PM2_CLASS_META[c]?.label.toLowerCase()).join(", ")||"no classes"}{ed.domains.length?` · ${ed.domains.join(", ")}`:""}{ed.sources.length?` · ${ed.sources.join(", ")}`:" · every source"}{ed.objectTypes.length?` · ${ed.objectTypes.join(" + ")}`:""}. Specific assets can be picked inside an enforcement rule.</span></div>
     </div>;
     if(ed.step===3) body = <>
       {secHead("Rules", ed.isReg?"Prebuilt rules are locked to the regulation — only the values it leaves open are editable. Add your own custom rules alongside them.":"A policy holds as many rules as its commitment needs. Each rule is one type: validation checks metadata, enforcement retains or holds data, attestation asks a person for evidence.")}
@@ -15304,16 +15352,29 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 {has&&!fw.custom&&!ed.isReg&&pill(T.amber,"Needs approval")}{locked&&<span style={{fontSize:10.5,color:T.textMuted}}>🔒 regulation</span>}
               </label>); })}
           </div>); })}
-        <CatFieldDropdown label="Notification" options={["Owner","Steward","Approver","Table owners"]} selected={ed.notify} onChange={v=>setE("notify",v)} placeholder="Who is notified"/>
+        <CatFieldDropdown label="Tags" options={PM2_TAGS} selected={ed.tags} onChange={v=>setE("tags",v)} placeholder="Search and select tags…"/>
+        <CatFieldDropdown label="Notification" options={["Owner","Steward","Approver","Table owners"]} selected={ed.notify} onChange={v=>setE("notify",v)} placeholder="Who is notified on a violation…"/>
         <div style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,lineHeight:1.6}}><b style={{color:T.text}}>Approval: </b>{routeText(ed.rules, ev.targets.length||null)}.{ed.isActive&&<> Your change becomes v{ed.version+1}; v{ed.version} keeps running until it's approved.</>}</div>
       </div>;
     }
     if(ed.step===5) body = <div style={{maxWidth:680}}>
       {secHead("Review & Create","Confirm your policy settings, then save it as a draft or submit it for approval.")}
-      {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Domains", ed.domains.join(", ")||"All domains"],["Assets", `${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope`]])}
-      {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Notify", ed.notify.join(", ")||"Nobody"]])}
+      {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Domains", ed.domains.join(", ")||"All domains"],["Sources", ed.sources.join(", ")||"All sources"],["Object types", ed.objectTypes.join(", ")||"All types"],["Assets", `${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope`]])}
+      {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Tags", ed.tags.join(", ")||"None"],["Notify", ed.notify.join(", ")||"Nobody"]])}
       {reviewCard(`Rules (${ed.rules.length})`, [["Evaluation logic", PM2_LOGIC[ed.ruleLogic||"independent"].label], ...ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>])])}
       {reviewCard("Ownership", [["Owner", ed.owner],["Stewards", ed.stewards.join(", ")||"None"],["Frameworks", ed.fwSel.map(id=>`${pm2Fw(id)?.name} (${ed.articles.filter(a=>a.fw===id).length})`).join(", ")||"Internal — none"]])}
+      {(()=>{ const sc=ed.sched; const setS=(k,v)=>setE("sched",{...(sc||{freq:"daily",time:"08:00",day:"monday",cron:"0 8 * * *",tz:"UTC",enabled:true}),[k]:v});
+        const fsel={...inp,width:"auto",padding:"6px 9px",background:T.bgSurface,cursor:"pointer"};
+        return <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:`1px solid ${T.border}`}}>Evaluation schedule</div>
+          <div style={{padding:"12px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+            <select value={sc?sc.freq:"manual"} onChange={e=>e.target.value==="manual"?setE("sched",null):setS("freq",e.target.value)} style={fsel}>
+              <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option><option value="manual">Manual only (Run now)</option></select>
+            {sc&&sc.freq==="weekly"&&<select value={sc.day} onChange={e=>setS("day",e.target.value)} style={fsel}>{CONTRACT_WEEKDAYS.map(d=><option key={d} value={d}>{d[0].toUpperCase()+d.slice(1)}</option>)}</select>}
+            {sc&&sc.freq!=="hourly"&&<input type="time" value={sc.time} onChange={e=>setS("time",e.target.value)} style={fsel}/>}
+            {sc&&<select value={sc.tz} onChange={e=>setS("tz",e.target.value)} style={fsel}>{CONTRACT_TZ_OPTS.map(z=><option key={z}>{z}</option>)}</select>}
+            <span style={{fontSize:11.5,color:T.textMuted}}>{sc?`Runs ${contractScheduleLabel(sc)} once the policy is active — and on Run now.`:"Runs only when someone clicks Run now."}</span>
+          </div></div>; })()}
       {reviewCard("Approval", [["Route", routeText(ed.rules, ev.targets.length||null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
       {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
     </div>;
