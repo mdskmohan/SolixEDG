@@ -39669,20 +39669,20 @@ const SLErdMarkers = () => (
       {Object.entries(SL_ERD_TONES).map(([k,c])=>[
         // Many. Sits at the start of the line, so the foot opens onto the dataset and
         // the three prongs converge into the line.
-        <marker key={`crow-${k}`} id={`slCrow-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
-                markerWidth="14" markerHeight="14" refX="1" refY="7" orient="auto">
-          <path d="M12 7 L1 1 M12 7 L1 7 M12 7 L1 13" stroke={c} strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+        <marker key={`crow-${k}`} id={`slCrow-${k}`} viewBox="0 0 20 20" markerUnits="userSpaceOnUse"
+                markerWidth="20" markerHeight="20" refX="1" refY="10" orient="auto">
+          <path d="M17 10 L1 2 M17 10 L1 10 M17 10 L1 18" stroke={c} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
         </marker>,
         // One. A single bar across the line at the dataset it points at.
-        <marker key={`one-${k}`} id={`slOne-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
-                markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
-          <path d="M9 2 L9 12" stroke={c} strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+        <marker key={`one-${k}`} id={`slOne-${k}`} viewBox="0 0 20 20" markerUnits="userSpaceOnUse"
+                markerWidth="20" markerHeight="20" refX="19" refY="10" orient="auto">
+          <path d="M13 2 L13 18" stroke={c} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
         </marker>,
         // Zero or one. The bar, plus the circle that says the other side may be absent.
-        <marker key={`zo-${k}`} id={`slZeroOne-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
-                markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
-          <path d="M11 2 L11 12" stroke={c} strokeWidth="1.6" fill="none" strokeLinecap="round"/>
-          <circle cx="6.5" cy="7" r="2.6" stroke={c} strokeWidth="1.4" fill="#ffffff"/>
+        <marker key={`zo-${k}`} id={`slZeroOne-${k}`} viewBox="0 0 20 20" markerUnits="userSpaceOnUse"
+                markerWidth="20" markerHeight="20" refX="19" refY="10" orient="auto">
+          <path d="M17 2 L17 18" stroke={c} strokeWidth="1.8" fill="none" strokeLinecap="round"/>
+          <circle cx="9" cy="10" r="3.6" stroke={c} strokeWidth="1.5" fill="#ffffff"/>
         </marker>,
       ])}
     </defs>
