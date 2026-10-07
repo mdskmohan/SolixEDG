@@ -13464,7 +13464,10 @@ function pm2LinkToFw(p, fw){
 }
 
 let _pm2 = (()=>{
+  // The same regulations the original Policy Manager has enabled (REGS_META), so both screens agree.
+  const FW_OWNER = {Privacy:"maya.chen", Security:"james.oh", Healthcare:"sarah.kim", Financial:"dev.patel"};
   const adopted = {gdpr:{owner:"maya.chen", at:"2026-06-02"}, soc2:{owner:"james.oh", at:"2026-06-20"}};
+  REGS_META.filter(r=>r.enabled&&pm2Fw(r.id)&&!adopted[r.id]).forEach(r=>{ adopted[r.id]={owner:FW_OWNER[pm2Fw(r.id).type]||"maya.chen", at:"2026-07-01"}; });
   const byId = {};
   Object.keys(adopted).forEach(fid=>{
     const fw = pm2Fw(fid);
