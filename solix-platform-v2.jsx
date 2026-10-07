@@ -13387,7 +13387,10 @@ function pm2EffectivePeriod(p, r){
 function pm2EvalRule(p, r){
   const out = {findings:[], targets:[], held:[]};
   if(r.type==="validation"){
-    PM2_ASSETS.forEach(a=>{ if(pm2AssetInPolicy(a,p,r) && (r.conds||[]).length && r.conds.every(c=>pm2CondTest(c,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
+    const fails = (v, a) => pm2AssetInPolicy(a,p,v) && (v.conds||[]).length && v.conds.every(c=>pm2CondTest(c,a));
+    // OR: an asset is flagged only when every validation rule that covers it fails. Independent and AND flag any failure.
+    const others = p.ruleLogic==="or" ? (p.rules||[]).filter(v=>v.type==="validation"&&v.id!==r.id) : [];
+    PM2_ASSETS.forEach(a=>{ if(fails(r,a) && others.every(v=>!pm2AssetInPolicy(a,p,v)||!(v.conds||[]).length||fails(v,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
   } else if(r.type==="enforcement" && r.enf){
     const e = r.enf; const eff = pm2EffectivePeriod(p, r);
     PM2_ASSETS.forEach(a=>{
@@ -13411,6 +13414,11 @@ function pm2EvalRule(p, r){
   }
   return out;
 }
+const PM2_LOGIC = {
+  independent:{label:"Each rule independently", short:"INDEPENDENT", hint:"Each rule is checked and reported on its own — an asset can pass some and fail others."},
+  and:{label:"All rules must pass (AND)", short:"AND", hint:"All rules must pass — one failure flags the asset as non-compliant."},
+  or:{label:"At least one rule must pass (OR)", short:"OR", hint:"At least one rule must pass — an asset fails only when every rule fails."},
+};
 function pm2Eval(p, rules){
   const out = {findings:[], targets:[], held:[], attest:[]};
   (rules||p.rules||[]).forEach(r=>{ if(r.type==="attestation"){ out.attest.push(r); return; } const x=pm2EvalRule(p,r); out.findings.push(...x.findings); out.targets.push(...x.targets); out.held.push(...x.held); });
@@ -13648,12 +13656,12 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const [selPol, setSelPol]   = useState(()=>_pm2Deep?_pm2Deep.policy:null);
   const [pdTab, setPdTab]     = useState(()=>_pm2Deep?.tab||"overview");
   useEffect(()=>{ if(_pm2Deep){ const d=_pm2Deep; _pm2Deep=null; if(d.folder) setExpCat(x=>({...x,[d.folder]:true})); } },[]);
-  const [apOpen, setApOpen]   = useState(false);   // Approval policies panel (the queue itself lives in the Workspace inbox)
   const [wiz, setWiz]         = useState(null);    // adopt a regulation
   const [ed, setEd]           = useState(null);    // create / edit a policy
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
-  const [addFw, setAddFw]     = useState(null);    // {q} — the Add framework drawer (adopt a regulation / create your own)
+  const [fwView, setFwView]   = useState("list");  // Frameworks tab: list | shared (policies that serve several frameworks)
+  const [sharedOnly, setSharedOnly] = useState(true);
   const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
   const [q, setQ]             = useState("");
   const [polQ, setPolQ]       = useState("");
@@ -13752,7 +13760,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const submitPolicy = (id, note, quiet) => {
     const p = _pm2.policies.find(x=>x.id===id); if(!p) return;
     const newRules = p.draft ? (p.draft.fields.rules||p.rules) : p.rules;
-    const changed = p.draft ? newRules.filter(r=>JSON.stringify(r)!==JSON.stringify(p.rules.find(x=>x.id===r.id)||null)) : newRules;
+    const logicChanged = p.draft && (p.draft.fields.ruleLogic||"independent")!==(p.ruleLogic||"independent");
+    const changed = p.draft ? [...newRules.filter(r=>JSON.stringify(r)!==JSON.stringify(p.rules.find(x=>x.id===r.id)||null)), ...(logicChanged?newRules.filter(r=>r.type==="validation"):[])] : newRules;
     if(_pm2.approvalPolicy.activation.autoValidation && onlyValidation(changed) && newRules.length){
       updPol(id, x=>{ const base = x.draft?{...x, ...x.draft.fields, version:x.draft.version, draft:null}:x;
         return {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm2Today(), history:[{when:pm2Today(), who:"EDG", what:`v${base.version} active without approval — ${p.draft?"the change only touches":"it only has"} validation rules, which change no data`}, ...(x.history||[])]}; });
@@ -14038,6 +14047,50 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(12)}</span>
       </div>);
   };
+  // Shared policies: one row per policy, one column per tracked framework, the articles it counts for in each cell.
+  const renderShared = () => {
+    const fws = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)];
+    const ql = q.toLowerCase();
+    const rows = livePols.map(p=>{ const per = fws.map(fw=>p.articles.filter(a=>a.fw===fw.id&&fw.arts[a.i]).map(a=>({ref:fw.arts[a.i].ref, ok:a.ok!==false})));
+        return {p, per, n:per.filter(l=>l.some(x=>x.ok)).length}; })
+      .filter(x=>x.n>0).sort((a,b)=>b.n-a.n||a.p.name.localeCompare(b.p.name));
+    const shared = rows.filter(x=>x.n>1);
+    const shown = (sharedOnly?shared:rows).filter(x=>!ql||x.p.name.toLowerCase().includes(ql));
+    const th = {padding:"9px 10px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
+    return (<div>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:10,background:`${T.violet}0c`,border:`1px solid ${T.violet}30`,marginBottom:14}}>
+        <span style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:T.violet}}>{shared.length}</span>
+        <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.5}}><b style={{color:T.text}}>of {rows.length} policies serve more than one framework.</b> One policy, many regulations — fix a finding or file evidence once, and it counts for every framework in its row.</div>
+        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={sharedOnly} onChange={e=>setSharedOnly(e.target.checked)} style={{accentColor:T.accent}}/>Only shared policies</label>
+      </div>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+          <thead><tr>
+            <th style={{...th,position:"sticky",left:0,zIndex:1,minWidth:240}}>Policy</th>
+            <th style={{...th,textAlign:"center"}}>Frameworks</th>
+            {fws.map(fw=><th key={fw.id} style={{...th,cursor:"pointer",color:T.text}} onClick={()=>{setSelFw(fw.id);setFwView("list");}} title={`Open ${fw.name}`}>{fw.name}</th>)}
+          </tr></thead>
+          <tbody>
+            {shown.map(({p,per,n})=>(
+              <tr key={p.id} style={{borderBottom:`1px solid ${T.border}`}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <td style={{padding:"9px 10px",position:"sticky",left:0,background:T.bgSurface,cursor:"pointer"}} onClick={()=>openPolicy(p.id)}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>{typeDots(p)}<span style={{fontWeight:600,color:T.text}}>{p.name}</span>
+                    <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span></div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length===1?"":"s"} · owner {p.owner}{p.status!=="Active"?` · ${p.status}`:""}</div>
+                </td>
+                <td style={{padding:"9px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:99,background:n>1?`${T.violet}15`:T.bgElevated,color:n>1?T.violet:T.textMuted}}>{n}</span></td>
+                {per.map((refs,j)=><td key={fws[j].id} style={{padding:"9px 10px",verticalAlign:"middle"}}>
+                  {refs.length ? <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{refs.map((x,k)=><span key={k} title={x.ok?"Counts toward readiness":"Mapping awaiting approval"} style={{fontSize:10,fontFamily:"'Geist Mono',monospace",fontWeight:700,padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap",background:x.ok?`${T.green}12`:"transparent",color:x.ok?T.green:T.amber,border:`1px ${x.ok?"solid":"dashed"} ${x.ok?T.green+"30":T.amber+"70"}`}}>{x.ref}</span>)}</div>
+                    : <span style={{color:T.borderLight||T.border}}>—</span>}
+                </td>)}
+              </tr>))}
+            {!shown.length&&<tr><td colSpan={fws.length+2} style={{padding:"22px",textAlign:"center",color:T.textMuted}}>{sharedOnly?"No policy serves more than one framework yet.":"No policies match."}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Each cell lists the articles the policy counts for in that framework. Dashed = a custom policy's mapping still waiting for approval.</div>
+    </div>);
+  };
   const renderFrameworks = () => {
     const ql = q.toLowerCase(); const match = f => !ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
     const tracked = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)].filter(match);
@@ -14048,7 +14101,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
           {searchBox(q, setQ, "Search frameworks…")}
           <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} framework{adoptedFws.length===1?"":"s"} tracked</span>
+          <div style={{marginLeft:"auto",display:"flex",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:2}}>
+            {[["list","Frameworks"],["shared","Shared policies"]].map(([k,l])=><button key={k} onClick={()=>setFwView(k)} style={{fontSize:11.5,fontWeight:fwView===k?700:500,padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",background:fwView===k?T.bgSurface:"transparent",color:fwView===k?T.text:T.textMuted,boxShadow:fwView===k?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{l}</button>)}
+          </div>
         </div>
+        {fwView==="shared" ? renderShared() : <>
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
           {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose}].map(x=>(
             <div key={x.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${x.color}30`,borderRadius:10,textAlign:"center"}}>
@@ -14062,7 +14119,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           {ql&&!tracked.length&&<div style={{fontSize:12,color:T.textMuted,padding:"8px 2px"}}>No tracked framework matches “{q}”.</div>}
           {!adoptedFws.length&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 2px"}}>No frameworks enabled yet.</div>}
           <div style={{fontSize:11.5,color:T.textMuted,padding:"6px 2px"}}>Regulations are enabled, and custom frameworks created, in <button onClick={()=>onNav&&onNav("settings",{section:"frameworks"})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>Settings › Regulations</button>.</div>
-        </div>
+        </div></>}
       </div>
     );
   };
@@ -14177,6 +14234,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                           <span onClick={()=>openPolicy(p.id, fw.id)} style={{fontSize:12.5,fontWeight:700,color:T.text,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>{p.name}</span>
                           <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
                           <span style={{fontSize:11,color:T.textMuted}}>owner {p.owner}</span>
+                          {(()=>{ const o=usedBy(p).filter(n=>n!==fw.name); return o.length>0&&<span title={`The same policy also counts for ${o.join(", ")} — change it once, it counts everywhere`} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:99,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}30`}}>also {o.join(" · ")}</span>; })()}
                           {mine&&pill(pend?T.amber:T.accent, pend?"Mapping awaiting approval":"Your interpretation")}
                           {p.status!=="Active"&&pill(statusColor(p.status), p.status)}
                           <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{p.status==="Active"?h.label:""}</span>
@@ -14426,6 +14484,12 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.6}}>{isReg?<>Prebuilt rules are locked to the regulation — you can edit the values it leaves open. Add your own <b>custom rules</b> next to them; they're marked and go through approval like any change.</>:<>Every rule in this policy. Validation rules check metadata, enforcement rules retain or hold data through CDP, attestation rules ask a person for evidence.</>}</div>
         {canChange&&<Btn small variant="primary" icon={Ic.plus(11)} onClick={()=>openRuleEditor(p,null)}>Add rule</Btn>}
       </div>
+      {p.rules.filter(r=>r.type==="validation").length>1&&(()=>{ const rl=p.ruleLogic||"independent"; const c=rl==="and"?T.green:rl==="or"?T.violet:T.textSub;
+        return <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:8,marginBottom:14,background:rl==="independent"?T.bgElevated:`${c}10`,border:`1px solid ${rl==="independent"?T.border:c+"30"}`}}>
+          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:rl==="independent"?T.bgBase:c,color:rl==="independent"?T.textMuted:"#fff"}}>{PM2_LOGIC[rl].short}</span>
+          <span style={{fontSize:11.5,color:c}}>{PM2_LOGIC[rl].hint}</span>
+          {canChange&&<button onClick={()=>openEditor(p,null,3)} style={{marginLeft:"auto",fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600}}>Change</button>}
+        </div>; })()}
       {["validation","enforcement","attestation"].map(k=>{ const rs=p.rules.filter(r=>r.type===k); return rs.length>0&&<div key={k} style={{marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/><span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{PM2_TYPE_META[k].label} ({rs.length})</span></div>
         {rs.map(r=>ruleCardView(r))}</div>; })}
@@ -14616,62 +14680,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 </tbody>
               </table>
             </div>}
-      </div>
-    );
-  };
-
-  // ═════ APPROVALS — the queue and the approval policies ═════
-  const renderApprovalPolicies = () => {
-    const kindLabel = r => r.kind==="pm2exception"?"Exception":r.kind==="pm2mapping"?"Article mapping":r.kind==="pm2attest"?"Attestation review":r.kind==="pm2attestdue"?"Attestation due":(r.name||"").includes(" change)")?"Policy change":"Policy activation";
-    const queue = [
-      ...pm2StatusPending.map(r=>({k:"s", r, type:kindLabel(r), subject:r.name, note:r.note, by:r.requestedBy, to:r.approver})),
-      ...pm2EnfPending.map(r=>({k:"e", r, type:"Enforcement on a table", subject:`${r.action} on ${r.table}`, note:r.policyName, by:r.requestedBy, to:r.approver})),
-    ];
-    const decided = statusReqs.filter(r=>(r.kind||"").startsWith("pm2")&&r.kind!=="pm2attestdue"&&r.status!=="pending").slice(0,8);
-    const typeC = {"Policy activation":T.accent,"Policy change":T.amber,"Exception":T.rose,"Enforcement on a table":typeColor("enforcement"),"Attestation review":typeColor("attestation"),"Attestation due":typeColor("attestation"),"Article mapping":T.blue};
-    const apCard = (title, when, body) => <div key={title}>{card(<>
-      <div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>
-      <div style={{fontSize:11.5,color:T.textSub,margin:"3px 0 10px",lineHeight:1.5}}>{when}</div>{body}</>)}</div>;
-    const row = (label, ctrl) => <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,fontSize:12,color:T.textSub}}><span style={{width:150}}>{label}</span>{ctrl}</div>;
-    const ro = !isAdmin;
-    const act = x => {
-      if(x.r.kind==="pm2attestdue") return x.to===me||isAdmin ? <Btn small variant="primary" onClick={()=>{const [pid,rid]=String(x.r.targetId).split("|"); openPolicy(pid,null,"activity"); setFill({polId:pid,ruleId:rid,values:{}});}}>Fill in the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>Waiting on {x.to}</span>;
-      if(x.r.kind==="pm2attest") return canDecide(x.r) ? <Btn small variant="primary" onClick={()=>openPolicy(String(x.r.targetId).split("|")[0],null,"activity")}>Review the form</Btn> : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You submitted this — someone else reviews":`Waiting on ${x.to}`}</span>;
-      return canDecide(x.r) ? <><Btn small variant="primary" onClick={()=>x.k==="s"?decideReq(x.r,true):decideEnf(x.r,true)}>Approve</Btn><Btn small ghost onClick={()=>x.k==="s"?decideReq(x.r,false):decideEnf(x.r,false)}>Reject</Btn></>
-        : <span style={{fontSize:11,color:T.textMuted}}>{ap.sod&&x.r.requestedBy===me?"You requested this — someone else decides":`Waiting on ${x.to}`}</span>;
-    };
-    return (
-      <div>
-        {!settingsOnly&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:14}}>Who approves what in Policy Manager 2. The requests themselves land in each approver's <b>Workspace</b> inbox, next to everything else they approve.</div>}
-        {ro&&<div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>Only an admin can change these.</div>}
-        <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
-          {apCard("Policy activation & changes", "A new policy, or a change to an active one, goes live only after approval. A change runs as a new version; the old one keeps running until it's approved.", <>
-            {row("Approver", ro?<b>{ap.activation.approver}</b>:userSel(ap.activation.approver, v=>setAp(["activation","approver"],v)))}
-            {row("Validation policies", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.activation.autoValidation} onChange={e=>setAp(["activation","autoValidation"],e.target.checked)} style={{accentColor:T.accent}}/>activate without approval — they change no data</label>)}
-          </>)}
-          {apCard("Enforcement on a table", "Before retention or a legal hold acts on a table, that table's owner approves. Nothing executes through CDP until they do.", <>
-            {row("Approver", <b style={{color:T.text}}>The table's owner</b>)}
-            {row("If a table has no owner", ro?<b>{ap.enforcement.fallback}</b>:userSel(ap.enforcement.fallback, v=>setAp(["enforcement","fallback"],v)))}
-          </>)}
-          {apCard("Attestation review", "Every submitted form is reviewed before it counts. A rejection goes back to the person who filled it in, with the reviewer's comment.", <>
-            {row("Default reviewer", ro?<b>{ap.attest.reviewer}</b>:userSel(ap.attest.reviewer, v=>setAp(["attest","reviewer"],v)))}
-            <div style={{fontSize:11,color:T.textMuted}}>A policy can name its own reviewer instead.</div>
-          </>)}
-          {apCard("Custom policy → regulation article", "When a custom policy claims to satisfy a regulation's article, someone confirms it before it counts toward readiness. Mapping to your own frameworks needs no approval.", <>
-            {row("Approver", ro?<b>{ap.mapping.approver}</b>:userSel(ap.mapping.approver, v=>setAp(["mapping","approver"],v)))}
-          </>)}
-          {apCard("Exceptions", "Accepting a finding as an exception stops it counting against readiness until it expires. The reason is kept with the finding.", <>
-            {row("Approver", ro?<b>{ap.exceptions.approver==="policy owner"?"The policy's owner":ap.exceptions.named}</b>:<select value={ap.exceptions.approver==="policy owner"?"policy owner":ap.exceptions.named} onChange={e=>{const v=e.target.value; if(v==="policy owner") setAp(["exceptions","approver"],"policy owner"); else {setAp(["exceptions","approver"],"named"); setAp(["exceptions","named"],v);}}} style={selStyle}><option value="policy owner">The policy's owner</option>{PM2_USERS.map(u=><option key={u}>{u}</option>)}</select>)}
-            {row("Expires after (days)", <input type="number" disabled={ro} value={ap.exceptions.maxDays} onChange={e=>setAp(["exceptions","maxDays"],Number(e.target.value))} style={{...inStyle,width:70}}/>)}
-          </>)}
-          {apCard("Legal hold release", "Releasing a hold lets retention and erasure act on the records again, so it takes two people.", <>
-            {row("Approvers", <b style={{color:T.text}}>{ap.hold.twoPerson?"The policy owner and the table owner":"The policy owner"}</b>)}
-            {row("Two-person rule", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.hold.twoPerson} onChange={e=>setAp(["hold","twoPerson"],e.target.checked)} style={{accentColor:T.accent}}/>required</label>)}
-          </>)}
-          {apCard("Separation of duties", "Nobody approves their own request. If the approver is the requester, the request goes to the fallback approver instead.", <>
-            {row("Enforced", <label style={{display:"flex",alignItems:"center",gap:6}}><input type="checkbox" disabled={ro} checked={ap.sod} onChange={e=>setAp(["sod"],e.target.checked)} style={{accentColor:T.accent}}/>on</label>)}
-          </>)}
-        </div>
       </div>
     );
   };
@@ -14914,37 +14922,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     setExpArt(x=>({...x,[pv.articles[0].fw+pv.articles[0].i]:true}));
   };
 
-  // ═════ ADD FRAMEWORK — adopt a regulation from the catalogue, or create your own ═════
-  const renderAddFw = () => {
-    const ql = addFw.q.toLowerCase();
-    const avail = PM2_FW.filter(f=>!st.adopted[f.id]).filter(f=>!ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql));
-    return sideDrawer({title:"Add framework", sub:"Adopt a regulation, or define your own standard.", width:680, onClose:()=>setAddFw(null),
-      body:<>
-        <div onClick={()=>{ setAddFw(null); openFwEditor(null); }} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",borderRadius:10,border:`1.5px dashed ${T.accent}60`,background:T.accentDim,cursor:"pointer",marginBottom:18}}>
-          <div style={{width:34,height:34,borderRadius:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.plus(14)}</div>
-          <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>Create a custom framework</div><div style={{fontSize:11.5,color:T.textSub,marginTop:2}}>An internal standard, contract obligation or industry code — articles, policies and readiness, exactly like a regulation.</div></div>
-          {Ic.chevRight(12)}
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Regulations ({avail.length})</span>
-          <span style={{marginLeft:"auto",flex:1,display:"flex",justifyContent:"flex-end"}}>{searchBox(addFw.q, v=>setAddFw(x=>({...x,q:v})), "Search regulations…", 260)}</span>
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {avail.map(fw=>{ const m=regMeta(fw.id); const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm2ParseRef(r).tid)))]; const k={validation:0,enforcement:0,attestation:0}; tids.forEach(t=>PM2_TPL[t].rules.forEach(r=>k[r.type]++));
-            const reused=tids.filter(t=>livePols.some(p=>p.id===pm2TplPolicyId(t,fw))).length;
-            return (<div key={fw.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderRadius:9,border:`1px solid ${T.border}`,background:T.bgSurface}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"baseline",gap:8}}><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fw.name}</span><span style={{fontSize:11,color:T.textMuted}}>{m.jurisdiction}{m.industry?` · ${m.industry}`:""}</span></div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{fw.arts.filter(a=>!a.out).length} articles · {tids.length} policies · <span style={{color:typeColor("validation")}}>{k.validation} validation</span> · <span style={{color:typeColor("enforcement")}}>{k.enforcement} enforcement</span> · <span style={{color:typeColor("attestation")}}>{k.attestation} attestation</span>{reused>0&&<span style={{color:T.green,fontWeight:600}}> · {reused} already running</span>}</div>
-              </div>
-              <Btn small ghost onClick={()=>{ setAddFw(null); setSelFw(fw.id); }}>Read</Btn>
-              <Btn small variant="primary" onClick={()=>{ setAddFw(null); startAdopt(fw.id); }}>Adopt</Btn>
-            </div>); })}
-          {!avail.length&&<div style={{fontSize:12,color:T.textMuted}}>{ql?"No regulation matches.":"Every regulation in the catalogue is adopted."}</div>}
-        </div>
-      </>});
-  };
-
   // ═════ ADD / EDIT ONE RULE — the original's single-rule drawer ═════
   const openRuleEditor = (p, r, ctx) => {
     if(!canEdit(p)){ onToast(`Only ${p.owner} or a steward can change this policy`,"info"); return; }
@@ -15108,19 +15085,19 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     if(p){ setEd({id:p.id, step:startStep||1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template,
       name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], domains:[...(p.domains||[])],
       rules:JSON.parse(JSON.stringify(p.rules)), articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])],
-      fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"]});
+      fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"], ruleLogic:p.ruleLogic||"independent"});
       return; }
     setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, name:preset?.name||"", purpose:"", category:"", scope:["PII"], domains:[],
-      rules: preset?.ruleType ? [newRuleOfType(preset.ruleType)] : [],
+      rules: preset?.ruleType ? [newRuleOfType(preset.ruleType)] : [], ruleLogic:"independent",
       articles:preset?.articles||[], owner:me, stewards:[], fwSel:[...new Set((preset?.articles||[]).map(a=>a.fw))], notify:["Owner","Steward"]});
   };
-  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, rules:ed.rules, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
+  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
   const rulesProblem = () => { if(!ed.rules.length) return "Add at least one rule"; for(let i=0;i<ed.rules.length;i++){ const x=ruleProblem(ed.rules[i], i+1); if(x) return x; } return null; };
   const saveEditor = submit => {
     if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
     if(!ed.scope.length){ onToast("Pick at least one data class","info"); setEd(e=>({...e,step:2})); return; }
     const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
-    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, rules:ed.rules, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
     let id = ed.id;
     if(!id){
       id = "p-cust-"+Date.now();
@@ -15166,6 +15143,13 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       {ed.rules.length===0&&<div style={{padding:"22px 16px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,textAlign:"center",marginBottom:12,fontSize:12,color:T.textMuted}}>No rules yet — add your first one.</div>}
       {ed.rules.map((r,ri)=>ruleCard(r, ri+1, nr=>setRule(ri,nr), {locked:r.origin==="prebuilt", p:pv, onType:r.origin==="prebuilt"?null:(t=>setRule(ri, retype(r,t))), onRemove:r.origin==="prebuilt"?null:()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))}))}
       <div style={{marginTop:4}}>{addRuleButtons(t=>setE("rules",[...ed.rules,newRuleOfType(t)]))}</div>
+      {(()=>{ const rl=ed.ruleLogic||"independent"; const nV=ed.rules.filter(r=>r.type==="validation").length; const accent=rl==="and"?T.green:rl==="or"?T.violet:T.accent;
+        return <div style={{marginTop:20,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
+          <label style={lbl}>Evaluation logic</label>
+          <select value={rl} onChange={e=>setE("ruleLogic",e.target.value)} style={{...inp,cursor:"pointer"}}>{Object.entries(PM2_LOGIC).map(([k,o])=><option key={k} value={k}>{o.label}</option>)}</select>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 12px",borderRadius:7,background:accent+"14",color:accent,fontSize:11.5,lineHeight:1.5}}>{PM2_LOGIC[rl].hint}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Applies to the validation rules ({nV}){nV<2?" — it matters once there are two or more":""}. Enforcement and attestation rules always run on their own.</div>
+        </div>; })()}
     </>;
     if(ed.step===4){
       const fwOpts = [...PM2_CUSTOM_FW, ...PM2_FW.filter(f=>st.adopted[f.id]), ...PM2_FW.filter(f=>!st.adopted[f.id])];
@@ -15197,7 +15181,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       {secHead("Review & Create","Confirm your policy settings, then save it as a draft or submit it for approval.")}
       {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Domains", ed.domains.join(", ")||"All domains"],["Assets", `${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope`]])}
       {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Notify", ed.notify.join(", ")||"Nobody"]])}
-      {reviewCard(`Rules (${ed.rules.length})`, ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>]))}
+      {reviewCard(`Rules (${ed.rules.length})`, [["Evaluation logic", PM2_LOGIC[ed.ruleLogic||"independent"].label], ...ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>])])}
       {reviewCard("Ownership", [["Owner", ed.owner],["Stewards", ed.stewards.join(", ")||"None"],["Frameworks", ed.fwSel.map(id=>`${pm2Fw(id)?.name} (${ed.articles.filter(a=>a.fw===id).length})`).join(", ")||"Internal — none"]])}
       {reviewCard("Approval", [["Route", routeText(ed.rules, ev.targets.length||null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
       {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
@@ -15366,21 +15350,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       {fwEd&&renderFwEditor()}
       {ruleEd&&renderRuleEditor()}
       {addPol&&renderAddPolicy()}
-      {addFw&&renderAddFw()}
-      {apOpen&&<>
-        <div onClick={()=>setApOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
-        <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
-          <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
-              <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Approval policies</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Requests go to each approver's Workspace inbox.</div></div></div>
-            <button onClick={()=>setApOpen(false)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>{renderApprovalPolicies()}</div>
-          <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",background:T.bgBase||T.bg}}>
-            <button onClick={()=>{setApOpen(false); onNav&&onNav("stewardship");}} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",marginRight:8}}>Open Workspace</button>
-            {fBtn("Done", ()=>setApOpen(false), true)}
-          </div>
-        </div></>}
       {confirm&&<>
         <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
         <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
