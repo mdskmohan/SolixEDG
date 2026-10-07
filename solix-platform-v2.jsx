@@ -39790,8 +39790,9 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
         style: {stroke: c, strokeWidth: risky ? 2 : 1.6, strokeDasharray: risky ? "5 3" : undefined},
         // Crow's foot at the many end, a bar at the one end — and the optional end gets
         // the circle, because a nullable join column really does mean "zero or one".
-        markerStart: `url(#slCrow-${tone})`,
-        markerEnd:   `url(#sl${slJoinOptional(r) ? "ZeroOne" : "One"}-${tone})`,
+        // The id alone — ReactFlow wraps it in url(#…) itself.
+        markerStart: `slCrow-${tone}`,
+        markerEnd:   `sl${slJoinOptional(r) ? "ZeroOne" : "One"}-${tone}`,
       };
     });
   },[rels.map(r=>r.id).join(), selected]);
@@ -39816,7 +39817,10 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
             </span>
           ))}
         </div>
-        <span style={{fontSize:10.5,color:"#94a3b8"}}>many → one · click an entity for details</span>
+        <SLErdKey d="M24 6 L13 1 M24 6 L13 6 M24 6 L13 12" label="Many"/>
+        <SLErdKey d="M20 1 L20 11" label="One"/>
+        <SLErdKey d="M22 1 L22 11 M17.5 6 m-2.6 0 a2.6 2.6 0 1 0 5.2 0 a2.6 2.6 0 1 0 -5.2 0" label="Zero or one"/>
+        <span style={{fontSize:10.5,color:"#94a3b8"}}>click a dataset for its joins</span>
         {selected && <button onClick={()=>onSelect(null)}
           style={{padding:"4px 11px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>
           Clear
@@ -39834,6 +39838,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
       {/* Canvas + info panel row */}
       <div style={{display:"flex",flex:1,minHeight:0,border:"1px solid #e2e8f0",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
         <div style={{flex:1,minWidth:0,position:"relative",background:"#f8fafc"}}>
+          <SLErdMarkers/>
           <ReactFlow
             nodes={rfNodes} edges={rfEdges}
             nodeTypes={SL_REL_NODE_TYPES}
@@ -56901,13 +56906,24 @@ const CPHeadBtn = ({title, onClick, on, children}) => (
     style={{width:26,height:26,borderRadius:7,background:on?T.bgActive:"transparent",border:`1px solid ${on?T.borderLight:T.border}`,color:on?T.text:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{children}</button>
 );
 
+// Sample earlier conversations so History is never empty in the demo. Answers
+// are produced by the same router when a conversation is opened.
+const CP_SEED_THREADS = [
+  {id:"cps1", at:"2026-10-06 16:42", qs:["Which assets have no owner?","Show me every column with personal data"]},
+  {id:"cps2", at:"2026-10-06 11:05", qs:["What was net revenue by region last quarter?","Which orders are still unfulfilled after 30 days?"]},
+  {id:"cps3", at:"2026-10-03 09:18", qs:["What breaks if I change orders?","What policies apply to orders?"]},
+  {id:"cps4", at:"2026-10-01 14:30", qs:["What quality rules are failing?"]},
+  {id:"cps5", at:"2026-09-29 10:12", qs:["What does Customer Lifetime Value mean?","Which assets have no description?"]},
+];
+
 const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
   const {role}  = useRole();
   const st      = useDA();
   const [msgs, setMsgs]       = useState([]);
-  const [threads, setThreads] = useState([]);   // earlier conversations, newest first
+  const [threads, setThreads] = useState(()=>CP_SEED_THREADS.map(t=>({id:t.id, at:t.at, scope:"auto", seedQs:t.qs,
+    title:t.qs[0].length>52?t.qs[0].slice(0,52)+"…":t.qs[0], msgs:t.qs.map(x=>({who:"user", text:x}))})));   // earlier conversations, newest first
   const [view, setView]       = useState("chat"); // chat | history
-  const [scope, setScope]     = useState("auto"); // auto | metadata | <space id>
+  const scope                 = "auto";           // Copilot routes every question itself
   const [q, setQ]             = useState("");
   const [busy, setBusy]       = useState(false);
   const [live, setLive]       = useState([]);     // tool chips revealed while "thinking"
@@ -56970,7 +56986,6 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
   // question handed over with its scope.
   useEffect(()=>{
     if(!req) return;
-    if(req.spaceId){ setScope(req.spaceId); }
     setView("chat");
     if(req.q) setTimeout(()=>send(req.q, req.spaceId), 80);
   },[req && req.at]);
@@ -56982,7 +56997,6 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
   const width    = wide ? Math.min(980, (typeof window!=="undefined"?window.innerWidth:1200) - 72) : w;
   const drift    = scopeSp ? daDrift(scopeSp) : null;
 
-  const selStyle = {padding:"3px 7px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:10.5,fontWeight:600,cursor:"pointer",outline:"none",fontFamily:"inherit",maxWidth:210};
 
   const SugBtn = ({s, icon}) => (
     <button onClick={()=>send(s)} className="row-hover"
@@ -57025,18 +57039,6 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
         ) : (
           <span style={{fontSize:10.5,color:T.textSub,fontWeight:600}}>{(NAV_TITLE[ctx.nav]||ctx.nav||"Platform")}</span>
         )}
-        <div style={{flex:1}}/>
-        <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Answer from</span>
-        <select value={scope} onChange={e=>setScope(e.target.value)} style={selStyle}
-          title="Auto sends governance questions to the metadata graph and data questions to the published Answer Spaces">
-          <option value="auto">Auto · metadata + data</option>
-          <option value="metadata">Metadata only</option>
-          <optgroup label="One Answer Space">
-            {st.spaces.map(sp=>(
-              <option key={sp.id} value={sp.id} disabled={!daAskable(sp)}>{sp.name}{daAskable(sp)?"":` — ${daEffStatus(sp).toLowerCase()}`}</option>
-            ))}
-          </optgroup>
-        </select>
       </div>
 
       {drift&&drift.n>0&&(
@@ -57057,7 +57059,8 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
           </div>}
           {threads.map(t=>(
             <button key={t.id} className="row-hover" onClick={()=>{
-                shelve(msgs); setMsgs(t.msgs); setScope(t.scope||"auto");
+                const restored = t.seedQs ? t.seedQs.flatMap(x=>[{who:"user", text:x},{who:"ai", ans:aiAsk(x, {...ctx, asset:null, role, scope:"auto"})}]) : t.msgs;
+                shelve(msgs); setMsgs(restored);
                 setThreads(x=>x.filter(y=>y.id!==t.id)); setView("chat");
               }}
               style={{width:"100%",textAlign:"left",padding:"9px 10px",marginBottom:5,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,cursor:"pointer",fontFamily:"inherit"}}>
