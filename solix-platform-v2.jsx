@@ -13093,7 +13093,7 @@ const PM2_TEMPLATES = [
     rules:[pm2E("hold","Freeze records under a legal matter",{action:"hold", matter:"LIT-2026-014 · Vendor dispute", select:"flag", assets:[]}),
            pm2A("notice","Hold notice issued to custodians","Record the legal matter, every custodian notified, and their acknowledgement that the records must be preserved.",6,
              [pm2Field("Matter","text",true),pm2Field("Custodians notified","long",true),pm2Field("All custodians acknowledged","yesno",true),pm2Field("Hold notice","doc",true)])]},
-  {id:"P-DSR", name:"Individual rights requests", category:"Privacy", perFramework:true,
+  {id:"P-DSR", name:"Individual rights requests", category:"Privacy",
     why:"Access, correction and deletion requests are fulfilled across every system that holds the person's data, within the law's deadline. EDG supplies the map; the log is the evidence.",
     rules:[pm2A("log","Rights requests completed on time","Document every access, correction and deletion request received in the period, confirm each was completed within the statutory deadline across every system holding the person's data, and explain any that were late or partial.",3,
              [pm2Field("Reporting period","text",true,"e.g. Q3 2026"),pm2Field("Requests received","text",true,"Access, deletion and correction requests, by count"),pm2Field("All completed within the deadline","yesno",true),pm2Field("Late or partial requests and why","long",false),pm2Field("Request log","doc",true,"Link to the log or ticket export")])]},
@@ -13101,7 +13101,7 @@ const PM2_TEMPLATES = [
     why:"Source systems log reads of sensitive data and keep the logs long enough to investigate. EDG has no audit-logging field yet, so each source's logging is attested.",
     rules:[pm2A("logging","Read access to sensitive data is logged","For every source system holding in-scope data, confirm that reads of sensitive tables are written to an audit log, state how long the log is kept, and attach the configuration as evidence.",12,
              [pm2Field("Systems covered","long",true),pm2Field("Read access is logged on every in-scope table","yesno",true),pm2Field("Log retention period","select",true,"",["90 days","12 months","6 years","7 years"]),pm2Field("Configuration evidence","doc",true),pm2Field("Verified by","person",true)],{assignee:"steward"})]},
-  {id:"P-RISK", name:"Risk / impact assessment", category:"Governance", perFramework:true,
+  {id:"P-RISK", name:"Risk / impact assessment", category:"Governance",
     why:"The framework's own assessment — a DPIA, a HIPAA risk analysis, a PIA — is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
     rules:[pm2A("assessment","Impact assessment completed and signed off","Record the assessment the framework requires: what processing and systems it covered, the high risks found, the residual risk accepted, and who signed it off. Attach the signed document.",12,
              [pm2Field("Assessment date","date",true),pm2Field("Processing or systems assessed","long",true,"EDG's in-scope asset list is a starting point"),pm2Field("High risks identified","long",false),pm2Field("Residual risk accepted","select",true,"",["Low","Medium","High"]),pm2Field("Signed off by","person",true,"DPO, privacy officer or security officer"),pm2Field("Assessment document","doc",true)])]},
@@ -13484,7 +13484,7 @@ let _pm2 = (()=>{
   // Seeded one template version behind, to show "update available".
   const xb = pol("p-P-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
   // Evidence already on file: GDPR's DPIA is approved; SOC 2 logging is waiting for review; last quarter's access review is approved.
-  const risk = rule("p-P-RISK-gdpr","assessment");
+  const risk = rule("p-P-RISK","assessment");
   if(risk) risk.submissions=[{id:"sub-seed-1", by:"maya.chen", at:"2026-06-08", status:"approved", reviewer:"alex.rivera", decidedBy:"alex.rivera", decidedAt:"2026-06-10",
     values:pm2Vals(risk.att.form,["2026-06-05","Customer analytics: customers, orders, customers_archive","Re-identification through joins in analytics copies","Low","maya.chen","https://sharepoint/privacy/DPIA-2026-03.pdf"])}];
   const aud = rule("p-P-AUDIT","logging");
@@ -13663,8 +13663,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const [ed, setEd]           = useState(null);    // create / edit a policy
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
-  const [fwView, setFwView]   = useState("list");  // Frameworks tab: list | shared (policies that serve several frameworks)
-  const [sharedOnly, setSharedOnly] = useState(true);
   const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
   const [q, setQ]             = useState("");
   const [polQ, setPolQ]       = useState("");
@@ -14050,50 +14048,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(12)}</span>
       </div>);
   };
-  // Shared policies: one row per policy, one column per tracked framework, the articles it counts for in each cell.
-  const renderShared = () => {
-    const fws = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)];
-    const ql = q.toLowerCase();
-    const rows = livePols.map(p=>{ const per = fws.map(fw=>p.articles.filter(a=>a.fw===fw.id&&fw.arts[a.i]).map(a=>({ref:fw.arts[a.i].ref, ok:a.ok!==false})));
-        return {p, per, n:per.filter(l=>l.some(x=>x.ok)).length}; })
-      .filter(x=>x.n>0).sort((a,b)=>b.n-a.n||a.p.name.localeCompare(b.p.name));
-    const shared = rows.filter(x=>x.n>1);
-    const shown = (sharedOnly?shared:rows).filter(x=>!ql||x.p.name.toLowerCase().includes(ql));
-    const th = {padding:"9px 10px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
-    return (<div>
-      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderRadius:10,background:`${T.violet}0c`,border:`1px solid ${T.violet}30`,marginBottom:14}}>
-        <span style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:T.violet}}>{shared.length}</span>
-        <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.5}}><b style={{color:T.text}}>of {rows.length} policies serve more than one framework.</b> One policy, many regulations — fix a finding or file evidence once, and it counts for every framework in its row.</div>
-        <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={sharedOnly} onChange={e=>setSharedOnly(e.target.checked)} style={{accentColor:T.accent}}/>Only shared policies</label>
-      </div>
-      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr>
-            <th style={{...th,position:"sticky",left:0,zIndex:1,minWidth:240}}>Policy</th>
-            <th style={{...th,textAlign:"center"}}>Frameworks</th>
-            {fws.map(fw=><th key={fw.id} style={{...th,cursor:"pointer",color:T.text}} onClick={()=>{setSelFw(fw.id);setFwView("list");}} title={`Open ${fw.name}`}>{fw.name}</th>)}
-          </tr></thead>
-          <tbody>
-            {shown.map(({p,per,n})=>(
-              <tr key={p.id} style={{borderBottom:`1px solid ${T.border}`}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <td style={{padding:"9px 10px",position:"sticky",left:0,background:T.bgSurface,cursor:"pointer"}} onClick={()=>openPolicy(p.id)}>
-                  <div style={{display:"flex",alignItems:"center",gap:7}}>{typeDots(p)}<span style={{fontWeight:600,color:T.text}}>{p.name}</span>
-                    <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span></div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{p.rules.length} rule{p.rules.length===1?"":"s"} · owner {p.owner}{p.status!=="Active"?` · ${p.status}`:""}</div>
-                </td>
-                <td style={{padding:"9px 10px",textAlign:"center"}}><span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",padding:"2px 8px",borderRadius:99,background:n>1?`${T.violet}15`:T.bgElevated,color:n>1?T.violet:T.textMuted}}>{n}</span></td>
-                {per.map((refs,j)=><td key={fws[j].id} style={{padding:"9px 10px",verticalAlign:"middle"}}>
-                  {refs.length ? <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{refs.map((x,k)=><span key={k} title={x.ok?"Counts toward readiness":"Mapping awaiting approval"} style={{fontSize:10,fontFamily:"'Geist Mono',monospace",fontWeight:700,padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap",background:x.ok?`${T.green}12`:"transparent",color:x.ok?T.green:T.amber,border:`1px ${x.ok?"solid":"dashed"} ${x.ok?T.green+"30":T.amber+"70"}`}}>{x.ref}</span>)}</div>
-                    : <span style={{color:T.borderLight||T.border}}>—</span>}
-                </td>)}
-              </tr>))}
-            {!shown.length&&<tr><td colSpan={fws.length+2} style={{padding:"22px",textAlign:"center",color:T.textMuted}}>{sharedOnly?"No policy serves more than one framework yet.":"No policies match."}</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Each cell lists the articles the policy counts for in that framework. Dashed = a custom policy's mapping still waiting for approval.</div>
-    </div>);
-  };
   const renderFrameworks = () => {
     const ql = q.toLowerCase(); const match = f => !ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
     const tracked = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)].filter(match);
@@ -14104,11 +14058,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
           {searchBox(q, setQ, "Search frameworks…")}
           <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} framework{adoptedFws.length===1?"":"s"} tracked</span>
-          <div style={{marginLeft:"auto",display:"flex",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:2}}>
-            {[["list","Frameworks"],["shared","Shared policies"]].map(([k,l])=><button key={k} onClick={()=>setFwView(k)} style={{fontSize:11.5,fontWeight:fwView===k?700:500,padding:"5px 12px",borderRadius:6,border:"none",cursor:"pointer",background:fwView===k?T.bgSurface:"transparent",color:fwView===k?T.text:T.textMuted,boxShadow:fwView===k?"0 1px 3px rgba(0,0,0,.08)":"none"}}>{l}</button>)}
-          </div>
         </div>
-        {fwView==="shared" ? renderShared() : <>
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
           {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose}].map(x=>(
             <div key={x.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${x.color}30`,borderRadius:10,textAlign:"center"}}>
@@ -14122,7 +14072,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           {ql&&!tracked.length&&<div style={{fontSize:12,color:T.textMuted,padding:"8px 2px"}}>No tracked framework matches “{q}”.</div>}
           {!adoptedFws.length&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 2px"}}>No frameworks enabled yet.</div>}
           <div style={{fontSize:11.5,color:T.textMuted,padding:"6px 2px"}}>Regulations are enabled, and custom frameworks created, in <button onClick={()=>onNav&&onNav("settings",{section:"frameworks"})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>Settings › Regulations</button>.</div>
-        </div></>}
+        </div>
       </div>
     );
   };
@@ -14293,6 +14243,9 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   };
 
   // ═════ POLICIES — the original list: category tree on the left, detail on the right ═════
+  // Boxed P / C marks a policy as prebuilt (shipped with the regulations) or custom (built by you).
+  const srcBox = p => { const pre=p.source==="regulation"; const c=pre?T.blue:T.accent;
+    return <span title={pre?"Prebuilt policy — shipped with the regulations":"Custom policy — built by your organisation"} style={{width:15,height:15,borderRadius:3,border:`1.5px solid ${c}`,background:`${c}12`,color:c,fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{pre?"P":"C"}</span>; };
   const renderPolicies = () => {
     const ql = polQ.toLowerCase();
     const list = st.policies.filter(p=>!ql||p.name.toLowerCase().includes(ql));
@@ -14349,14 +14302,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                     {pend&&<span title="Mapping to this framework awaits approval" style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:`${T.amber}18`,color:T.amber,flexShrink:0}}>pending</span>}
                     {p.status!=="Active"&&p.status!=="Retired"&&<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700,flexShrink:0}}>{p.status}</span>}
                     {n>0&&<span style={{minWidth:16,height:16,borderRadius:8,background:T.rose,color:"#fff",fontSize:9.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 4px",flexShrink:0}}>{n}</span>}
+                    {srcBox(p)}
                   </button>
                   <div style={{width:26,display:"flex",justifyContent:"center",opacity:hov?1:0}}>{menuBtn("pl:"+fd.id+p.id, policyMenu(p), "right", true)}</div>
                 </div>); };
-              const sub = (label, list2, color) => list2.length>0 && <div key={label}>
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"4px 10px 2px 30px"}}>
-                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${color}14`,color,border:`1px solid ${color}30`,letterSpacing:"0.04em",textTransform:"uppercase"}}>{label}</span>
-                  <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{list2.length}</span></div>
-                {list2.map(row)}</div>;
               return (<div key={fd.id}>
                 <button onClick={()=>setExpCat(x=>({...x,[fd.id]:!exp}))} title={fd.hint} style={{width:"100%",display:"flex",alignItems:"center",gap:5,padding:"6px 6px 6px 8px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
                   <span style={{width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,transform:exp?"rotate(90deg)":"none",transition:"transform .15s"}}><svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
@@ -14364,11 +14313,13 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                   <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fd.label}</span>
                   <span style={{fontSize:10,color:T.textMuted,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{rows.length}</span>
                 </button>
-                {exp&&(fd.flat ? rows.map(row) : <>{sub("Prefixed", pre, T.blue)}{sub("Custom", cus, T.accent)}</>)}
+                {exp&&(fd.flat ? rows.map(row) : [...pre, ...cus].map(row))}
               </div>); })}
           </div>
           <div style={{padding:"8px 12px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap"}}>
             {["validation","enforcement","attestation"].map(k=><span key={k} style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}><span style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>{PM2_TYPE_META[k].label}</span>)}
+            <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"regulation"})}Prebuilt</span>
+            <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"custom"})}Custom</span>
           </div>
         </div>
         {sel ? renderPolicy(sel) : (
