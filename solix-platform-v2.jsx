@@ -123,6 +123,8 @@ const ASSETS = [
   {id:9001, name:"orders_archive",    type:"Table",  domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:88, usage:"Low", updated:"3d ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / orders_archive", tier:2, rows:"412M", size:"96 GB", tags:["PII","GDPR","archived"], description:"Archived historical orders retired from Snowflake into CDP. Governed in place; retention 7y.", slaFreshness:"—"},
   {id:9002, name:"customers_archive", type:"Table",  domain:"Finance",  owner:"dev.patel", owners:["dev.patel"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:90, usage:"Low", updated:"1w ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / customers_archive", tier:1, rows:"28M", size:"14 GB", tags:["PII","legal-hold"], description:"Archived customer records under legal hold via Federated Governance.", slaFreshness:"—"},
   {id:9003, name:"contracts_2025.pdf",type:"Object", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:0, usage:"Med", updated:"2d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / legal / contracts_2025.pdf", tier:2, rows:"—", size:"4.2 MB", tags:["confidential"], description:"Executed vendor contracts in ECS. Retention + legal hold enforced in place.", slaFreshness:"—", assetLevel:"object", fileFormat:"PDF"},
+  {id:9101, name:"store_sales_sv", type:"Semantic View", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:0, usage:"Med", updated:"6h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"snowflake_prod / COMMERCE / store_sales_sv", tier:1, rows:"—", size:"—", tags:["revenue"], description:"Snowflake semantic view over store sales. Built by the Commerce analytics team in Snowflake; EDG reads its definitions.", slaFreshness:"—", semanticModelId:"mdl_store"},
+  {id:9102, name:"product_engagement_mv", type:"Metric View", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"alex.wu", stewards:["alex.wu"], cert:"Approved", quality:0, usage:"Low", updated:"1d ago", service:"databricks", connectionLabel:"Databricks Unity", db:"main / product / product_engagement_mv", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Databricks metric view for product engagement. Defined in Unity Catalog; EDG reads its measures and dimensions.", slaFreshness:"—", semanticModelId:"mdl_product"},
   {id:9004, name:"hr_records",        type:"Folder", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved", quality:0, usage:"Low", updated:"5d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / hr / hr_records", tier:1, rows:"—", size:"1.1 GB", tags:["PII","confidential"], description:"HR document folder in ECS. Access-restricted; retention governed by EDG.", slaFreshness:"—", assetLevel:"folder", childCount:240},
   {id:1, name:"orders",              type:"Table",     domain:"Commerce",  owner:"maya.chen",  owners:["maya.chen"],               steward:"dev.patel",  stewards:["dev.patel","sarah.kim"],  cert:"Approved",   quality:94, usage:"High", updated:"2h ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / orders",       tier:1, rows:"48.2M",  size:"12.4 GB", tags:["PII","revenue"],          description:"Core transactional orders table. Source of truth for all order data.",     slaFreshness:"2h", dbtSource:"snowflake_raw.orders"},
   {id:2, name:"customers",           type:"Table",     domain:"Commerce",  owner:"dev.patel",  owners:["dev.patel","maya.chen"],    steward:"dev.patel",  stewards:["dev.patel"],              cert:"Approved",   quality:91, usage:"High", updated:"1d ago",  service:"snowflake",  connectionLabel:"Snowflake DWH",   db:"snowflake_prod / COMMERCE / customers",    tier:1, rows:"3.1M",   size:"2.8 GB",  tags:["PII"],                    description:"Master customer dimension table from Salesforce CRM.",                     slaFreshness:"6h", dbtSource:"snowflake_raw.customers"},
@@ -16161,8 +16163,42 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
   const [notesVal,setNotesVal]=useState(data.notes||(
     `The \`${asset.name}\` table is the source of truth for ${asset.domain.toLowerCase()} data.\n\nData is refreshed every ${asset.slaFreshness} via automated pipeline. All PII columns are tagged and subject to data retention policy.\n\nContact ${asset.owner} for access requests.`
   ));
+  // A semantic view or metric view is two things at once: an object that lives in a
+  // platform, which is what this page governs, and a model definition, which is read
+  // where model definitions are read. Neither page duplicates the other.
+  const semModel = asset.semanticModelId
+    ? (_slState.models||[]).find(m=>m.id===asset.semanticModelId) : null;
+
   return (
   <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
+    {semModel && (()=>{
+      const ents = (_slState.entities||[]).filter(e=>(semModel.entityIds||[]).includes(e.id));
+      const mets = (_slState.metrics ||[]).filter(m=>m.model===semModel.id);
+      const flds = (_slState.dims||[]).filter(d=>ents.some(e=>e.id===d.entity)).length
+                 + (_slState.facts||[]).filter(x=>ents.some(e=>e.id===x.entity)).length;
+      return (
+        <Card2>
+          <div style={{padding:"14px 16px"}}>
+            <SH title="This is a semantic model"
+                sub={`Defined in ${asset.connectionLabel}, not in EDG. This page governs the object — who owns it, what policies reach it, what it depends on. What it computes is read in Semantic Models.`}
+                action={<Btn small variant="primary" onClick={()=>navFn && navFn("semanticlayer",{modelId:semModel.id})}>Open in Semantic Models</Btn>}/>
+            <div style={{display:"flex",gap:24,flexWrap:"wrap",alignItems:"baseline"}}>
+              {[["Datasets",ents.length],["Fields",flds],["Metrics",mets.length]].map(([k,v])=>(
+                <div key={k} style={{display:"flex",alignItems:"baseline",gap:7}}>
+                  <span style={{fontSize:17,fontWeight:700,color:v?T.text:T.textMuted,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</span>
+                  <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
+                </div>
+              ))}
+              <span style={{flex:1}}/>
+              <span style={{fontSize:11,color:T.textMuted}}>
+                {semModel.source ? `Last read ${semModel.source.lastRead} · EDG mirrors it, it does not write back` : ""}
+              </span>
+            </div>
+          </div>
+        </Card2>
+      );
+    })()}
+
     {/* Description */}
     <Card2>
       <div style={{padding:"14px 16px"}}>
@@ -39611,7 +39647,7 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onP
 // ═══════════════════════════════════════════════════════════════════════════
 // THE SCREEN — a list of semantic models, then one model at a time.
 // ═══════════════════════════════════════════════════════════════════════════
-const SemanticLayerView = ({onToast, onNav}) => {
+const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   const { role: slRole, roleCfg: slRoleCfg } = useRole();
   const slMe = ((slRoleCfg&&slRoleCfg.email)||"you@jnj").split("@")[0];
   const [store, setStore] = useSemanticLayer();
@@ -39620,6 +39656,8 @@ const SemanticLayerView = ({onToast, onNav}) => {
 
   const [selMdl,  setSelMdl]  = useState(null);
   const [tab,     setTab]     = useState("overview");
+  // Arriving from a catalogued semantic view opens that model rather than the list.
+  useEffect(()=>{ if(deepLinkModelId){ setSelMdl(deepLinkModelId); setTab("overview"); } },[deepLinkModelId]);
   const [selId,   setSelId]   = useState(null);
   const [selEnt,  setSelEnt]  = useState(null);
   const [q,       setQ]       = useState("");
@@ -59499,6 +59537,7 @@ export default function App(){
   const [deepLinkPolicyId, setDeepLinkPolicyId] = useState(null);
   const [deepLinkTagId, setDeepLinkTagId] = useState(null);
   const [deepLinkDomainId, setDeepLinkDomainId] = useState(null);
+  const [deepLinkModelId,  setDeepLinkModelId]  = useState(null);
   const [deepLinkTermId, setDeepLinkTermId] = useState(null);
   const [deepLinkConnName, setDeepLinkConnName] = useState(null);
   const [cpOpen,   setCpOpen]   = useState(false);
@@ -59528,6 +59567,7 @@ export default function App(){
     setDeepLinkDomainId(payload?.domainId ?? null);
     setDeepLinkTermId(payload?.termName ? (_gtState.find(t=>t.term===payload.termName)?.id ?? null) : null);
     setDeepLinkConnName(payload?.connName ?? null);
+    setDeepLinkModelId(payload?.modelId ?? null);
     setNav(id); setAssetStack([]);
   };
   const handleAsset     = (a) => { setAssetStack([a]); setNav("catalog"); };
@@ -59573,7 +59613,7 @@ export default function App(){
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
-      case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav}/>;
+      case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "observability": return <QualityView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
