@@ -39665,65 +39665,189 @@ const SLMetricDrawer = ({metric, metrics, entities, rels, vendor, gTerms, onClos
 };
 
 // ── Publish. Runs the adapters and shows exactly what they produce.
+// ═══════════════════════════════════════════════════════════════════════════
+// PUBLISH — the one way a model leaves EDG. A left rail asks the three questions
+// in the order a person actually has them: where is this going, which connection,
+// and on what terms. The compiled text is shown underneath, because publishing
+// something you have not read is how a definition quietly changes meaning.
+// ═══════════════════════════════════════════════════════════════════════════
+const SL_PUB_MODES = [
+  {v:"replace", l:"Create or replace",
+   d:"Writes the definition whether or not one is already there. Use this for a model EDG owns."},
+  {v:"create",  l:"Create only",
+   d:"Stops if something of the same name already exists on the platform, so nothing of theirs is overwritten."},
+];
+
 const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onPublish, onToast}) => {
-  const targets = (mdl && mdl.targets || []).filter(t=>(SL_PLATFORMS[t]||{}).adapter==="ready");
-  const [plat, setPlat] = useState("__src");
-  useEffect(()=>{ if(open) setPlat("__src"); },[open]);
+  // Only a platform this model is actually meant for, and only one EDG can write.
+  const targets = (mdl && mdl.targets || [])
+    .filter(t => t!=="ossie" && (SL_PLATFORMS[t]||{}).adapter==="ready");
+
+  const [plat,  setPlat]  = useState(null);
+  const [conn,  setConn]  = useState("");
+  const [mode,  setMode]  = useState("replace");
+  const [gov,   setGov]   = useState(true);
+  const [block, setBlock] = useState(false);
+
+  useEffect(()=>{ if(open){ setPlat(targets[0] || "__file"); setMode("replace"); setGov(true); setBlock(false); } },[open]);
+  // Default to the connection this platform's definitions already live in.
+  useEffect(()=>{ if(plat && plat!=="__file") setConn(slConnectionsFor(plat)[0] || ""); },[plat]);
+
   if(!open || !mdl) return null;
-  const isSource = plat==="__src";
-  const files = isSource
-    ? slBuildArtifacts("ossie", {mdl, ents, rels, mets, dims, facts})
-    : slBuildArtifacts(plat, {mdl, ents, rels, mets, dims, facts});
-  const warns = isSource ? [] : mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
+
+  const isFile  = plat==="__file" || !plat;
+  const files   = slBuildArtifacts(isFile ? "ossie" : plat, {mdl, ents, rels, mets, dims, facts});
+  const conns   = isFile ? [] : slConnectionsFor(plat);
+  const warns   = isFile ? [] : mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
+  const stopped = block && warns.length>0;
+  const ready   = !isFile && !!conn && !stopped;
+
+  const Row = ({k, label, sub, dot}) => (
+    <button onClick={()=>setPlat(k)}
+      style={{width:"100%",textAlign:"left",display:"flex",alignItems:"center",gap:9,padding:"9px 11px",borderRadius:8,
+        border:`1px solid ${plat===k?T.accent+"55":"transparent"}`,cursor:"pointer",marginBottom:3,
+        background:plat===k?T.bgSurface:"transparent",fontFamily:"inherit"}}>
+      <span style={{width:7,height:7,borderRadius:"50%",flexShrink:0,background:dot||T.textMuted}}/>
+      <span style={{flex:1,minWidth:0}}>
+        <span style={{display:"block",fontSize:12.5,fontWeight:plat===k?700:600,color:T.text}}>{label}</span>
+        <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub}</span>
+      </span>
+    </button>
+  );
+
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
       <div className="slideInRight" onClick={e=>e.stopPropagation()}
-        style={{position:"absolute",top:0,right:0,bottom:0,width:900,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        style={{position:"absolute",top:0,right:0,bottom:0,width:1020,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Publish {mdl.name}</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Compiled from the model. This is the exact text that goes into the change set — nothing is written live.</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Choose where it goes and on what terms. EDG opens a change set for review — it never writes to a platform directly.</div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
-        <div style={{flexShrink:0,padding:"12px 22px 0"}}>
-          <Tabs2 tabs={[{key:"__src",label:`Ossie source · ${OSSIE_VERSION}`}, ...targets.filter(t=>t!=="ossie").map(t=>({key:t,label:SL_PLATFORMS[t].label}))]} active={plat} onChange={setPlat}/>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"0 22px 20px"}}>
-          {isSource && targets.length===0 && <div style={{margin:"14px 0",padding:"12px 14px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>No publish targets yet</div>
-            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>The model compiles to the source below, but nothing has been chosen to compile it into. Pick targets with Edit on the model header.</div>
-          </div>}
-          {isSource && <div style={{margin:"14px 0",fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-            The Apache Ossie document EDG stores. Every tab to the right is compiled from exactly this — the adapters read it and nothing else, which is why adding a platform never changes the model.
-          </div>}
-          {warns.length>0 && <div style={{margin:"14px 0",padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:6}}>{warns.length} metric{warns.length===1?"":"s"} lose something on {SL_PLATFORMS[plat].label}</div>
-            {warns.map(w=>{
-              const L = SL_LEVELS[w.r.level];
-              return <div key={w.m.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:4}}>
-                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:L.bg,color:L.c,border:`1px solid ${L.c}33`,whiteSpace:"nowrap",flexShrink:0}}>{L.l}</span>
-                <span style={{fontSize:11,color:T.textSub,lineHeight:1.55}}><b style={{color:T.text}}>{w.m.name}</b> — {w.r.notes[0]}</span>
-              </div>;
-            })}
-          </div>}
-          {files.map((f,i)=>(
-            <div key={f.path} style={{marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{f.path}</span>
-                <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{f.lang}</span>
-                <span style={{fontSize:10.5,color:T.textMuted}}>{f.body.split("\n").length} lines</span>
+
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+
+          {/* ── the three questions, in order ── */}
+          <div style={{width:252,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bgElevated,overflowY:"auto",padding:"14px 11px"}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,padding:"0 4px 7px"}}>WHERE TO PUBLISH</div>
+            {targets.length===0
+              ? <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,padding:"4px 5px 10px"}}>
+                  This model has no publish targets. Add one with <b style={{color:T.textSub}}>Edit details</b> on the model header.
+                </div>
+              : targets.map(t=>{
+                  const n = slConnectionsFor(t).length;
+                  return <Row key={t} k={t} label={SL_PLATFORMS[t].label} dot={SL_SYS_COLOUR[t]}
+                              sub={n ? `${n} connection${n===1?"":"s"}` : "No connection yet"}/>;
+                })}
+
+            <div style={{height:1,background:T.border,margin:"12px 4px"}}/>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,padding:"0 4px 7px"}}>THE MODEL ITSELF</div>
+            <Row k="__file" label="Open-format file" sub="What everything else compiles from" dot={T.violet}/>
+          </div>
+
+          {/* ── what that choice means ── */}
+          <div style={{flex:1,overflowY:"auto",padding:"18px 22px",minWidth:0}}>
+
+            {isFile ? <>
+              <SH title="The model file"
+                  sub="The open-format document EDG stores. Every platform output is compiled from exactly this, which is why adding a platform never changes the model."/>
+              <div style={{padding:"11px 13px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:18}}>
+                This is not a destination — the file already lives in EDG. Pick a platform on the left to publish into it.
               </div>
-              <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
-                background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{f.body}</pre>
-            </div>
-          ))}
+            </> : <>
+              <SH title="Connection"
+                  sub={`Which ${SL_PLATFORMS[plat].label} the change set is written against. Only connections EDG already has are offered.`}/>
+              {conns.length===0
+                ? <div style={{padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,fontSize:11.5,color:T.textSub,lineHeight:1.6,marginBottom:18}}>
+                    EDG has no {SL_PLATFORMS[plat].label} connection yet. Add one under Connections and it will appear here.
+                  </div>
+                : <div style={{maxWidth:360,marginBottom:18}}>
+                    <SLSelect value={conn} onChange={e=>setConn(e.target.value)} placeholder="Pick a connection"
+                      options={conns.map(c=>({v:c,l:c}))}/>
+                  </div>}
+
+              <SH title="How to publish" sub={`Compiles to ${SL_PLATFORMS[plat].artifact}.`}/>
+              <div style={{marginBottom:18}}>
+                {SL_PUB_MODES.map(o=>(
+                  <button key={o.v} onClick={()=>setMode(o.v)}
+                    style={{width:"100%",textAlign:"left",display:"flex",gap:10,alignItems:"flex-start",padding:"11px 13px",marginBottom:7,
+                      borderRadius:9,cursor:"pointer",fontFamily:"inherit",
+                      background:mode===o.v?T.bgSurface:"transparent",
+                      border:`1px solid ${mode===o.v?T.accent+"55":T.border}`}}>
+                    <span style={{width:13,height:13,borderRadius:"50%",marginTop:1,flexShrink:0,
+                      border:`1px solid ${mode===o.v?T.accent:T.border}`,
+                      background:mode===o.v?T.accent:"transparent",boxShadow:mode===o.v?`inset 0 0 0 2.5px ${T.bgSurface}`:"none"}}/>
+                    <span>
+                      <span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}>{o.l}</span>
+                      <span style={{display:"block",fontSize:11,color:T.textMuted,marginTop:2,lineHeight:1.55}}>{o.d}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <SH title="Options"/>
+              <div style={{marginBottom:18}}>
+                {[[gov, setGov, "Carry the governance metadata",
+                   `Owner, descriptions and approval state travel with the definition — ${SL_PLATFORMS[plat].caps.governanceCarry}.`],
+                  [block, setBlock, "Stop if a metric would lose meaning",
+                   "Refuses the publish while anything is flagged below, instead of quietly shipping a weaker definition."]
+                 ].map(([val, set, l, d], i)=>(
+                  <button key={i} onClick={()=>set(!val)}
+                    style={{width:"100%",textAlign:"left",display:"flex",gap:10,alignItems:"flex-start",padding:"10px 13px",marginBottom:7,
+                      borderRadius:9,cursor:"pointer",fontFamily:"inherit",background:"transparent",border:`1px solid ${T.border}`}}>
+                    <span style={{width:14,height:14,borderRadius:4,marginTop:1,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                      border:`1px solid ${val?T.accent:T.border}`,background:val?T.accent:"transparent",color:"#fff",fontSize:10,fontWeight:700}}>{val?"✓":""}</span>
+                    <span>
+                      <span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}>{l}</span>
+                      <span style={{display:"block",fontSize:11,color:T.textMuted,marginTop:2,lineHeight:1.55}}>{d}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {warns.length>0 && <div style={{marginBottom:18,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
+                <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:6}}>{warns.length} metric{warns.length===1?"":"s"} lose something on {SL_PLATFORMS[plat].label}</div>
+                {warns.map(w=>{
+                  const L = SL_LEVELS[w.r.level];
+                  return <div key={w.m.id} style={{display:"flex",gap:8,alignItems:"flex-start",marginTop:4}}>
+                    <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:L.bg,color:L.c,border:`1px solid ${L.c}33`,whiteSpace:"nowrap",flexShrink:0}}>{L.l}</span>
+                    <span style={{fontSize:11,color:T.textSub,lineHeight:1.55}}><b style={{color:T.text}}>{w.m.name}</b> — {w.r.notes[0]}</span>
+                  </div>;
+                })}
+              </div>}
+            </>}
+
+            <SH title={isFile?"The file":"What gets written"}
+                sub={isFile?undefined:"The exact text that goes into the change set."}/>
+            {files.map(f=>(
+              <div key={f.path} style={{marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{f.path}</span>
+                  <span style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{f.lang}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted}}>{f.body.split("\n").length} lines</span>
+                </div>
+                <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
+                  background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{f.body}</pre>
+              </div>
+            ))}
+          </div>
         </div>
+
         <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",background:T.bg}}>
-          <span style={{fontSize:11.5,color:T.textMuted}}>{isSource ? "Pick a platform tab to publish its compiled output." : `Opens a change set for review. Never writes to ${SL_PLATFORMS[plat].label} directly.`}</span>
+          <span style={{fontSize:11.5,color:T.textMuted}}>
+            {isFile    ? "Pick a platform on the left to publish."
+             : stopped ? "Held back — a metric would lose meaning and you asked EDG to stop."
+             : !conn   ? "Pick a connection first."
+             : `Opens a change set against ${conn}. Nothing is written to ${SL_PLATFORMS[plat].label} until it is approved.`}
+          </span>
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
-            <Btn variant="primary" disabled={isSource} onClick={()=>onPublish(plat, files)}>Create change set</Btn>
+            <Btn variant="primary" disabled={!ready} onClick={()=>onPublish(plat, files, {connection:conn, mode, governance:gov})}>
+              {isFile ? "Publish" : `Publish to ${SL_PLATFORMS[plat].label}`}
+            </Btn>
           </div>
         </div>
       </div>
@@ -39755,7 +39879,6 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
   const [defTab,      setDefTab]      = useState("dimensions");
   const [defQ,        setDefQ]        = useState("");
-  const [cfgTab,      setCfgTab]      = useState("source");
   const [yamlDraft,   setYamlDraft]   = useState(null);
   const [joinFor,     setJoinFor]     = useState(null);
   const [mdlMenuOpen, setMdlMenuOpen] = useState(false);
@@ -39864,11 +39987,13 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
     onToast && onToast(`${model.name} created · ${bits.join(" · ")}`,"success");
   };
 
-  const doPublish = (plat, files) => {
-    const cs = {id:"cs_"+Date.now(), plat, files:files.length, at:new Date().toISOString().slice(0,16).replace("T"," "), status:"Open for review"};
+  const doPublish = (plat, files, opts) => {
+    const o = opts || {};
+    const cs = {id:"cs_"+Date.now(), plat, files:files.length, connection:o.connection||"", mode:o.mode||"replace",
+                governance:o.governance!==false, at:new Date().toISOString().slice(0,16).replace("T"," "), status:"Open for review"};
     patchModel({lastPublished:new Date().toISOString().slice(0,10), changeSets:[cs, ...((mdl.changeSets)||[])]});
     setPubOpen(false);
-    onToast && onToast(`Change set opened for ${SL_PLATFORMS[plat].label} · ${files.length} file${files.length===1?"":"s"}`,"success");
+    onToast && onToast(`Change set opened for ${SL_PLATFORMS[plat].label}${o.connection?` · ${o.connection}`:""} · ${files.length} file${files.length===1?"":"s"}`,"success");
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -39879,7 +40004,6 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"notify"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
-                  {k:"alignment",l:`In your tools · ${mVendor.length}`},
                   {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
@@ -40040,23 +40164,15 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
 
 
             {tab==="config" && (()=>{
-              const setSync = (patch) => patchModel({sync:{...sync, ...patch}});
-              const FREQ = [{v:"hourly",l:"Every hour"},{v:"daily",l:"Daily"},{v:"weekly",l:"Weekly"}];
-              const DRIFT = [
-                {v:"notify",    l:"Notify the owner",    d:"The model owner gets a notification when a definition drifts."},
-                {v:"work_item", l:"Open a work item",    d:"A task lands in the steward's Inbox and stays open until someone resolves it."},
-              ];
+              // Which platforms this model is meant to reach. Publishing is the last
+              // thing on this page because it is the last thing in the job.
+              const pubTargets = (mdl.targets||[]).filter(t=>t!=="ossie" && (SL_PLATFORMS[t]||{}).adapter==="ready");
               const srcFile = (slBuildArtifacts("ossie", {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts})||[])[0] || {path:"—", body:""};
               const curYaml = yamlDraft!==null ? yamlDraft : srcFile.body;
               const outFiles = slBuildArtifacts(outPlat, {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts});
               return (
                 <div>
-                <div style={{marginBottom:20}}>
-                  <SegTabs tabs={[{key:"source",label:"Source"},{key:"sync",label:"Reverse sync"}]}
-                    active={cfgTab} onChange={setCfgTab}/>
-                </div>
-
-                {cfgTab==="source" && (()=>{
+                {(()=>{
                   const octx = {mdl, ents:mEnts, rels:mRels, mets:mMetrics, dims:mDims, facts:mFacts};
                   const odoc = slOssieDoc(octx);
                   const oerr = slOssieValidate(odoc);
@@ -40083,8 +40199,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
                     <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                       <SH title="The model file"
                           sub="This model is one file, written in Apache Ossie — the open format Snowflake, dbt, Databricks and Power BI have all agreed to read. Everything on the other tabs is a view of what is in here, and every platform artifact is compiled from it."
-                          action={<Btn small variant="primary" disabled={!mMetrics.length}
-                            onClick={()=>setPubOpen(true)}>{mMetrics.length?"Publish":"Nothing to publish"}</Btn>}/>
+                          />
 
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 13px",borderRadius:9,marginBottom:14,
                         background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
@@ -40198,104 +40313,10 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
                   </div>);
                 })()}
 
-                {cfgTab==="sync" && <div style={{maxWidth:900}}>
-                  <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-                  <SH title="Reverse sync"
-                      sub="Reads the definitions back out of your platforms and compares them with this model — so when somebody edits the metric directly in Power BI or Snowflake, you find out instead of discovering it in a board pack. Sending this model the other way is set up on the connection itself, not here."/>
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,padding:"16px 18px",marginBottom:24}}>
-                    <button onClick={()=>setSync({enabled:!sync.enabled})}
-                      style={{display:"flex",alignItems:"center",gap:12,background:"transparent",border:"none",cursor:"pointer",padding:0,width:"100%",textAlign:"left"}}>
-                      <span style={{width:38,height:22,borderRadius:11,background:sync.enabled?T.accent:T.bgActive,border:`1px solid ${sync.enabled?T.accent:T.border}`,position:"relative",flexShrink:0,transition:"all .15s"}}>
-                        <span style={{position:"absolute",top:2,left:sync.enabled?18:2,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"left .15s"}}/>
-                      </span>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{sync.enabled?"Reverse sync is on":"Reverse sync is off"}</div>
-                        <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
-                          {sync.enabled?`Reads ${(sync.targets||[]).length} platform${(sync.targets||[]).length===1?"":"s"} ${String(FREQ.find(x=>x.v===sync.frequency)?.l||"").toLowerCase()}.`
-                                       :"No definitions are read back. Drift will go unnoticed."}
-                        </div>
-                      </div>
-                      <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>{mdl.lastSynced?`last run ${mdl.lastSynced}`:"never run"}</span>
-                    </button>
-                  </div>
-
-                  <SH title="Where to read from" sub="Pick a platform and the connection its definitions live in. Only connections EDG already has are offered — a platform with none cannot be read."/>
-                  <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:24,opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
-                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange").map(p=>{
-                      const on    = (sync.targets||[]).includes(p.k);
-                      const conns = slConnectionsFor(p.k);
-                      const picked = (sync.connections||{})[p.k] || conns[0] || "";
-                      return (
-                        <div key={p.k} style={{background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,overflow:"hidden"}}>
-                          <button
-                            onClick={()=>{
-                              if(!conns.length) return;
-                              setSync({
-                                targets: on ? (sync.targets||[]).filter(x=>x!==p.k) : [...(sync.targets||[]), p.k],
-                                connections: {...(sync.connections||{}), [p.k]: picked},
-                              });
-                            }}
-                            disabled={!conns.length}
-                            style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:"transparent",border:"none",
-                              cursor:conns.length?"pointer":"not-allowed",textAlign:"left"}}>
-                            <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.accent:T.borderLight}`,background:on?T.accent:"transparent",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{on?"✓":""}</span>
-                            <SLSysChip system={p.k}/>
-                            <span style={{fontSize:11.5,color:T.textSub,flex:1}}>{p.artifact}</span>
-                            {!conns.length && <span style={{fontSize:10.5,color:T.amber}}>no connection</span>}
-                          </button>
-                          {on && conns.length>0 && (
-                            <div style={{display:"flex",alignItems:"center",gap:10,padding:"0 13px 11px 38px"}}>
-                              <span style={{fontSize:11,color:T.textMuted,flexShrink:0}}>Read from</span>
-                              <div style={{flex:1,maxWidth:320}}>
-                                <SLSelect value={picked}
-                                  onChange={e=>setSync({connections:{...(sync.connections||{}), [p.k]:e.target.value}})}
-                                  options={conns}/>
-                              </div>
-                              {conns.length===1 && <span style={{fontSize:10.5,color:T.textMuted}}>the only one catalogued</span>}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange" && !slConnectionsFor(p.k).length).length>0 &&
-                      <div style={{fontSize:11,color:T.textMuted,lineHeight:1.55,marginTop:2}}>
-                        A platform with no connection cannot be read. Add one under Settings → Connections and it appears here.
-                      </div>}
-                  </div>
-
-                  <div style={{display:"flex",gap:24,marginBottom:24,flexWrap:"wrap",opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
-                    <div style={{flex:1,minWidth:220}}>
-                      <SH title="How often"/>
-                      <SLSelect value={sync.frequency} onChange={e=>setSync({frequency:e.target.value})} options={FREQ.map(x=>({v:x.v,l:x.l}))}/>
-                    </div>
-                  </div>
-
-                  <div style={{opacity:sync.enabled?1:.5,pointerEvents:sync.enabled?"auto":"none"}}>
-                    <SH title="When something has drifted" sub="Finding drift and doing nothing about it is how a governance tool becomes a dashboard nobody opens."/>
-                    <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:24}}>
-                      {DRIFT.map(o=>{
-                        const on = sync.onDrift===o.v;
-                        return (
-                          <button key={o.v} onClick={()=>setSync({onDrift:o.v})}
-                            style={{display:"flex",gap:11,alignItems:"flex-start",padding:"11px 13px",background:on?T.bgActive:T.bgElevated,border:`1px solid ${on?T.accent+"55":T.border}`,borderRadius:9,cursor:"pointer",textAlign:"left"}}>
-                            <span style={{width:15,height:15,borderRadius:"50%",border:`1.5px solid ${on?T.accent:T.borderLight}`,flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                              {on&&<span style={{width:7,height:7,borderRadius:"50%",background:T.accent}}/>}
-                            </span>
-                            <div>
-                              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{o.l}</div>
-                              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,lineHeight:1.5}}>{o.d}</div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  </div></Card2>
-
+                <div style={{maxWidth:900}}>
                   <Card2><div style={{padding:"14px 16px"}}>
                   <SH title="Bring a model in"
-                      sub="Read a semantic model out of one of your connections and see it as the same open-format file the Source tab shows — a Snowflake semantic view, a dbt project, a Power BI dataset, all in one shape. Or upload a file from any tool that speaks the format. EDG checks it, tells you exactly what it would change, and changes nothing until you accept."/>
+                      sub="Read a semantic model out of one of your connections and see it as the same open-format file at the top of this page — a Snowflake semantic view, a dbt project, a Power BI dataset, all in one shape. Or upload a file from any tool that speaks the format. EDG checks it, tells you exactly what it would change, and changes nothing until you accept."/>
                   <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
                     {SL_PLAT_LIST.filter(p=>p.adapter!=="none" && p.family!=="interchange" && slConnectionsFor(p.k).length).map(p=>{
                       const conn = (sync.connections||{})[p.k] || slConnectionsFor(p.k)[0];
@@ -40360,7 +40381,23 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
                     </>}
                   </div>}
                   </div></Card2>
-                </div>}
+
+                  <Card2 style={{marginTop:16}}><div style={{padding:"14px 16px"}}>
+                  <SH title="Publish"
+                      sub="Send this model out to the platforms that read it. EDG compiles the file above into each one's own shape and opens a change set — it never writes to a platform directly."/>
+                  <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:260}}>
+                      <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
+                        {pubTargets.length===0
+                          ? <>No publish targets yet. Add one with <b style={{color:T.text}}>Edit details</b> on the model header, then publish from here.</>
+                          : <>Goes to {pubTargets.map((t,i)=><span key={t}>{i?", ":""}<b style={{color:T.text}}>{SL_PLATFORMS[t].label}</b></span>)}. You pick the connection and the terms on the way out.</>}
+                      </div>
+                      {mdl.lastPublished && <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Last published {mdl.lastPublished}.</div>}
+                    </div>
+                    <Btn variant="primary" icon={Ic.branches(12)} onClick={()=>setPubOpen(true)}>Publish</Btn>
+                  </div>
+                  </div></Card2>
+                </div>
                 </div>
               );
             })()}
@@ -40520,60 +40557,6 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
               );
             })()}
 
-            {tab==="alignment" && <>
-              <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:22}}>
-                <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:820}}>
-                  <b style={{color:T.text}}>Your tools already define these numbers.</b> Somebody built a revenue measure in Power BI, somebody else wrote one in dbt, and a third sits in a Tableau workbook. EDG read them — it did not write them. This page puts each of those definitions next to the one this model certifies, so you can see which agree, which have quietly drifted, and which belong to nobody.
-                </div>
-              </div>
-              <SH title="Where the tools disagree" sub="Every number in this model that more than one tool defines, and how many copies are out of step."/>
-              {dis.length===0
-                ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10,marginBottom:24}}>Nothing in this model is defined in more than one tool.</div>
-                : <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:24}}>
-                    {dis.map(r=>(
-                      <div key={r.metric.id} style={{background:T.bgSurface,border:`1px solid ${r.disagree?T.amber+"44":T.border}`,borderRadius:11,overflow:"hidden"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 15px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,cursor:"pointer",flexWrap:"wrap"}}
-                          onClick={()=>setSelId(r.metric.id)}>
-                          <span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.metric.name}</span>
-                          <SLStatusChip status={r.metric.status}/>
-                          <span style={{marginLeft:"auto",fontSize:11.5,color:r.disagree?T.amber:T.green,fontWeight:600}}>
-                            {r.disagree?`${r.disagree} of ${r.total} out of step`:"all in step"}
-                          </span>
-                        </div>
-                        {r.defs.map((d,i)=>(
-                          <div key={d.id} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"11px 15px",borderBottom:i<r.defs.length-1?`1px solid ${T.border}`:"none"}}>
-                            <div style={{width:150,flexShrink:0,display:"flex",flexDirection:"column",gap:4}}>
-                              <SLSysChip system={d.system}/>
-                              <SLConfChip state={d.conformance} small/>
-                            </div>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:3}}>{d.object}</div>
-                              <div style={{fontFamily:"ui-monospace,monospace",fontSize:11,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,padding:"6px 9px",marginBottom:5,overflowX:"auto"}}>{d.expr}</div>
-                              <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5}}>{d.note}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
-                  </div>}
-
-              <SH title="Unclaimed definitions" sub="Found in a tool, belonging to no metric and owned by nobody."/>
-              {unclaimed.length===0
-                ? <div style={{padding:"20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Everything found has been claimed.</div>
-                : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {unclaimed.map(v=>(
-                      <div key={v.id} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 15px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,flexWrap:"wrap"}}>
-                        <SLSysChip system={v.system}/>
-                        <div style={{flex:1,minWidth:180}}>
-                          <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{v.object}</div>
-                          <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{v.loc}</div>
-                        </div>
-                        <span style={{fontSize:11.5,color:T.textSub,maxWidth:300,lineHeight:1.5}}>{v.note}</span>
-                        <Btn small onClick={()=>setMapFor(v)}>Claim</Btn>
-                      </div>
-                    ))}
-                  </div>}
-            </>}
           </div>
         </div>
 
