@@ -13677,6 +13677,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const [runningPol, setRunningPol] = useState(null);  // policy being evaluated by Run now
   const [schedFor, setSchedFor] = useState(null);       // policy whose evaluation schedule is open
   const [runExp, setRunExp] = useState(null);           // expanded run in the Runs tab
+  const [pvQ, setPvQ] = useState(""); const [pvStat, setPvStat] = useState("All"); const [pvSev, setPvSev] = useState("All"); const [pvExp, setPvExp] = useState(null); // policy Violations table
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
   const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
@@ -14548,10 +14549,85 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         {rs.map(ruleCardView)}</div>; })}
       {!p.rules.length&&<div style={{padding:"28px 16px",borderRadius:10,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules yet.</div>}
     </>;
-    if(tab==="violations") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Nothing is evaluated until the policy is active. {nextText(p)}</div>
-      : ev.findings.length===0 ? <div style={{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",borderRadius:9,background:`${T.green}10`,border:`1px solid ${T.green}25`,fontSize:12.5,color:T.green,fontWeight:600}}>✓ No violations — every in-scope asset passes.</div>
-      : <><div style={{fontSize:12,color:T.textSub,marginBottom:12}}>{openFindN} open violation{openFindN===1?"":"s"} from the validation rules. Stewards fix them, or request an exception.</div>
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{ev.findings.map((f,i)=>findingRow({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}, i, true))}</div></>;
+    const thS = {padding:"8px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap"};
+    if(tab==="violations"){
+      const stateOf = f => f.exc?.status==="accepted"?"Excepted":f.exc?.status==="pending"?"Exception requested":"Open";
+      const STAT = {"Open":T.rose, "Exception requested":T.amber, "Excepted":T.textMuted};
+      const detected = (p.runs||[]).slice(-1)[0]?.ts?.slice(0,10) || p.activatedAt || "—";
+      const all = ev.findings.map(f=>({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm2AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}));
+      const ql = pvQ.toLowerCase();
+      const rows = all.filter(f=>pvStat==="All"||stateOf(f)===pvStat).filter(f=>pvSev==="All"||f.severity===pvSev).filter(f=>!ql||[f.asset.name,f.rule.name,f.msg,f.asset.domain].join(" ").toLowerCase().includes(ql));
+      const cnt = k => all.filter(f=>stateOf(f)===k).length;
+      const fsel = (label, val, set, opts) => <div style={{display:"flex",alignItems:"center",gap:5}}>
+        <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>{label}:</span>
+        <select value={val} onChange={e=>set(e.target.value)} style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${val!=="All"?T.accent:T.border}`,background:val!=="All"?T.accentDim:T.bgElevated,color:val!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>{opts.map(o=><option key={o}>{o}</option>)}</select></div>;
+      body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Nothing is evaluated until the policy is active. {nextText(p)}</div> : <>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+          {["Open","Exception requested","Excepted"].map(k=>{ const c=STAT[k]; return (
+            <div key={k} onClick={()=>setPvStat(pvStat===k?"All":k)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:pvStat===k?`${c}22`:`${c}12`,border:`1px solid ${c}30`,cursor:"pointer"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:c}}/><span style={{fontSize:11,fontWeight:700,color:c}}>{cnt(k)}</span><span style={{fontSize:11,color:c,opacity:.85}}>{k}</span></div>); })}
+          <div style={{marginLeft:"auto",fontSize:11,color:T.textMuted,alignSelf:"center"}}>{all.length} total</div>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{flex:"1 1 180px",maxWidth:280,display:"flex"}}>{searchBox(pvQ, setPvQ, "Search asset, rule…", 280)}</div>
+          {fsel("Status", pvStat, setPvStat, ["All","Open","Exception requested","Excepted"])}
+          {fsel("Severity", pvSev, setPvSev, ["All","Critical","High","Medium","Low"])}
+        </div>
+        {all.length===0 ? <div style={{textAlign:"center",padding:"48px 20px"}}>
+            <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7 10l3 3 5-5" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10" r="8" stroke={T.green} strokeWidth="1.5"/></svg></div>
+            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations detected</div>
+            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,maxWidth:280,margin:"0 auto"}}>All in-scope assets are compliant with this policy. Run it again to check for new issues.</div></div>
+          : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Asset","Rule","Severity","Status","Frameworks","Detected"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.map((f,vi)=>{ const s=stateOf(f); const c=STAT[s]; const isExp=pvExp===f.key;
+                  return (<React.Fragment key={f.key}>
+                    <tr onClick={()=>setPvExp(isExp?null:f.key)} style={{borderBottom:(!isExp&&vi<rows.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:isExp?`${T.accent}06`:"transparent",opacity:s==="Excepted"?.6:1}}
+                      onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}>
+                      <td style={{padding:"10px 14px",maxWidth:180}}><div style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.asset.name}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{f.asset.service} · {f.asset.domain}</div></td>
+                      <td style={{padding:"10px 14px",maxWidth:240}}><div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.rule.name}</div><div style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>“{f.msg}”</div></td>
+                      <td style={{padding:"10px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${SEV_COLOR[f.severity]||T.textMuted}14`,color:SEV_COLOR[f.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{f.severity}</span></td>
+                      <td style={{padding:"10px 14px"}}><span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:`${c}14`,color:c,border:`1.5px solid ${c}45`,whiteSpace:"nowrap"}}>{s}</span></td>
+                      <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{f.refs.slice(0,2).map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`)}</span>)}{f.refs.length>2&&<span style={{fontSize:10.5,color:T.textMuted}}>+{f.refs.length-2}</span>}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>—</span>}</div></td>
+                      <td style={{padding:"10px 14px",fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{detected}</td>
+                    </tr>
+                    {isExp&&<tr style={{borderBottom:vi<rows.length-1?`1px solid ${T.border}`:"none"}}><td colSpan={6} style={{padding:0,background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>{findingRow(f,0,true)}</td></tr>}
+                  </React.Fragment>); })}
+                {!rows.length&&<tr><td colSpan={6} style={{padding:"28px",textAlign:"center",color:T.textMuted,fontSize:12}}>No violations match the current filters.</td></tr>}
+              </tbody></table></div>}
+      </>;
+    }
+    if(tab==="runs"){ const runs=p.runs||[];
+      body = <>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12}}>
+          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Evaluation Runs</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every execution of this policy — an immutable audit trail of what was found and when.{p.schedule&&p.schedEnabled!==false?` Scheduled ${contractScheduleLabel(p.sched)}.`:""}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>{runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}{runBtn(false)}</div>
+        </div>
+        {runs.length===0 ? <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
+            <div style={{fontSize:28,marginBottom:10}}>▷</div><div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
+            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,margin:"0 auto",lineHeight:1.7}}>{p.status!=="Active"?"Activate this policy first, then run it to see evaluation history.":'Click "Run now" to evaluate this policy for the first time.'}</div></div>
+          : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Status","Run at","Trigger","Assets","Rules","Duration","New violations","Open violations","Score"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>{runs.map((run,ri)=>{ const sc=run.status==="success"?T.green:T.rose; const scoreC=run.score==null?T.textMuted:run.score>=80?T.green:run.score>=60?T.amber:T.rose;
+                return (<tr key={run.id} style={{borderBottom:ri<runs.length-1?`1px solid ${T.border}`:"none",boxShadow:`inset 3px 0 0 ${sc}`,background:ri===0?`${T.accent}05`:"transparent"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=ri===0?`${T.accent}05`:"transparent"}>
+                  <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}10`,color:sc,border:`1px solid ${sc}30`,display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:5,height:5,borderRadius:"50%",background:sc}}/>{run.status==="success"?"Passed":"Failed"}</span>
+                    {ri===0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em"}}>Latest</span>}</div></td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{run.ts}</td>
+                  <td style={{padding:"10px 14px"}}><span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`}}>{run.trigger}</span></td>
+                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.assetsScanned}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.rulesEval}</td>
+                  <td style={{padding:"10px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>⏱ {run.duration}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,color:run.violationsNew>0?T.rose:T.green}}>{run.violationsNew>0?`+${run.violationsNew}`:"0"}</td>
+                  <td style={{padding:"10px 14px"}}>{run.violations>0&&vR.length?<button onClick={()=>setPdTab("violations")} style={{fontSize:12,fontWeight:700,color:T.rose,background:"none",border:"none",cursor:"pointer",padding:0}}>{run.violations}</button>:<span style={{fontSize:12,color:T.green,fontWeight:600}}>{run.violations}</span>}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:scoreC}}>{run.score!=null?`${run.score}%`:"—"}</td>
+                </tr>); })}</tbody></table></div>}
+      </>;
+    }
     if(tab==="assets"){
       const th = {padding:"9px 12px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
       body = <>
@@ -14574,47 +14650,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           </table>
         </div>
         {ev.targets.some(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve enforcement in their Workspace inbox; a table without an owner goes to {ap.enforcement.fallback}.</div>}
-      </>;
-    }
-    if(tab==="runs"){ const runs=p.runs||[];
-      body = <>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12}}>
-          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Evaluation Runs</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every execution of this policy — an immutable audit trail of what was found and when.{p.schedule&&p.schedEnabled!==false?` Scheduled ${contractScheduleLabel(p.sched)}.`:""}</div></div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>{runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}{runBtn(false)}</div>
-        </div>
-        {runs.length===0 ? <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
-            <div style={{fontSize:28,marginBottom:10}}>▷</div><div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
-            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,margin:"0 auto",lineHeight:1.7}}>{p.status!=="Active"?"Activate this policy first, then run it to see evaluation history.":'Click "Run now" to evaluate this policy for the first time.'}</div></div>
-          : <div style={{display:"flex",flexDirection:"column",gap:8}}>{runs.map((run,ri)=>{ const isExp=runExp===run.id; const latest=ri===0;
-              const sc=run.status==="success"?T.green:T.rose;
-              return (<div key={run.id} style={{borderRadius:10,border:`1.5px solid ${latest?`${T.accent}30`:T.border}`,background:T.bgSurface,overflow:"hidden"}}>
-                <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setRunExp(isExp?null:run.id)}>
-                  <div style={{width:4,background:sc,flexShrink:0}}/>
-                  <div style={{flex:1,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}10`,color:sc,border:`1px solid ${sc}30`}}>{run.status==="success"?"Passed":"Failed"}</span>
-                    {latest&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em"}}>Latest</span>}
-                    <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{run.ts}</span>
-                    <span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`}}>{run.trigger}</span>
-                    <div style={{display:"flex",gap:12,marginLeft:"auto",alignItems:"center"}}>
-                      <span style={{fontSize:11,color:T.textMuted}}>{run.assetsScanned} assets</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>⏱ {run.duration}</span>
-                      {run.violationsNew>0?<span style={{fontSize:11,fontWeight:700,color:T.rose}}>+{run.violationsNew} violation{run.violationsNew!==1?"s":""}</span>:<span style={{fontSize:11,fontWeight:600,color:T.green}}>0 new</span>}
-                      {run.score!=null&&<span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:run.score>=80?T.green:run.score>=60?T.amber:T.rose}}>{run.score}%</span>}
-                    </div>
-                    <span style={{fontSize:11,color:T.textMuted,transform:isExp?"rotate(180deg)":"none"}}>▾</span>
-                  </div>
-                </div>
-                {isExp&&<div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:run.violations>0?12:0}}>
-                    {[["Assets Scanned",run.assetsScanned],["Rules Evaluated",run.rulesEval],["Duration",run.duration],["Open Violations",run.violations,run.violations>0?T.rose:T.green],["Score",run.score!=null?`${run.score}%`:"—",run.score!=null?(run.score>=80?T.green:run.score>=60?T.amber:T.rose):T.textMuted],["Trigger",run.trigger]].map(([l,v,c])=>(
-                      <div key={l} style={{padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                        <div style={{fontSize:9.5,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{l}</div>
-                        <div style={{fontSize:13,fontWeight:700,color:c||T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div></div>))}
-                  </div>
-                  {run.violations>0&&vR.length>0&&<button onClick={()=>setPdTab("violations")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>View the violations →</button>}
-                </div>}
-              </div>); })}</div>}
       </>;
     }
     if(tab==="evidence") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Forms come due once the policy is active. {nextText(p)}</div> : <>
