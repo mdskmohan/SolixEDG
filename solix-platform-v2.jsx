@@ -13465,6 +13465,12 @@ function pm2LinkToFw(p, fw){
   return {...p, scope:[...new Set([...p.scope, ...add])], articles:[...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))]};
 }
 
+// What one evaluation run of a policy finds — recorded in its Runs history.
+function pm2RunStats(p){
+  const ev = pm2Eval(p); const inS = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p)); const fail = new Set(ev.findings.map(f=>f.asset.name));
+  const vR = (p.rules||[]).some(r=>r.type==="validation");
+  return {assetsScanned:inS.length, rulesEval:(p.rules||[]).length, violations:ev.findings.length, score: vR ? (inS.length?Math.round((inS.length-fail.size)/inS.length*100):100) : null};
+}
 let _pm2 = (()=>{
   // The same regulations the original Policy Manager has enabled (REGS_META), so both screens agree.
   const FW_OWNER = {Privacy:"maya.chen", Security:"james.oh", Healthcare:"sarah.kim", Financial:"dev.patel"};
@@ -13483,6 +13489,11 @@ let _pm2 = (()=>{
     {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
     {when:"2026-06-02", who:p.owner, what:`Created from the ${pm2LinkedFws(p).map(f=>f.name).join(" / ")} template`}]}));
   const pol = id => policies.find(p=>p.id===id); const rule = (id, key) => pol(id)?.rules.find(r=>r.key===key);
+  // Evaluation history and a daily schedule, the same way the original Policy Manager runs policies.
+  policies.forEach((p,k)=>{ const x=pm2RunStats(p);
+    p.sched = {freq:"daily", time:"08:00", day:"monday", cron:"0 8 * * *", tz:"UTC", enabled:true}; p.schedule="0 8 * * *"; p.schedEnabled=true; p.nextRun=scheduleNextRun(p.sched);
+    p.runs = [0,1,2].map(d=>({id:`run-${p.id}-${d}`, ts:`2026-10-0${7-d} 08:00`, trigger:"Schedule", duration:`${1+((k+d)%3)}m ${10+((k*7+d*13)%49)}s`,
+      assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:d===2?x.violations:0, score:x.score, status:"success"})); });
   // Seeded one template version behind, to show "update available".
   const xb = pol("p-P-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
   // Evidence already on file: GDPR's DPIA is approved; SOC 2 logging is waiting for review; last quarter's access review is approved.
@@ -13663,6 +13674,9 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   useEffect(()=>{ if(_pm2Deep){ const d=_pm2Deep; _pm2Deep=null; if(d.folder) setExpCat(x=>({...x,[d.folder]:true})); } },[]);
   const [wiz, setWiz]         = useState(null);    // adopt a regulation
   const [ed, setEd]           = useState(null);    // create / edit a policy
+  const [runningPol, setRunningPol] = useState(null);  // policy being evaluated by Run now
+  const [schedFor, setSchedFor] = useState(null);       // policy whose evaluation schedule is open
+  const [runExp, setRunExp] = useState(null);           // expanded run in the Runs tab
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
   const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
@@ -13818,10 +13832,18 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     setFill(null); setTimeout(pm2Sync,0); onToast(`Submitted — ${reviewer} reviews it`,"success");
   };
   const runNow = p => {
-    const ev = evalOf(p);
-    pm2Set(s=>({...s, lastRun:{...s.lastRun, [p.id]:new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}}));
-    pm2RequestTargets();
-    onToast(`Ran "${p.name}" — ${ev.findings.length} finding${ev.findings.length===1?"":"s"}, ${ev.targets.length} table${ev.targets.length===1?"":"s"} under enforcement`,"success");
+    if(p.status!=="Active"){ onToast("Activate the policy before running it","info"); return; }
+    if(runningPol) return;
+    setRunningPol(p.id);
+    setTimeout(()=>{
+      const q=_pm2.policies.find(x=>x.id===p.id)||p; const x=pm2RunStats(q); const prev=(q.runs||[])[0];
+      const ts=`${pm2Today()} ${new Date().toTimeString().slice(0,5)}`;
+      const run={id:`run-${p.id}-${Date.now()}`, ts, trigger:"Manual", duration:`${1+Math.floor(Math.random()*2)}m ${10+Math.floor(Math.random()*49)}s`, assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:Math.max(0,x.violations-(prev?.violations??0)), score:x.score, status:"success"};
+      updPol(p.id, y=>({...y, runs:[run, ...(y.runs||[])]}));
+      pm2Set(s2=>({...s2, lastRun:{...s2.lastRun, [p.id]:ts.slice(11)}}));
+      pm2RequestTargets(); setRunningPol(null);
+      onToast(`Evaluated "${p.name}" — ${x.violations} violation${x.violations===1?"":"s"} across ${x.assetsScanned} assets`,"success");
+    }, 1600);
   };
   const duplicateAsCustom = p => {
     const id = "p-cust-"+Date.now();
@@ -14348,6 +14370,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const inScope = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p));
     const assetRows = [...new Map([...inScope, ...ev.targets.map(t=>t.asset), ...ev.held].map(a=>[a.name,a])).values()];
     const failing = new Set(openF.map(f=>f.asset.name));
+    const lastRunRec = (p.runs||[])[0];
     // One compliance number, as in the original: validation pass rate, else enforcement coverage, else evidence currency.
     const pct = vR.length ? (inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100)
       : eR.length ? (ev.targets.length?Math.round(runN/ev.targets.length*100):100)
@@ -14358,6 +14381,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const tab = pdTab==="activity" ? (attRules.length&&(fill?.polId===p.id||dueN||!vR.length) ? "evidence" : vR.length ? "violations" : "assets") : pdTab;
     const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Rules",badge:p.rules.length},
       ...(vR.length?[{k:"violations",l:"Violations",badge:openFindN||null,danger:true}]:[]),
+      {k:"runs",l:"Runs",badge:(p.runs||[]).length||null},
       {k:"assets",l:"Assets",badge:assetRows.length||null},
       ...(attRules.length?[{k:"evidence",l:"Evidence",badge:(p.status==="Active"&&dueN)||null,danger:true}]:[]),
       {k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
@@ -14391,6 +14415,14 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:6}}>{ruleSentence(p,r)}</div>
         {arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
       </div>); };
+    const running = runningPol===p.id; const notLive = p.status!=="Active";
+    const runBtn = full => <button disabled={running||notLive} title={notLive?"Activate the policy first":""} onClick={()=>runNow(p)}
+      style={{width:full?"100%":"auto",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 14px",borderRadius:8,background:running||notLive?T.bgElevated:T.accentDim,border:`1.5px solid ${running||notLive?T.border:T.accent+"44"}`,color:running||notLive?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:running||notLive?"not-allowed":"pointer",marginBottom:full?8:0,fontFamily:"inherit"}}>
+      {running ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
+        : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><polygon points="5,3 14,8 5,13" fill="currentColor"/></svg>Run now</>}</button>;
+    const schedBtn = () => { const on=!!p.schedule&&p.schedEnabled!==false, paused=!!p.schedule&&p.schedEnabled===false; const col=on?"#16a34a":paused?T.amber:T.textSub;
+      return <button onClick={()=>setSchedFor(p.id)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:on?"#16a34a12":paused?T.amberDim:"transparent",border:`1.5px solid ${on?"#16a34a55":paused?T.amber+"66":T.border}`,color:col,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>{on?"Scheduled":paused?"Schedule paused":"Schedule"}</button>; };
     // A rule as a compact row (Overview), like the original's RULE rows.
     const ruleRow = r => { const tail = r.type==="validation" ? (r.severity||"Medium") : r.type==="enforcement" ? (r.enf?.action==="hold"?"Legal hold":"Retention") : `Every ${r.att?.every||12} mo`;
       const sc = r.type==="validation" ? (SEV_COLOR[r.severity||"Medium"]||T.textMuted) : typeColor(r.type);
@@ -14413,7 +14445,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${healthColor}30`,background:`${healthColor}10`,overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${healthColor}20`}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:healthColor,boxShadow:`0 0 0 3px ${healthColor}25`}}/><span style={{fontSize:11,fontWeight:700,color:healthColor,textTransform:"uppercase",letterSpacing:"0.07em"}}>Evaluation Results</span></div>
-              <button onClick={()=>setPdTab("assets")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all assets →</button>
+              <button onClick={()=>setPdTab("runs")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all runs →</button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
               <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
@@ -14426,8 +14458,12 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               </div>
               <div style={{padding:"14px 16px"}}>
                 <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Last Evaluation</div>
-                <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{st.lastRun[p.id]?`Today ${st.lastRun[p.id]}`:"Continuous"}</div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:10}}>since {p.activatedAt||p.created} · {inScope.length} assets in scope</div>
+                {lastRunRec ? <div style={{marginBottom:10}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{lastRunRec.ts}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4,alignItems:"center"}}>
+                      <span style={{fontSize:10.5,color:T.textMuted}}>⏱ {lastRunRec.duration}</span><span style={{fontSize:10.5,color:T.textMuted}}>· {lastRunRec.assetsScanned} assets</span>
+                      <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:lastRunRec.trigger==="Manual"?`${T.violet}14`:`${T.blue}14`,color:lastRunRec.trigger==="Manual"?T.violet:T.blue,fontWeight:600}}>{lastRunRec.trigger}</span></div></div>
+                  : <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Not run yet — use Run now</div>}
                 {vR.length>0&&(openFindN ? metricBtn(openFindN, `open violation${openFindN!==1?"s":""}`, T.rose, ()=>setPdTab("violations"), <div style={{display:"flex",gap:4}}>{crit>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.rose,color:"#fff"}}>{crit} Crit</span>}{high>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.amber,color:"#fff"}}>{high} High</span>}</div>)
                   : <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:T.green}}>✓ All assets compliant</span></div>)}
                 {eR.length>0&&metricBtn(`${runN}/${ev.targets.length}`, ev.targets.length-runN?`tables enforced — ${ev.targets.length-runN} awaiting their owner`:"tables enforced", ev.targets.length-runN?T.amber:T.green, ()=>setPdTab("assets"))}
@@ -14493,6 +14529,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {kv("Source", isReg?"Prebuilt":p.basedOn?"Custom (duplicated)":"Custom")}
               {isReg&&kv("Template", `v${p.tplVersion||1}`)}
               {upd&&<div style={{fontSize:11.5,color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>)}
+            {SB("Evaluation", null, <>{runBtn(true)}{schedBtn()}
+              {p.schedule&&<div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>{p.schedEnabled===false?"Paused — next run when re-enabled":"Next run"}</div>
+                <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{p.schedEnabled===false?"—":(p.nextRun||"—").replace(/^Next run: /,"")}</div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{p.schedule}</div></div>}</>)}
           </div>
         </div>);
     }
@@ -14533,6 +14574,47 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           </table>
         </div>
         {ev.targets.some(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve enforcement in their Workspace inbox; a table without an owner goes to {ap.enforcement.fallback}.</div>}
+      </>;
+    }
+    if(tab==="runs"){ const runs=p.runs||[];
+      body = <>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12}}>
+          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Evaluation Runs</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every execution of this policy — an immutable audit trail of what was found and when.{p.schedule&&p.schedEnabled!==false?` Scheduled ${contractScheduleLabel(p.sched)}.`:""}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>{runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}{runBtn(false)}</div>
+        </div>
+        {runs.length===0 ? <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
+            <div style={{fontSize:28,marginBottom:10}}>▷</div><div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
+            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,margin:"0 auto",lineHeight:1.7}}>{p.status!=="Active"?"Activate this policy first, then run it to see evaluation history.":'Click "Run now" to evaluate this policy for the first time.'}</div></div>
+          : <div style={{display:"flex",flexDirection:"column",gap:8}}>{runs.map((run,ri)=>{ const isExp=runExp===run.id; const latest=ri===0;
+              const sc=run.status==="success"?T.green:T.rose;
+              return (<div key={run.id} style={{borderRadius:10,border:`1.5px solid ${latest?`${T.accent}30`:T.border}`,background:T.bgSurface,overflow:"hidden"}}>
+                <div style={{display:"flex",cursor:"pointer"}} onClick={()=>setRunExp(isExp?null:run.id)}>
+                  <div style={{width:4,background:sc,flexShrink:0}}/>
+                  <div style={{flex:1,padding:"11px 14px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}10`,color:sc,border:`1px solid ${sc}30`}}>{run.status==="success"?"Passed":"Failed"}</span>
+                    {latest&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em"}}>Latest</span>}
+                    <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{run.ts}</span>
+                    <span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`}}>{run.trigger}</span>
+                    <div style={{display:"flex",gap:12,marginLeft:"auto",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:T.textMuted}}>{run.assetsScanned} assets</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>⏱ {run.duration}</span>
+                      {run.violationsNew>0?<span style={{fontSize:11,fontWeight:700,color:T.rose}}>+{run.violationsNew} violation{run.violationsNew!==1?"s":""}</span>:<span style={{fontSize:11,fontWeight:600,color:T.green}}>0 new</span>}
+                      {run.score!=null&&<span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:run.score>=80?T.green:run.score>=60?T.amber:T.rose}}>{run.score}%</span>}
+                    </div>
+                    <span style={{fontSize:11,color:T.textMuted,transform:isExp?"rotate(180deg)":"none"}}>▾</span>
+                  </div>
+                </div>
+                {isExp&&<div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"14px 18px 14px 22px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:run.violations>0?12:0}}>
+                    {[["Assets Scanned",run.assetsScanned],["Rules Evaluated",run.rulesEval],["Duration",run.duration],["Open Violations",run.violations,run.violations>0?T.rose:T.green],["Score",run.score!=null?`${run.score}%`:"—",run.score!=null?(run.score>=80?T.green:run.score>=60?T.amber:T.rose):T.textMuted],["Trigger",run.trigger]].map(([l,v,c])=>(
+                      <div key={l} style={{padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`}}>
+                        <div style={{fontSize:9.5,color:T.textMuted,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{l}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:c||T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div></div>))}
+                  </div>
+                  {run.violations>0&&vR.length>0&&<button onClick={()=>setPdTab("violations")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:600}}>View the violations →</button>}
+                </div>}
+              </div>); })}</div>}
       </>;
     }
     if(tab==="evidence") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Forms come due once the policy is active. {nextText(p)}</div> : <>
@@ -15364,6 +15446,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       {fwEd&&renderFwEditor()}
       {ruleEd&&renderRuleEditor()}
       {addPol&&renderAddPolicy()}
+      {schedFor&&(()=>{ const sp=st.policies.find(x=>x.id===schedFor);
+        return <ScheduleControl title="Evaluation schedule" subtitle={sp?.name} schedule={sp?.sched} onClose={()=>setSchedFor(null)}
+          onRunNow={()=>{ setSchedFor(null); runNow(sp); }} running={runningPol===schedFor}
+          onRemove={sp?.schedule?()=>{ updPol(schedFor,x=>addHist({...x,sched:null,schedule:null,nextRun:null},"Evaluation schedule removed")); setSchedFor(null); onToast("Schedule removed","info"); }:undefined}
+          onSave={sched=>{ updPol(schedFor,x=>addHist({...x,sched,schedule:contractCron(sched),nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled},`Evaluation schedule set — ${contractScheduleLabel(sched)}`)); setSchedFor(null); onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success"); }}/>; })()}
       {confirm&&<>
         <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
         <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
