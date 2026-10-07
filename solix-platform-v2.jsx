@@ -33853,9 +33853,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
           different systems are the same real-world thing. */}
       <Topbar breadcrumb={[{label:"Knowledge Layer"}]}/>
       <div style={{flex:1,overflowY:"auto",padding:24}}>
-        {/* Create actions sit on the tab row, right-aligned, and follow the tab: a source graph
-            (AKG) can be built here with the builder or imported from Solix EAI; a cross-source
-            graph (XKG) is always built here. */}
+        {/* One create action, and only on the tab it belongs to: Source Graphs creates a
+            source graph (AKG), Cross-Source Graphs creates a cross-source graph (XKG).
+            Overview is a summary and carries no create button. */}
         <div style={{display:"flex",alignItems:"flex-end",gap:12,borderBottom:`1px solid ${T.border}`,marginBottom:20}}>
           <div style={{flex:1,minWidth:0,marginBottom:-21}}>
             <Tabs2 tabs={[
@@ -33865,9 +33865,8 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
             ]} active={tab} onChange={setTab}/>
           </div>
           <div style={{display:"flex",gap:8,flexShrink:0,paddingBottom:8}}>
-            {tab==="sources" && <Btn small icon={Ic.plus(11)} onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>}
-            {tab!=="cross" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("src")}>New Source Graph (AKG)</Btn>}
-            {tab!=="sources" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph (XKG)</Btn>}
+            {tab==="sources" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("src")}>New Source Graph</Btn>}
+            {tab==="cross" && <Btn variant="primary" small icon={Ic.plus(11)} onClick={()=>openWizard("cross")}>New Cross-Source Graph</Btn>}
           </div>
         </div>
 
@@ -34098,9 +34097,9 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
               );
             })()}
             {srcGraphs.length===0
-              ? <KLEmpty icon={Ic.knowledge(34)} title="No knowledge graphs imported yet"
-                  sub="Data Sense builds a knowledge graph per application. Connect Solix EAI to import them as governed objects."
-                  action={<Btn small variant="primary" onClick={()=>onNav&&onNav("settings")}>Import from Solix EAI</Btn>}/>
+              ? <KLEmpty icon={Ic.knowledge(34)} title="No source graphs yet"
+                  sub="A source graph describes one application's data. Create one to get started."
+                  action={<Btn small variant="primary" onClick={()=>openWizard("src")}>New Source Graph</Btn>}/>
               : srcFiltered.length===0
               ? <KLEmpty icon={Ic.knowledge(34)} title="No source graphs match your search"
                   action={<Btn small ghost onClick={()=>{setSq("");setSStatus("all");}}>Clear filters</Btn>}/>
@@ -37878,6 +37877,20 @@ const slToCols   = (r) => (r.toKeys   && r.toKeys.length)   ? r.toKeys   : (r.to
 const slJoinPairs = (r) => slFromCols(r).map((c,i) => [c, slToCols(r)[i]]);
 const slJoinText = (r) => slJoinPairs(r).map(([a,b]) => `${a} = ${b||"?"}`).join(" AND ") || "—";
 
+// Is the many side optional? In ER terms, a nullable join column means a row on the
+// many side need not have a partner — zero or one, not exactly one. It is read from
+// the column itself rather than declared, because the column already knows.
+const slJoinOptional = (r) => {
+  const ent = _slState.entities.find(e => e.id === r.from);
+  if (!ent) return false;
+  const cols = SCHEMA[ent.table] || [];
+  return slFromCols(r).some(c => {
+    const col = cols.find(x => x.name === c);
+    if (col && col.nullable) return true;
+    return ((COL_PROFILES[c] || {}).nullPct || 0) > 0;
+  });
+};
+
 // A field is a column on the dataset or a calculation over it. Ossie draws no
 // distinction — both are just an expression — so neither does anything downstream.
 const slIsComputed = (f) => !!(f && f.expr && String(f.expr).trim());
@@ -39646,6 +39659,47 @@ const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}
   );
 };
 
+// ── Crow's foot. The notation every data modeller already reads, so the canvas does
+//    not have to write the cardinality out in words next to every line. Three tones,
+//    because a marker cannot inherit the stroke colour of the edge that uses it.
+const SL_ERD_TONES = {base:"#94a3b8", risk:"#dc2626", mute:"#e2e8f0"};
+const SLErdMarkers = () => (
+  <svg width="0" height="0" style={{position:"absolute"}} aria-hidden="true">
+    <defs>
+      {Object.entries(SL_ERD_TONES).map(([k,c])=>[
+        // Many. Sits at the start of the line, so the foot opens onto the dataset and
+        // the three prongs converge into the line.
+        <marker key={`crow-${k}`} id={`slCrow-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
+                markerWidth="14" markerHeight="14" refX="1" refY="7" orient="auto">
+          <path d="M12 7 L1 1 M12 7 L1 7 M12 7 L1 13" stroke={c} strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+        </marker>,
+        // One. A single bar across the line at the dataset it points at.
+        <marker key={`one-${k}`} id={`slOne-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
+                markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
+          <path d="M9 2 L9 12" stroke={c} strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+        </marker>,
+        // Zero or one. The bar, plus the circle that says the other side may be absent.
+        <marker key={`zo-${k}`} id={`slZeroOne-${k}`} viewBox="0 0 14 14" markerUnits="userSpaceOnUse"
+                markerWidth="14" markerHeight="14" refX="13" refY="7" orient="auto">
+          <path d="M11 2 L11 12" stroke={c} strokeWidth="1.6" fill="none" strokeLinecap="round"/>
+          <circle cx="6.5" cy="7" r="2.6" stroke={c} strokeWidth="1.4" fill="#ffffff"/>
+        </marker>,
+      ])}
+    </defs>
+  </svg>
+);
+
+// The notation, drawn rather than described, so the legend is the same marks as the graph.
+const SLErdKey = ({d, label}) => (
+  <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
+    <svg width="26" height="12" style={{flexShrink:0}}>
+      <path d="M2 6 L24 6" stroke="#94a3b8" strokeWidth="1.4"/>
+      <path d={d} stroke="#94a3b8" strokeWidth="1.4" fill="none" strokeLinecap="round"/>
+    </svg>
+    {label}
+  </span>
+);
+
 const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, onOpenMetric, onRename, onEditJoin}) => {
   const [rf, setRf] = useState(null);
 
@@ -39721,20 +39775,23 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
       const pair = `${r.from}|${r.to}`;
       const nth  = seen[pair] = (seen[pair]===undefined ? 0 : seen[pair]+1);
       const dim  = selected && r.from!==selected && r.to!==selected;
-      // A join that fans out is correct SQL and a wrong number. It is drawn as the
-      // exception it is rather than left to be discovered in a dashboard.
+      // A join that fans out is correct SQL and a wrong number, so it is drawn as the
+      // exception it is rather than left to be discovered in a dashboard. Cardinality
+      // is the crow's foot; the colour is the only thing the notation cannot say.
       const risky = r.fanOutSafe === false;
+      const tone  = dim ? "mute" : risky ? "risk" : "base";
       const c = dim ? "#e2e8f0" : risky ? "#dc2626" : "#94a3b8";
+      // The columns a join is on belong in the dataset panel, not written across the
+      // canvas. An ER diagram says cardinality with its ends.
       return {
         id: r.id, source: r.from, target: r.to,
-        label: (r.role ? `${r.role}: ` : "") + slJoinPairs(r).map(([a,b])=>`${a} → ${b}`).join(" · ") + (risky ? "  ⚠ fans out" : ""),
         type: "smoothstep", animated: false,
         pathOptions: {borderRadius: 10, offset: 24 + nth * 34},
         style: {stroke: c, strokeWidth: risky ? 2 : 1.6, strokeDasharray: risky ? "5 3" : undefined},
-        labelStyle: {fontSize: 9.5, fill: dim ? "#cbd5e1" : risky ? "#dc2626" : "#64748b", fontWeight: 600},
-        labelBgStyle: {fill: "#ffffff", stroke: dim ? "#e2e8f0" : risky ? "#fecaca" : "#e2e8f0"},
-        labelBgPadding: [6, 3], labelBgBorderRadius: 8,
-        markerEnd: {type: MarkerType.ArrowClosed, color: c, width: 16, height: 16},
+        // Crow's foot at the many end, a bar at the one end — and the optional end gets
+        // the circle, because a nullable join column really does mean "zero or one".
+        markerStart: `url(#slCrow-${tone})`,
+        markerEnd:   `url(#sl${slJoinOptional(r) ? "ZeroOne" : "One"}-${tone})`,
       };
     });
   },[rels.map(r=>r.id).join(), selected]);
