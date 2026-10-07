@@ -38832,54 +38832,6 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
   );
 };
 
-// ── One target's compiled output, opened from the row where you chose that target.
-const SLTargetDrawer = ({open, plat, mdl, ents, rels, mets, dims, facts, onClose}) => {
-  if(!open || !plat || !mdl) return null;
-  const p = SL_PLATFORMS[plat] || {};
-  const files = slBuildArtifacts(plat, {mdl, ents, rels, mets, dims, facts});
-  const warns = mets.map(m=>({m, r:slCompilability(m, plat, rels)})).filter(x=>x.r.level!=="full");
-  return (
-    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
-      <div className="slideInRight" onClick={e=>e.stopPropagation()}
-        style={{position:"absolute",top:0,right:0,bottom:0,width:820,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
-        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:4}}>
-              <SLSysChip system={plat}/>
-              <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{p.artifact}</span>
-            </div>
-            <div style={{fontSize:11.5,color:T.textMuted}}>Compiled from the model source. Read-only — edit the source in Configuration.</div>
-          </div>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px 22px"}}>
-          {warns.length>0 && <div style={{marginBottom:14,padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:6}}>{warns.length} metric{warns.length===1?"":"s"} lose something here</div>
-            {warns.map(w=><div key={w.m.id} style={{fontSize:11,color:T.textSub,lineHeight:1.55}}>· <b style={{color:T.text}}>{w.m.name}</b> — {w.r.notes[0]}</div>)}
-          </div>}
-          {files.map(fl=>(
-            <div key={fl.path} style={{marginBottom:14}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                <span style={{fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"ui-monospace,monospace"}}>{fl.path}</span>
-                <span style={{fontSize:10.5,color:T.textMuted}}>{fl.body.split("\n").length} lines</span>
-              </div>
-              <pre style={{margin:0,fontFamily:"ui-monospace,monospace",fontSize:11,lineHeight:1.6,color:T.textSub,
-                background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",overflowX:"auto",whiteSpace:"pre"}}>{fl.body}</pre>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ── Relationships, on ReactFlow — the same canvas the Lineage tab uses, with the same
-//    Background, Controls and MiniMap, so the two screens are one product rather than
-//    two that resemble each other.
-//
-//    fitView is DECLARATIVE. An imperative fit in onInit races node measurement and
-//    leaves the graph with hidden nodes and no edge paths — the same trap the Knowledge
-//    Layer canvas documents.
 const SL_ENT_KIND = {
   fact:      {c:"#6366f1", l:"Has facts"},
   dimension: {c:"#0ea5e9", l:"Dimension table"},
@@ -39669,7 +39621,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
   const [yamlResult,  setYamlResult]  = useState(null);
   const [outPlat,     setOutPlat]     = useState("dbt");
   const [renameFor,   setRenameFor]   = useState(null);  // {kind, obj}
-  const [tgtDrawer,   setTgtDrawer]   = useState(null);  // platform key
   const [mapFor,  setMapFor]  = useState(null);
   const [descEdit,setDescEdit]= useState(false);
   const [descVal, setDescVal] = useState("");
@@ -39783,7 +39734,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"notify"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
-                  {k:"alignment",l:`Alignment · ${mVendor.length}`},
+                  {k:"alignment",l:`In your tools · ${mVendor.length}`},
                   {k:"config",l:"Configuration"}];
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
@@ -39897,7 +39848,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
                 </div></Card2>
 
                 <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-                  <SH title="Concepts this model realises"
+                  <SH title="What these datasets mean"
                       sub="The business meaning behind each dataset, owned in the Glossary. Edit a concept there and every model realising it follows — there is one record, not a copy per model. Its synonyms compile into the generated artifacts, which is what makes a natural-language question resolve to a certified metric."/>
                   <div style={{display:"flex",flexDirection:"column",gap:8}}>
                     {mEnts.map(e=>{
@@ -39923,49 +39874,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   </div>
 
 
-                </div></Card2>
-
-                <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-                  <SH title="Published to" sub="Each target compiles from the same model. Publishing opens a change set for review — it never writes live."
-                      action={<Btn small variant="primary" disabled={!mMetrics.length}
-                        onClick={()=>setPubOpen(true)}>{mMetrics.length?"Publish":"Nothing to publish"}</Btn>}/>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {(mdl.targets||[]).map(t=>{
-                      const p = SL_PLATFORMS[t]||{}; const fileCount = slBuildArtifacts(t,{mdl,ents:mEnts,rels:mRels,mets:mMetrics,dims:mDims,facts:mFacts}).length;
-                      const lossy = mMetrics.filter(m=>slCompilability(m,t,mRels).level!=="full").length;
-                      return (
-                        <div key={t} style={{display:"flex",alignItems:"center",gap:11,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,flexWrap:"wrap"}}>
-                          <SLSysChip system={t}/>
-                          <span style={{fontSize:11.5,color:T.textSub,flex:1,minWidth:170}}>{p.artifact}</span>
-                          <span style={{fontSize:11,color:T.textMuted}}>{fileCount} file{fileCount===1?"":"s"}</span>
-                          {lossy>0
-                            ? <span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>{lossy} metric{lossy===1?"":"s"} degraded</span>
-                            : <span style={{fontSize:10.5,fontWeight:600,color:T.green}}>clean</span>}
-                          <button onClick={()=>setTgtDrawer(t)} title={`View the ${p.label} output`}
-                            style={{width:28,height:28,borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,
-                              cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-                            onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                            onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                            {Ic.catalog(13)}
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {(mdl.targets||[]).length===0 && <div style={{fontSize:12,color:T.textMuted}}>No targets selected. Add them with Edit.</div>}
-                  </div>
-
-                  {(mdl.changeSets||[]).length>0 && <>
-                    <div style={{marginTop:24}}><SH title="Change sets" sub="Opened by a publish. Reviewed and merged outside EDG."/></div>
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                      {(mdl.changeSets||[]).map((c,i,a)=>(
-                        <div key={c.id} style={{display:"flex",alignItems:"center",gap:11,padding:"11px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
-                          <SLSysChip system={c.plat}/>
-                          <span style={{fontSize:11.5,color:T.text,flex:1}}>{c.files} file{c.files===1?"":"s"} · {c.at}</span>
-                          <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}35`}}>{c.status}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>}
                 </div></Card2>
               </div>
               <SLModelSidebar mdl={mdl} ents={mEnts} dims={mDims} facts={mFacts} mets={mMetrics}
@@ -40028,7 +39936,9 @@ const SemanticLayerView = ({onToast, onNav}) => {
                   <div style={{maxWidth:900}}>
                     <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                       <SH title="The model file"
-                          sub="This model is one file, written in Apache Ossie — the open format Snowflake, dbt, Databricks and Power BI have all agreed to read. Everything on the other tabs is a view of what is in here, and every platform artifact is compiled from it."/>
+                          sub="This model is one file, written in Apache Ossie — the open format Snowflake, dbt, Databricks and Power BI have all agreed to read. Everything on the other tabs is a view of what is in here, and every platform artifact is compiled from it."
+                          action={<Btn small variant="primary" disabled={!mMetrics.length}
+                            onClick={()=>setPubOpen(true)}>{mMetrics.length?"Publish":"Nothing to publish"}</Btn>}/>
 
                       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",padding:"10px 13px",borderRadius:9,marginBottom:14,
                         background: bad.length?T.roseDim:"rgba(22,163,74,.07)",
@@ -40467,7 +40377,7 @@ const SemanticLayerView = ({onToast, onNav}) => {
             {tab==="alignment" && <>
               <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:11,padding:"14px 18px",marginBottom:22}}>
                 <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,maxWidth:820}}>
-                  The same numbers, as they are already defined in dbt, Power BI, Tableau and the rest — harvested, not written by EDG. This is where you find out that three tools each compute "revenue" differently, which of them matches the certified definition, and which ones nobody owns.
+                  <b style={{color:T.text}}>Your tools already define these numbers.</b> Somebody built a revenue measure in Power BI, somebody else wrote one in dbt, and a third sits in a Tableau workbook. EDG read them — it did not write them. This page puts each of those definitions next to the one this model certifies, so you can see which agree, which have quietly drifted, and which belong to nobody.
                 </div>
               </div>
               <SH title="Where the tools disagree" sub="Every number in this model that more than one tool defines, and how many copies are out of step."/>
@@ -40585,8 +40495,6 @@ const SemanticLayerView = ({onToast, onNav}) => {
           onSave={saveModel} existingEntities={entities} existingRels={rels} onToast={onToast}/>
         <SLJoinDrawer open={!!joinFor} join={joinFor} entities={mEnts}
           onClose={()=>setJoinFor(null)} onSave={saveJoin} onDelete={deleteJoin} onToast={onToast}/>
-        <SLTargetDrawer open={!!tgtDrawer} plat={tgtDrawer} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
-          dims={mDims} facts={mFacts} onClose={()=>setTgtDrawer(null)}/>
         <SLDimFactDrawer open={!!dfKind} kind={dfKind} entities={mEnts} dims={dims} facts={facts} gTerms={gTerms}
           onClose={()=>setDfKind(null)} onSave={(k,o)=>{addDimFact(k,o);setDfKind(null);}} onToast={onToast}/>
         <SLPublishDrawer open={pubOpen} onClose={()=>setPubOpen(false)} mdl={mdl} ents={mEnts} rels={mRels} mets={mMetrics}
