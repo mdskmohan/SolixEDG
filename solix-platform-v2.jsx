@@ -57028,18 +57028,6 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
         <button onClick={onClose} title="Close (Esc)" style={{width:26,height:26,borderRadius:7,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(14)}</button>
       </div>
 
-      {/* Context + scope — the reason this is a dock and not a page */}
-      <div style={{flexShrink:0,padding:"7px 14px",borderBottom:`1px solid ${T.border}`,background:T.bg,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:T.textMuted,flexShrink:0}}>Context</span>
-        {ctx.asset ? (
-          <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:T.bgSurface,border:`1px solid ${T.borderLight}`,fontSize:10.5,color:T.text,fontWeight:600,minWidth:0,maxWidth:180}}>
-            <ServiceIcon service={ctx.asset.service} size={11}/>
-            <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ctx.asset.name}</span>
-          </span>
-        ) : (
-          <span style={{fontSize:10.5,color:T.textSub,fontWeight:600}}>{(NAV_TITLE[ctx.nav]||ctx.nav||"Platform")}</span>
-        )}
-      </div>
 
       {drift&&drift.n>0&&(
         <div style={{flexShrink:0,display:"flex",alignItems:"flex-start",gap:7,padding:"7px 14px",background:T.amber+"12",borderBottom:`1px solid ${T.amber}44`}}>
@@ -57157,18 +57145,6 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
             style={{width:32,height:32,borderRadius:9,flexShrink:0,background:q.trim()&&!busy?T.accent:T.bgElevated,border:`1px solid ${q.trim()&&!busy?T.accent:T.border}`,color:q.trim()&&!busy?"#fff":T.textMuted,cursor:q.trim()&&!busy?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"}}>
             {Ic.arrowRight(14)}
           </button>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:9.5,color:T.textMuted,marginTop:6,lineHeight:1.45,maxWidth:wide?820:"none",marginLeft:"auto",marginRight:"auto"}}>
-          <span>As <b style={{color:T.textSub,fontWeight:600}}>{(ROLES_CONFIG[role]||{}).label}</b></span>
-          <span style={{color:T.border}}>·</span>
-          <span>Metadata answers are free</span>
-          <span style={{color:T.border}}>·</span>
-          <span title="Solix credits left for data questions">{balance.toLocaleString()} credits left{used?` (${used} this conversation)`:""}</span>
-          <span style={{color:T.border}}>·</span>
-          <span>Every answer is logged</span>
-          <div style={{flex:1}}/>
-          <button onClick={()=>onNav&&onNav("settings",{section:"dataask"})}
-            style={{background:"transparent",border:"none",padding:0,cursor:"pointer",fontSize:9.5,color:T.accent,fontWeight:600,fontFamily:"inherit"}}>Manage Answer Spaces</button>
         </div>
       </div>
     </div>
