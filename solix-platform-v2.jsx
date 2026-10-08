@@ -171,7 +171,7 @@ const HIERARCHY_ASSETS = [
   // ── MySQL: Database → Table/View (no schema layer) ──
   {id:140,name:"mysql_appdb",       type:"Database",  domain:"Platform", owner:"james.oh",   owners:["james.oh"],              steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:79,usage:"Med", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb",                                 tier:3,rows:"—",    size:"6.4 GB", tags:[],          description:"MySQL application database. No schema layer — tables are direct children.",       slaFreshness:"4h",  path:[],                          parentId:null,assetLevel:"database",childCount:4},
   {id:141,name:"app_orders",        type:"Table",     domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Draft",     quality:71,usage:"Med", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_orders",                    tier:3,rows:"4.2M",  size:"2.1 GB", tags:[],           description:"Application-layer orders table. Synced nightly to Snowflake.",                    slaFreshness:"4h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
-  {id:142,name:"app_users",         type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:82,usage:"High",updated:"1h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_users",                     tier:2,rows:"1.9M",  size:"890 MB", tags:["PII"],      description:"Application user accounts. Login, profile and preferences.",                      slaFreshness:"1h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
+  {id:142,name:"app_users",         type:"Table",     domain:"Platform", owner:"james.oh",   owners:["james.oh"],             steward:"james.oh",   stewards:["james.oh"],               cert:"Approved",  quality:82,usage:"High",updated:"1h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_users",                     tier:2,rows:"1.9M",  size:"890 MB", tags:["PII"],      description:"",                      slaFreshness:"1h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
   {id:143,name:"app_products",      type:"Table",     domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Approved",  quality:88,usage:"Med", updated:"6h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / app_products",                  tier:2,rows:"82K",   size:"45 MB",  tags:[],           description:"Product catalog. SKUs, prices and inventory levels.",                             slaFreshness:"6h",  path:["mysql_appdb"],             parentId:140,assetLevel:"table"},
   {id:144,name:"vw_recent_orders",  type:"View",      domain:"Commerce", owner:"james.oh",   owners:["james.oh"],             steward:"maya.chen",  stewards:["maya.chen"],              cert:"Draft",     quality:68,usage:"Low", updated:"4h ago",  service:"mysql",      connectionLabel:"MySQL App DB",      db:"mysql_appdb / vw_recent_orders",              tier:3,rows:"—",    size:"—",      tags:[],           description:"Orders placed in the last 7 days with customer and product details.",             slaFreshness:"4h",  path:["mysql_appdb"],             parentId:140,assetLevel:"view"},
   // ── S3: Bucket → Folder → Object ──
@@ -331,7 +331,7 @@ const ICEBERG_ASSETS = [
   {id:7301,name:"sales_transactions", type:"Table", tableFormat:"Iceberg", domain:"Finance", owner:"sarah.kim", owners:["sarah.kim"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:93, usage:"High", updated:"40m ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"SNOWFLAKE_PROD / FINANCE / sales_transactions", tier:1, rows:"612M", size:"148 GB", tags:["revenue","finance"], description:"Transaction-level sales fact, stored as a Snowflake-managed Iceberg table on the finance lake.", slaFreshness:"1h"},
   {id:7302,name:"customer_consent",   type:"Table", tableFormat:"Iceberg", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:89, usage:"Med", updated:"3h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"SNOWFLAKE_PROD / COMMERCE / customer_consent", tier:1, rows:"31M", size:"9.4 GB", tags:["PII","GDPR"], description:"Marketing consent state per customer. Iceberg table registered in an EXTERNAL AWS Glue catalog - Snowflake reads it but does not own it.", slaFreshness:"6h"},
   {id:7303,name:"clickstream_events", type:"Table", tableFormat:"Iceberg", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"priya.nair", stewards:["priya.nair"], cert:"Approved", quality:87, usage:"High", updated:"25m ago", service:"databricks", connectionLabel:"Databricks Unity", db:"unity_catalog / analytics / clickstream_events", tier:2, rows:"4.1B", size:"860 GB", tags:["events"], description:"Raw product clickstream, Unity Catalog managed Iceberg.", slaFreshness:"30m"},
-  {id:7304,name:"campaign_spend",     type:"Table", tableFormat:"Iceberg", domain:"Marketing", owner:"lisa.ray", owners:["lisa.ray"], steward:"lisa.ray", stewards:["lisa.ray"], cert:"In Review", quality:76, usage:"Med", updated:"1d ago", service:"bigquery", connectionLabel:"BigQuery Analytics", db:"jnj-analytics / marketing / campaign_spend", tier:2, rows:"84M", size:"21 GB", tags:["marketing"], description:"Paid-media spend by campaign and channel. BigQuery table for Apache Iceberg.", slaFreshness:"24h"},
+  {id:7304,name:"campaign_spend",     type:"Table", tableFormat:"Iceberg", domain:"Marketing", owner:"lisa.ray", owners:["lisa.ray"], steward:"lisa.ray", stewards:["lisa.ray"], cert:"In Review", quality:76, usage:"Med", updated:"1d ago", service:"bigquery", connectionLabel:"BigQuery Analytics", db:"jnj-analytics / marketing / campaign_spend", tier:2, rows:"84M", size:"21 GB", tags:["marketing"], description:"", slaFreshness:"24h"},
   {id:7305,name:"web_sessions",       type:"Table", tableFormat:"Iceberg", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"alex.wu", stewards:["alex.wu"], cert:"Approved", quality:84, usage:"Med", updated:"2h ago", service:"glue", connectionLabel:"AWS Glue Data Catalog", db:"GLUE_LAKE / events / web_sessions", tier:2, rows:"920M", size:"210 GB", tags:["events"], description:"Sessionised web events. Iceberg table registered in the Glue Data Catalog over S3.", slaFreshness:"3h"},
 
   // -- Object-store Iceberg: a new asset type, one table per prefix --
@@ -1313,11 +1313,11 @@ Object.assign(SCHEMA,{
     {name:"_ingested_at",type:"TIMESTAMP",     desc:"Delta table ingestion watermark",  pii:false,nullable:false,quality:"Monotonic", pk:false},
   ],
   app_users:[
-    {name:"id",          type:"INT UNSIGNED",  desc:"Auto-increment primary key",       pii:false,nullable:false,quality:"NOT NULL",pk:true},
-    {name:"email",       type:"VARCHAR(255)",  desc:"User email for login",             pii:true, nullable:false,quality:"Unique",    pk:false},
-    {name:"full_name",   type:"VARCHAR(100)",  desc:"Display name",                     pii:true, nullable:true, quality:"—",         pk:false},
-    {name:"created_at",  type:"DATETIME",      desc:"Account creation time",            pii:false,nullable:false,quality:"NOT NULL",  pk:false},
-    {name:"plan",        type:"ENUM",          desc:"free / starter / pro / enterprise",pii:false,nullable:false,quality:"Value in set",pk:false},
+    {name:"id",          type:"INT UNSIGNED",  desc:"",       pii:false,nullable:false,quality:"NOT NULL",pk:true},
+    {name:"email",       type:"VARCHAR(255)",  desc:"",             pii:true, nullable:false,quality:"Unique",    pk:false},
+    {name:"full_name",   type:"VARCHAR(100)",  desc:"",                     pii:true, nullable:true, quality:"—",         pk:false},
+    {name:"created_at",  type:"DATETIME",      desc:"",            pii:false,nullable:false,quality:"NOT NULL",  pk:false},
+    {name:"plan",        type:"ENUM",          desc:"",pii:false,nullable:false,quality:"Value in set",pk:false},
   ],
 });
 
@@ -1355,13 +1355,13 @@ Object.assign(SCHEMA,{
     {name:"ip_address",  type:"STRING",    desc:"Client IP at event time",         pii:true, nullable:true, quality:"Format valid", pk:false},
   ],
   campaign_spend:[
-    {name:"spend_id",    type:"BIGINT",        desc:"Unique spend row",              pii:false,nullable:false,quality:"NOT NULL",     pk:true},
-    {name:"spend_date",  type:"DATE",          desc:"Date the spend was booked",     pii:false,nullable:false,quality:"Freshness",    pk:false,part:"day"},
-    {name:"channel",     type:"STRING",        desc:"Paid media channel",            pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
-    {name:"campaign_id", type:"STRING",        desc:"Campaign identifier",           pii:false,nullable:false,quality:"NOT NULL",     pk:false},
-    {name:"impressions", type:"BIGINT",        desc:"Impressions delivered",         pii:false,nullable:true, quality:">= 0",         pk:false},
-    {name:"clicks",      type:"BIGINT",        desc:"Clicks delivered",              pii:false,nullable:true, quality:">= 0",         pk:false},
-    {name:"cost",        type:"DECIMAL(12,2)", desc:"Spend in USD",                  pii:false,nullable:false,quality:">= 0",         pk:false},
+    {name:"spend_id",    type:"BIGINT",        desc:"",              pii:false,nullable:false,quality:"NOT NULL",     pk:true},
+    {name:"spend_date",  type:"DATE",          desc:"",     pii:false,nullable:false,quality:"Freshness",    pk:false,part:"day"},
+    {name:"channel",     type:"STRING",        desc:"",            pii:false,nullable:false,quality:"Value in set", pk:false,part:"identity"},
+    {name:"campaign_id", type:"STRING",        desc:"",           pii:false,nullable:false,quality:"NOT NULL",     pk:false},
+    {name:"impressions", type:"BIGINT",        desc:"",         pii:false,nullable:true, quality:">= 0",         pk:false},
+    {name:"clicks",      type:"BIGINT",        desc:"",              pii:false,nullable:true, quality:">= 0",         pk:false},
+    {name:"cost",        type:"DECIMAL(12,2)", desc:"",                  pii:false,nullable:false,quality:">= 0",         pk:false},
   ],
   web_sessions:[
     {name:"session_id",   type:"STRING",    desc:"Unique session identifier",   pii:false,nullable:false,quality:"NOT NULL",  pk:true},
@@ -16413,7 +16413,7 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         {editingDesc
           ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
               style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
-          : <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,fontStyle:descVal?"normal":"italic",lineHeight:1.8,margin:0}}>{descVal||"No description yet."}</p>
+          : (descVal || !ai.box) && <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,fontStyle:descVal?"normal":"italic",lineHeight:1.8,margin:0}}>{descVal||"No description yet."}</p>
         }
         {!editingDesc&&ai.applied&&ai.applied.text===descVal&&<AIDescProvenance rec={ai.applied}/>}
         {ai.pending&&(
@@ -57997,7 +57997,13 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
   const [text, setText] = useState(draft.text);
   const [editing, setEditing] = useState(false);
   const [showSent, setShowSent] = useState(false);
-  useEffect(()=>{ setText(draft.text); setEditing(false); },[draft]);
+  const [typed, setTyped] = useState(0);            // characters written so far
+  useEffect(()=>{
+    setText(draft.text); setEditing(false); setTyped(0);
+    const t = setInterval(()=>setTyped(n=>{ if(n>=draft.text.length){ clearInterval(t); return n; } return n+3; }), 16);
+    return ()=>clearInterval(t);
+  },[draft]);
+  const writing = typed < draft.text.length;
   const edited = text.trim()!==draft.text.trim();
   const btn = (primary) => ({padding:"5px 12px",borderRadius:7,fontSize:11.5,fontWeight:primary?700:600,cursor:"pointer",fontFamily:"inherit",
     background:primary?T.violet:T.bgSurface,border:primary?"none":`1px solid ${T.border}`,color:primary?"#fff":T.textSub});
@@ -58014,7 +58020,10 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
       {editing
         ? <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} autoFocus
             style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.violet}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit",boxSizing:"border-box"}}/>
-        : <div style={{fontSize:12.5,color:T.text,lineHeight:1.65}}>{text}</div>}
+        : <div style={{fontSize:12.5,color:T.text,lineHeight:1.65,minHeight:20}}>
+            {writing ? draft.text.slice(0,typed) : text}
+            {writing&&<span style={{display:"inline-block",width:7,height:14,marginLeft:1,verticalAlign:"text-bottom",background:T.violet,animation:"pulse 1s infinite"}}/>}
+          </div>}
       {draft.unknown&&draft.unknown.length>0&&(
         <div style={{fontSize:10.5,color:T.amber,marginTop:6}}>Could not read {draft.unknown.map(u=>`“${u}”`).join(", ")} — check the wording before accepting.</div>
       )}
@@ -58028,9 +58037,9 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
         </div>
       )}
       <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,flexWrap:"wrap"}}>
-        <button onClick={()=>onAccept(text.trim(), edited)} disabled={!text.trim()} style={btn(true)}>
+        <button onClick={()=>onAccept(text.trim(), edited)} disabled={!text.trim()||writing} style={{...btn(true),opacity:writing?.5:1}}>
           {canSave ? (edited?"Save edited":"Accept") : `Send to ${owner||"the owner"}`}</button>
-        {!editing&&<button onClick={()=>setEditing(true)} style={btn(false)}>Edit</button>}
+        {!editing&&!writing&&<button onClick={()=>setEditing(true)} style={btn(false)}>Edit</button>}
         <button onClick={onRegenerate} disabled={busy} style={btn(false)}>{busy?"Drafting…":"Regenerate"}</button>
         <button onClick={onDiscard} style={{...btn(false),border:"none",background:"transparent"}}>Discard</button>
         {!canSave&&<span style={{fontSize:10.5,color:T.textMuted}}>You don't own this asset, so {owner||"the owner"} approves it in their Inbox.</span>}
@@ -58090,9 +58099,11 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
   const [rows, setRows] = useState([]);
   const [busy, setBusy] = useState(false);
   const [onlyEmpty, setOnlyEmpty] = useState(false);
+  const [written, setWritten] = useState(0);   // rows whose draft has been written
   useEffect(()=>{
     if(!open) return;
-    setBusy(true);
+    setBusy(true); setWritten(0);
+    const timers = [];
     const t = setTimeout(()=>{
       const cols = SCHEMA[asset.name] || [];
       const out = cols.map(c=>{
@@ -58103,9 +58114,11 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
       });
       aidSet(s=>({...s, stats:{...s.stats, suggested:s.stats.suggested+out.length}}));
       setRows(out); setBusy(false);
-    }, 700);
-    return ()=>clearTimeout(t);
+      out.forEach((_,i)=>timers.push(setTimeout(()=>setWritten(i+1), 260*(i+1))));
+    }, 500);
+    return ()=>{ clearTimeout(t); timers.forEach(clearTimeout); };
   },[open, asset.name]);
+  const stillWriting = written < rows.length;
   if(!open) return null;
   const shown = rows.filter(r=>!onlyEmpty || !r.cur);
   const selected = rows.filter(r=>r.sel && r.text.trim() && !r.pending);
@@ -58141,7 +58154,7 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
         <div style={{flex:1,overflowY:"auto"}}>
           {busy ? (
             <div style={{padding:"60px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>
-              <span style={{color:T.violet,fontSize:18}}>✦</span><div style={{marginTop:8}}>Drafting {(SCHEMA[asset.name]||[]).length} column descriptions…</div>
+              <span style={{color:T.violet,fontSize:18}}>✦</span><div style={{marginTop:8}}>Reading {(SCHEMA[asset.name]||[]).length} columns…</div>
             </div>
           ) : (
             <table style={{width:"100%",borderCollapse:"collapse"}}>
@@ -58153,8 +58166,8 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
                 {["Column","Current","Suggested",""].map(h=><th key={h} style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:".05em",textTransform:"uppercase",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {shown.map(r=>(
-                  <tr key={r.col} style={{borderBottom:`1px solid ${T.border}`,opacity:r.pending?.55:1,background:r.sel?T.violetDim+"66":"transparent"}}>
+                {shown.map(r=>{ const ri = rows.indexOf(r); const done = ri < written; return (
+                  <tr key={r.col} style={{borderBottom:`1px solid ${T.border}`,opacity:r.pending?.55:1,background:r.sel&&done?T.violetDim+"66":"transparent"}}>
                     <td style={{padding:"9px 0 9px 16px",verticalAlign:"top"}}>
                       <input type="checkbox" checked={r.sel} disabled={r.pending} onChange={()=>setRow(r.col,{sel:!r.sel})}/>
                     </td>
@@ -58164,14 +58177,16 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
                     </td>
                     <td style={{padding:"9px 12px",verticalAlign:"top",width:190,fontSize:11.5,color:r.cur?T.textSub:T.textMuted,fontStyle:r.cur?"normal":"italic"}}>{r.cur||"none"}</td>
                     <td style={{padding:"7px 12px",verticalAlign:"top"}}>
-                      <textarea value={r.text} rows={2} disabled={r.pending} onChange={e=>setRow(r.col,{text:e.target.value, sel:true})}
-                        style={{width:"100%",padding:"6px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                      {done
+                        ? <textarea value={r.text} rows={2} disabled={r.pending} onChange={e=>setRow(r.col,{text:e.target.value, sel:true})}
+                            style={{width:"100%",padding:"6px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                        : <div style={{padding:"6px 8px",fontSize:11.5,color:T.violet}}>{ri===written?"✦ Writing…":"Waiting…"}</div>}
                       {r.unknown.length>0&&<div style={{fontSize:10,color:T.amber,marginTop:2}}>Could not read {r.unknown.map(u=>`“${u}”`).join(", ")}</div>}
                       {r.pending&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>A suggestion for this column is already waiting on the owner.</div>}
                     </td>
-                    <td style={{padding:"9px 14px 9px 0",verticalAlign:"top",width:52,textAlign:"right"}}><AIConf conf={r.conf} small/></td>
+                    <td style={{padding:"9px 14px 9px 0",verticalAlign:"top",width:52,textAlign:"right"}}>{done&&<AIConf conf={r.conf} small/>}</td>
                   </tr>
-                ))}
+                ); })}
                 {shown.length===0&&<tr><td colSpan={5} style={{padding:"30px",textAlign:"center",fontSize:12,color:T.textMuted}}>Every column already has a description.</td></tr>}
               </tbody>
             </table>
@@ -58179,11 +58194,11 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
         </div>
         <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
           <span style={{fontSize:11.5,color:T.textMuted}}>
-            {selected.length} selected{!canSave&&` · you don't own ${asset.name}, so ${owners[0]||"the owner"} approves these in their Inbox`}
+            {stillWriting&&!busy?`Writing ${written} of ${rows.length}… · `:""}{selected.length} selected{!canSave&&` · you don't own ${asset.name}, so ${owners[0]||"the owner"} approves these in their Inbox`}
           </span>
           <div style={{flex:1}}/>
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-          <button onClick={commit} disabled={!selected.length||busy}
+          <button onClick={commit} disabled={!selected.length||busy||stillWriting}
             style={{padding:"8px 18px",borderRadius:8,background:selected.length?T.violet:T.bgHover,border:"none",color:selected.length?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:selected.length?"pointer":"default",fontFamily:"inherit"}}>
             {canSave?`Accept ${selected.length}`:`Send ${selected.length} to owner`}</button>
         </div>
