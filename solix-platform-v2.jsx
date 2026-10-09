@@ -56032,13 +56032,45 @@ const aiCall = (trace, name, args) => {
 // becomes a description_change item in the owner's Inbox — the same steward→owner
 // rule custom properties use.
 
+// The default prompts. Admins can edit each one; "Reset to default" restores these.
+const AID_DEFAULT_PROMPTS = {
+  short: "You write data catalog descriptions for business users. Using only the metadata provided, write one or two sentences that say what one row of this table represents and what the table is used for. Use plain language, expand abbreviations, and do not repeat the table name as the description. If the metadata is not enough to be sure, say what the table appears to hold instead of inventing details.",
+  detailed: "You write data catalog descriptions for business users. Using only the metadata provided, write one paragraph of three to five sentences covering, in this order: what one row represents; the key that identifies a row; the most important columns; any sensitive data and that it is masked; what the table feeds downstream and who owns it. Use plain language, expand abbreviations, and skip any point the metadata does not support. Never invent values, sources or business rules.",
+  column: "You write data catalog descriptions for business users. Using only the metadata provided, write one sentence that says what this column holds for each row of its table. Expand abbreviations, say if it is a key or refers to another table, and note if it is classified as sensitive. Do not repeat the column name as the description and do not invent values.",
+};
+// What the model may read. `name` is required at both levels and cannot be turned off.
+const AID_TABLE_INPUTS = [
+  {k:"name",     l:"Table name",                   ex:"campaign_spend", required:true},
+  {k:"typeConn", l:"Object type and connection",   ex:"Table · BigQuery Analytics"},
+  {k:"domain",   l:"Domain",                       ex:"Marketing"},
+  {k:"columns",  l:"Column names and data types",  ex:"spend_id BIGINT, cost DECIMAL(12,2), …"},
+  {k:"keys",     l:"Primary key",                  ex:"spend_id"},
+  {k:"tags",     l:"Classifications and tags",     ex:"PII on email, full_name"},
+  {k:"glossary", l:"Matching glossary term",       ex:"Order"},
+  {k:"lineage",  l:"Downstream lineage",           ex:"Feeds 21 assets, e.g. revenue_dashboard"},
+  {k:"owner",    l:"Owner",                        ex:"lisa.ray"},
+  {k:"existing", l:"Current description",          ex:"Sent when rewriting an existing description"},
+];
+const AID_COLUMN_INPUTS = [
+  {k:"name",     l:"Column name",                  ex:"cust_ref", required:true},
+  {k:"dataType", l:"Data type",                    ex:"BIGINT"},
+  {k:"keys",     l:"Key and reference",            ex:"References customers.customer_id"},
+  {k:"parent",   l:"Table name and domain",        ex:"orders · Commerce"},
+  {k:"tags",     l:"Classifications and tags",     ex:"PII"},
+  {k:"glossary", l:"Matching glossary term",       ex:"Order Status"},
+  {k:"existing", l:"Current description",          ex:"Sent when rewriting an existing description"},
+];
+const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, true]));
+// Asking for a suggestion follows the existing "edit description" permission —
+// there is no separate AI permission to manage.
+const AID_EDIT_ROLES = ["admin","steward","engineer"];
+
 let _aidState = {
   settings:{
     enabled:true,
-    roles:["admin","steward","engineer"],        // who may ask for a suggestion
-    length:"short",                               // short | detailed
-    instructions:"Write for business users, not engineers. Say what one row represents before anything else. Never repeat the column name back as the description.",
-    sources:{tags:true, glossary:true, lineage:true},
+    length:"short",                               // short | detailed — for table descriptions
+    prompts:{...AID_DEFAULT_PROMPTS},
+    inputs:{table:aidAllOn(AID_TABLE_INPUTS), column:aidAllOn(AID_COLUMN_INPUTS)},
   },
   applied:{},     // key -> {text, by, at, edited, conf}
   reqs:[],        // steward drafts awaiting the owner
@@ -56054,7 +56086,7 @@ const useAid = () => {
 const aidKey = (asset, col) => col ? `c:${asset}.${col}` : `a:${asset}`;
 const aidApplied = (asset, col) => _aidState.applied[aidKey(asset, col)] || null;
 const aidPendingFor = (asset, col) => _aidState.reqs.find(r=>r.key===aidKey(asset,col) && r.status==="pending") || null;
-const aidCanAsk = (role) => _aidState.settings.enabled && _aidState.settings.roles.includes(role);
+const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.includes(role);
 
 const aidApply = (asset, col, text, by, meta={}) => aidSet(s=>({...s,
   applied:{...s.applied, [aidKey(asset,col)]:{text, by, at:"just now", ...meta}},
@@ -56139,42 +56171,69 @@ const aidGlossaryFor = (trace, phrase) => {
 };
 
 const aidDraftColumn = ({assetName, colName, role, variant=0, trace=[]}) => {
-  const S = _aidState.settings;
+  const S = _aidState.settings, I = S.inputs.column;
   const a = aiCall(trace, "asset.get", {name:assetName})[0];
   const cols = aiCall(trace, "asset.columns", {name:assetName, role});
-  const col = cols.find(c=>c.name===colName);
-  if(!a || !col) return null;
-  const entity = aidEntity(a.name);
-  const glossary = S.sources.glossary ? aidGlossaryFor(trace, aidWords(col.name).map(x=>AID_ABBR[x]||x).join(" ")) : null;
-  const r = aidColumnText({col, asset:a.name, entity, glossary, sensitive:S.sources.tags && col.sensitive, variant});
-  return {...r, trace, sent:["Column name and type","Key and reference flags",S.sources.glossary&&"Glossary term lookups",S.sources.tags&&"Sensitivity classification","Your organisation instructions"].filter(Boolean)};
+  const raw = cols.find(c=>c.name===colName);
+  if(!a || !raw) return null;
+  // Inputs that are off are removed before anything is "sent".
+  const col = {...raw, type: I.dataType ? raw.type : "", pk: I.keys ? raw.pk : false,
+               desc: I.keys && /Reference to/.test(raw.desc||"") ? raw.desc : ""};
+  const entity = I.parent ? aidEntity(a.name) : "record";
+  const glossary = I.glossary ? aidGlossaryFor(trace, aidWords(col.name).map(x=>AID_ABBR[x]||x).join(" ")) : null;
+  const r = aidColumnText({col, asset:a.name, entity, glossary, sensitive:I.tags && raw.sensitive, variant});
+  const ref = /Reference to ([a-zA-Z_0-9.]+)/.exec(raw.desc||"");
+  const sent = [
+    `Column name: ${raw.name}`,
+    I.dataType && `Data type: ${raw.type}`,
+    I.keys && `Key and reference: ${raw.pk?"primary key":ref?`references ${ref[1]}`:"none"}`,
+    I.parent && `Table and domain: ${a.name} · ${a.domain||"—"}`,
+    I.tags && `Classifications: ${raw.sensitive?"personal data":"none"}`,
+    I.glossary && `Glossary term: ${glossary?glossary.term:"no match"}`,
+    I.existing && `Current description: ${(aidApplied(a.name, raw.name)||{}).text || raw.desc || "(empty)"}`,
+  ].filter(Boolean);
+  return {...r, trace, sent, prompt:S.prompts.column, promptLabel:"Column prompt"};
 };
 
 const aidDraftAsset = ({assetName, role, variant=0, trace=[]}) => {
-  const S = _aidState.settings;
+  const S = _aidState.settings, I = S.inputs.table;
   const a = aiCall(trace, "asset.get", {name:assetName})[0];
   if(!a) return null;
-  const cols = aiCall(trace, "asset.columns", {name:assetName, role});
+  const cols = (I.columns || I.keys || I.tags) ? aiCall(trace, "asset.columns", {name:assetName, role}) : [];
   const entity = aidEntity(a.name);
-  const pks = cols.filter(c=>c.pk).map(c=>c.name);
-  const sens = S.sources.tags ? cols.filter(c=>c.sensitive) : [];
-  const biz = cols.filter(c=>!c.pk && !/(_id|_at|_ts|_key)$/.test(c.name) && !c.sensitive).slice(0,3).map(c=>c.name);
-  const down = S.sources.lineage ? aiCall(trace, "lineage.impact", {asset:a}) : [];
-  const glossary = S.sources.glossary ? aidGlossaryFor(trace, entity) : null;
-  const kind = (a.type||"table").toLowerCase();
+  const pks = I.keys ? cols.filter(c=>c.pk).map(c=>c.name) : [];
+  const sens = I.tags ? cols.filter(c=>c.sensitive) : [];
+  const biz = I.columns ? cols.filter(c=>!c.pk && !/(_id|_at|_ts|_key)$/.test(c.name) && !c.sensitive).slice(0,3).map(c=>c.name) : [];
+  const down = I.lineage ? aiCall(trace, "lineage.impact", {asset:a}) : [];
+  const glossary = I.glossary ? aidGlossaryFor(trace, entity) : null;
+  const kind = I.typeConn ? (a.type||"table").toLowerCase() : "table";
+  const where = I.typeConn ? ` in ${a.connectionLabel||a.service}` : "";
+  const dom = I.domain && a.domain ? `${a.domain.toLowerCase()} ` : "";
   const out = [];
   out.push(variant%2
-    ? `${aidTitle(a.domain||"")} ${kind} in ${a.connectionLabel||a.service} with one row per ${entity}.`
-    : `One row per ${entity}${glossary && glossary.term.toLowerCase()!==entity ?` (${glossary.term})`:""} — the ${(a.domain||"").toLowerCase()} ${kind} for ${entity} records in ${a.connectionLabel||a.service}.`);
-  if(cols.length) out.push(`${pks.length?`Keyed on ${pks.join(", ")}; `:""}${cols.length} columns${biz.length?`, including ${biz.join(", ")}`:""}.`);
+    ? `${aidTitle(dom+kind)}${where} with one row per ${entity}.`
+    : `One row per ${entity}${glossary && glossary.term.toLowerCase()!==entity ?` (${glossary.term})`:""} — the ${dom}${kind} for ${entity} records${where}.`);
+  if(pks.length || (I.columns && cols.length))
+    out.push(`${pks.length?`Keyed on ${pks.join(", ")}`:""}${pks.length&&I.columns?"; ":""}${I.columns?`${cols.length} columns${biz.length?`, including ${biz.join(", ")}`:""}`:""}.`);
   if(sens.length) out.push(`${sens.length} column${sens.length>1?"s carry":" carries"} personal data (${sens.slice(0,4).map(c=>c.name).join(", ")}) and ${sens.length>1?"are":"is"} masked for roles below Steward.`);
   if(down.length) out.push(`Feeds ${down.length} downstream asset${down.length>1?"s":""}, including ${down.slice(0,2).map(d=>d.label).join(" and ")}.`);
-  if(a.owner) out.push(`Owned by ${a.owner}.`);
+  if(I.owner && a.owner) out.push(`Owned by ${a.owner}.`);
   const text = (S.length==="short" ? out.slice(0,2) : out).join(" ");
-  const used = ["names","types",pks.length&&"keys",sens.length&&"classifications",down.length&&"lineage",glossary&&"glossary"].filter(Boolean);
-  const conf = Math.min(0.94, 0.72 + (cols.length?0.08:0) + (pks.length?0.04:0) + (down.length?0.04:0) + (glossary?0.04:0));
-  return {text, conf, used, unknown:[], trace,
-    sent:["Asset name, type, domain and connection",`${cols.length} column names and types`,S.sources.tags&&"Sensitivity classifications",S.sources.lineage&&"Downstream lineage",S.sources.glossary&&"Glossary term lookups","Your organisation instructions"].filter(Boolean)};
+  const used = ["name", I.columns&&"columns", pks.length&&"keys", sens.length&&"classifications", down.length&&"lineage", glossary&&"glossary"].filter(Boolean);
+  const conf = Math.min(0.94, 0.66 + (I.columns&&cols.length?0.1:0) + (pks.length?0.04:0) + (down.length?0.04:0) + (glossary?0.04:0) + (I.domain?0.02:0));
+  const sent = [
+    `Table name: ${a.name}`,
+    I.typeConn && `Type and connection: ${a.type} · ${a.connectionLabel||a.service}`,
+    I.domain && `Domain: ${a.domain||"—"}`,
+    I.columns && `Columns and types (${cols.length}): ${cols.slice(0,4).map(c=>`${c.name} ${c.type}`).join(", ")}${cols.length>4?", …":""}`,
+    I.keys && `Primary key: ${pks.join(", ")||"none"}`,
+    I.tags && `Classifications: ${sens.length?`personal data on ${sens.map(c=>c.name).join(", ")}`:"none"}`,
+    I.glossary && `Glossary term: ${glossary?glossary.term:"no match"}`,
+    I.lineage && `Downstream lineage: ${down.length} asset${down.length===1?"":"s"}`,
+    I.owner && `Owner: ${a.owner||"—"}`,
+    I.existing && `Current description: ${(aidApplied(a.name)||{}).text || a.description || "(empty)"}`,
+  ].filter(Boolean);
+  return {text, conf, used, unknown:[], trace, sent, prompt:S.prompts[S.length], promptLabel:S.length==="short"?"Short table prompt":"Detailed table prompt"};
 };
 
 
@@ -58031,7 +58090,8 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
         <div style={{marginTop:9,padding:"8px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,fontSize:10.5,color:T.textSub,lineHeight:1.6}}>
           <div style={{fontWeight:700,color:T.text,marginBottom:3}}>Sent to the model</div>
           {draft.sent.map(x=><div key={x}>· {x}</div>)}
-          <div style={{color:T.green,marginTop:3}}>· Never sent: data values, samples, profiles</div>
+          {draft.prompt&&<><div style={{fontWeight:700,color:T.text,margin:"6px 0 3px"}}>{draft.promptLabel}</div>
+            <div style={{fontStyle:"italic"}}>{draft.prompt}</div></>}
           <div style={{fontWeight:700,color:T.text,margin:"6px 0 3px"}}>Governed tool calls</div>
           <div style={{fontFamily:"'Geist Mono',monospace"}}>{draft.trace.map((c,i)=><div key={i}>{c.name} → {c.rows} row{c.rows===1?"":"s"}</div>)}</div>
         </div>
@@ -58226,85 +58286,143 @@ const AIDRow = ({l, d, on, set, locked}) => (
             : <Toggle on={on} onChange={set}/>}
   </div>
 );
-const AIDescSettings = ({onToast, onModels}) => {
+// One input the model may read: label, a concrete example, and its switch.
+const AIDInputRow = ({item, on, set, first}) => (
+  <div style={{display:"flex",alignItems:"center",gap:12,padding:"9px 0",borderTop:first?"none":`1px solid ${T.border}`}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.l}</div>
+      <div style={{fontSize:10.5,color:T.textMuted,marginTop:1,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.ex}</div>
+    </div>
+    {item.required
+      ? <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>Required</span>
+      : <Toggle on={on} onChange={set}/>}
+  </div>
+);
+// A prompt editor that saves on blur and can be put back to Solix's default.
+const AIDPromptBox = ({label, hint, value, def, onSave}) => {
+  const [v, setV] = useState(value);
+  useEffect(()=>{ setV(value); },[value]);
+  const edited = value !== def;
+  return (
+    <div style={{marginTop:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <span style={{fontSize:11,fontWeight:600,color:T.textSub}}>{label}</span>
+        {edited&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.amberDim,color:T.amber}}>Edited</span>}
+        <div style={{flex:1}}/>
+        {edited&&<button onClick={()=>onSave(def)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Reset to default</button>}
+      </div>
+      <textarea value={v} rows={4} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v.trim() && v!==value) onSave(v.trim()); else if(!v.trim()) setV(value); }}
+        style={{width:"100%",padding:"9px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{hint}</div>
+    </div>
+  );
+};
+
+const AIDescSettings = ({onToast}) => {
   const aid = useAid();
   const da = useDA();
   const S = aid.settings;
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
+  const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
   const m = (da.settings.models||{}).describe || {};
-  const prov = (DA_PROVIDERS[m.provider]||{}).label || m.provider;
+  const act = DA_ACTIVITIES.find(a=>a.k==="describe");
+  const setModel = (patch) => {
+    daPatch({settings:{..._da.settings, models:{..._da.settings.models, describe:{...(_da.settings.models||{}).describe, ...patch}}}});
+    onToast("Description model updated","success");
+  };
+  const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
   const st = aid.stats;
-  const [instr, setInstr] = useState(S.instructions);
   const pct = n => st.suggested ? Math.round(n/st.suggested*100) : 0;
+  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
+  const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+  const onCount = lv => Object.values(S.inputs[lv]).filter(Boolean).length;
+  const prov = DA_PROVIDERS[m.provider] || DA_PROVIDERS.anthropic;
+
   return (
-    <div style={{maxWidth:860}}>
+    <div style={{maxWidth:900}}>
+      {/* 1 · On / off */}
       <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
                    background:S.enabled?T.bgSurface:T.bgElevated,border:`1px solid ${S.enabled?T.green+"45":T.border}`}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}>
-            AI Descriptions
-            <span style={{fontSize:10,fontWeight:700,padding:"1.5px 7px",borderRadius:99,
-              background:S.enabled?T.green+"18":T.bgHover,color:S.enabled?T.green:T.textMuted,border:`1px solid ${S.enabled?T.green+"40":T.border}`}}>{S.enabled?"On":"Off"}</span>
-          </div>
+          <div style={{fontSize:13,fontWeight:700,color:T.text}}>AI Descriptions</div>
           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
             {S.enabled
-              ? "A ✦ Suggest button appears on the Description of tables and views, and a Describe columns action on their Columns tab. Nothing is written until a person accepts it — descriptions are never generated automatically."
-              : "Off — no Suggest button appears anywhere. Existing descriptions, including ones that started as AI drafts, are unchanged."}
+              ? "Shows ✦ Suggest description on tables and views, and ✦ Describe columns on their Columns tab, for anyone who can edit a description. Nothing is saved until a person accepts it."
+              : "Off — the Suggest and Describe columns buttons are hidden everywhere. Existing descriptions are not changed."}
           </div>
         </div>
         <Toggle on={S.enabled} onChange={()=>{ put({enabled:!S.enabled}); onToast(S.enabled?"AI Descriptions turned off":"AI Descriptions turned on","success"); }}/>
       </div>
 
-      <div style={{opacity:S.enabled?1:.55}}>
-        <AIDCard title="Who can ask for a suggestion"
-          desc="Asking is harmless — it reads metadata only. Saving is not: an asset's owner, or an Admin, saves directly; anyone else's accepted draft goes to the owner's Inbox for approval.">
-          <div style={{display:"flex",gap:18,flexWrap:"wrap"}}>
-            {DA_ROLE_LIST.map(r=>(
-              <label key={r.k} style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.text,cursor:r.k==="admin"?"default":"pointer"}}>
-                <input type="checkbox" checked={S.roles.includes(r.k)} disabled={r.k==="admin"}
-                  onChange={()=>put({roles:S.roles.includes(r.k)?S.roles.filter(x=>x!==r.k):[...S.roles,r.k]})}/>{r.l}
-              </label>
-            ))}
+      <div style={{opacity:S.enabled?1:.55,pointerEvents:S.enabled?"auto":"none"}}>
+        {/* 2 · What the model reads */}
+        <AIDCard title="What the model reads" desc="Choose exactly which metadata is sent with each request. Turning an input off removes it from the request — the draft is written without it.">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
+                For table descriptions · {onCount("table")} of {AID_TABLE_INPUTS.length} on</div>
+              {AID_TABLE_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.table[x.k]} set={()=>setInput("table",x.k)}/>)}
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
+                For column descriptions · {onCount("column")} of {AID_COLUMN_INPUTS.length} on</div>
+              {AID_COLUMN_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.column[x.k]} set={()=>setInput("column",x.k)}/>)}
+            </div>
           </div>
         </AIDCard>
 
-        <AIDCard title="What the model may read" desc="The draft is only as good as the metadata behind it. Data values are not a setting — they are never sent.">
-          <AIDRow l="Names, types, keys and references" d="The minimum a draft needs." on locked/>
-          <AIDRow l="Tags and classifications" d="Lets a draft say a column holds personal data and is masked." on={S.sources.tags} set={()=>put({sources:{...S.sources,tags:!S.sources.tags}})}/>
-          <AIDRow l="Glossary terms" d="Names the business term a table or column matches, in the glossary's own words." on={S.sources.glossary} set={()=>put({sources:{...S.sources,glossary:!S.sources.glossary}})}/>
-          <AIDRow l="Lineage" d="Lets a table's draft say what it feeds downstream." on={S.sources.lineage} set={()=>put({sources:{...S.sources,lineage:!S.sources.lineage}})}/>
-          <AIDRow l="Data values, samples and profiles" d="Blocked by design. A description is written about the data, not from it." on={false} locked/>
+        {/* 3 · Prompt */}
+        <AIDCard title="Prompt" desc="The instruction sent with the metadata. Each prompt starts from a Solix default you can edit for your house style; Reset to default puts it back.">
+          <div style={{maxWidth:320}}>
+            <label style={lab}>Table description length</label>
+            <select value={S.length} onChange={e=>{ put({length:e.target.value}); onToast(`Table descriptions will be ${e.target.value==="short"?"short":"detailed"}`,"success"); }} style={sel}>
+              <option value="short">Short — one or two sentences</option>
+              <option value="detailed">Detailed — a paragraph of three to five sentences</option>
+            </select>
+          </div>
+          <AIDPromptBox key={S.length} label={S.length==="short"?"Short table prompt":"Detailed table prompt"}
+            hint="Used for ✦ Suggest description on tables and views."
+            value={S.prompts[S.length]} def={AID_DEFAULT_PROMPTS[S.length]} onSave={v=>savePrompt(S.length, v)}/>
+          <AIDPromptBox label="Column prompt" hint="Used for ✦ Describe columns. Column descriptions are always one sentence."
+            value={S.prompts.column} def={AID_DEFAULT_PROMPTS.column} onSave={v=>savePrompt("column", v)}/>
         </AIDCard>
 
-        <AIDCard title="Style">
-          <div style={{display:"grid",gridTemplateColumns:"220px 1fr",gap:16,alignItems:"start"}}>
+        {/* 4 · Model — chosen here, not in another tab */}
+        <AIDCard title="Model" desc="The model that writes description drafts.">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:12}}>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Length</div>
-              <select value={S.length} onChange={e=>put({length:e.target.value})}
-                style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"}}>
-                <option value="short">Short — one or two sentences</option>
-                <option value="detailed">Detailed — a full paragraph</option>
+              <label style={lab}>Provider</label>
+              <select value={m.provider} onChange={e=>{ const p=e.target.value; setModel({provider:p, model:DA_PROVIDERS[p].models[0]}); }} style={sel}>
+                {Object.entries(DA_PROVIDERS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Organisation instructions</div>
-              <textarea value={instr} onChange={e=>setInstr(e.target.value)} onBlur={()=>instr!==S.instructions&&(put({instructions:instr}),onToast("Instructions saved","success"))} rows={3}
-                style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.55,fontFamily:"inherit",boxSizing:"border-box"}}/>
-              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Sent with every request — your vocabulary, audience and house style.</div>
+              <label style={lab}>Model</label>
+              <select value={m.model} onChange={e=>setModel({model:e.target.value})} style={{...sel,fontFamily:"'Geist Mono',monospace"}}>
+                {prov.models.map(x=><option key={x} value={x}>{x}{act&&x===act.rec?"  — recommended":""}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lab}>Credentials</label>
+              <select value={m.key||"shared"} onChange={e=>setModel({key:e.target.value})} style={sel}>
+                <option value="shared">Solix-managed — no key needed</option>
+                <option value="own">Our own API key</option>
+                <option value="byo">Our own inference endpoint</option>
+              </select>
             </div>
           </div>
-        </AIDCard>
-
-        <AIDCard title="Model">
-          <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <code style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:600}}>{m.model||"—"}</code>
-            <span style={{fontSize:11.5,color:T.textSub}}>{prov} · {m.key==="shared"?"Solix-managed, shared platform key":m.key==="own"?"your registered key":"your own endpoint"} · metadata only</span>
-            <div style={{flex:1}}/>
-            <Btn small ghost onClick={onModels}>Change in Models</Btn>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,fontSize:11,color:T.textMuted}}>
+            {act&&m.model!==act.rec
+              ? <><span>Solix recommends <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{act.rec}</b> ({act.acc}% measured accuracy).</span>
+                  <button onClick={()=>{ const p=Object.keys(DA_PROVIDERS).find(k=>DA_PROVIDERS[k].models.includes(act.rec)); setModel({provider:p, model:act.rec}); }}
+                    style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Use recommended</button></>
+              : <span>On the recommended model{act?` · ${act.acc}% measured accuracy`:""}.</span>}
+            {m.key&&m.key!=="shared"&&<span style={{color:T.amber}}>· Register the {m.key==="own"?"key":"endpoint"} in Settings › API Keys first.</span>}
           </div>
         </AIDCard>
 
-        <AIDCard title="How the drafts are landing" desc="Last 30 days. A high edit rate means the instructions or the metadata need work, not the reviewers.">
+        {/* 5 · How it is going */}
+        <AIDCard title="How the drafts are landing" desc="Last 30 days. A high edit rate means the prompt or the inputs need work, not the reviewers.">
           <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
             <AICStat label="Drafts produced" value={st.suggested} sub="tables and columns"/>
             <AICStat label="Accepted as-is" value={`${pct(st.accepted)}%`} sub={`${st.accepted} drafts`} color={T.green}/>
@@ -58335,13 +58453,13 @@ const AISettingsSection = ({onToast}) => {
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
           {key:"classification", label:`Classification${dot(aic.settings.enabled)}`},
-          {key:"descriptions",   label:`Descriptions${dot(aid.settings.enabled)}`},
+          {key:"descriptions",   label:"Descriptions"},
           {key:"models",         label:"Models"},
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
       {tab==="classification" && <AICControlPanel onToast={onToast}/>}
-      {tab==="descriptions"   && <AIDescSettings onToast={onToast} onModels={()=>setTab("models")}/>}
+      {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
       {tab==="models"         && <DASettingsSection onToast={onToast} embedded only={["models"]}/>}
     </>
   );
