@@ -57679,6 +57679,18 @@ const aicDecide = (finding, verdict, by) => aicSet(st=>{
   return {...st, stats, decisions:{...st.decisions, [finding.id]:{verdict, by, at:"just now"}}};
 });
 
+// Undo takes a decision back: the suggestion returns to Review and the detector's
+// record forgets it.
+const aicUndo = (finding) => aicSet(st=>{
+  const prev = st.decisions[finding.id];
+  if(!prev) return st;
+  const stats = {...st.stats};
+  const k = prev.verdict==="accepted" ? "accepted" : "rejected";
+  if(finding.det && stats[finding.det]) stats[finding.det] = {...stats[finding.det], [k]:Math.max(0, stats[finding.det][k]-1)};
+  const decisions = {...st.decisions}; delete decisions[finding.id];
+  return {...st, stats, decisions};
+});
+
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 // A run is the definition (what to scan, which tags, when). Running it creates a
 // background job: queued → running → complete | failed | cancelled. Timers live
@@ -57686,7 +57698,7 @@ const aicDecide = (finding, verdict, by) => aicSet(st=>{
 let _aicJobSeq = 4130;
 const aicJobFor = id => _aicState.jobs.find(j=>j.id===id);
 const aicJobsOf = runId => _aicState.jobs.filter(j=>j.runId===runId);
-const aicRunName = id => (_aicState.profiles.find(p=>p.id===id)||{}).name || "Deleted run";
+const aicRunName = id => (_aicState.profiles.find(p=>p.id===id)||{}).name || "Deleted scan";
 const aicPatchJob = (id, fn) => aicSet(s=>({...s, jobs:s.jobs.map(j=>j.id===id?{...j,...fn(j)}:j)}));
 const aicJobLive = j => j && (j.status==="queued" || j.status==="running");
 const aicStartJob = (runId, trigger, by) => {
@@ -57719,7 +57731,7 @@ const aicStartJob = (runId, trigger, by) => {
     aicSet(s=>({...s, findings:merged, jobs:s.jobs.map(j=>j.id!==id ? j : {...j, status:"complete", progress:100, phase:"Complete",
       ms:Date.now()-t0, cols:fresh.length, proposed:prop, confirmed:n("confirmed"), clear:n("clear"),
       log:[...j.log, {lvl:"ok", msg:`Complete · ${fresh.length} columns · ${prop} proposals`}]})}));
-    pushNotif({category:"Classifications", type:"tag", title:`Classification run finished · ${run.name}`,
+    pushNotif({category:"Classifications", type:"tag", title:`Scan finished · ${run.name}`,
       body:`${prop} proposal${prop===1?"":"s"} to review from ${fresh.length} columns`, nav:"tags"});
   }, 1100 + steps*420 + 400);
   return id;
@@ -57754,47 +57766,90 @@ const AICStat = ({label, value, sub, color}) => (
   </div>
 );
 
-// ── Evidence drawer ───────────────────────────────────────────────────────────
-const AICEvidence = ({f, onClose, onNav}) => {
+// ── Review drawer ─────────────────────────────────────────────────────────────
+// Opened from any suggestion, and it is where the decision is made — not just
+// where evidence is read. Accept / Reject sit in the footer and move straight on
+// to the next suggestion, so a steward can work the queue without going back to
+// the list. ← → step through it; A and R decide.
+const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision, canDecide, onClose, onNav}) => {
+  useEffect(()=>{
+    if(!f) return;
+    const h = (e) => {
+      if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if(e.key==="Escape") onClose();
+      else if(e.key==="ArrowRight" && onNext) onNext();
+      else if(e.key==="ArrowLeft" && onPrev) onPrev();
+      else if(canDecide && !decision && (e.key==="a"||e.key==="A")) onDecide(f,"accepted");
+      else if(canDecide && !decision && (e.key==="r"||e.key==="R")) onDecide(f,"rejected");
+    };
+    window.addEventListener("keydown", h);
+    return ()=>window.removeEventListener("keydown", h);
+  },[f, onPrev, onNext, onDecide, decision, canDecide]);
   if(!f) return null;
   const st = _aicState;
-  const stats = st.stats[f.det] || {accepted:0,rejected:0};
-  const prof = COL_PROFILES[f.col];
+  const stats = f.det ? (st.stats[f.det] || {accepted:0,rejected:0}) : null;
+  const prof = f.col ? COL_PROFILES[f.col] : null;
+  const mono = {fontFamily:"'Geist Mono',monospace"};
+  const where = f.col ? <code style={mono}>{f.asset.name}.{f.col}</code> : <code style={mono}>{f.asset.name}</code>;
+  // Table-level and new-tag suggestions are based on roll-ups and meaning; column
+  // detectors on name, value shape and linked columns. Show the signals that apply.
+  const signalKeys = f.tiers.some(t=>t.t==="rollup"||t.t==="meaning") ? f.tiers.map(t=>t.t) : ["name","value","graph"];
+  const navBtn = (on, onClick, label) => (
+    <button onClick={onClick} disabled={!on} title={label}
+      style={{width:28,height:28,borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:on?T.textSub:T.textMuted,
+        cursor:on?"pointer":"default",opacity:on?1:.45,fontSize:13,fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      {label==="Previous"?"‹":"›"}</button>
+  );
+  const kbd = (k) => <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,padding:"0 4px",borderRadius:3,border:"1px solid currentColor",opacity:.6}}>{k}</span>;
   return (
     <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
       <div className="slideInRight" onClick={e=>e.stopPropagation()}
-        style={{position:"absolute",top:0,right:0,bottom:0,width:520,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
-        <div style={{flexShrink:0,padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{f.asset.name}{f.col?`.${f.col}`:""} <span style={{fontSize:11,fontWeight:600,color:T.textMuted}}>· {f.col?"column":"table"}{f.newTag?" · new tag":""}</span></div>
-            <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{f.asset.connectionLabel||f.asset.service} · {f.type}</div>
+        style={{position:"absolute",top:0,right:0,bottom:0,width:540,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"12px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",flex:1}}>
+              {decision ? (decision.verdict==="accepted"?"Accepted suggestion":"Rejected suggestion") : `Suggestion ${pos} of ${total}`}
+            </div>
+            {navBtn(!!onPrev, onPrev, "Previous")}
+            {navBtn(!!onNext, onNext, "Next")}
+            <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(13)}</button>
           </div>
-          <AIConf conf={f.conf}/>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <ServiceIcon service={f.asset.service} size={14}/>
+                <span style={{fontSize:14,fontWeight:700,color:T.text,...mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.asset.name}{f.col?`.${f.col}`:""}</span>
+                <span style={{fontSize:9.5,fontWeight:700,padding:"0 6px",borderRadius:4,background:T.bgSurface,color:T.textMuted,border:`1px solid ${T.border}`}}>{f.col?"Column":"Whole table"}</span>
+              </div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{f.asset.connectionLabel||f.asset.service} · {f.asset.domain} · {f.type}</div>
+            </div>
+            <AIConf conf={f.conf}/>
+          </div>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
-          <div style={{padding:"11px 13px",borderRadius:9,background:T.bg,border:`1px solid ${T.border}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <span style={{fontSize:13,fontWeight:700,color:T.text}}>{f.detLabel}</span>
-              <span style={{fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:4,background:AIC_RISK_COLOR(f.risk)+"18",color:AIC_RISK_COLOR(f.risk),border:`1px solid ${AIC_RISK_COLOR(f.risk)}38`}}>{f.risk}</span>
+          <div style={{padding:"12px 14px",borderRadius:9,background:T.bg,border:`1px solid ${T.border}`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+              <span style={{fontSize:11,color:T.textMuted}}>Suggested tag</span>
+              {f.newTag
+                ? <span style={{fontSize:11.5,fontWeight:700,padding:"2px 9px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ {f.tag} · new</span>
+                : <span style={{fontSize:11.5,fontWeight:700,padding:"2px 9px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>}
               <div style={{flex:1}}/>
-              <span style={{fontSize:10,color:T.textMuted}}>proposes</span>
-              <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 8px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>
+              <span style={{fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:4,background:AIC_RISK_COLOR(f.risk)+"18",color:AIC_RISK_COLOR(f.risk),border:`1px solid ${AIC_RISK_COLOR(f.risk)}38`}}>{f.risk} risk</span>
             </div>
-            <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{f.why}</div>
+            <div style={{fontSize:12,color:T.text,lineHeight:1.6}}>{f.why}</div>
           </div>
 
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>SIGNALS THAT FIRED</div>
-          {["name","value","graph"].map(t=>{
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 6px"}}>WHY THE AI THINKS SO</div>
+          {signalKeys.map(t=>{
             const hit = f.tiers.find(x=>x.t===t);
             const m = AIC_TIER_META[t];
             return (
               <div key={t} style={{display:"flex",gap:10,padding:"9px 0",borderTop:`1px solid ${T.border}`,opacity:hit?1:.45}}>
-                <div style={{width:54,flexShrink:0,paddingTop:1}}><AICTier t={t}/></div>
+                <div style={{width:58,flexShrink:0,paddingTop:1}}><AICTier t={t}/></div>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:11.5,color:hit?T.text:T.textMuted,lineHeight:1.55}}>{hit ? hit.note : "Did not fire"}</div>
-                  {!hit&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{m.title}</div>}
+                  <div style={{fontSize:11.5,color:hit?T.text:T.textMuted,lineHeight:1.55}}>{hit ? hit.note : "Did not match"}</div>
+                  <div style={{fontSize:10,color:T.textMuted,marginTop:2}}>{m.title}</div>
                 </div>
                 <span style={{flexShrink:0,color:hit?T.green:T.textMuted,display:"flex",paddingTop:1}}>{hit?Ic.check(13):Ic.x(11)}</span>
               </div>
@@ -57804,7 +57859,7 @@ const AICEvidence = ({f, onClose, onNav}) => {
           {prof&&(
             <>
               <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>
-                PROFILE READ {f.valueRead ? "" : "· not used for this proposal"}
+                COLUMN PROFILE {f.valueRead ? "· used for this suggestion" : "· not used for this suggestion"}
               </div>
               <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
                 {[["Null rate", prof.nullPct!=null?`${prof.nullPct}% (${prof.nullCount})`:"—"],
@@ -57815,7 +57870,7 @@ const AICEvidence = ({f, onClose, onNav}) => {
                 ].map(([k,v],i)=>(
                   <div key={k} style={{display:"flex",gap:10,padding:"6px 11px",borderTop:i?`1px solid ${T.border}`:"none"}}>
                     <div style={{width:96,flexShrink:0,fontSize:11,color:T.textMuted}}>{k}</div>
-                    <code style={{flex:1,fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.text,wordBreak:"break-all"}}>{v}</code>
+                    <code style={{flex:1,...mono,fontSize:10.5,color:T.text,wordBreak:"break-all"}}>{v}</code>
                   </div>
                 ))}
               </div>
@@ -57825,29 +57880,43 @@ const AICEvidence = ({f, onClose, onNav}) => {
             </>
           )}
 
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>THIS DETECTOR'S RECORD</div>
-          <div style={{display:"flex",gap:8}}>
-            <AICStat label="Precision" value={`${Math.round(aicPrecision(stats)*100)}%`} sub={`${stats.accepted+stats.rejected} decisions`}
-              color={aicPrecision(stats)>=AIC_AUTO_MIN_PRECISION?T.green:T.amber}/>
-            <AICStat label="Accepted"  value={stats.accepted}/>
-            <AICStat label="Overridden" value={stats.rejected} color={stats.rejected?T.amber:T.text}/>
-          </div>
+          {stats&&(<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"18px 0 8px"}}>HOW OFTEN THIS DETECTOR HAS BEEN RIGHT</div>
+            <div style={{display:"flex",gap:8}}>
+              <AICStat label="Precision" value={`${Math.round(aicPrecision(stats)*100)}%`} sub={`${stats.accepted+stats.rejected} decisions`}
+                color={aicPrecision(stats)>=AIC_AUTO_MIN_PRECISION?T.green:T.amber}/>
+              <AICStat label="Accepted"  value={stats.accepted}/>
+              <AICStat label="Rejected" value={stats.rejected} color={stats.rejected?T.amber:T.text}/>
+            </div>
+          </>)}
 
-          <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.amberDim,border:`1px solid ${T.amber}35`}}>
-            <div style={{fontSize:11,fontWeight:700,color:T.amber,marginBottom:4}}>What accepting this does</div>
+          <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.blueDim,border:`1px solid ${T.blue}35`}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.blue,marginBottom:4}}>If you accept</div>
             <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
-              Applies <b style={{color:T.text}}>{f.tag}</b> to <code style={{fontFamily:"'Geist Mono',monospace"}}>{f.col}</code>.
-              That makes the column maskable for roles below Steward, brings it into scope for retention and legal-hold rules
-              targeting {f.tag}, and makes it eligible as a match key. It is reversible, and the reversal is recorded.
+              {f.newTag&&<><b style={{color:T.text}}>{f.tag}</b> is created as a <b style={{color:T.text}}>Draft</b> business tag in your taxonomy, then </>}
+              {f.newTag?"applied":<><b style={{color:T.text}}>{f.tag}</b> is applied</>} to {f.col?"the column":"the table"} {where}.
+              {" "}Retention and legal-hold rules that target {f.tag} start to cover it{f.col?", and the column becomes eligible as a match key":""}.
+              {" "}You can undo it later from Decided.
             </div>
           </div>
         </div>
 
-        <div style={{flexShrink:0,padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bg}}>
+        <div style={{flexShrink:0,padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
           <button onClick={()=>onNav&&onNav("catalog",{assetName:f.asset.name})}
-            style={{width:"100%",padding:"8px 0",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-            Open {f.asset.name} in the catalog →
-          </button>
+            style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+            Open in catalog →</button>
+          <div style={{flex:1}}/>
+          {decision ? (<>
+            <span style={{fontSize:11.5,color:T.textMuted}}>{decision.verdict==="accepted"?"Accepted":"Rejected"} by {decision.by} · {decision.at}</span>
+            {canDecide&&onUndo&&<Btn small ghost onClick={()=>onUndo(f)}>Undo</Btn>}
+          </>) : canDecide ? (<>
+            <button onClick={()=>onDecide(f,"rejected")}
+              style={{padding:"8px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Reject{kbd("R")}</button>
+            <button onClick={()=>onDecide(f,"accepted")}
+              style={{padding:"8px 16px",borderRadius:8,background:T.green,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{f.newTag?"Create & apply":"Accept"}{kbd("A")}</button>
+          </>) : (
+            <span style={{fontSize:11.5,color:T.amber}}>Only a Steward or Admin can accept or reject</span>
+          )}
         </div>
       </div>
     </div>
@@ -57879,7 +57948,7 @@ const AICControlPanel = ({onToast}) => {
           </div>
           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
             {on
-              ? <>Runs are created, started and reviewed in <button onClick={()=>onNav&&onNav("tags")} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Classifications › AI Classification</button>. The limits below apply to every run.</>
+              ? <>Scans are created, run and reviewed in <button onClick={()=>onNav&&onNav("tags")} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Classifications › AI Classification</button>. The limits below apply to every scan.</>
               : "Off — no run can start and nothing is suggested. Existing runs are kept and resume when it is turned back on."}
           </div>
         </div>
@@ -57890,7 +57959,7 @@ const AICControlPanel = ({onToast}) => {
       </div>
 
       <div style={{marginBottom:14}}>
-        <Tabs2 tabs={[{key:"settings",label:"Limits for every run"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
+        <Tabs2 tabs={[{key:"settings",label:"Limits for every scan"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
           active={tab} onChange={setTab}/>
       </div>
       <div style={{opacity:on?1:.55,transition:"opacity .15s"}}>
@@ -57993,7 +58062,7 @@ const AICControlPanel = ({onToast}) => {
             <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
               <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>
                 Value inspection reads sampled data. Some domains cannot permit that for legal reasons, and that is a
-                boundary rather than a preference — a domain turned off here is off for every run, scheduled or manual.
+                boundary rather than a preference — a domain turned off here is off for every scan, scheduled or manual.
               </div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                 {AIC_ALL_DOMAINS.map(d=>{
@@ -58466,13 +58535,19 @@ const AISettingsSection = ({onToast}) => {
 };
 
 // ═══ Classifications › AI Classification ═══════════════════════════════════════
-// Everything a steward does with AI classification, in one place: define a run
-// (what to scan, which tags to look for, when), run it, watch its job, and review
-// what it found. Each execution is a background job that Settings › Background
-// Jobs also shows — counts and status there, the results only here.
+// One flow, shown as three steps so nobody has to guess the order:
+//
+//   ① Scans    — a saved definition: what to look at, which tags to look for, when.
+//                Running it is a "run"; each run is a background job, which is the
+//                only place a job id appears (Settings › Background Jobs).
+//   ② Review   — every suggestion from completed runs, grouped by table. The
+//                review drawer is where the decision is made.
+//   ③ Decided  — what was accepted or rejected, by whom, with Undo.
+//
+// Nothing is applied until a Steward or Admin accepts it.
 
 const AICJobPill = ({j}) => {
-  const m = !j ? {l:"Never run", c:T.textMuted}
+  const m = !j ? {l:"Not run yet", c:T.textMuted}
     : {queued:{l:"Queued",c:T.textMuted}, running:{l:`Running · ${j.progress}%`,c:T.blue}, complete:{l:"Complete",c:T.green},
        failed:{l:"Failed",c:T.rose}, cancelled:{l:"Cancelled",c:T.amber}}[j.status];
   return (
@@ -58492,6 +58567,11 @@ const AICTagChips = ({p}) => p.mode==="new"
   : <>{p.tags.slice(0,3).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}
       {p.tags.length>3&&<span style={{fontSize:10,color:T.textMuted,alignSelf:"center"}}>+{p.tags.length-3}</span>}</>;
 const aicViewJob = (onNav, id) => { _bgJobJump = id; onNav && onNav("settings",{section:"bg_jobs"}); };
+const aicConfBand = (c) => c>=0.9 ? "high" : c>=0.75 ? "medium" : "low";
+// The tag chip a suggestion carries — a new tag is dashed violet so it never reads as an existing one.
+const AICTagChip = ({f}) => f.newTag
+  ? <span title="Not in your taxonomy yet — accepting creates it as a Draft tag" style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`,whiteSpace:"nowrap"}}>+ {f.tag} · new</span>
+  : <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`,whiteSpace:"nowrap"}}>{f.tag}</span>;
 
 const AICWorkspace = ({onToast, onNav}) => {
   const st = useAic();
@@ -58499,18 +58579,33 @@ const AICWorkspace = ({onToast, onNav}) => {
   const me = (roleCfg?.email||"you@jnj").split("@")[0];
   const canDecide = role==="admin" || role==="steward";
   const canRun = canDecide;
-  const [tab, setTab]     = useState(()=>_aicJump&&_aicJump.runId ? "runs" : "review");
+  const findings = st.findings || [];
+  useEffect(()=>{ if(!st.findings) aicSet(s=>({...s, findings: aicScanAll(s)})); },[st.findings]);
+  const pending = findings.filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]);
+  const decided = findings.filter(f=>st.decisions[f.id]);
+  const live = st.jobs.filter(aicJobLive);
+
+  const [tab, setTab]     = useState(()=>_aicJump&&_aicJump.runId ? "scans" : pending.length ? "review" : "scans");
   const [openRun, setOpenRun] = useState(()=>(_aicJump&&_aicJump.runId)||null);
   useEffect(()=>{ _aicJump=null; },[]);
   const [edit, setEdit]   = useState(null);
-  const [evid, setEvid]   = useState(null);
+  const [evidId, setEvidId] = useState(null);
   const [fRun, setFRun]   = useState("all");
-  const [fDet, setFDet]   = useState("all");
-  const [fTier, setFTier] = useState("all");
-  const [sel, setSel]     = useState(new Set());
   const [fTag, setFTag]   = useState("all");
   const [fLevel, setFLevel] = useState("all");
+  const [fConf, setFConf] = useState("all");
+  const [fVerdict, setFVerdict] = useState("all");
+  const [sel, setSel]     = useState(new Set());
   const [schedFor, setSchedFor] = useState(null);
+  // Runs that finished while this page is open get a "ready to review" banner.
+  const [seen, setSeen]   = useState(()=>new Set(_aicState.jobs.filter(j=>!aicJobLive(j)).map(j=>j.id)));
+  // Looking at a scan, or reviewing just its suggestions, counts as having seen its finished runs.
+  useEffect(()=>{
+    const r = openRun || (tab==="review" && fRun!=="all" ? fRun : null);
+    if(!r) return;
+    const ids = _aicState.jobs.filter(j=>j.runId===r && j.status==="complete" && !seen.has(j.id)).map(j=>j.id);
+    if(ids.length) setSeen(s=>new Set([...s, ...ids]));
+  },[openRun, tab, fRun, st.jobs]);
   const tagCtx = useTagCtx();
   const [toApply, setToApply] = useState([]);   // new tags waiting for the taxonomy to hand back an id
   useEffect(()=>{
@@ -58524,22 +58619,12 @@ const AICWorkspace = ({onToast, onNav}) => {
     if(left.length!==toApply.length) setToApply(left);
   },[tagCtx&&tagCtx.tagDefs, toApply]);
 
-  const findings = st.findings || [];
-  useEffect(()=>{ if(!st.findings) aicSet(s=>({...s, findings: aicScanAll(s)})); },[st.findings]);
-  const pending = findings.filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]);
-  const live = st.jobs.filter(aicJobLive);
-  const lastJob = st.jobs[0];
-
-  const decide = (f, verdict) => {
-    if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
-    aicDecide(f, verdict, me);
-    if(verdict==="accepted") applyAccepted(f);
-  };
+  const whereOf = f => f.col ? `${f.asset.name}.${f.col}` : f.asset.name;
   // What "accept" does to the taxonomy: a table-level suggestion is applied to the
   // asset; a new tag is first created as a Draft; a column-level one is recorded
   // on the column's classification.
   const applyAccepted = (f) => {
-    const where = f.col ? `${f.asset.name}.${f.col}` : f.asset.name;
+    const where = whereOf(f);
     if(f.newTag && tagCtx && !tagCtx.tagDefs.some(t=>t.name===f.tag) && !toApply.some(x=>x.name===f.tag)){
       tagCtx.createTagDef({name:f.tag, category:"business", color:"#fbbf24", propagationMode:"hierarchy", governanceRequired:false,
         managedBy:me, description:`Created from an AI Classification suggestion on ${where}.`});
@@ -58552,24 +58637,40 @@ const AICWorkspace = ({onToast, onNav}) => {
     pushNotif({category:"Classifications", type:"tag", title:`${f.tag} ${f.newTag?"created and ":""}applied · ${where}`,
       body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
+  const decide = (f, verdict) => {
+    if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
+    aicDecide(f, verdict, me);
+    if(verdict==="accepted") applyAccepted(f);
+  };
   const decideMany = (list, verdict) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
     list.forEach(f=>{ aicDecide(f, verdict, me); if(verdict==="accepted") applyAccepted(f); });
-    onToast(`${list.length} classification${list.length>1?"s":""} ${verdict}`,"success"); setSel(new Set());
+    onToast(`${list.length} suggestion${list.length>1?"s":""} ${verdict} — see Decided to undo`,"success"); setSel(new Set());
+  };
+  // Undo puts the suggestion back in Review and takes back the tag it applied.
+  const undo = (f) => {
+    const d = st.decisions[f.id]; if(!d || !canDecide) return;
+    aicUndo(f);
+    if(d.verdict==="accepted" && !f.col && tagCtx){
+      const def = tagCtx.tagDefs.find(t=>t.name===f.tag);
+      const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
+      if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
+    }
+    onToast(`${f.tag} on ${whereOf(f)} is back in Review`,"info");
   };
   const runNow = (p) => {
     if(!p.enabled){ onToast(`"${p.name}" is paused — resume it first`,"error"); return; }
     const id = aicStartJob(p.id, "Manual", me);
-    onToast(id ? `Started ${id} — it runs in the background; you can leave this page` : `"${p.name}" already has a job running`, id?"success":"info");
+    onToast(id ? `"${p.name}" is running in the background — you can leave this page` : `"${p.name}" is already running`, id?"success":"info");
   };
   const saveRun = (p, how) => {
     const isNew = !st.profiles.some(x=>x.id===p.id);
     aicSet(x=>({...x, findings:null,
       profiles: isNew ? [...x.profiles, {...p, owner:me, created:"just now"}] : x.profiles.map(q=>q.id===p.id?p:q)}));
-    setEdit(null); setOpenRun(p.id); setTab("runs");
-    if(how==="run") setTimeout(()=>{ const id=aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Run created":"Run saved"} — ${id} started in the background`,"success"); },0);
-    else if(how==="schedule"){ setSchedFor(p.id); onToast(isNew?`Run "${p.name}" created — set its schedule`:`Run "${p.name}" saved`,"success"); }
-    else onToast(`Run "${p.name}" saved`,"success");
+    setEdit(null); setOpenRun(p.id); setTab("scans");
+    if(how==="run") setTimeout(()=>{ aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Scan created":"Scan saved"} — its first run has started in the background`,"success"); },0);
+    else if(how==="schedule"){ setSchedFor(p.id); onToast(isNew?`Scan "${p.name}" created — now set when it runs`:`Scan "${p.name}" saved`,"success"); }
+    else onToast(`Scan "${p.name}" saved`,"success");
   };
   const saveSchedule = (runId, sched) => {
     aicSet(x=>({...x, profiles:x.profiles.map(q=>q.id===runId?{...q, schedule:sched}:q)}));
@@ -58579,12 +58680,14 @@ const AICWorkspace = ({onToast, onNav}) => {
   const removeRun = (p) => {
     aicSet(x=>({...x, findings:null, profiles:x.profiles.filter(q=>q.id!==p.id)}));
     setEdit(null); setOpenRun(null);
-    onToast(`Run "${p.name}" deleted — its proposals leave the queue; its job history stays in Background Jobs`,"info");
+    onToast(`Scan "${p.name}" deleted — its suggestions leave Review; its run history stays in Background Jobs`,"info");
   };
   const togglePause = (p) => {
     aicSet(x=>({...x, findings:null, profiles:x.profiles.map(q=>q.id===p.id?{...q,enabled:!q.enabled}:q)}));
     onToast(p.enabled?`"${p.name}" paused — it will not run until resumed`:`"${p.name}" resumed`,"success");
   };
+  const goReview = (runId) => { setFRun(runId||"all"); setFTag("all"); setFLevel("all"); setFConf("all"); setSel(new Set()); setOpenRun(null); setTab("review"); };
+  const goTab = (t) => { setTab(t); setOpenRun(null); setSel(new Set()); };
 
   if(!st.settings.enabled) return (
     <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
@@ -58592,7 +58695,7 @@ const AICWorkspace = ({onToast, onNav}) => {
         <div style={{color:T.violet,display:"flex",justifyContent:"center",marginBottom:12}}>{Ic.bot(30)}</div>
         <div style={{fontSize:15,fontWeight:700,color:T.text}}>AI Classification is turned off</div>
         <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,marginTop:6}}>
-          No run can start and nothing is proposed. An Admin turns it on in Settings › AI.
+          No scan can run and nothing is suggested. An Admin turns it on in Settings › AI.
         </div>
         {role==="admin"&&<button onClick={()=>onNav&&onNav("settings",{section:"ai", aiTab:"classification"})}
           style={{marginTop:16,padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
@@ -58601,45 +58704,6 @@ const AICWorkspace = ({onToast, onNav}) => {
     </div>
   );
 
-  // One proposal row — used by the Review tab and by a run's results.
-  const PropRow = ({f, i, withSel}) => (
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-      {withSel&&<input type="checkbox" checked={sel.has(f.id)}
-        onChange={e=>setSel(s=>{const n=new Set(s); e.target.checked?n.add(f.id):n.delete(f.id); return n;})} style={{cursor:"pointer"}}/>}
-      <button onClick={()=>setEvid(f)} style={{flex:1,minWidth:0,textAlign:"left",background:"transparent",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
-        <div style={{display:"flex",alignItems:"center",gap:7}}>
-          <ServiceIcon service={f.asset.service} size={13}/>
-          <code style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text,fontWeight:600}}>{f.asset.name}{f.col?`.${f.col}`:""}</code>
-          <span style={{fontSize:9.5,fontWeight:700,padding:"0 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{f.col?"Column":"Table"}</span>
-        </div>
-        <div style={{fontSize:10,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-          {f.type} · {f.asset.domain} · {f.why}
-        </div>
-      </button>
-      <div style={{width:150,flexShrink:0,display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
-        {f.newTag
-          ? <span title="Not in your taxonomy yet — accepting creates it as a Draft tag" style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ {f.tag}</span>
-          : <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{f.tag}</span>}
-        {f.newTag&&<span style={{fontSize:9.5,color:T.violet,fontWeight:700}}>New</span>}
-      </div>
-      <div style={{width:150,flexShrink:0,display:"flex",gap:3,flexWrap:"wrap"}}>{f.tiers.map(t=><AICTier key={t.t} t={t.t} title={t.note}/>)}</div>
-      <div style={{width:60,flexShrink:0,textAlign:"right"}}><AIConf conf={f.conf} small/></div>
-      <div style={{width:130,flexShrink:0,display:"flex",gap:5,justifyContent:"flex-end"}}>
-        <button onClick={()=>decide(f,"accepted")} disabled={!canDecide}
-          style={{padding:"4px 10px",borderRadius:6,background:canDecide?T.green:T.bgElevated,border:"none",color:canDecide?"#fff":T.textMuted,fontSize:11,fontWeight:700,cursor:canDecide?"pointer":"default"}}>Accept</button>
-        <button onClick={()=>decide(f,"rejected")} disabled={!canDecide}
-          style={{padding:"4px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,fontWeight:600,cursor:canDecide?"pointer":"default",opacity:canDecide?1:.5}}>Reject</button>
-      </div>
-    </div>
-  );
-  const PropHead = ({withSel, list}) => (
-    <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-      {withSel&&<input type="checkbox" checked={list.length>0&&sel.size===list.length}
-        onChange={e=>setSel(e.target.checked?new Set(list.map(f=>f.id)):new Set())} style={{cursor:"pointer"}}/>}
-      <div style={{flex:1}}>TABLE / COLUMN</div><div style={{width:150}}>SUGGESTED TAG</div><div style={{width:150}}>BASED ON</div>
-      <div style={{width:60,textAlign:"right"}}>SURE</div><div style={{width:130}}/>
-    </div>
-  );
   const box = {border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface};
   const selStyle = {padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"};
   const H2 = ({children, right}) => (
@@ -58647,8 +58711,60 @@ const AICWorkspace = ({onToast, onNav}) => {
       <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",flex:1}}>{children}</div>{right}
     </div>
   );
+  const mono = {fontFamily:"'Geist Mono',monospace"};
+  const smallBtn = (kind) => ({padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:kind==="accept"?700:600,fontFamily:"inherit",cursor:canDecide?"pointer":"default",
+    background:kind==="accept"?(canDecide?T.green:T.bgElevated):T.bgElevated, color:kind==="accept"?(canDecide?"#fff":T.textMuted):T.textSub,
+    border:kind==="accept"?"none":`1px solid ${T.border}`, opacity:canDecide||kind==="accept"?1:.5, whiteSpace:"nowrap"});
 
-  // ── Run detail ────────────────────────────────────────────────────────────
+  // ── Review list, grouped by table ─────────────────────────────────────────
+  const byTag = {}; pending.forEach(f=>{ (byTag[f.tag]=byTag[f.tag]||[]).push(f); });
+  const shown = pending.filter(f=>(fRun==="all"||(f.profiles||[]).includes(fRun)) && (fTag==="all"||f.tag===fTag)
+    && (fLevel==="all"||(fLevel==="table")===!f.col) && (fConf==="all"||aicConfBand(f.conf)===fConf));
+  const groups = [];
+  shown.forEach(f=>{ let g = groups.find(x=>x.assetId===f.assetId); if(!g){ g={assetId:f.assetId, asset:f.asset, items:[]}; groups.push(g); } g.items.push(f); });
+  groups.forEach(g=>g.items.sort((a,b)=>(a.col?1:0)-(b.col?1:0) || b.conf-a.conf));
+  const flatShown = groups.flatMap(g=>g.items);
+  const decidedShown = decided.filter(f=>fVerdict==="all"||st.decisions[f.id].verdict===fVerdict);
+
+  // The drawer walks whichever list it was opened from.
+  const evid = evidId ? findings.find(f=>f.id===evidId) : null;
+  const evidDecision = evid ? st.decisions[evid.id] : null;
+  const navList = evid && evidDecision ? decidedShown : flatShown;
+  const evidIdx = evid ? navList.findIndex(f=>f.id===evid.id) : -1;
+  const decideInDrawer = (f, verdict) => {
+    const list = flatShown, i = list.findIndex(x=>x.id===f.id);
+    const next = list[i+1] || list[i-1] || null;
+    decide(f, verdict);
+    if(next) setEvidId(next.id);
+    else { setEvidId(null); onToast(`${verdict==="accepted"?"Accepted":"Rejected"} — nothing left to review here`,"success"); }
+  };
+
+  const RowSel = ({f}) => <input type="checkbox" checked={sel.has(f.id)} onClick={e=>e.stopPropagation()}
+    onChange={e=>setSel(s=>{const n=new Set(s); e.target.checked?n.add(f.id):n.delete(f.id); return n;})} style={{cursor:"pointer"}}/>;
+  const SuggestionRow = ({f}) => (
+    <div onClick={()=>setEvidId(f.id)} className="row-hover"
+      style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px 8px 14px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}>
+      <RowSel f={f}/>
+      <div style={{flex:1,minWidth:0,paddingLeft:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          {f.col
+            ? <code style={{...mono,fontSize:11.5,color:T.text,fontWeight:600}}>{f.col}</code>
+            : <span style={{fontSize:11.5,color:T.text,fontWeight:600}}>Whole table</span>}
+          {f.col&&<span style={{fontSize:10,color:T.textMuted,...mono}}>{f.type}</span>}
+        </div>
+        <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.why}</div>
+      </div>
+      <div style={{width:170,flexShrink:0}}><AICTagChip f={f}/></div>
+      <div style={{width:130,flexShrink:0,display:"flex",gap:3,flexWrap:"wrap"}}>{f.tiers.map(t=><AICTier key={t.t} t={t.t} title={t.note}/>)}</div>
+      <div style={{width:70,flexShrink:0,textAlign:"right"}}><AIConf conf={f.conf} small/></div>
+      <div style={{width:130,flexShrink:0,display:"flex",gap:5,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>decide(f,"accepted")} disabled={!canDecide} style={smallBtn("accept")}>Accept</button>
+        <button onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={smallBtn("reject")}>Reject</button>
+      </div>
+    </div>
+  );
+
+  // ── Body ──────────────────────────────────────────────────────────────────
   const run = openRun ? st.profiles.find(p=>p.id===openRun) : null;
   let body;
   if(run){
@@ -58657,43 +58773,45 @@ const AICWorkspace = ({onToast, onNav}) => {
     const mine = findings.filter(f=>(f.profiles||[]).includes(run.id));
     const minePending = mine.filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]);
     const assets = aicProfileAssets(run);
+    const card = (label, children, foot) => (
+      <div style={{...box,padding:"11px 14px"}}>
+        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>{label}</div>
+        {children}
+        {foot&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{foot}</div>}
+      </div>
+    );
     body = (<>
-      <button onClick={()=>setOpenRun(null)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>← All runs</button>
+      <button onClick={()=>setOpenRun(null)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>← All scans</button>
       <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:14}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:9}}>
+          <div style={{display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
             <span style={{fontSize:16,fontWeight:700,color:T.text}}>{run.name}</span>
             {!run.enabled&&<span style={{fontSize:10,fontWeight:700,padding:"1.5px 8px",borderRadius:99,background:T.bgHover,color:T.textMuted,border:`1px solid ${T.border}`}}>Paused</span>}
             <AICJobPill j={lj}/>
           </div>
-          <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>Created by {run.owner||"—"} · {aicSchedText(run)}</div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:3}}>Scan · created by {run.owner||"—"}</div>
         </div>
         {canRun&&<div style={{display:"flex",gap:7}}>
           <Btn small ghost onClick={()=>togglePause(run)}>{run.enabled?"Pause":"Resume"}</Btn>
           <Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(run)))}>Edit</Btn>
           <ScheduleButton small schedule={run.schedule} onClick={()=>setSchedFor(run.id)}/>
-          <Btn small variant="primary" disabled={aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>
+          <Btn small variant="primary" disabled={!run.enabled||aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>
         </div>}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10}}>
-        <div style={{...box,padding:"11px 14px"}}>
-          <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>What it scans</div>
-          <div style={{fontSize:12,color:T.text,lineHeight:1.55}}>{aicScopeText(run)}</div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{assets.length} tables & views · {assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0)} columns</div>
-        </div>
-        <div style={{...box,padding:"11px 14px"}}>
-          <div style={{fontSize:10.5,color:T.textMuted,marginBottom:6}}>{run.mode==="new"?"Suggests":"Recommends"}</div>
-          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}><AICTagChips p={run}/></div>
-          <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>On {aicLevelText(run).toLowerCase()}</div>
-        </div>
+      <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr",gap:10}}>
+        {card("Looks at", <div style={{fontSize:12,color:T.text,lineHeight:1.55}}>{aicScopeText(run)}</div>,
+          `${assets.length} tables & views · ${assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0)} columns`)}
+        {card(run.mode==="new"?"Looks for":"Looks for these tags", <div style={{display:"flex",gap:5,flexWrap:"wrap"}}><AICTagChips p={run}/></div>, `On ${aicLevelText(run).toLowerCase()}`)}
+        {card("Runs", <div style={{fontSize:12,color:T.text}}>{aicSchedOn(run)?contractScheduleShort(run.schedule):"Only when started by hand"}</div>,
+          lj?`Last run ${lj.at}`:"Never run")}
       </div>
 
       {lj&&aicJobLive(lj)&&(
         <div style={{marginTop:12,padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.blue}40`}}>
           <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8,fontSize:12,color:T.text}}>
-            <b>{lj.id}</b><span style={{color:T.textMuted}}>{lj.phase}</span><div style={{flex:1}}/>
-            {canRun&&<Btn small ghost onClick={()=>{aicCancelJob(lj.id,me); onToast(`${lj.id} cancelled`,"info");}}>Cancel</Btn>}
+            <b>Running</b><span style={{color:T.textMuted}}>{lj.phase} · you can leave this page, it keeps going</span><div style={{flex:1}}/>
+            {canRun&&<Btn small ghost onClick={()=>{aicCancelJob(lj.id,me); onToast("Run cancelled","info");}}>Cancel</Btn>}
           </div>
           <div style={{height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${lj.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
         </div>
@@ -58701,54 +58819,75 @@ const AICWorkspace = ({onToast, onNav}) => {
       {lj&&lj.status==="failed"&&(
         <div style={{marginTop:12,padding:"11px 14px",borderRadius:10,background:T.rose+"12",border:`1px solid ${T.rose}45`,display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,fontSize:12,color:T.text,lineHeight:1.55}}>
-            <b>The last job failed, so nothing was scanned.</b> <span style={{color:T.textSub}}>{lj.error}</span>
+            <b>The last run failed, so nothing was scanned.</b> <span style={{color:T.textSub}}>{lj.error}</span>
           </div>
           {role==="admin"&&<Btn small ghost onClick={()=>aicViewJob(onNav,lj.id)}>View job</Btn>}
           {canRun&&run.enabled&&<Btn small variant="primary" onClick={()=>runNow(run)}>Retry</Btn>}
         </div>
       )}
 
-      <H2>Latest results</H2>
+      <H2>What the last run found</H2>
       {!mine.length ? (
-        <div style={{...box,padding:"22px",textAlign:"center",fontSize:12,color:T.textMuted}}>
-          {!run.enabled ? "This run is paused, so it has no current results." : aicHasRun(st, run.id) ? "The last job found nothing to suggest." : "No results yet — click Run now to see what it finds."}
+        <div style={{...box,padding:"22px",textAlign:"center"}}>
+          <div style={{fontSize:12,color:T.textMuted}}>
+            {!run.enabled ? "This scan is paused, so it has no current results." : aicJobLive(lj) ? "Results appear here when this run finishes." : aicHasRun(st, run.id) ? "The last run found nothing to suggest." : "This scan hasn't run yet."}
+          </div>
+          {canRun&&run.enabled&&!aicHasRun(st, run.id)&&!aicJobLive(lj)&&<div style={{marginTop:10}}><Btn small variant="primary" onClick={()=>runNow(run)}>Run now</Btn></div>}
         </div>
       ) : (<>
-        <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
           <AICStat label="Waiting for review" value={minePending.length} color={minePending.length?T.amber:T.green}/>
-          <AICStat label="Already classified" value={mine.filter(f=>f.kind==="confirmed").length} sub="signals agree with the catalog"/>
           <AICStat label="Tables suggested" value={minePending.filter(f=>!f.col).length}/>
           <AICStat label="Columns suggested" value={minePending.filter(f=>f.col).length}/>
+          <AICStat label="Already tagged" value={mine.filter(f=>f.kind==="confirmed").length} sub="the AI agrees with the catalog"/>
         </div>
-        {minePending.length>0 && <div style={box}><PropHead/>{minePending.map((f,i)=><PropRow key={f.id} f={f} i={i}/>)}</div>}
+        <div style={{marginTop:10,padding:"11px 14px",borderRadius:10,display:"flex",alignItems:"center",gap:10,
+          background:minePending.length?T.amberDim:T.green+"14",border:`1px solid ${(minePending.length?T.amber:T.green)}40`}}>
+          <div style={{flex:1,fontSize:12,color:T.text}}>
+            {minePending.length ? <><b>{minePending.length} suggestion{minePending.length>1?"s":""}</b> from this scan {minePending.length>1?"are":"is"} waiting for a decision.</> : "Everything this scan suggested has been decided."}
+          </div>
+          {minePending.length>0&&<Btn small variant="primary" onClick={()=>goReview(run.id)}>Review {minePending.length} →</Btn>}
+        </div>
       </>)}
 
-      <H2>Job history</H2>
+      <H2>Run history</H2>
       <div style={box}>
         <div style={{display:"flex",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-          <div style={{width:80}}>JOB</div><div style={{width:130}}>STARTED</div><div style={{flex:1}}>TRIGGER</div><div style={{width:110}}>STATUS</div>
-          <div style={{width:70,textAlign:"right"}}>FOUND</div><div style={{width:60,textAlign:"right"}}>TOOK</div><div style={{width:70}}/>
+          <div style={{width:130}}>STARTED</div><div style={{flex:1}}>HOW</div><div style={{width:110}}>STATUS</div>
+          <div style={{width:80,textAlign:"right"}}>SUGGESTED</div><div style={{width:60,textAlign:"right"}}>TOOK</div><div style={{width:120,textAlign:"right"}}>JOB</div>
         </div>
         {jobs.map((j,i)=>(
           <div key={j.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
-            <div style={{width:80,fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{j.id}</div>
-            <div style={{width:130,color:T.textSub}}>{j.at}</div>
+            <div style={{width:130,color:T.text}}>{j.at}</div>
             <div style={{flex:1,color:T.textSub,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.trigger}{j.by&&j.by!=="scheduler"?` · ${j.by}`:""}</div>
             <div style={{width:110}}><AICJobPill j={j}/></div>
-            <div style={{width:70,textAlign:"right",fontFamily:"'Geist Mono',monospace",color:j.proposed?T.amber:T.textMuted,fontWeight:700}}>{j.status==="complete"?j.proposed:"—"}</div>
-            <div style={{width:60,textAlign:"right",fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{j.ms?`${(j.ms/1000).toFixed(1)}s`:"—"}</div>
-            <div style={{width:70,textAlign:"right"}}>{role==="admin"&&<button onClick={()=>aicViewJob(onNav,j.id)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>View job</button>}</div>
+            <div style={{width:80,textAlign:"right",...mono,color:j.proposed?T.amber:T.textMuted,fontWeight:700}}>{j.status==="complete"?j.proposed:"—"}</div>
+            <div style={{width:60,textAlign:"right",...mono,color:T.textMuted}}>{j.ms?`${(j.ms/1000).toFixed(1)}s`:"—"}</div>
+            <div style={{width:120,textAlign:"right"}}>
+              {role==="admin"
+                ? <button onClick={()=>aicViewJob(onNav,j.id)} title="Open in Settings › Background Jobs" style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",...mono}}>{j.id} ↗</button>
+                : <span style={{...mono,fontSize:11,color:T.textMuted}}>{j.id}</span>}
+            </div>
           </div>
         ))}
-        {!jobs.length&&<div style={{padding:"20px",textAlign:"center",fontSize:12,color:T.textMuted}}>This run has never been started.</div>}
+        {!jobs.length&&<div style={{padding:"20px",textAlign:"center",fontSize:12,color:T.textMuted}}>This scan has never run.</div>}
       </div>
     </>);
-  } else if(tab==="runs"){
-    body = (
+  } else if(tab==="scans"){
+    body = !st.profiles.length ? (
+      <div style={{...box,padding:"40px 24px",textAlign:"center"}}>
+        <div style={{color:T.violet,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.bot(28)}</div>
+        <div style={{fontSize:14,fontWeight:700,color:T.text}}>Create your first scan</div>
+        <div style={{fontSize:12,color:T.textMuted,lineHeight:1.65,maxWidth:440,margin:"6px auto 0"}}>
+          Pick the tables to look at and the tags to look for. Run it, and the AI's suggestions land in Review for a Steward to accept or reject.
+        </div>
+        {canRun&&<div style={{marginTop:14}}><AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/></div>}
+      </div>
+    ) : (
       <div style={box}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-          <div style={{flex:1}}>RUN</div><div style={{width:130}}>TAGS</div><div style={{width:130}}>SCHEDULE</div><div style={{width:150}}>LAST JOB</div>
-          <div style={{width:70,textAlign:"right"}}>TO REVIEW</div><div style={{width:84}}/>
+          <div style={{flex:1}}>SCAN</div><div style={{width:140}}>LOOKS FOR</div><div style={{width:130}}>RUNS</div><div style={{width:140}}>LAST RUN</div>
+          <div style={{width:90,textAlign:"right"}}>TO REVIEW</div><div style={{width:84}}/>
         </div>
         {st.profiles.map((p,i)=>{
           const lj = st.jobs.find(j=>j.runId===p.id);
@@ -58760,107 +58899,229 @@ const AICWorkspace = ({onToast, onNav}) => {
                 <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}{!p.enabled&&<span style={{fontSize:10,color:T.textMuted,fontWeight:600}}> · Paused</span>}</div>
                 <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicScopeText(p)} · {aicProfileAssets(p).length} tables & views · {aicLevelText(p).toLowerCase()}</div>
               </div>
-              <div style={{width:130,display:"flex",gap:4,flexWrap:"wrap"}}><AICTagChips p={p}/></div>
-              <div style={{width:130,fontSize:11,color:aicSchedOn(p)?T.textSub:T.textMuted}}>{aicSchedOn(p)?contractScheduleShort(p.schedule):"Manual only"}</div>
-              <div style={{width:150}}><AICJobPill j={lj}/>{lj&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{lj.at}</div>}</div>
-              <div style={{width:70,textAlign:"right",fontSize:12,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:toReview?T.amber:T.textMuted}}>{toReview}</div>
+              <div style={{width:140,display:"flex",gap:4,flexWrap:"wrap"}}><AICTagChips p={p}/></div>
+              <div style={{width:130,fontSize:11,color:aicSchedOn(p)?T.textSub:T.textMuted}}>{aicSchedOn(p)?contractScheduleShort(p.schedule):"By hand"}</div>
+              <div style={{width:140}}><AICJobPill j={lj}/>{lj&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{lj.at}</div>}</div>
+              <div style={{width:90,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
+                {toReview
+                  ? <button onClick={()=>goReview(p.id)} style={{background:"none",border:"none",padding:0,color:T.amber,fontSize:12,fontWeight:700,cursor:"pointer",...mono}}>{toReview} →</button>
+                  : <span style={{fontSize:12,...mono,color:T.textMuted}}>0</span>}
+              </div>
               <div style={{width:84,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
                 {canRun&&<Btn small ghost disabled={!p.enabled||aicJobLive(lj)} onClick={()=>runNow(p)}>{aicJobLive(lj)?"Running":"Run now"}</Btn>}
               </div>
             </div>
           );
         })}
-        {!st.profiles.length&&<div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.textMuted}}>No runs yet. Create one to choose what to scan and which tags to look for.</div>}
       </div>
     );
-  } else {
-    const byTag = {}; pending.forEach(f=>{ (byTag[f.tag]=byTag[f.tag]||[]).push(f); });
-    const shown = pending.filter(f=>(fRun==="all"||(f.profiles||[]).includes(fRun)) && (fTag==="all"||f.tag===fTag)
-      && (fLevel==="all"||(fLevel==="table")===!f.col) && (fTier==="all"||f.tiers.some(t=>t.t===fTier)));
+  } else if(tab==="review"){
+    const neverRan = !st.profiles.some(p=>aicHasRun(st,p.id));
     body = pending.length===0 ? (
-      <div style={{padding:"60px 20px",textAlign:"center"}}>
-        <div style={{color:T.green,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.check(28)}</div>
-        <div style={{fontSize:14,fontWeight:700,color:T.text}}>Nothing waiting for review</div>
-        <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Every suggestion has been decided. Start a run to look again.</div>
+      <div style={{...box,padding:"48px 20px",textAlign:"center"}}>
+        {neverRan ? (<>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>Nothing to review yet</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Suggestions appear here once a scan has run.</div>
+          <div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>goTab("scans")}>Go to Scans</Btn></div>
+        </>) : (<>
+          <div style={{color:T.green,display:"flex",justifyContent:"center",marginBottom:10}}>{Ic.check(28)}</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>All caught up</div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Every suggestion has been decided. Run a scan again to look for more.</div>
+          <div style={{marginTop:12,display:"flex",gap:8,justifyContent:"center"}}>
+            <Btn small ghost onClick={()=>goTab("decided")}>See what was decided</Btn>
+            <Btn small variant="primary" onClick={()=>goTab("scans")}>Go to Scans</Btn>
+          </div>
+        </>)}
       </div>
     ) : (<>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        <select value={fRun} onChange={e=>setFRun(e.target.value)} style={selStyle}>
-          <option value="all">All runs</option>
+        <select value={fRun} onChange={e=>{setFRun(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="all">From any scan</option>
           {st.profiles.map(p=><option key={p.id} value={p.id}>{p.name} ({pending.filter(f=>(f.profiles||[]).includes(p.id)).length})</option>)}
         </select>
-        <select value={fTag} onChange={e=>setFTag(e.target.value)} style={selStyle}>
-          <option value="all">All tags</option>
+        <select value={fTag} onChange={e=>{setFTag(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="all">Any tag</option>
           {Object.keys(byTag).sort().map(k=><option key={k} value={k}>{k} ({byTag[k].length})</option>)}
         </select>
-        <select value={fLevel} onChange={e=>setFLevel(e.target.value)} style={selStyle}>
-          <option value="all">Tables and columns</option><option value="table">Tables only</option><option value="column">Columns only</option>
+        <select value={fLevel} onChange={e=>{setFLevel(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="all">Tables and columns</option><option value="table">Whole tables</option><option value="column">Columns</option>
         </select>
-        <select value={fTier} onChange={e=>setFTier(e.target.value)} style={selStyle}>
-          <option value="all">Any reason</option><option value="name">Column name</option><option value="value">Value shape</option>
-          <option value="graph">Linked column</option><option value="rollup">From its columns</option><option value="meaning">Meaning of the name</option>
+        <select value={fConf} onChange={e=>{setFConf(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="all">Any confidence</option>
+          <option value="high">High · 90% and up ({pending.filter(f=>aicConfBand(f.conf)==="high").length})</option>
+          <option value="medium">Medium · 75–89% ({pending.filter(f=>aicConfBand(f.conf)==="medium").length})</option>
+          <option value="low">Low · under 75% ({pending.filter(f=>aicConfBand(f.conf)==="low").length})</option>
         </select>
         <div style={{flex:1}}/>
-        {sel.size>0&&(<>
-          <span style={{fontSize:11.5,color:T.textSub}}>{sel.size} selected</span>
-          <button onClick={()=>decideMany(shown.filter(f=>sel.has(f.id)),"accepted")} style={{padding:"5px 12px",borderRadius:7,background:T.green,border:"none",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Accept</button>
-          <button onClick={()=>decideMany(shown.filter(f=>sel.has(f.id)),"rejected")} style={{padding:"5px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Reject</button>
-        </>)}
+        <span style={{fontSize:11.5,color:T.textMuted}}>{shown.length} suggestion{shown.length===1?"":"s"} · {groups.length} table{groups.length===1?"":"s"}</span>
+      </div>
+      {sel.size>0&&(
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}35`}}>
+          <span style={{fontSize:12,color:T.text,fontWeight:600,flex:1}}>{sel.size} selected</span>
+          <button onClick={()=>setSel(new Set())} style={{background:"none",border:"none",color:T.textSub,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Clear</button>
+          <button onClick={()=>decideMany(flatShown.filter(f=>sel.has(f.id)),"rejected")} disabled={!canDecide} style={{...smallBtn("reject"),padding:"5px 12px",fontSize:11.5}}>Reject {sel.size}</button>
+          <button onClick={()=>decideMany(flatShown.filter(f=>sel.has(f.id)),"accepted")} disabled={!canDecide} style={{...smallBtn("accept"),padding:"5px 12px",fontSize:11.5}}>Accept {sel.size}</button>
+        </div>
+      )}
+      <div style={box}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+          <input type="checkbox" checked={flatShown.length>0&&flatShown.every(f=>sel.has(f.id))}
+            onChange={e=>setSel(e.target.checked?new Set(flatShown.map(f=>f.id)):new Set())} style={{cursor:"pointer"}}/>
+          <div style={{flex:1}}>TABLE / COLUMN</div><div style={{width:170}}>SUGGESTED TAG</div><div style={{width:130}}>BASED ON</div>
+          <div style={{width:70,textAlign:"right"}}>CONFIDENCE</div><div style={{width:130}}/>
+        </div>
+        {groups.map(g=>{
+          const allSel = g.items.every(f=>sel.has(f.id));
+          return (
+            <div key={g.assetId} style={{borderTop:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:T.bg}}>
+                <input type="checkbox" checked={allSel} style={{cursor:"pointer"}}
+                  onChange={e=>setSel(s=>{const n=new Set(s); g.items.forEach(f=>e.target.checked?n.add(f.id):n.delete(f.id)); return n;})}/>
+                <ServiceIcon service={g.asset.service} size={14}/>
+                <code style={{...mono,fontSize:12,fontWeight:700,color:T.text}}>{g.asset.name}</code>
+                <span style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.asset.domain} · {g.asset.connectionLabel||g.asset.service}</span>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:10.5,color:T.textMuted}}>{g.items.length} suggestion{g.items.length>1?"s":""}</span>
+                {canDecide&&g.items.length>1&&<button onClick={()=>decideMany(g.items,"accepted")}
+                  style={{padding:"3px 9px",borderRadius:6,background:"transparent",border:`1px solid ${T.green}55`,color:T.green,fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Accept all {g.items.length}</button>}
+              </div>
+              {g.items.map(f=><SuggestionRow key={f.id} f={f}/>)}
+            </div>
+          );
+        })}
+        {!shown.length&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>No suggestions match these filters.</div>}
+      </div>
+      <div style={{marginTop:10,fontSize:11,color:canDecide?T.textMuted:T.amber}}>
+        {canDecide ? "Click a suggestion to see why the AI made it — decide there with A / R and move through the list with ← →."
+                   : `You are signed in as ${roleCfg.label}. Accepting or rejecting is a Steward or Admin action.`}
+      </div>
+    </>);
+  } else {
+    body = !decided.length ? (
+      <div style={{...box,padding:"48px 20px",textAlign:"center"}}>
+        <div style={{fontSize:14,fontWeight:700,color:T.text}}>Nothing decided yet</div>
+        <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Suggestions you accept or reject in Review are kept here, and can be undone.</div>
+        {pending.length>0&&<div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>goTab("review")}>Review {pending.length} suggestions</Btn></div>}
+      </div>
+    ) : (<>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <select value={fVerdict} onChange={e=>setFVerdict(e.target.value)} style={selStyle}>
+          <option value="all">Accepted and rejected</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option>
+        </select>
+        <div style={{flex:1}}/>
+        <span style={{fontSize:11.5,color:T.textMuted}}>Undo puts a suggestion back in Review and removes the tag it applied.</span>
       </div>
       <div style={box}>
-        <PropHead withSel list={shown}/>
-        {shown.map((f,i)=><PropRow key={f.id} f={f} i={i} withSel/>)}
-        {!shown.length&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No suggestions match these filters.</div>}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+          <div style={{flex:1}}>TABLE / COLUMN</div><div style={{width:170}}>TAG</div><div style={{width:100}}>DECISION</div><div style={{width:170}}>BY</div><div style={{width:60}}/>
+        </div>
+        {decidedShown.map((f,i)=>{
+          const d = st.decisions[f.id];
+          const ok = d.verdict==="accepted";
+          return (
+            <div key={f.id} onClick={()=>setEvidId(f.id)} className="row-hover"
+              style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer"}}>
+              <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:7}}>
+                <ServiceIcon service={f.asset.service} size={13}/>
+                <code style={{...mono,fontSize:11.5,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{whereOf(f)}</code>
+                {!f.col&&<span style={{fontSize:9.5,fontWeight:700,padding:"0 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>Whole table</span>}
+              </div>
+              <div style={{width:170}}><AICTagChip f={f}/></div>
+              <div style={{width:100}}><span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:(ok?T.green:T.rose)+"16",color:ok?T.green:T.rose,border:`1px solid ${(ok?T.green:T.rose)}40`}}>{ok?"Accepted":"Rejected"}</span></div>
+              <div style={{width:170,fontSize:11,color:T.textSub}}>{d.by} · {d.at}</div>
+              <div style={{width:60,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
+                {canDecide&&<button onClick={()=>undo(f)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Undo</button>}
+              </div>
+            </div>
+          );
+        })}
+        {!decidedShown.length&&<div style={{padding:"24px",textAlign:"center",fontSize:12,color:T.textMuted}}>Nothing {fVerdict} yet.</div>}
       </div>
-      {!canDecide&&<div style={{marginTop:10,fontSize:11.5,color:T.amber}}>You are signed in as {roleCfg.label}. Accepting or rejecting is a Steward or Admin action.</div>}
     </>);
   }
+
+  // ── The three steps ───────────────────────────────────────────────────────
+  const nAcc = decided.filter(f=>st.decisions[f.id].verdict==="accepted").length;
+  const steps = [
+    {k:"scans",   n:1, label:"Scans",   sub: live.length ? `${live.length} running now` : `${st.profiles.length} scan${st.profiles.length===1?"":"s"} · ${st.profiles.filter(aicSchedOn).length} scheduled`},
+    {k:"review",  n:2, label:"Review",  sub: pending.length ? `${pending.length} waiting for a decision` : "Nothing waiting", hot: pending.length},
+    {k:"decided", n:3, label:"Decided", sub: decided.length ? `${nAcc} accepted · ${decided.length-nAcc} rejected` : "Nothing decided yet"},
+  ];
+  const activeStep = run ? "scans" : tab;
+  const hint = {
+    scans:   "A scan says which tables to look at and which tags to look for. Run it now or on a schedule — runs happen in the background.",
+    review:  "Suggestions from completed runs, grouped by table. Nothing is applied until a Steward or Admin accepts it.",
+    decided: "Everything accepted or rejected, and by whom.",
+  }[activeStep];
+  const finished = st.jobs.filter(j=>j.status==="complete" && !seen.has(j.id) && j.runId!==openRun);
 
   return (
     <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
       <div style={{flex:1,overflowY:"auto",padding:"14px 24px 40px"}}>
-        {!run&&(<>
-          <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:14}}>
-            <div style={{flex:1,fontSize:12,color:T.textSub,lineHeight:1.6}}>
-              Choose what to scan and which tags to look for, run it, then review what it finds. <b style={{color:T.text}}>Nothing is applied until someone accepts it.</b>
+        <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:10}}>
+          {steps.map((s,i)=>{
+            const on = activeStep===s.k;
+            return (
+              <React.Fragment key={s.k}>
+                {i>0&&<div style={{display:"flex",alignItems:"center",padding:"0 6px",color:T.textMuted,fontSize:14}}>→</div>}
+                <button onClick={()=>goTab(s.k)}
+                  style={{flex:1,textAlign:"left",padding:"10px 14px",borderRadius:10,cursor:"pointer",fontFamily:"inherit",
+                    background:on?T.accentDim:T.bgSurface,border:`1.5px solid ${on?T.accent+"66":T.border}`,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{width:22,height:22,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,
+                    background:on?T.accent:T.bgElevated,color:on?"#fff":T.textMuted,border:on?"none":`1px solid ${T.border}`}}>{s.n}</span>
+                  <span style={{minWidth:0}}>
+                    <span style={{display:"block",fontSize:13,fontWeight:700,color:on?T.accent:T.text}}>{s.label}</span>
+                    <span style={{display:"block",fontSize:11,color:s.hot?T.amber:T.textMuted,fontWeight:s.hot?600:400,marginTop:1}}>{s.sub}</span>
+                  </span>
+                </button>
+              </React.Fragment>
+            );
+          })}
+          {canRun&&<div style={{display:"flex",alignItems:"center",paddingLeft:14}}><AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/></div>}
+        </div>
+        {!run&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:12,lineHeight:1.55}}>{hint}</div>}
+
+        {live.filter(j=>j.runId!==openRun).map(j=>(
+          <div key={j.id} style={{marginBottom:10,padding:"10px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.blue}40`}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7,fontSize:12,color:T.text}}>
+              <b>{aicRunName(j.runId)}</b><span style={{color:T.textMuted}}>is running · {j.phase}</span><div style={{flex:1}}/>
+              <button onClick={()=>setOpenRun(j.runId)} style={{background:"none",border:"none",color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Open scan</button>
             </div>
-            {canRun&&<AddBtn label="New run" onClick={()=>setEdit(aicNewProfile())}/>}
+            <div style={{height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${j.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
           </div>
-          <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
-            <AICStat label="Waiting for review" value={pending.length} color={pending.length?T.amber:T.green}/>
-            <AICStat label="Runs" value={st.profiles.length} sub={`${st.profiles.filter(p=>p.enabled).length} active`}/>
-            <AICStat label="Last job" value={lastJob?lastJob.id:"—"} sub={lastJob?`${({complete:"Complete",failed:"Failed",running:"Running",queued:"Queued",cancelled:"Cancelled"})[lastJob.status]} · ${lastJob.at}`:"never run"}
-              color={lastJob&&lastJob.status==="failed"?T.rose:undefined}/>
-          </div>
-          {live.map(j=>(
-            <div key={j.id} style={{marginBottom:10,padding:"10px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.blue}40`}}>
-              <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7,fontSize:12,color:T.text}}>
-                <b>{aicRunName(j.runId)}</b><span style={{color:T.textMuted}}>{j.id} · {j.phase}</span><div style={{flex:1}}/>
-                <button onClick={()=>{setOpenRun(j.runId);}} style={{background:"none",border:"none",color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Open run</button>
-              </div>
-              <div style={{height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${j.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
+        ))}
+        {finished.map(j=>{ const waiting = pending.filter(f=>(f.profiles||[]).includes(j.runId)).length; return (
+          <div key={j.id} style={{marginBottom:10,padding:"10px 14px",borderRadius:10,background:T.green+"14",border:`1px solid ${T.green}45`,display:"flex",alignItems:"center",gap:10}}>
+            <span style={{color:T.green,display:"flex"}}>{Ic.check(14)}</span>
+            <div style={{flex:1,fontSize:12,color:T.text}}>
+              <b>{aicRunName(j.runId)}</b> finished — {waiting ? <>{waiting} suggestion{waiting>1?"s":""} ready for review.</> : "nothing waiting for review."}
             </div>
-          ))}
-          <div style={{marginBottom:12}}>
-            <Tabs2 tabs={[{key:"review",label:`Review (${pending.length})`},{key:"runs",label:`Runs (${st.profiles.length})`}]} active={tab} onChange={t=>{setTab(t);setSel(new Set());}}/>
+            {waiting>0&&<Btn small variant="primary" onClick={()=>{ setSeen(s=>new Set([...s,j.id])); goReview(j.runId); }}>Review →</Btn>}
+            <button onClick={()=>setSeen(s=>new Set([...s,j.id]))} title="Dismiss" style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
           </div>
-        </>)}
+        ); })}
+
         {body}
       </div>
-      <AICEvidence f={evid} onClose={()=>setEvid(null)} onNav={onNav}/>
+      <AICEvidence f={evid} pos={evidIdx+1} total={navList.length} decision={evidDecision} canDecide={canDecide}
+        onPrev={evidIdx>0 ? ()=>setEvidId(navList[evidIdx-1].id) : null}
+        onNext={evidIdx>=0 && evidIdx<navList.length-1 ? ()=>setEvidId(navList[evidIdx+1].id) : null}
+        onDecide={decideInDrawer} onUndo={(f)=>{ undo(f); setEvidId(null); }}
+        onClose={()=>setEvidId(null)} onNav={onNav}/>
       <AICRunDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
         onClose={()=>setEdit(null)} onSave={saveRun} onDelete={removeRun} platform={st.settings}/>
       {schedFor&&(()=>{ const r = st.profiles.find(x=>x.id===schedFor); if(!r) return null; return (
-        <ScheduleControl schedule={r.schedule} title={`Schedule · ${r.name}`} subtitle="Each scheduled execution runs as a background job."
+        <ScheduleControl schedule={r.schedule} title={`When should "${r.name}" run?`} subtitle="Each run happens in the background and shows up in Settings › Background Jobs."
           onClose={()=>setSchedFor(null)} onSave={sc=>saveSchedule(r.id, sc)} onRemove={()=>saveSchedule(r.id, null)}
           onRunNow={()=>{ setSchedFor(null); runNow(r); }} running={st.jobs.some(j=>j.runId===r.id&&aicJobLive(j))}/>); })()}
     </div>
   );
 };
 
-// The run editor: what to scan (connection → database/schema → tables & views),
-// where to suggest (tables, columns), and which tags — recommend ones the taxonomy
-// already has, or propose new ones. Launch with the standard Schedule / Run now.
+// The scan editor, in the order a person thinks about it: what to look at
+// (connection → database/schema → tables & views), what to look for (tags the
+// taxonomy has, or new ones), where to put them (tables, columns). The name comes
+// last and is suggested from those choices. Launch with the standard Schedule / Run now.
 const AIC_CAT_LABEL = {sensitivity:"Sensitivity", regulatory:"Regulatory", business:"Business", custom:"Custom"};
 const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) => {
   const tagCtx = useTagCtx();
@@ -58887,7 +59148,10 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
   const levelOk = d.levels.table || d.levels.column;
   const tagsOk = d.mode==="new" || d.tags.length;
   const colOnlyNoDet = d.mode==="existing" && !d.levels.table && d.tags.length && !d.tags.some(t=>AIC_DETECTORS.some(x=>x.tag===t));
-  const valid = d.name.trim() && assets.length && levelOk && tagsOk && !colOnlyNoDet;
+  const suggestedName = (d.mode==="new" ? "Missing business tags" : d.tags.length ? d.tags.slice(0,2).join(" & ")+(d.tags.length>2?` +${d.tags.length-2}`:"") : "Tags")
+    + " — " + ((d.tables||[]).length ? `${d.tables.length} table${d.tables.length>1?"s":""}` : d.containers.length ? d.containers[0]+(d.containers.length>1?` +${d.containers.length-1}`:"")
+      : d.connections.length ? d.connections.join(", ") : "all sources");
+  const valid = assets.length && levelOk && tagsOk && !colOnlyNoDet;
   const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
   const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
   const sec = (n, t, sub) => (
@@ -58911,7 +59175,7 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
     color:primary?(dis?T.textMuted:"#fff"):(dis?T.textMuted:T.textSub)});
   const clock = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>;
   const play = <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>;
-  const out = (how) => valid && onSave({...d, name:d.name.trim(), enabled:how==="save"?d.enabled:true}, how);
+  const out = (how) => valid && onSave({...d, name:d.name.trim()||suggestedName, enabled:how==="save"?d.enabled:true}, how);
 
   return createPortal(
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
@@ -58921,16 +59185,16 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
         <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>AI Classification</div>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.text,marginTop:2}}>{existing?`Edit run · ${draft.name}`:"New run"}</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text,marginTop:2}}>{existing?`Edit scan · ${draft.name}`:"New scan"}</div>
           </div>
           <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:"14px 22px 24px"}}>
-          <label style={lbl}>Run name <span style={{color:T.rose}}>*</span></label>
-          <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder="e.g. HR warehouse — personal data" style={inp}/>
-
-          {sec("1","What to scan","Leave a field empty to include everything in the level above it.")}
+          <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:4}}>
+            Tell the AI which tables to look at and which tags to look for. It only <b style={{color:T.text}}>suggests</b> — every suggestion waits in Review until a Steward or Admin accepts it.
+          </div>
+          {sec("1","What should it look at?","Leave a field empty to include everything in the level above it.")}
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <RuleMultiSelect label="Connections" flat={connections} selected={d.connections}
               onChange={v=>set({connections:v, containers:[], tables:[]})} placeholder="All connections"/>
@@ -58941,25 +59205,19 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
           </div>
           <div style={{marginTop:12,padding:"9px 12px",borderRadius:8,background:assets.length?T.blueDim:T.amberDim,border:`1px solid ${assets.length?T.blue+"40":T.amber+"44"}`,fontSize:11.5,color:T.text,lineHeight:1.55}}>
             <b>{assets.length} table{assets.length===1?"":"s"} & views · {cols} columns</b> will be scanned
-            {!assets.length&&<span style={{color:T.textSub}}> — nothing matches, so this run would scan nothing.</span>}
+            {!assets.length&&<span style={{color:T.textSub}}> — nothing matches, so this scan would look at nothing.</span>}
           </div>
 
-          {sec("2","Suggest tags on")}
-          <div style={{display:"flex",gap:10}}>
-            {levelBox("table","Tables & views","One tag for the whole object")}
-            {levelBox("column","Columns","A tag on each matching column")}
-          </div>
-          {!levelOk&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>Pick at least one.</div>}
 
-          {sec("3","Which tags")}
-          <label style={lbl}>How should it suggest tags?</label>
+          {sec("2","What should it look for?")}
+          <label style={lbl}>Look for</label>
           <select value={d.mode} onChange={e=>set({mode:e.target.value})} style={{...inp,cursor:"pointer"}}>
-            <option value="existing">Recommend tags from my taxonomy</option>
-            <option value="new">Suggest new tags my taxonomy doesn't have</option>
+            <option value="existing">Tags I already have in my taxonomy</option>
+            <option value="new">New tags my taxonomy is missing</option>
           </select>
           {d.mode==="existing" ? (<>
             <div style={{marginTop:14}}>
-              <RuleMultiSelect label="Tags to recommend" required groups={tagGroups} selected={d.tags}
+              <RuleMultiSelect label="Which tags" required groups={tagGroups} selected={d.tags}
                 onChange={v=>set({tags:v})} placeholder="Choose tags…"/>
             </div>
             {tableOnly.length>0&&d.levels.column&&(
@@ -58974,6 +59232,17 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
               Accepting a suggestion creates the tag as a <b>Draft</b> in Classifications and applies it.
             </div>
           )}
+
+          {sec("3","Where should it put them?")}
+          <div style={{display:"flex",gap:10}}>
+            {levelBox("table","Tables & views","A tag for the whole table or view")}
+            {levelBox("column","Columns","A tag on each matching column")}
+          </div>
+          {!levelOk&&<div style={{fontSize:11.5,color:T.amber,marginTop:6}}>Pick at least one.</div>}
+
+          <label style={{...lbl,marginTop:24}}>Name <span style={{fontWeight:400,color:T.textMuted}}>· optional</span></label>
+          <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder={suggestedName} style={inp}/>
+          {!d.name.trim()&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>Leave it blank to use “{suggestedName}”.</div>}
 
           <button onClick={()=>setMore(v=>!v)} style={{marginTop:22,background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
             {more?"▾":"▸"} More options</button>
@@ -59001,7 +59270,7 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
             </div>
           )}
           <div style={{marginTop:20,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textMuted,lineHeight:1.6}}>
-            <b style={{color:T.textSub}}>Launch:</b> <b style={{color:T.text}}>Run now</b> saves the run and starts it immediately. <b style={{color:T.text}}>Schedule</b> saves it and opens the recurring schedule. Every execution appears in Settings › Background Jobs.
+            <b style={{color:T.text}}>Run now</b> saves the scan and starts its first run. <b style={{color:T.text}}>Schedule</b> saves it and asks when it should run. Runs happen in the background — when one finishes, its suggestions appear in Review.
           </div>
         </div>
 
@@ -59061,7 +59330,7 @@ const AICJobsCard = ({onToast}) => {
             </span>
             {running>0&&<AICJobPill j={jobs.find(aicJobLive)}/>}
           </div>
-          <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Scans columns and suggests classifications. Each run started in Classifications › AI Classification shows up here as a job.</div>
+          <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Scans columns and suggests classifications. Each run of a scan in Classifications › AI Classification shows up here as a job.</div>
         </div>
         <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:T.accent,flexShrink:0,whiteSpace:"nowrap"}}>View jobs
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
