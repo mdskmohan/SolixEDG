@@ -42707,6 +42707,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [enableProfiling, setEnableProfiling] = useState(false);
   const [enableUsage,     setEnableUsage]     = useState(false);
   const [enableTagSync,   setEnableTagSync]   = useState(true);
+  const aicSt = useAic();
+  const [enableAic, setEnableAic] = useState(false);
+  const [aicCfg,    setAicCfg]    = useState(aicIngestDefaults);
   // Test connection state (combined auth + discovery)
   const [prereqOpen,   setPrereqOpen]  = useState(false);  // read once, then in the way
   const [testState,    setTestState]   = useState("idle"); // idle|running|success|error
@@ -42753,7 +42756,20 @@ const AddServiceWizard = ({onClose, onDone}) => {
     caps.endorsements&&{key:"endorsements", label:"Endorsements",
       desc:"Read Promoted and Certified endorsements from the tenant. They stay read-only: EDG certification is separate and lives on the asset.",
       value:enableTagSync, setter:setEnableTagSync},
+    // Structured sources only: classification needs columns.
+    (scope.objectTypes||[]).includes("Columns")&&{key:"aic", label:"AI classification",
+      desc:aicSt.settings.enabled ? "Suggest tags for new and changed tables, views and columns" : "Disabled in Settings › AI",
+      value:enableAic&&aicSt.settings.enabled, setter:setEnableAic, disabled:!aicSt.settings.enabled},
   ].filter(Boolean);
+  const aicOn = enableAic && aicSt.settings.enabled && (scope.objectTypes||[]).includes("Columns");
+  // Launch also switches classification on for the new connection — the first sync classifies.
+  const launch = (mode) => {
+    if(aicOn){
+      aicSetIngest(svcName, aicCfg, "you", true);
+      if(mode==="run") setTimeout(()=>aicStartJob(aicIngestId(svcName), "Ingestion · first sync", "ingestion"), 0);
+    }
+    onDone(svcName,connector,category,mode);
+  };
 
   // Everything below this point belongs to ONE connector. Switching connector has to clear
   // it, or the new source inherits the old one's verified banner, its discovery counts, its
@@ -42850,7 +42866,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
     if(step===0) return !!category;
     if(step===1) return !!connector;
     if(step===2) return testState === "success" && svcName.trim().length >= 2;
-    if(step===3) return true;
+    if(step===3) return !aicOn || aicIngestValid(aicCfg);
     if(step===4) return true;
     return true;
   };
@@ -43493,8 +43509,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   <div style={{margin:"0 0 14px",fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{scope.capsNote}</div>
                 )}
                 <div style={{display:"flex",flexDirection:"column",gap:9}}>
-                  {ingestionApps.map(app=>(
-                    <div key={app.key} style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}>
+                  {ingestionApps.map(app=>(<React.Fragment key={app.key}>
+                    <div style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:app.key==="aic"&&app.value?"9px 9px 0 0":9}}>
                       <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
                       <div style={{flex:1}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}</div>
@@ -43502,7 +43518,12 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       </div>
                       <div style={{width:7,height:7,borderRadius:"50%",background:app.value?"#10b981":T.border,flexShrink:0,transition:"background .2s"}}/>
                     </div>
-                  ))}
+                    {app.key==="aic"&&app.value&&(
+                      <div style={{marginTop:-10,padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 9px 9px"}}>
+                        <AICIngestFields cfg={aicCfg} onChange={setAicCfg} profilingOn={enableProfiling}/>
+                      </div>
+                    )}
+                  </React.Fragment>))}
                 </div>
               </div>
               )}
@@ -43573,6 +43594,13 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     })}] : []),
                   // A source with nothing separately collectable gets no empty section.
                   ...(ingestionApps.length ? [{title:"What to collect", rows:[["Enabled", apps]]}] : []),
+                  ...(aicOn ? [{title:"AI classification", rows:[
+                    ["Classification level", [aicCfg.levels.table&&"Table / view", aicCfg.levels.column&&"Column"].filter(Boolean).join(", ")],
+                    ["Tag source", aicCfg.mode==="new"?"Suggest new tags":"Existing tags"],
+                    ...(aicCfg.mode==="new"?[]:[["Tags", aicCfg.tags.join(", ")||"—"]]),
+                    ["Minimum confidence", aicCfg.minConfidence==null?`Default (${Math.round(aicSt.settings.minConfidence*100)}%)`:`${Math.round(aicCfg.minConfidence*100)}%`],
+                    ["Signals", enableProfiling?"Column name, value pattern, linked columns":"Column name, linked columns"],
+                  ]}] : []),
                 ];
                 return cards.map(sec=>(
                   <div key={sec.title} style={{background:T.bgElevated,borderRadius:12,border:`1px solid ${T.border}`,overflow:"hidden"}}>
@@ -43636,11 +43664,11 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     : "Review →"}
                 </button>
               : <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>onDone(svcName,connector,category,"schedule")} title="Create the connection and set a recurring sync schedule" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
+                  <button onClick={()=>launch("schedule")} title="Create the connection and set a recurring sync schedule" style={{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:10,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,fontSize:13,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>Schedule
                   </button>
-                  <button onClick={()=>onDone(svcName,connector,category,"run")} title="Create the connection and run the first sync now" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
+                  <button onClick={()=>launch("run")} title="Create the connection and run the first sync now" style={{display:"flex",alignItems:"center",gap:8,padding:"10px 24px",borderRadius:10,border:"none",background:"#ee2424",color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all .15s",boxShadow:"0 4px 14px rgba(238,36,36,.38)"}}
                     onMouseEnter={e=>{e.currentTarget.style.opacity=".88";e.currentTarget.style.transform="translateY(-1px)";}} onMouseLeave={e=>{e.currentTarget.style.opacity="1";e.currentTarget.style.transform="none";}}>
                     <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now
                   </button>
@@ -43656,7 +43684,19 @@ const AddServiceWizard = ({onClose, onDone}) => {
 
 /* connection detail panel */
 const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
-  const [cfgTab, setCfgTab] = useState("overview");
+  const [cfgTab, setCfgTab] = useState(()=>(_svcJump&&_svcJump.name===svc.displayName&&_svcJump.tab)||"overview");
+  useEffect(()=>{ _svcJump=null; },[]);
+  const aicSt = useAic();
+  const onNavSvc = useNav();
+  const {roleCfg:svcRoleCfg} = useRole();
+  const aicMe = (svcRoleCfg?.email||"you@jnj").split("@")[0];
+  const aicIng = aicSt.profiles.find(p=>p.trigger==="ingestion" && p.connId===svc.displayName && p.enabled) || null;
+  const aicCanClassify = !!(svc.assets && svc.assets.tables>0);
+  // An ingestion run classifies too, when classification is on for this connection.
+  const triggerIngest = () => {
+    onToast(`${svc.displayName} ingestion triggered`,"success");
+    if(aicIng && aicSt.settings.enabled) aicStartJob(aicIng.id, "Ingestion · manual sync", "ingestion");
+  };
   const [runLogModal, setRunLogModal] = useState(null); // run object for log modal
   const progress = svc.status==="running" ? Math.min(98,(44+(tick*3))%100) : 100;
   // Configuration tab state
@@ -43799,6 +43839,36 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
             ))}
           </div>
 
+          {aicCanClassify&&(()=>{
+            const lj = aicIng ? aicSt.jobs.find(j=>j.runId===aicIng.id) : null;
+            const fnd = aicSt.findings || aicScanAll(aicSt);
+            const pend = aicIng ? fnd.filter(f=>(f.profiles||[]).includes(aicIng.id) && aicIsProposal(aicSt,f) && !aicSt.decisions[f.id]).length : 0;
+            const on = !!aicIng && aicSt.settings.enabled;
+            const cell = (l, v) => (
+              <div style={{padding:"8px 10px",background:T.bgSurface,borderRadius:7,border:`1px solid ${T.border}`,minWidth:0}}>
+                <div style={{fontSize:10,color:T.textMuted,marginBottom:4}}>{l}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.text,display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>{v}</div>
+              </div>
+            );
+            return (
+              <div style={{marginBottom:16,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:on?10:0}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>AI classification</span>
+                  <span style={{fontSize:10,fontWeight:700,padding:"1px 8px",borderRadius:99,background:on?T.green+"16":T.bgHover,color:on?T.green:T.textMuted,border:`1px solid ${on?T.green+"40":T.border}`}}>
+                    {!aicSt.settings.enabled?"Disabled in Settings › AI":on?"On ingestion":"Off"}</span>
+                  <div style={{flex:1}}/>
+                  {on&&pend>0&&<Btn small variant="primary" onClick={()=>{ _aicJump={runId:aicIng.id, review:true}; onNavSvc&&onNavSvc("tags"); }}>Review {pend}</Btn>}
+                  {aicSt.settings.enabled&&<Btn small ghost onClick={()=>setCfgTab("configuration")}>{on?"Configure":"Enable"}</Btn>}
+                </div>
+                {on&&<div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:8}}>
+                  {cell("Last run", lj ? <><AICJobPill j={lj}/><span style={{fontSize:10.5,color:T.textMuted,fontWeight:400}}>{lj.at}</span></> : "—")}
+                  {cell("Pending review", <span style={{color:pend?T.amber:T.text,fontFamily:"'Geist Mono',monospace"}}>{pend}</span>)}
+                  {cell("Level", <>{aicIng.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{aicIng.levels.column&&<AICObjChip kind="column"/>}</>)}
+                </div>}
+              </div>
+            );
+          })()}
+
           {/* asset breakdown */}
           <div style={{marginBottom:16}}>
             <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Assets Indexed</div>
@@ -43814,7 +43884,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
           {/* quick actions */}
           <div style={{display:"flex",gap:6,marginBottom:12}}>
-            {svc.status!=="disconnected"&&<button onClick={()=>onToast(`${svc.displayName} ingestion triggered`,"success")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now</button>}
+            {svc.status!=="disconnected"&&<button onClick={()=>triggerIngest()} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"8px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}><svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>Run now</button>}
             <Btn small ghost onClick={()=>setCfgTab("configuration")}>Configure</Btn>
             {svc.status==="connected"&&<Btn small variant="danger" onClick={()=>onToast("Service paused","success")}>Pause</Btn>}
           </div>
@@ -44076,6 +44146,25 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
             );
           })()}
 
+          {/* ── AI classification ── */}
+          {aicCanClassify&&(<>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>AI Classification</div>
+            <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:aicIng?14:0}}>
+                <Toggle on={!!aicIng&&aicSt.settings.enabled} disabled={!aicSt.settings.enabled}
+                  onChange={!aicSt.settings.enabled?undefined:()=>{
+                    if(aicIng){ aicSetIngest(svc.displayName, null); onToast("AI classification turned off for this connection","info"); }
+                    else { aicSetIngest(svc.displayName, aicIngestCfg(aicSt.profiles.find(p=>p.id===aicIngestId(svc.displayName))), aicMe); onToast("AI classification on — runs with each ingestion","success"); }
+                  }}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Classify on ingestion</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{aicSt.settings.enabled?"New and changed tables, views and columns":"Disabled in Settings › AI"}</div>
+                </div>
+              </div>
+              {aicIng&&aicSt.settings.enabled&&<AICIngestFields cfg={aicIngestCfg(aicIng)} onChange={c=>aicSetIngest(svc.displayName, c, aicMe)} profilingOn={true}/>}
+            </div>
+          </>)}
+
           {/* ── Ingestion Filters ── */}
           <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Ingestion Filters</div>
           <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
@@ -44273,7 +44362,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
       onClose={()=>setSvcSchedModal(false)}
       onRunNow={()=>{
         setSvcSchedModal(false);setSvcRunning(true);
-        onToast(`${svc.displayName} ingestion triggered`,"success");
+        triggerIngest();
         setTimeout(()=>setSvcRunning(false),2500);
       }}
       running={svcRunning}
@@ -52867,6 +52956,7 @@ const SettingsView = ({onToast})=>{
   const CUSTOM_PROPS=[{name:"data_classification",type:"Enum",entity:"Table",required:false,vals:"Public, Internal, Confidential, Restricted"},{name:"retention_days",type:"Integer",entity:"Table",required:true,vals:""},{name:"business_criticality",type:"Enum",entity:"Dashboard",required:false,vals:"Low, Medium, High, Critical"},{name:"cost_center",type:"String",entity:"Pipeline",required:false,vals:""},{name:"data_product_owner",type:"User",entity:"Domain",required:true,vals:""}];
 
   // derived
+  useEffect(()=>{ if(_svcJump){ const s = SERVICES.find(x=>x.displayName===_svcJump.name); if(s) setSvcSel(s.id); } },[]);
   const selSvc = svcSel ? SERVICES.find(s=>s.id===svcSel) : null;
   const selApp = appSel ? APPLICATIONS.find(a=>a.id===appSel) : null;
 
@@ -57868,6 +57958,9 @@ let _aicState = {
   // Every execution of a run is a background job — the same record Settings ›
   // Background Jobs shows. Results live on the findings; a job carries counts only.
   jobs:[
+    {id:"job-4129", runId:"ing_snowflake_dwh", trigger:"Ingestion · run r1", by:"ingestion", status:"complete", at:"2026-09-28 12:14",
+     progress:100, phase:"Complete", ms:22800, assets:8, cols:57, proposed:9, confirmed:12, clear:36,
+     log:[{lvl:"info",msg:"Job queued — Ingestion · Snowflake DWH"},{lvl:"info",msg:"Started after ingestion run r1 · 8 objects changed"},{lvl:"ok",msg:"Complete · 57 columns · 9 proposals"}]},
     {id:"job-4127", runId:"prof_all", trigger:"Scheduled · daily", by:"scheduler", status:"complete", at:"2026-09-28 02:14",
      progress:100, phase:"Complete", ms:41200, assets:30, cols:184, proposed:21, confirmed:41, clear:122,
      log:[{lvl:"info",msg:"Job queued — Personal & card data — all sources"},{lvl:"info",msg:"Started · 30 objects in scope"},{lvl:"ok",msg:"Scanned 30 objects"},{lvl:"ok",msg:"Complete · 184 columns · 21 proposals"}]},
@@ -57895,6 +57988,10 @@ let _aicState = {
      useDefaults:false, tiers:{name:true, value:true, graph:false}, minConfidence:0.85,
      schedule:{freq:"weekly", day:"sunday", time:"02:00", tz:"UTC", enabled:true},
      owner:"dev.patel", created:"2026-09-10"},
+    {id:"ing_snowflake_dwh", name:"Ingestion · Snowflake DWH", enabled:true, trigger:"ingestion", connId:"Snowflake DWH",
+     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
+     useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
+     owner:"dev.patel", created:"2026-09-20"},
     {id:"prof_new", name:"Commerce — find missing business tags", enabled:true,
      connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:true, column:true}, mode:"new", tags:[],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
@@ -57938,6 +58035,36 @@ const aicUndo = (finding) => aicSet(st=>{
   const decisions = {...st.decisions}; delete decisions[finding.id];
   return {...st, stats, decisions};
 });
+
+// ── Classification on ingestion ───────────────────────────────────────────────
+// A connector can classify as part of each ingestion run. That setting is a scan
+// like any other (trigger "ingestion"), so Review, Scans and Background Jobs all
+// treat it the same way; the connector screen is just where it is switched on.
+const aicIngestId = (conn) => "ing_"+aicSlug(conn);
+const aicIngestFor = (conn) => _aicState.profiles.find(p=>p.trigger==="ingestion" && p.connId===conn) || null;
+// Connection display names and the labels assets carry differ slightly ("PostgreSQL
+// Production" vs "PostgreSQL Prod"); match exactly, then on the product name.
+const aicConnLabel = (conn) => {
+  const labels = [...new Set(aicClassifiable().map(a=>a.connectionLabel))];
+  return labels.find(l=>l===conn) || labels.find(l=>l.split(" ")[0]===String(conn).split(" ")[0]) || conn;
+};
+const aicIngestDefaults = () => ({levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"], minConfidence:null});
+const aicIngestCfg = (p) => p ? {levels:p.levels, mode:p.mode, tags:p.tags, minConfidence:p.useDefaults?null:p.minConfidence} : aicIngestDefaults();
+// fresh: a connection created just now owns no assets yet, so it never borrows another's label.
+const aicSetIngest = (conn, cfg, by, fresh) => aicSet(s=>{
+  const id = aicIngestId(conn);
+  const prev = s.profiles.find(p=>p.id===id);
+  if(!cfg) return prev ? {...s, findings:null, profiles:s.profiles.map(p=>p.id===id?{...p, enabled:false}:p)} : s;
+  const p = {...(prev || {id, name:`Ingestion · ${conn}`, trigger:"ingestion", connId:conn, connections:[fresh ? conn : aicConnLabel(conn)],
+      containers:[], tables:[], tiers:{name:true, value:true, graph:true}, schedule:null, owner:by, created:"just now"}),
+    enabled:true, levels:cfg.levels, mode:cfg.mode, tags:cfg.mode==="new"?[]:cfg.tags,
+    useDefaults:cfg.minConfidence==null, minConfidence:cfg.minConfidence==null ? s.settings.minConfidence : cfg.minConfidence};
+  return {...s, findings:null, profiles: prev ? s.profiles.map(q=>q.id===id?p:q) : [...s.profiles, p]};
+});
+const aicTriggerText = (p) => p.trigger==="ingestion" ? "On ingestion" : aicSchedOn(p) ? contractScheduleShort(p.schedule) : "Manual";
+// Where "Edit in connection" lands: Settings › Connections, that connection, Configuration tab.
+let _svcJump = null;     // {name, tab}
+let _bgJobScanJump = null; // scan id → Background Jobs list filtered to it
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 // A run is the definition (what to scan, which tags, when). Running it creates a
@@ -58827,6 +58954,60 @@ const AICTagChip = ({f}) => f.newTag
   ? <span title="Not in your taxonomy yet — accepting creates it as a Draft tag" style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`,whiteSpace:"nowrap"}}>+ {f.tag} · new</span>
   : <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`,whiteSpace:"nowrap"}}>{f.tag}</span>;
 
+// The classification settings a connector carries — the same fields a scan has,
+// minus scope (the connector's own filters are the scope).
+const AICIngestFields = ({cfg, onChange, profilingOn, disabled}) => {
+  const tagCtx = useTagCtx();
+  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
+  const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
+  const set = (patch) => onChange({...cfg, ...patch});
+  const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"};
+  const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+  const check = (on, k, label) => (
+    <label style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,
+      background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent+"55":T.border}`}}>
+      <input type="checkbox" checked={on} onChange={()=>set({levels:{...cfg.levels,[k]:!on}})} style={{margin:0}}/>{label}
+    </label>
+  );
+  const levelOk = cfg.levels.table || cfg.levels.column;
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px 16px",opacity:disabled?.5:1,pointerEvents:disabled?"none":"auto"}}>
+      <div>
+        <label style={lbl}>Classification level <span style={{color:T.rose}}>*</span></label>
+        <div style={{display:"flex",gap:8}}>{check(cfg.levels.table,"table","Table / view")}{check(cfg.levels.column,"column","Column")}</div>
+        {!levelOk&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>Select at least one level.</div>}
+      </div>
+      <div>
+        <label style={lbl}>Tag source</label>
+        <select value={cfg.mode} onChange={e=>set({mode:e.target.value})} style={inp}>
+          <option value="existing">Existing tags</option><option value="new">Suggest new tags</option>
+        </select>
+      </div>
+      {cfg.mode==="existing"&&(
+        <div style={{gridColumn:"1 / -1"}}>
+          <RuleMultiSelect label="Tags" required groups={tagGroups} selected={cfg.tags} onChange={v=>set({tags:v})} placeholder="Select tags"/>
+        </div>
+      )}
+      <div>
+        <label style={lbl}>Minimum confidence</label>
+        <select value={cfg.minConfidence==null?"default":String(cfg.minConfidence)} onChange={e=>set({minConfidence:e.target.value==="default"?null:Number(e.target.value)})} style={inp}>
+          <option value="default">Default ({Math.round(_aicState.settings.minConfidence*100)}%)</option>
+          {[0.75,0.8,0.85,0.9].map(v=><option key={v} value={String(v)}>{Math.round(v*100)}%</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={lbl}>Signals</label>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",minHeight:30}}>
+          <AICTier t="name"/><AICTier t="graph"/>
+          {profilingOn ? <AICTier t="value"/> : <span style={{fontSize:10.5,color:T.textMuted}}>Value · requires Profiling</span>}
+        </div>
+      </div>
+    </div>
+  );
+};
+const aicIngestValid = (cfg) => (cfg.levels.table || cfg.levels.column) && (cfg.mode==="new" || cfg.tags.length>0);
+
+const aicViewJobs = (onNav, runId) => { _bgJobScanJump = runId; onNav && onNav("settings",{section:"bg_jobs"}); };
 const AICWorkspace = ({onToast, onNav}) => {
   const st = useAic();
   const {role, roleCfg} = useRole();
@@ -58839,12 +59020,12 @@ const AICWorkspace = ({onToast, onNav}) => {
   const decided = findings.filter(f=>st.decisions[f.id]);
   const live = st.jobs.filter(aicJobLive);
 
-  const [tab, setTab]     = useState(()=>_aicJump&&_aicJump.runId ? "scans" : "review");
-  const [openRun, setOpenRun] = useState(()=>(_aicJump&&_aicJump.runId)||null);
+  const [tab, setTab]     = useState(()=>_aicJump&&_aicJump.runId&&!_aicJump.review ? "scans" : "review");
+  const [openRun, setOpenRun] = useState(()=>(_aicJump&&!_aicJump.review&&_aicJump.runId)||null);
   useEffect(()=>{ _aicJump=null; },[]);
   const [edit, setEdit]   = useState(null);
   const [evidId, setEvidId] = useState(null);
-  const [fRun, setFRun]   = useState("all");
+  const [fRun, setFRun]   = useState(()=>(_aicJump&&_aicJump.review&&_aicJump.runId)||"all");
   const [fTag, setFTag]   = useState("all");
   const [fLevel, setFLevel] = useState("all");
   const [fConf, setFConf] = useState("all");
@@ -59056,8 +59237,10 @@ const AICWorkspace = ({onToast, onNav}) => {
         </div>
         {canRun&&<div style={{display:"flex",gap:7}}>
           <Btn small ghost onClick={()=>togglePause(run)}>{run.enabled?"Pause":"Resume"}</Btn>
-          <Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(run)))}>Edit</Btn>
-          <ScheduleButton small schedule={run.schedule} onClick={()=>setSchedFor(run.id)}/>
+          {run.trigger==="ingestion"
+            ? <Btn small ghost onClick={()=>{ _svcJump={name:run.connId, tab:"configuration"}; onNav&&onNav("settings",{section:"connections"}); }}>Edit in connection</Btn>
+            : <><Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(run)))}>Edit</Btn>
+                <ScheduleButton small schedule={run.schedule} onClick={()=>setSchedFor(run.id)}/></>}
           <Btn small variant="primary" disabled={!run.enabled||aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>
         </div>}
       </div>
@@ -59097,32 +59280,13 @@ const AICWorkspace = ({onToast, onNav}) => {
         {kv("Classification level", <>{run.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{run.levels.column&&<AICObjChip kind="column"/>}</>)}
         {kv("Tag source", run.mode==="new"?"Suggest new tags":"Existing tags")}
         {run.mode!=="new"&&kv("Tags", <AICTagChips p={run}/>)}
-        {kv("Schedule", aicSchedOn(run)?contractScheduleShort(run.schedule):"Manual")}
+        {kv("Trigger", run.trigger==="ingestion" ? `On ingestion · ${run.connId}` : aicSchedOn(run) ? contractScheduleShort(run.schedule) : "Manual")}
+        {kv("Last run", lj ? <><AICJobPill j={lj}/><span style={{color:T.textMuted,fontSize:11.5}}>{lj.at}</span>
+          {lj.status==="complete"&&<span style={{color:T.textMuted,fontSize:11.5}}>· {lj.proposed} suggested</span>}
+          {role==="admin"&&<button onClick={()=>aicViewJobs(onNav, run.id)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginLeft:4}}>View jobs ↗</button>}</> : "—")}
         {kv("Owner", run.owner||"—")}
       </div>
 
-      <H2>Run history</H2>
-      <div style={box}>
-        <div style={{display:"flex",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,...th}}>
-          <div style={{width:130}}>STARTED</div><div style={{flex:1}}>TRIGGER</div><div style={{width:110}}>STATUS</div>
-          <div style={{width:80,textAlign:"right"}}>SUGGESTED</div><div style={{width:60,textAlign:"right"}}>DURATION</div><div style={{width:120,textAlign:"right"}}>JOB</div>
-        </div>
-        {jobs.map((j,i)=>(
-          <div key={j.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
-            <div style={{width:130,color:T.text}}>{j.at}</div>
-            <div style={{flex:1,color:T.textSub,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.trigger}{j.by&&j.by!=="scheduler"?` · ${j.by}`:""}</div>
-            <div style={{width:110}}><AICJobPill j={j}/></div>
-            <div style={{width:80,textAlign:"right",...mono,color:j.proposed?T.amber:T.textMuted,fontWeight:700}}>{j.status==="complete"?j.proposed:"—"}</div>
-            <div style={{width:60,textAlign:"right",...mono,color:T.textMuted}}>{j.ms?`${(j.ms/1000).toFixed(1)}s`:"—"}</div>
-            <div style={{width:120,textAlign:"right"}}>
-              {role==="admin"
-                ? <button onClick={()=>aicViewJob(onNav,j.id)} title="Open in Settings › Background Jobs" style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",...mono}}>{j.id} ↗</button>
-                : <span style={{...mono,fontSize:11,color:T.textMuted}}>{j.id}</span>}
-            </div>
-          </div>
-        ))}
-        {!jobs.length&&<div style={{padding:"20px",textAlign:"center",fontSize:12,color:T.textMuted}}>No runs</div>}
-      </div>
     </>);
   } else if(tab==="scans"){
     body = !st.profiles.length ? (
@@ -59133,7 +59297,7 @@ const AICWorkspace = ({onToast, onNav}) => {
     ) : (
       <div style={box}>
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,...th}}>
-          <div style={{flex:1}}>NAME</div><div style={{width:150}}>LEVEL</div><div style={{width:140}}>TAGS</div><div style={{width:120}}>SCHEDULE</div><div style={{width:130}}>LAST RUN</div>
+          <div style={{flex:1}}>NAME</div><div style={{width:150}}>LEVEL</div><div style={{width:140}}>TAGS</div><div style={{width:120}}>TRIGGER</div><div style={{width:130}}>LAST RUN</div>
           <div style={{width:70,textAlign:"right"}}>PENDING</div><div style={{width:84}}/>
         </div>
         {st.profiles.map((p,i)=>{
@@ -59149,7 +59313,7 @@ const AICWorkspace = ({onToast, onNav}) => {
               </div>
               <div style={{width:150,display:"flex",gap:4,flexWrap:"wrap"}}>{p.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{p.levels.column&&<AICObjChip kind="column"/>}</div>
               <div style={{width:140,display:"flex",gap:4,flexWrap:"wrap"}}><AICTagChips p={p}/></div>
-              <div style={{width:120,fontSize:11,color:aicSchedOn(p)?T.textSub:T.textMuted}}>{aicSchedOn(p)?contractScheduleShort(p.schedule):"Manual"}</div>
+              <div style={{width:120,fontSize:11,color:p.trigger==="ingestion"||aicSchedOn(p)?T.textSub:T.textMuted}}>{aicTriggerText(p)}</div>
               <div style={{width:130}}><AICJobPill j={lj}/>{lj&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{lj.at}</div>}</div>
               <div style={{width:70,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
                 {toReview
@@ -59184,8 +59348,10 @@ const AICWorkspace = ({onToast, onNav}) => {
           {seg("pending","Pending",nStatus("pending"))}{seg("accepted","Accepted",nStatus("accepted"))}{seg("rejected","Rejected",nStatus("rejected"))}{seg("all","All",all.length)}
         </div>
         <select value={fRun} onChange={e=>{setFRun(e.target.value);setSel(new Set());}} style={selStyle}>
-          <option value="all">All scans</option>
-          {st.profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+          <option value="all">All sources</option>
+          {st.profiles.some(p=>p.trigger==="ingestion")&&<optgroup label="On ingestion">
+            {st.profiles.filter(p=>p.trigger==="ingestion").map(p=><option key={p.id} value={p.id}>{p.connId}</option>)}</optgroup>}
+          <optgroup label="Scans">{st.profiles.filter(p=>p.trigger!=="ingestion").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>
         </select>
         <select value={fLevel} onChange={e=>{setFLevel(e.target.value);setSel(new Set());}} style={selStyle}>
           <option value="all">All levels</option><option value="object">Table / view</option><option value="column">Column</option>
@@ -59467,9 +59633,10 @@ const AICJobsCard = ({onToast}) => {
   const onNav = useNav();
   const {roleCfg} = useRole();
   const me = (roleCfg?.email||"you@jnj").split("@")[0];
-  const [open, setOpen] = useState(()=>!!_bgJobJump);
+  const [open, setOpen] = useState(()=>!!_bgJobJump || !!_bgJobScanJump);
   const [jobId, setJobId] = useState(()=>_bgJobJump);
-  useEffect(()=>{ _bgJobJump=null; },[]);
+  const [fScan, setFScan] = useState(()=>_bgJobScanJump||"all");
+  useEffect(()=>{ _bgJobJump=null; _bgJobScanJump=null; },[]);
   const [fStatus, setFStatus] = useState("all");
   const jobs = st.jobs;
   const done = jobs.filter(j=>j.status==="complete").length;
@@ -59478,9 +59645,9 @@ const AICJobsCard = ({onToast}) => {
   const running = jobs.filter(aicJobLive).length;
   const upcoming = st.settings.enabled ? st.profiles.filter(p=>p.enabled && aicSchedOn(p)) : [];
   const j = jobId ? jobs.find(x=>x.id===jobId) : null;
-  const shown = jobs.filter(x=>fStatus==="all" || x.status===fStatus);
+  const shown = jobs.filter(x=>(fStatus==="all" || x.status===fStatus) && (fScan==="all" || x.runId===fScan));
   const lvl = {ok:T.green, info:T.textMuted, warn:T.amber, err:T.rose};
-  const results = (runId) => { _aicJump = {runId}; setOpen(false); onNav && onNav("tags"); };
+  const results = (runId) => { _aicJump = {runId, review:true}; setOpen(false); onNav && onNav("tags"); };
   const selStyle = {height:30,padding:"0 8px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:11.5,outline:"none",cursor:"pointer"};
   const Stat = ({l, v, c}) => (
     <div style={{flex:1,minWidth:90,padding:"9px 11px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
@@ -59501,7 +59668,7 @@ const AICJobsCard = ({onToast}) => {
             </span>
             {running>0&&<AICJobPill j={jobs.find(aicJobLive)}/>}
           </div>
-          <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Scans columns and suggests classifications. Each run of a scan in Classifications › AI Classification shows up here as a job.</div>
+          <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.5,marginBottom:8}}>Scan runs and connector-ingestion runs</div>
         </div>
         <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:T.accent,flexShrink:0,whiteSpace:"nowrap"}}>View jobs
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -59528,14 +59695,20 @@ const AICJobsCard = ({onToast}) => {
 
           {!j ? (<>
             <div style={{padding:"10px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+              <select value={fScan} onChange={e=>setFScan(e.target.value)} style={selStyle}>
+                <option value="all">All sources</option>
+                {st.profiles.some(p=>p.trigger==="ingestion")&&<optgroup label="On ingestion">
+                  {st.profiles.filter(p=>p.trigger==="ingestion").map(p=><option key={p.id} value={p.id}>{p.connId}</option>)}</optgroup>}
+                <optgroup label="Scans">{st.profiles.filter(p=>p.trigger!=="ingestion").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>
+              </select>
               <select value={fStatus} onChange={e=>setFStatus(e.target.value)} style={selStyle}>
                 <option value="all">Any status</option><option value="running">Running</option><option value="queued">Queued</option>
                 <option value="complete">Complete</option><option value="failed">Failed</option><option value="cancelled">Cancelled</option>
               </select>
-              <span style={{fontSize:11,color:T.textMuted}}>{shown.length} of {jobs.length} · click a job for its log</span>
+              <span style={{fontSize:11,color:T.textMuted,marginLeft:"auto"}}>{shown.length} of {jobs.length}</span>
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"12px 20px 20px"}}>
-              {upcoming.length>0&&fStatus==="all"&&(<>
+              {upcoming.length>0&&fStatus==="all"&&fScan==="all"&&(<>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"0 0 6px"}}>Scheduled</div>
                 <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>
                   {upcoming.map((p,i)=>(
@@ -59547,14 +59720,15 @@ const AICJobsCard = ({onToast}) => {
                 </div>
               </>)}
               <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                <div style={{display:"grid",gridTemplateColumns:"80px 1fr 110px 110px 50px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {["Job","Run","Status","Started","Took"].map(h=><div key={h} style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}
+                <div style={{display:"grid",gridTemplateColumns:"72px 1fr 120px 100px 110px 44px",gap:10,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                  {["Job","Source","Trigger","Status","Started","Took"].map(h=><div key={h} style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}
                 </div>
                 {shown.map((x,i)=>(
                   <div key={x.id} onClick={()=>setJobId(x.id)} className="row-hover"
-                    style={{display:"grid",gridTemplateColumns:"80px 1fr 110px 110px 50px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
+                    style={{display:"grid",gridTemplateColumns:"72px 1fr 120px 100px 110px 44px",gap:10,padding:"10px 14px",alignItems:"center",cursor:"pointer",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
                     <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text}}>{x.id}</span>
                     <span style={{color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicRunName(x.runId)}</span>
+                    <span style={{color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.trigger}</span>
                     <span><AICJobPill j={x}/></span>
                     <span style={{color:T.textMuted}}>{x.at}</span>
                     <span style={{color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{x.ms?`${(x.ms/1000).toFixed(0)}s`:"—"}</span>
@@ -59571,7 +59745,7 @@ const AICJobsCard = ({onToast}) => {
                 {(j.status==="failed"||j.status==="cancelled")&&<Btn small variant="primary" onClick={()=>{
                   const id=aicStartJob(j.runId,`Retry of ${j.id}`,me);
                   if(id){ setJobId(id); onToast(`${id} started`,"success"); } else onToast("That run is paused, deleted, or already running","error"); }}>Retry</Btn>}
-                {st.profiles.some(p=>p.id===j.runId)&&<Btn small ghost onClick={()=>results(j.runId)}>View results</Btn>}
+                {st.profiles.some(p=>p.id===j.runId)&&<Btn small ghost onClick={()=>results(j.runId)}>View suggestions</Btn>}
               </div>
               {aicJobLive(j)&&<div style={{height:6,borderRadius:99,background:T.bgElevated,overflow:"hidden",marginBottom:12}}><div style={{height:"100%",width:`${j.progress}%`,background:T.blue,transition:"width .3s"}}/></div>}
               {j.error&&<div style={{padding:"10px 12px",borderRadius:8,background:T.rose+"12",border:`1px solid ${T.rose}45`,fontSize:12,color:T.text,lineHeight:1.55,marginBottom:12}}>{j.error}</div>}
@@ -59583,7 +59757,6 @@ const AICJobsCard = ({onToast}) => {
               <div style={{border:`1px solid ${T.border}`,borderRadius:8,background:T.bgElevated,padding:"8px 12px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.8}}>
                 {j.log.map((l,i)=><div key={i} style={{color:lvl[l.lvl]||T.textSub}}>{l.lvl==="err"?"✕":l.lvl==="warn"?"!":l.lvl==="ok"?"✓":"·"} {l.msg}</div>)}
               </div>
-              <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>The suggestions this job produced are reviewed in Classifications › AI Classification, not here.</div>
             </div>
           )}
         </div>
