@@ -13431,18 +13431,39 @@ function pm2EffectivePeriod(p, r){
   return {years:ownY, label:`${e.period} ${e.unit}`, why:reqs[0]?`meets ${reqs[0].fw}'s ${reqs[0].y}-year minimum`:"your schedule — no linked regulation sets a number", floor:reqs[0]?.y||0};
 }
 
+// ── Scans decide WHERE and WHEN policies run. A policy only evaluates the objects a scan that includes it has run over.
+const pm2ScanAssets = sc => { const o = sc.objects||{};
+  if(o.mode==="pick") return PM2_ASSETS.filter(a=>(o.assets||[]).includes(a.name));
+  return PM2_ASSETS.filter(a=>(!(o.sources||[]).length||o.sources.includes(pm2SourceOf(a))) && (!(o.objectTypes||[]).length||o.objectTypes.includes(pm2ObjOf(a)))
+    && (!(o.domains||[]).length||o.domains.includes(a.domain)) && (!(o.classes||[]).length||pm2Classes(a).some(c=>o.classes.includes(c)))); };
+function pm2CovFor(p){
+  if(!p||!p.id||p.id==="preview"||p.id==="__new") return null;
+  let sc; try{ sc=_pm2.scans; }catch(e){ return null; } if(!sc) return null;
+  const set=new Set(); sc.filter(x=>x.status!=="Paused"&&(x.runs||[]).length&&(x.policyIds||[]).includes(p.id)).forEach(x=>pm2ScanAssets(x).forEach(a=>set.add(a.name)));
+  return set;
+}
+// What one run of a scan finds: its policies, on its objects.
+function pm2ScanStats(sc, policies){
+  const names = new Set(pm2ScanAssets(sc).map(a=>a.name));
+  const pols = policies.filter(p=>(sc.policyIds||[]).includes(p.id)&&p.status==="Active");
+  let findings=0, targets=0, rules=0;
+  pols.forEach(p=>{ const ev=pm2Eval({...p, id:"preview"}); findings+=ev.findings.filter(f=>names.has(f.asset.name)).length; targets+=ev.targets.filter(t=>names.has(t.asset.name)).length; rules+=p.rules.filter(r=>r.type!=="attestation").length; });
+  return {assets:names.size, policies:pols.length, rules, findings, targets};
+}
 // ── One evaluator for every rule, whatever policy it sits in.
 function pm2EvalRule(p, r){
   const out = {findings:[], targets:[], held:[]};
+  const cov = pm2CovFor(p); const inCov = a => !cov || cov.has(a.name);
   if(r.type==="validation"){
     const fails = (v, a) => pm2AssetInPolicy(a,p,v) && (v.conds||[]).length && v.conds.every(c=>pm2CondTest(c,a));
     // OR: an asset is flagged only when every validation rule that covers it fails. Independent and AND flag any failure.
     const others = p.ruleLogic==="or" ? (p.rules||[]).filter(v=>v.type==="validation"&&v.id!==r.id) : [];
-    PM2_ASSETS.forEach(a=>{ if(fails(r,a) && others.every(v=>!pm2AssetInPolicy(a,p,v)||!(v.conds||[]).length||fails(v,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
+    PM2_ASSETS.forEach(a=>{ if(inCov(a) && fails(r,a) && others.every(v=>!pm2AssetInPolicy(a,p,v)||!(v.conds||[]).length||fails(v,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
   } else if(r.type==="enforcement" && r.enf){
     const e = r.enf; const eff = pm2EffectivePeriod(p, r);
     const clsOk = a => !(e.classes||[]).length || pm2Classes(a).some(c=>e.classes.includes(c));
     PM2_ASSETS.forEach(a=>{
+      if(e.select!=="assets" && !inCov(a)) return;  // a rule that names its own objects runs on them, scan or not
       if(e.action==="hold"){
         const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm2AssetInPolicy(a,p) && clsOk(a));
         if(pick) out.targets.push({asset:a, rule:r, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
@@ -13536,11 +13557,6 @@ let _pm2 = (()=>{
     {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
     {when:"2026-06-02", who:p.owner, what:`Created from the ${pm2LinkedFws(p).map(f=>f.name).join(" / ")} template`}]}));
   const pol = id => policies.find(p=>p.id===id); const rule = (id, key) => pol(id)?.rules.find(r=>r.key===key);
-  // Evaluation history and a daily schedule, the same way the original Policy Manager runs policies.
-  policies.forEach((p,k)=>{ const x=pm2RunStats(p);
-    p.sched = {freq:"daily", time:"08:00", day:"monday", cron:"0 8 * * *", tz:"UTC", enabled:true}; p.schedule="0 8 * * *"; p.schedEnabled=true; p.nextRun=scheduleNextRun(p.sched);
-    p.runs = [0,1,2].map(d=>({id:`run-${p.id}-${d}`, ts:`2026-10-0${7-d} 08:00`, trigger:"Schedule", duration:`${1+((k+d)%3)}m ${10+((k*7+d*13)%49)}s`,
-      assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:d===2?x.violations:0, score:x.score, status:"success"})); });
   // Seeded one template version behind, to show "update available".
   const xb = pol("p-P-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
   // Evidence already on file: GDPR's DPIA is approved; SOC 2 logging is waiting for review; last quarter's access review is approved.
@@ -13594,8 +13610,18 @@ let _pm2 = (()=>{
     history:[{when:"2026-09-01", who:"alex.rivera", what:"Approved — v1 active"},{when:"2026-08-28", who:"maya.chen", what:"Created (custom policy)"}]});
   const approved = {};
   policies.filter(p=>p.status==="Active").forEach(p=>pm2Eval(p).targets.forEach(t=>{ approved[`${p.id}:${t.rule.id}:${t.asset.name}`]=true; }));
+  // Scans: the warehouses nightly, the application databases weekly, finance daily. dbt, Glue and CDP are left unscanned on purpose.
+  const idsFor = fids => policies.filter(p=>p.status==="Active"&&p.articles.some(a=>fids.includes(a.fw))).map(p=>p.id);
+  const sch = (freq,time,day) => { const x={freq, time, day:day||"monday", cron:"", tz:"UTC", enabled:true}; return {sched:x, schedule:contractCron(x), nextRun:scheduleNextRun(x), schedEnabled:true}; };
+  const fo = o => ({mode:"filter", sources:[], objectTypes:[], domains:[], classes:[], assets:[], ...o});
+  const scans = [
+    {id:"scan-wh", name:"Warehouses — nightly", desc:"Snowflake and Databricks against GDPR, SOC 2 and ISO 27001.", owner:"maya.chen", objects:fo({sources:["Snowflake","Databricks"]}), frameworks:["gdpr","soc2","iso27001"], policyIds:idsFor(["gdpr","soc2","iso27001"]), ...sch("daily","02:00"), times:["2026-10-13 02:00","2026-10-12 02:00","2026-10-11 02:00"]},
+    {id:"scan-apps", name:"Application databases — weekly", desc:"PostgreSQL, MySQL and Oracle against the privacy and health regulations.", owner:"james.oh", objects:fo({sources:["PostgreSQL","MySQL","Oracle"]}), frameworks:["gdpr","ukgdpr","ccpa","hipaa","hitech"], policyIds:[...idsFor(["gdpr","ukgdpr","ccpa","hipaa","hitech"]),"p-cust-hr"], ...sch("weekly","06:00","monday"), times:["2026-10-12 06:00","2026-10-05 06:00","2026-09-28 06:00"]},
+    {id:"scan-fin", name:"Finance & payments — daily", desc:"Finance domain against PCI DSS and SOX.", owner:"dev.patel", objects:fo({domains:["Finance"]}), frameworks:["pci_dss","sox"], policyIds:idsFor(["pci_dss","sox"]), ...sch("daily","04:00"), times:["2026-10-13 04:00","2026-10-12 04:00","2026-10-11 04:00"]},
+  ].map((sc,k)=>{ const x=pm2ScanStats(sc, policies); const {times, ...rest}=sc;
+    return {...rest, status:"Active", created:"2026-07-01", runs:times.map((ts,d)=>({id:`srun-${sc.id}-${d}`, ts, trigger:"Schedule", duration:`${2+((k+d)%3)}m ${12+((k*11+d*17)%47)}s`, ...x, newFindings:d===2?x.findings:0, status:"success"}))}; });
   return {
-    adopted:{...adopted, "cf-ids":{owner:"maya.chen", at:"2026-08-01"}}, policies, approved, exceptions:{}, lastRun:{}, fwVer:0,
+    adopted:{...adopted, "cf-ids":{owner:"maya.chen", at:"2026-08-01"}}, policies, scans, approved, exceptions:{}, lastRun:{}, fwVer:0,
     approvalPolicy:{activation:{approver:"maya.chen", autoValidation:true}, enforcement:{fallback:"alex.rivera"}, attest:{reviewer:"maya.chen"}, mapping:{approver:"maya.chen"},
       exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90}, hold:{twoPerson:true}, sod:true},
   };
@@ -13723,7 +13749,12 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const [ed, setEd]           = useState(null);    // create / edit a policy
   const [runningPol, setRunningPol] = useState(null);  // policy being evaluated by Run now
   const [schedFor, setSchedFor] = useState(null);       // policy whose evaluation schedule is open
-  const [runExp, setRunExp] = useState(null);           // expanded run in the Runs tab
+  const [selScan, setSelScan] = useState(null);         // open scan
+  const [scanTab, setScanTab] = useState("overview");
+  const [scanEd, setScanEd]   = useState(null);         // create / edit a scan
+  const [scanQ, setScanQ]     = useState("");
+  const [runningScan, setRunningScan] = useState(null);
+  const [schedScan, setSchedScan] = useState(null);
   const [pvQ, setPvQ] = useState(""); const [pvStat, setPvStat] = useState("All"); const [pvSev, setPvSev] = useState("All"); const [pvExp, setPvExp] = useState(null); // policy Violations table
   const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
   const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
@@ -13774,6 +13805,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const ruleHealth = (p, r, fw) => {
     const inFw = a => !fw || pm2AssetInFw(a,p,fw,r);
     if(r.type==="attestation"){ const s=pm2AttState(p,r); return {state:{current:"met",soon:"met",review:"review2",due:"evidence",overdue:"findings",rejected:"findings"}[s.state], label:s.label}; }
+    const cov = pm2CovFor(p); if(p.status==="Active"&&cov&&cov.size===0&&!(r.type==="enforcement"&&r.enf?.select==="assets")) return {state:"unscanned", label:"Not scanned"};
     const ev = pm2EvalRule(p,r);
     if(r.type==="validation"){ const f=ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,r,x.asset)); return f.length?{state:"findings",label:`${f.length} finding${f.length>1?"s":""}`,n:f.length}:{state:"met",label:"Passing"}; }
     const tg = ev.targets.filter(t=>inFw(t.asset)); const ts = tg.map(t=>pm2TargetStatus(p.id,r.id,t.asset.name));
@@ -13781,8 +13813,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const pend = ts.filter(s=>s!=="approved").length;
     return pend?{state:"pending",label:`${pend} of ${tg.length} table${tg.length>1?"s":""} awaiting owner`}:{state:"met",label:tg.length?`Running on ${tg.length} table${tg.length===1?"":"s"}`:"No tables in scope"};
   };
-  const ART_ORDER = ["uncovered","norules","rejected","findings","draft","review","pending","review2","evidence","met"];
-  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, norules:{l:"No rules",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted},
+  const ART_ORDER = ["uncovered","norules","rejected","findings","unscanned","draft","review","pending","review2","evidence","met"];
+  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, norules:{l:"No rules",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, unscanned:{l:"Not scanned",c:T.amber}, draft:{l:"Policy in draft",c:T.textMuted},
     review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, review2:{l:"Evidence in review",c:T.amber}, evidence:{l:"Evidence due",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
   // Health of a policy — for one article (its exact rules) or overall.
   const polHealth = (p, fw, link) => {
@@ -13879,20 +13911,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     updPol(p.id, x=>addHist({...x, rules:x.rules.map(rl=>rl.id!==r.id?rl:{...rl, submissions:[{id:`sub-${Date.now()}`, by:me, at:pm2Today(), status:"pending", reviewer, values:{...fill.values}}, ...(rl.submissions||[])]})}, `“${r.name}” submitted to ${reviewer}`));
     setFill(null); setTimeout(pm2Sync,0); onToast(`Submitted — ${reviewer} reviews it`,"success");
   };
-  const runNow = p => {
-    if(p.status!=="Active"){ onToast("Activate the policy before running it","info"); return; }
-    if(runningPol) return;
-    setRunningPol(p.id);
-    setTimeout(()=>{
-      const q=_pm2.policies.find(x=>x.id===p.id)||p; const x=pm2RunStats(q); const prev=(q.runs||[])[0];
-      const ts=`${pm2Today()} ${new Date().toTimeString().slice(0,5)}`;
-      const run={id:`run-${p.id}-${Date.now()}`, ts, trigger:"Manual", duration:`${1+Math.floor(Math.random()*2)}m ${10+Math.floor(Math.random()*49)}s`, assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:Math.max(0,x.violations-(prev?.violations??0)), score:x.score, status:"success"};
-      updPol(p.id, y=>({...y, runs:[run, ...(y.runs||[])]}));
-      pm2Set(s2=>({...s2, lastRun:{...s2.lastRun, [p.id]:ts.slice(11)}}));
-      pm2RequestTargets(); setRunningPol(null);
-      onToast(`Evaluated "${p.name}" — ${x.violations} violation${x.violations===1?"":"s"} across ${x.assetsScanned} assets`,"success");
-    }, 1600);
-  };
   const duplicateAsCustom = p => {
     const id = "p-cust-"+Date.now();
     const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (${p.source==="regulation"?"custom":"copy"})`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null,
@@ -13959,7 +13977,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       "-",
       (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:!p.rules.length?"Add at least one rule first":null},
       pr&&{label:"Withdraw approval request", on:()=>withdrawRequest(p), disabled:(pr.requestedBy===me||canSubmit(p))?null:"Only the requester or the owner can withdraw it"},
-      p.status==="Active"&&{label:"Run now", on:()=>runNow(p)},
       p.status==="Active"&&{label:"Retire", on:()=>ask(`Retire "${p.name}"?`, `It stops running. The ${artCount(p)} article${artCount(p)===1?"":"s"} it satisfies will read "No policy" unless another policy covers ${artCount(p)===1?"it":"them"}. You can restore it later.`, "Retire", ()=>retirePolicy(p)), disabled:!canSubmit(p)?`Only the owner (${p.owner}) retires it`:null},
       p.status==="Retired"&&{label:"Restore as draft", on:()=>restorePolicy(p), disabled:!canSubmit(p)?`Only the owner (${p.owner}) restores it`:null},
       "-",
@@ -14132,7 +14149,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} framework{adoptedFws.length===1?"":"s"} tracked</span>
         </div>
         <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
-          {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose}].map(x=>(
+          {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose},{label:"Assets not scanned",count:new Set(adoptedFws.flatMap(f=>fwUnscanned(f).map(a=>a.name))).size,color:T.amber}].map(x=>(
             <div key={x.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${x.color}30`,borderRadius:10,textAlign:"center"}}>
               <div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:x.color,marginBottom:3}}>{x.count}</div>
               <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{x.label}</div>
@@ -14211,6 +14228,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
               <span style={{minWidth:24,fontSize:13,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:c}}>{n}</span><span style={{flex:1,fontSize:12.5,color:T.text}}>{text}</span>{Ic.chevRight(12)}</div>;
             const items = [
+              line(fwUnscanned(fw).length, `in-scope asset${fwUnscanned(fw).length>1?"s are":" is"} not covered by any scan`, ()=>{setTab("scans");setSelFw(null);}, T.amber),
               line(noPol.length, `article${noPol.length>1?"s have":" has"} no policy — ${fw.custom?"create or map one below":"review the framework's policies to switch one on"}`, ()=>fw.custom?null:startAdopt(fw.id,2), T.rose),
               line(drafts.length, `polic${drafts.length>1?"ies are drafts":"y is a draft"} — the owner submits ${drafts.length>1?"them":"it"}`, ()=>openPolicy(drafts[0].id), T.textSub),
               line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>onNav&&onNav("stewardship"), T.amber),
@@ -14418,7 +14436,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const inScope = PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,p));
     const assetRows = [...new Map([...inScope, ...ev.targets.map(t=>t.asset), ...ev.held].map(a=>[a.name,a])).values()];
     const failing = new Set(openF.map(f=>f.asset.name));
-    const lastRunRec = (p.runs||[])[0];
+    const pScans = scans.filter(x=>(x.policyIds||[]).includes(p.id));
+    const lastRunRec = pScans.flatMap(x=>(x.runs||[]).slice(0,1).map(r=>({...r, scan:x.name}))).sort((a,b)=>b.ts.localeCompare(a.ts))[0];
+    const cov = pm2CovFor(p)||new Set(); const scannedN = inScope.filter(a=>cov.has(a.name)).length;
+    const addToScan = id => { updScan(id, x=>({...x, policyIds:[...new Set([...(x.policyIds||[]), p.id])]})); onToast(`Added to ${scans.find(x=>x.id===id)?.name} — runs on its next run`,"success"); };
     // One compliance number, as in the original: validation pass rate, else enforcement coverage, else evidence currency.
     const pct = vR.length ? (inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100)
       : eR.length ? (ev.targets.length?Math.round(runN/ev.targets.length*100):100)
@@ -14429,7 +14450,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const tab = pdTab==="activity" ? (attRules.length&&(fill?.polId===p.id||dueN||!vR.length) ? "evidence" : vR.length ? "violations" : "assets") : pdTab;
     const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Rules",badge:p.rules.length},
       ...(vR.length?[{k:"violations",l:"Violations",badge:openFindN||null,danger:true}]:[]),
-      {k:"runs",l:"Runs",badge:(p.runs||[]).length||null},
+      {k:"scans",l:"Scans",badge:pScans.length||null},
       {k:"assets",l:"Assets",badge:assetRows.length||null},
       ...(attRules.length?[{k:"evidence",l:"Evidence",badge:(p.status==="Active"&&dueN)||null,danger:true}]:[]),
       {k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
@@ -14463,14 +14484,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:6}}>{ruleSentence(p,r)}</div>
         {arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
       </div>); };
-    const running = runningPol===p.id; const notLive = p.status!=="Active";
-    const runBtn = full => <button disabled={running||notLive} title={notLive?"Activate the policy first":""} onClick={()=>runNow(p)}
-      style={{width:full?"100%":"auto",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 14px",borderRadius:8,background:running||notLive?T.bgElevated:T.accentDim,border:`1.5px solid ${running||notLive?T.border:T.accent+"44"}`,color:running||notLive?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:running||notLive?"not-allowed":"pointer",marginBottom:full?8:0,fontFamily:"inherit"}}>
-      {running ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
-        : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><polygon points="5,3 14,8 5,13" fill="currentColor"/></svg>Run now</>}</button>;
-    const schedBtn = () => { const on=!!p.schedule&&p.schedEnabled!==false, paused=!!p.schedule&&p.schedEnabled===false; const col=on?"#16a34a":paused?T.amber:T.textSub;
-      return <button onClick={()=>setSchedFor(p.id)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:on?"#16a34a12":paused?T.amberDim:"transparent",border:`1.5px solid ${on?"#16a34a55":paused?T.amber+"66":T.border}`,color:col,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>{on?"Scheduled":paused?"Schedule paused":"Schedule"}</button>; };
     // A rule as a compact row (Overview), like the original's RULE rows.
     const ruleRow = r => { const tail = r.type==="validation" ? (r.severity||"Medium") : r.type==="enforcement" ? (r.enf?.action==="hold"?"Legal hold":"Retention") : `Every ${r.att?.every||12} mo`;
       const sc = r.type==="validation" ? (SEV_COLOR[r.severity||"Medium"]||T.textMuted) : typeColor(r.type);
@@ -14493,7 +14506,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${healthColor}30`,background:`${healthColor}10`,overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${healthColor}20`}}>
               <div style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:healthColor,boxShadow:`0 0 0 3px ${healthColor}25`}}/><span style={{fontSize:11,fontWeight:700,color:healthColor,textTransform:"uppercase",letterSpacing:"0.07em"}}>Evaluation Results</span></div>
-              <button onClick={()=>setPdTab("runs")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all runs →</button>
+              <button onClick={()=>setPdTab("scans")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View scans →</button>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
               <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
@@ -14509,9 +14522,9 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 {lastRunRec ? <div style={{marginBottom:10}}>
                     <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{lastRunRec.ts}</div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4,alignItems:"center"}}>
-                      <span style={{fontSize:10.5,color:T.textMuted}}>⏱ {lastRunRec.duration}</span><span style={{fontSize:10.5,color:T.textMuted}}>· {lastRunRec.assetsScanned} assets</span>
+                      <span style={{fontSize:10.5,color:T.textMuted}}>⏱ {lastRunRec.duration}</span><span style={{fontSize:10.5,color:T.textMuted}}>· {lastRunRec.scan}</span>
                       <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:lastRunRec.trigger==="Manual"?`${T.violet}14`:`${T.blue}14`,color:lastRunRec.trigger==="Manual"?T.violet:T.blue,fontWeight:600}}>{lastRunRec.trigger}</span></div></div>
-                  : <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Not run yet — use Run now</div>}
+                  : <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Not scanned</div>}
                 {vR.length>0&&(openFindN ? metricBtn(openFindN, `open violation${openFindN!==1?"s":""}`, T.rose, ()=>setPdTab("violations"), <div style={{display:"flex",gap:4}}>{crit>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.rose,color:"#fff"}}>{crit} Crit</span>}{high>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.amber,color:"#fff"}}>{high} High</span>}</div>)
                   : <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:T.green}}>✓ All assets compliant</span></div>)}
                 {eR.length>0&&metricBtn(`${runN}/${ev.targets.length}`, ev.targets.length-runN?`tables enforced — ${ev.targets.length-runN} awaiting their owner`:"tables enforced", ev.targets.length-runN?T.amber:T.green, ()=>setPdTab("assets"))}
@@ -14526,6 +14539,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               ? <><textarea value={descEdit} onChange={e=>setDescEdit(e.target.value)} rows={5} autoFocus style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
               : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
+            {p.status==="Active"&&!pScans.some(x=>(x.runs||[]).length)&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:700,color:T.amber}}>Not scanned</span><span style={{flex:1,fontSize:12,color:T.textSub}}>No scan runs this policy.</span>
+              {scans.length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,fontSize:11.5}}><option value="">Add to a scan…</option>{scans.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+              <Btn small variant="primary" onClick={()=>openScanEditor(null,{policyIds:[p.id], name:`${p.name} scan`})}>New scan</Btn></div>}
             {results}
             {secHd("Rules", p.rules.length, <span style={{display:"flex",gap:10,alignItems:"center"}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}{p.rules.length>0&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</span>)}
             <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
@@ -14540,15 +14557,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data classes</div>
                 <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{p.scope.map(classChip)}</div></div>
               <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Domains</div>
-                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div></div>
-              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Sources</div>
-                <div style={{fontSize:12,color:(p.sources||[]).length?T.text:T.textMuted,marginBottom:10}}>{(p.sources||[]).join(", ")||"All sources"}</div>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Object types</div>
-                <div style={{fontSize:12,color:(p.objectTypes||[]).length?T.text:T.textMuted,marginBottom:10}}>{(p.objectTypes||[]).join(", ")||"All types"}</div>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Assets</div>
-                <div style={{fontSize:12,color:T.textSub}}>{inScope.length} assets in scope today <button onClick={()=>setPdTab("assets")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500,marginLeft:6}}>View →</button></div></div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Scanned objects</div>
+                <div style={{fontSize:12,color:T.textSub}}>{scannedN} of {inScope.length} objects holding these classes · {pScans.length} scan{pScans.length===1?"":"s"} <button onClick={()=>setPdTab("scans")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500,marginLeft:6}}>View →</button></div></div>
             </div>
           </div>
           <div style={{width:250,flexShrink:0}}>
@@ -14558,7 +14568,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
             {SB("Category", canEdit(p)?()=>setSideEdit(sideEdit==="cat"?null:"cat"):null, sideEdit==="cat"
               ? <select autoFocus value={p.category||""} onChange={e=>{const v=e.target.value; updPol(p.id,x=>addHist({...x,category:v},`Category set to ${v||"Not set"}`)); setSideEdit(null);}} style={{...selStyle,width:"100%"}}><option value="">Not set</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
               : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:`${catColor(p.category)}14`,color:catColor(p.category),border:`1px solid ${catColor(p.category)}30`}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
-            {SB("Domain", null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.domains||[]).length?p.domains.map(d=><span key={d}>{pill(T.rose,d)}</span>):<span style={{fontSize:12,color:T.textMuted}}>All domains</span>}</div>)}
             {SB("Owners", (isAdmin||p.owner===me)?()=>setSideEdit(sideEdit==="own"?null:"own"):null, sideEdit==="own"
               ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");}) : ownerChip(p.owner))}
             {SB("Stewards", canSubmit(p)?()=>setSideEdit(sideEdit==="stw"?null:"stw"):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -14582,11 +14591,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {kv("Source", isReg?"Prebuilt":p.basedOn?"Custom (duplicated)":"Custom")}
               {isReg&&kv("Template", `v${p.tplVersion||1}`)}
               {upd&&<div style={{fontSize:11.5,color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>)}
-            {SB("Evaluation", null, <>{runBtn(true)}{schedBtn()}
-              {p.schedule&&<div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>{p.schedEnabled===false?"Paused — next run when re-enabled":"Next run"}</div>
-                <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{p.schedEnabled===false?"—":(p.nextRun||"—").replace(/^Next run: /,"")}</div>
-                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{p.schedule}</div></div>}</>)}
+            {SB("Scans", null, <>
+              {pScans.map(x=>{ const lr=(x.runs||[])[0]; return <div key={x.id} onClick={()=>{setTab("scans");setSelScan(x.id);setScanTab("overview");}} style={{padding:"6px 0",borderBottom:`1px dashed ${T.border}`,cursor:"pointer"}}>
+                <div style={{fontSize:12,fontWeight:600,color:T.accent}}>{x.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{lr?`Last run ${lr.ts}`:"Never run"}</div></div>; })}
+              {!pScans.length&&<div style={{fontSize:12,color:T.textMuted}}>Not in any scan</div>}
+              {scans.filter(x=>!pScans.includes(x)).length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,width:"100%",marginTop:8}}><option value="">+ Add to a scan</option>{scans.filter(x=>!pScans.includes(x)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}</>)}
           </div>
         </div>);
     }
@@ -14650,36 +14659,25 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               </tbody></table></div>}
       </>;
     }
-    if(tab==="runs"){ const runs=p.runs||[];
-      body = <>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12}}>
-          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Evaluation Runs</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Every execution of this policy — an immutable audit trail of what was found and when.{p.schedule&&p.schedEnabled!==false?` Scheduled ${contractScheduleLabel(p.sched)}.`:""}</div></div>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>{runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}{runBtn(false)}</div>
-        </div>
-        {runs.length===0 ? <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
-            <div style={{fontSize:28,marginBottom:10}}>▷</div><div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
-            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,margin:"0 auto",lineHeight:1.7}}>{p.status!=="Active"?"Activate this policy first, then run it to see evaluation history.":'Click "Run now" to evaluate this policy for the first time.'}</div></div>
-          : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-            <table style={{width:"100%",borderCollapse:"collapse"}}>
-              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Status","Run at","Trigger","Assets","Rules","Duration","New violations","Open violations","Score"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
-              <tbody>{runs.map((run,ri)=>{ const sc=run.status==="success"?T.green:T.rose; const scoreC=run.score==null?T.textMuted:run.score>=80?T.green:run.score>=60?T.amber:T.rose;
-                return (<tr key={run.id} style={{borderBottom:ri<runs.length-1?`1px solid ${T.border}`:"none",boxShadow:`inset 3px 0 0 ${sc}`,background:ri===0?`${T.accent}05`:"transparent"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=ri===0?`${T.accent}05`:"transparent"}>
-                  <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}10`,color:sc,border:`1px solid ${sc}30`,display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:5,height:5,borderRadius:"50%",background:sc}}/>{run.status==="success"?"Passed":"Failed"}</span>
-                    {ri===0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em"}}>Latest</span>}</div></td>
-                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{run.ts}</td>
-                  <td style={{padding:"10px 14px"}}><span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`}}>{run.trigger}</span></td>
-                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.assetsScanned}</td>
-                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.rulesEval}</td>
-                  <td style={{padding:"10px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>⏱ {run.duration}</td>
-                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,color:run.violationsNew>0?T.rose:T.green}}>{run.violationsNew>0?`+${run.violationsNew}`:"0"}</td>
-                  <td style={{padding:"10px 14px"}}>{run.violations>0&&vR.length?<button onClick={()=>setPdTab("violations")} style={{fontSize:12,fontWeight:700,color:T.rose,background:"none",border:"none",cursor:"pointer",padding:0}}>{run.violations}</button>:<span style={{fontSize:12,color:T.green,fontWeight:600}}>{run.violations}</span>}</td>
-                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:scoreC}}>{run.score!=null?`${run.score}%`:"—"}</td>
-                </tr>); })}</tbody></table></div>}
-      </>;
-    }
+    if(tab==="scans") body = <>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Scans running this policy</div>
+        {scans.filter(x=>!pScans.includes(x)).length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,fontSize:11.5}}><option value="">Add to a scan…</option>{scans.filter(x=>!pScans.includes(x)).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+        <Btn small variant="primary" icon={Ic.plus(10)} onClick={()=>openScanEditor(null,{policyIds:[p.id], name:`${p.name} scan`})}>New scan</Btn>
+      </div>
+      {!pScans.length ? <div style={{textAlign:"center",padding:"40px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12,fontSize:12.5,color:T.textMuted}}>Not in any scan</div>
+      : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Scan","Objects","Schedule","Last run","Findings",""].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+        <tbody>{pScans.map(x=>{ const names=new Set(pm2ScanAssets(x).map(a=>a.name)); const lr=(x.runs||[])[0]; const n=openF.filter(f=>names.has(f.asset.name)).length; const hit=inScope.filter(a=>names.has(a.name)).length;
+          return <tr key={x.id} onClick={()=>{setTab("scans");setSelScan(x.id);setScanTab("overview");}} style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <td style={{padding:"10px 14px"}}><div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>owner {x.owner}</div></td>
+            <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{hit}</td>
+            <td style={{padding:"10px 14px",fontSize:11.5,color:T.textSub}}>{x.status==="Paused"?"Paused":x.schedule?contractScheduleLabel(x.sched):"Manual"}</td>
+            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:lr?T.text:T.textMuted,whiteSpace:"nowrap"}}>{lr?lr.ts:"Never"}</td>
+            <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,color:!lr?T.textMuted:n?T.rose:T.green}}>{lr?n:"—"}</td>
+            <td style={{padding:"10px 14px",textAlign:"right"}} onClick={e=>e.stopPropagation()}><button onClick={()=>ask(`Remove from ${x.name}?`, `${x.name} stops running "${p.name}".`, "Remove", ()=>{ updScan(x.id,y=>({...y,policyIds:y.policyIds.filter(i=>i!==p.id)})); onToast("Removed from the scan","info"); })} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Remove</button></td>
+          </tr>; })}</tbody></table></div>}
+    </>;
     if(tab==="assets"){
       const th = {padding:"9px 12px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
       body = <>
@@ -15302,7 +15300,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
     const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, sources:ed.sources, objectTypes:ed.objectTypes, tags:ed.tags, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
     // The evaluation schedule applies straight away (it only decides when an active policy runs).
-    const schedFields = ed.sched ? {sched:ed.sched, schedule:contractCron(ed.sched), nextRun:scheduleNextRun(ed.sched), schedEnabled:ed.sched.enabled!==false} : {sched:null, schedule:null, nextRun:null};
+    const schedFields = {};
     let id = ed.id;
     if(!id){
       id = "p-cust-"+Date.now();
@@ -15335,21 +15333,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave it empty and assign a category later.</div></div>
     </div>;
     if(ed.step===2) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
-      {secHead("Policy Scope", ed.isReg?"A prebuilt policy's data classes come from its regulations. You can narrow it to specific domains.":"Define which data this policy governs. Assets are picked by classification, so newly classified data joins automatically.")}
+      {secHead("Policy Scope")}
       <div>{ed.isReg ? <><label style={lbl}>Data Classes <span style={{color:T.rose}}>*</span></label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{ed.scope.map(classChip)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Locked — set by the regulations it serves.</div></>
         : <CatFieldDropdown label="Data Classes" required options={classLabels} selected={ed.scope.filter(c=>c!=="ALL").map(c=>PM2_CLASS_META[c].label)} onChange={v=>setE("scope",v.map(classFromLabel).filter(Boolean))} placeholder="Search and select data classes…"/>}
         {!ed.scope.length&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>Select at least one data class to continue.</div>}</div>
-      <div><CatFieldDropdown label="Domain" options={PM2_DOMAINS} selected={ed.domains} onChange={v=>setE("domains",v)} placeholder="All domains"/>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave empty to cover every domain.</div></div>
-      <div><CatFieldDropdown label="Source" options={PM2_SOURCES} selected={ed.sources} placeholder="All sources — search and select…"
-          onChange={v=>{ const ok=new Set(pm2ObjFor(v)); setEd(e=>({...e, sources:v, objectTypes:e.objectTypes.filter(t=>ok.has(t))})); }}
-          renderChip={o=><span>{o}</span>}/>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave empty to cover every connected source.</div></div>
-      <div><CatFieldDropdown label="Object Types" options={pm2ObjFor(ed.sources)} selected={ed.objectTypes} onChange={v=>setE("objectTypes",v)} placeholder="All object types…"/>
-        <div style={{fontSize:11,color:T.textMuted,marginTop:6,lineHeight:1.6}}>{ed.sources.length?"Filtered by your sources.":"Showing every object type — pick a Source above to narrow this."} Object stores govern at the <b>Bucket</b> / <b>Container</b> level; an <b>Iceberg Table</b> has columns like a warehouse table.</div></div>
-      <div style={{padding:"12px 16px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,fontSize:12,color:T.accent,lineHeight:1.7}}>
-        <b>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets</b> in scope today
-        <span style={{color:T.textSub}}> — {ed.scope.map(c=>c==="ALL"?"all classified data":PM2_CLASS_META[c]?.label.toLowerCase()).join(", ")||"no classes"}{ed.domains.length?` · ${ed.domains.join(", ")}`:""}{ed.sources.length?` · ${ed.sources.join(", ")}`:" · every source"}{ed.objectTypes.length?` · ${ed.objectTypes.join(" + ")}`:""}. Specific assets can be picked inside an enforcement rule.</span></div>
+      <div style={{padding:"10px 14px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,fontSize:12,color:T.accent}}><b>{PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} objects</b> hold these classes today · scans decide which are checked</div>
     </div>;
     if(ed.step===3) body = <>
       {secHead("Rules", ed.isReg?"Prebuilt rules are locked to the regulation — only the values it leaves open are editable. Add your own custom rules alongside them.":"A policy holds as many rules as its commitment needs. Each rule is one type: validation checks metadata, enforcement retains or holds data, attestation asks a person for evidence.")}
@@ -15393,22 +15381,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
     }
     if(ed.step===5) body = <div style={{maxWidth:680}}>
       {secHead("Review & Create","Confirm your policy settings, then save it as a draft or submit it for approval.")}
-      {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Domains", ed.domains.join(", ")||"All domains"],["Sources", ed.sources.join(", ")||"All sources"],["Object types", ed.objectTypes.join(", ")||"All types"],["Assets", `${PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length} assets in scope`]])}
+      {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM2_CLASS_META[c]?.label).join(", ")||"—"],["Objects holding these classes", PM2_ASSETS.filter(a=>pm2AssetInPolicy(a,pv)).length]])}
       {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Tags", ed.tags.join(", ")||"None"],["Notify", ed.notify.join(", ")||"Nobody"]])}
       {reviewCard(`Rules (${ed.rules.length})`, [["Evaluation logic", PM2_LOGIC[ed.ruleLogic||"independent"].label], ...ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>])])}
       {reviewCard("Ownership", [["Owner", ed.owner],["Stewards", ed.stewards.join(", ")||"None"],["Frameworks", ed.fwSel.map(id=>`${pm2Fw(id)?.name} (${ed.articles.filter(a=>a.fw===id).length})`).join(", ")||"Internal — none"]])}
-      {(()=>{ const sc=ed.sched; const setS=(k,v)=>setE("sched",{...(sc||{freq:"daily",time:"08:00",day:"monday",cron:"0 8 * * *",tz:"UTC",enabled:true}),[k]:v});
-        const fsel={...inp,width:"auto",padding:"6px 9px",background:T.bgSurface,cursor:"pointer"};
-        return <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}>
-          <div style={{padding:"10px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:`1px solid ${T.border}`}}>Evaluation schedule</div>
-          <div style={{padding:"12px 14px",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-            <select value={sc?sc.freq:"manual"} onChange={e=>e.target.value==="manual"?setE("sched",null):setS("freq",e.target.value)} style={fsel}>
-              <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option><option value="manual">Manual only (Run now)</option></select>
-            {sc&&sc.freq==="weekly"&&<select value={sc.day} onChange={e=>setS("day",e.target.value)} style={fsel}>{CONTRACT_WEEKDAYS.map(d=><option key={d} value={d}>{d[0].toUpperCase()+d.slice(1)}</option>)}</select>}
-            {sc&&sc.freq!=="hourly"&&<input type="time" value={sc.time} onChange={e=>setS("time",e.target.value)} style={fsel}/>}
-            {sc&&<select value={sc.tz} onChange={e=>setS("tz",e.target.value)} style={fsel}>{CONTRACT_TZ_OPTS.map(z=><option key={z}>{z}</option>)}</select>}
-            <span style={{fontSize:11.5,color:T.textMuted}}>{sc?`Runs ${contractScheduleLabel(sc)} once the policy is active — and on Run now.`:"Runs only when someone clicks Run now."}</span>
-          </div></div>; })()}
       {reviewCard("Approval", [["Route", routeText(ed.rules, ev.targets.length||null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
       {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
     </div>;
@@ -15538,17 +15514,297 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   }
 
 
+  // ═════ SCANS — where and when policies run ═════
+  const scans = st.scans||[];
+  const scanFindings = sc => { const names=new Set(pm2ScanAssets(sc).map(a=>a.name)); return allFindings.filter(f=>(sc.policyIds||[]).includes(f.pol.id)&&names.has(f.asset.name)); };
+  const scanTargets = sc => { const names=new Set(pm2ScanAssets(sc).map(a=>a.name));
+    return livePols.filter(p=>p.status==="Active"&&(sc.policyIds||[]).includes(p.id)).flatMap(p=>evalOf(p).targets.filter(t=>names.has(t.asset.name)).map(t=>({...t, pol:p}))); };
+  const scanObjLabel = sc => { const o=sc.objects||{};
+    if(o.mode==="pick") return `${(o.assets||[]).length} selected object${(o.assets||[]).length===1?"":"s"}`;
+    const parts=[(o.sources||[]).join(", ")||"All sources", (o.objectTypes||[]).join(", "), (o.domains||[]).join(", "), (o.classes||[]).map(c=>PM2_CLASS_META[c]?.label).join(", ")].filter(Boolean);
+    return parts.join(" · "); };
+  // The frameworks picked for the scan; a scan of hand-picked policies falls back to the frameworks those policies serve.
+  const scanFws = sc => ((sc.frameworks||[]).length ? sc.frameworks : [...new Set(livePols.filter(p=>(sc.policyIds||[]).includes(p.id)).flatMap(p=>p.articles.filter(a=>a.ok!==false&&st.adopted[a.fw]).map(a=>a.fw)))]).map(pm2Fw).filter(Boolean);
+  // Assets a tracked framework applies to, and those no running scan covers.
+  const coveredNames = new Set(scans.filter(s=>s.status!=="Paused"&&(s.runs||[]).length).flatMap(s=>pm2ScanAssets(s).map(a=>a.name)));
+  const fwUnscanned = fw => PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)&&!coveredNames.has(a.name));
+  const updScan = (id, fn) => pm2Set(s=>({...s, scans:(s.scans||[]).map(x=>x.id===id?fn(x):x)}));
+  const runScan = sc => {
+    if(runningScan) return;
+    if(!(sc.policyIds||[]).length){ onToast("Add at least one policy to the scan","info"); return; }
+    setRunningScan(sc.id);
+    setTimeout(()=>{
+      const cur=(_pm2.scans||[]).find(x=>x.id===sc.id)||sc; const x=pm2ScanStats(cur,_pm2.policies); const prev=(cur.runs||[])[0];
+      const ts=`${pm2Today()} ${new Date().toTimeString().slice(0,5)}`;
+      const run={id:`srun-${sc.id}-${Date.now()}`, ts, trigger:"Manual", by:me, duration:`${1+Math.floor(Math.random()*3)}m ${10+Math.floor(Math.random()*49)}s`, ...x, newFindings:Math.max(0,x.findings-(prev?.findings??0)), status:"success"};
+      updScan(sc.id, y=>({...y, runs:[run, ...(y.runs||[])]}));
+      setTimeout(pm2RequestTargets,0); setRunningScan(null);
+      onToast(`${cur.name} — ${x.findings} findings on ${x.assets} objects${x.targets?` · ${x.targets} enforcement targets`:""}`,"success");
+    }, 1800);
+  };
+  const deleteScan = sc => ask(`Delete ${sc.name}?`, `Its run history is removed. Policies stay; objects only this scan covered become unscanned.`, "Delete", ()=>{ pm2Set(s=>({...s, scans:s.scans.filter(x=>x.id!==sc.id)})); setSelScan(null); onToast("Scan deleted","info"); }, true);
+  const scanMenu = sc => [
+    {label:"Run now", on:()=>runScan(sc), disabled:runningScan?"A scan is running":null},
+    {label:"Edit", on:()=>openScanEditor(sc)},
+    {label:sc.status==="Paused"?"Resume":"Pause", on:()=>{ updScan(sc.id,x=>({...x,status:x.status==="Paused"?"Active":"Paused"})); onToast(sc.status==="Paused"?"Scan resumed":"Scan paused","success"); }},
+    "-",
+    {label:"Delete", danger:true, on:()=>deleteScan(sc)},
+  ];
+  const schedChip = sc => { const on=!!sc.schedule&&sc.schedEnabled!==false&&sc.status!=="Paused";
+    return <span style={{fontSize:11,color:on?T.text:T.textMuted}}>{sc.status==="Paused"?"Paused":on?contractScheduleLabel(sc.sched):"Manual"}</span>; };
+  const runBtnS = (sc, small) => { const running=runningScan===sc.id;
+    return <button disabled={!!runningScan} onClick={e=>{e.stopPropagation(); runScan(sc);}} style={{display:"inline-flex",alignItems:"center",gap:6,padding:small?"4px 10px":"7px 14px",borderRadius:7,background:running||runningScan?T.bgElevated:T.accentDim,border:`1.5px solid ${running||runningScan?T.border:T.accent+"44"}`,color:running||runningScan?T.textMuted:T.accent,fontSize:small?11:12,fontWeight:600,cursor:runningScan?"not-allowed":"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
+      {running?<><span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Running…</>:<><svg width="10" height="10" viewBox="0 0 16 16" fill="none"><polygon points="5,3 14,8 5,13" fill="currentColor"/></svg>Run now</>}</button>; };
+  const thS2 = {padding:"8px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap",background:T.bgElevated,borderBottom:`1px solid ${T.border}`};
+  const tdS = {padding:"10px 14px",fontSize:12,color:T.textSub,borderBottom:`1px solid ${T.border}`,verticalAlign:"middle"};
+
+  const renderScans = () => {
+    if(selScan){ const sc=scans.find(x=>x.id===selScan); if(sc) return renderScan(sc); }
+    const ql=scanQ.toLowerCase(); const rows=scans.filter(s=>!ql||[s.name,s.desc,s.owner].join(" ").toLowerCase().includes(ql));
+    const inScopeAll = PM2_ASSETS.filter(a=>adoptedFws.some(f=>pm2InScope(a,f.covers)));
+    const unscanned = inScopeAll.filter(a=>!coveredNames.has(a.name));
+    const stat = (v,l,c) => <div style={{flex:1,minWidth:130,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${c}30`,borderRadius:10,textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:c,marginBottom:3}}>{v}</div><div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}</div></div>;
+    return (
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16,flexWrap:"wrap"}}>
+          {searchBox(scanQ, setScanQ, "Search scans…")}
+          <span style={{marginLeft:"auto"}}><Btn small variant="primary" icon={Ic.plus(11)} onClick={()=>openScanEditor(null)}>New scan</Btn></span>
+        </div>
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          {stat(scans.filter(s=>s.status!=="Paused").length, "Active scans", T.accent)}
+          {stat(`${inScopeAll.length-unscanned.length}/${inScopeAll.length}`, "In-scope assets scanned", unscanned.length?T.amber:T.green)}
+          {stat(unscanned.length, "Not scanned", unscanned.length?T.rose:T.green)}
+          {stat(scans.reduce((n,s)=>n+scanFindings(s).filter(f=>f.exc?.status!=="accepted").length,0), "Open findings", T.rose)}
+        </div>
+        {unscanned.length>0&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderRadius:9,background:`${T.amber}0c`,border:`1px solid ${T.amber}40`,marginBottom:16,fontSize:12,color:T.text}}>
+          <span style={{fontWeight:700,color:T.amber}}>Not scanned</span>
+          <span style={{flex:1,fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub}}>{unscanned.map(a=>a.name).join(", ")}</span>
+          <Btn small ghost onClick={()=>openScanEditor(null,{objects:{mode:"pick",assets:unscanned.map(a=>a.name),sources:[],objectTypes:[],domains:[],classes:[]}})}>Scan these</Btn></div>}
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr>{["Scan","Objects","Policies","Schedule","Last run","Findings","Status",""].map(h=><th key={h} style={thS2}>{h}</th>)}</tr></thead>
+            <tbody>{rows.map(sc=>{ const last=(sc.runs||[])[0]; const objs=pm2ScanAssets(sc).length; const fw=scanFws(sc); const nF=scanFindings(sc).filter(f=>f.exc?.status!=="accepted").length;
+              return (<tr key={sc.id} onClick={()=>{setSelScan(sc.id);setScanTab("overview");}} style={{cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <td style={tdS}><div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{sc.name}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>owner {sc.owner}</div></td>
+                <td style={tdS}><div style={{fontWeight:600,color:T.text}}>{objs}</div><div style={{fontSize:10.5,color:T.textMuted,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{scanObjLabel(sc)}</div></td>
+                <td style={tdS}><div style={{fontWeight:600,color:T.text}}>{(sc.policyIds||[]).length}</div><div style={{display:"flex",gap:3,flexWrap:"wrap",marginTop:2}}>{fw.slice(0,3).map(f=><span key={f.id} style={{fontSize:10,padding:"0 6px",borderRadius:4,background:`${T.blue}10`,color:T.blue,border:`1px solid ${T.blue}25`}}>{f.name}</span>)}{fw.length>3&&<span style={{fontSize:10,color:T.textMuted}}>+{fw.length-3}</span>}</div></td>
+                <td style={tdS}>{schedChip(sc)}</td>
+                <td style={{...tdS,whiteSpace:"nowrap"}}>{last?<><div style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.text}}>{last.ts}</div><div style={{fontSize:10.5,color:T.textMuted}}>{last.trigger}</div></>:<span style={{color:T.textMuted}}>Never</span>}</td>
+                <td style={tdS}><span style={{fontWeight:700,color:nF?T.rose:T.green}}>{last?nF:"—"}</span></td>
+                <td style={tdS}>{pill(sc.status==="Paused"?T.textMuted:T.green, sc.status==="Paused"?"Paused":"Active")}</td>
+                <td style={{...tdS,textAlign:"right"}} onClick={e=>e.stopPropagation()}><div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}}>{runBtnS(sc,true)}{menuBtn("sc:"+sc.id, scanMenu(sc))}</div></td>
+              </tr>); })}
+              {!rows.length&&<tr><td colSpan={8} style={{padding:"36px",textAlign:"center",color:T.textMuted,fontSize:12.5}}>{scans.length?"No scans match.":"No scans yet."}</td></tr>}</tbody>
+          </table>
+        </div>
+      </div>);
+  };
+
+  const renderScan = sc => {
+    const assets = pm2ScanAssets(sc); const pols = livePols.filter(p=>(sc.policyIds||[]).includes(p.id));
+    const finds = scanFindings(sc); const openF = finds.filter(f=>f.exc?.status!=="accepted"); const tg = scanTargets(sc);
+    const tgPend = tg.filter(t=>pm2TargetStatus(t.pol.id,t.rule.id,t.asset.name)!=="approved");
+    const last = (sc.runs||[])[0]; const fws = scanFws(sc);
+    const STABS = [{k:"overview",l:"Overview"},{k:"runs",l:"Runs",b:(sc.runs||[]).length},{k:"findings",l:"Findings",b:openF.length,d:true},{k:"objects",l:"Objects",b:assets.length},{k:"policies",l:"Policies",b:pols.length}];
+    const kv2 = (k,v) => <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"4px 0"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,fontWeight:500,textAlign:"right"}}>{v}</span></div>;
+    const box = (title, children) => <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}><div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{title}</div>{children}</div>;
+    let body;
+    if(scanTab==="overview"){
+      const tile = (v,l,c,go) => <div onClick={go} style={{flex:1,minWidth:120,padding:"12px 14px",borderRight:`1px solid ${T.border}`,cursor:go?"pointer":"default"}}><div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:c}}>{v}</div><div style={{fontSize:10.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:600,marginTop:2}}>{l}</div></div>;
+      body = <div style={{display:"flex",minHeight:"100%"}}>
+        <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,minWidth:0}}>
+          {sc.desc&&<div style={{fontSize:13,lineHeight:1.7,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:18}}>{sc.desc}</div>}
+          <div style={{borderRadius:10,border:`1px solid ${T.border}`,background:T.bgSurface,overflow:"hidden",marginBottom:18}}>
+            <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Last run</span>
+              <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{last?`${last.ts} · ${last.trigger} · ⏱ ${last.duration}`:"Never run"}</span></div>
+            <div style={{display:"flex",flexWrap:"wrap"}}>
+              {tile(assets.length,"Objects",T.text,()=>setScanTab("objects"))}
+              {tile(pols.length,"Policies",T.text,()=>setScanTab("policies"))}
+              {tile(last?openF.length:"—","Open findings",openF.length?T.rose:T.green,()=>setScanTab("findings"))}
+              {tile(last?tgPend.length:"—","Awaiting table owner",tgPend.length?T.amber:T.green)}
+            </div></div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Frameworks</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:18}}>{fws.map(f=><span key={f.id} onClick={()=>{setTab("frameworks");setSelFw(f.id);}} style={{fontSize:12,padding:"3px 10px",borderRadius:5,background:`${T.blue}10`,color:T.blue,border:`1px solid ${T.blue}30`,cursor:"pointer"}}>{f.name}</span>)}{!fws.length&&<span style={{fontSize:12,color:T.textMuted}}>—</span>}</div>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Objects</div>
+          <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:12,color:T.text}}>
+            {kv2("Selection", (sc.objects||{}).mode==="pick"?"Picked objects":"Filter (dynamic)")}{kv2("Criteria", scanObjLabel(sc))}{kv2("Matching now", assets.length)}</div>
+        </div>
+        <div style={{width:250,flexShrink:0}}>
+          {box("Status", pill(sc.status==="Paused"?T.textMuted:T.green, sc.status==="Paused"?"Paused":"Active"))}
+          {box("Owner", <span style={{fontSize:12,color:T.text}}>{sc.owner}</span>)}
+          {box("Schedule", <>{schedChip(sc)}{sc.schedule&&sc.status!=="Paused"&&sc.schedEnabled!==false&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:4,fontFamily:"'Geist Mono',monospace"}}>{sc.schedule}</div>}
+            <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>{runBtnS(sc)}<button onClick={()=>setSchedScan(sc.id)} style={{padding:"7px 12px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{sc.schedule?"Edit schedule":"Schedule"}</button></div></>)}
+          {box("Details", <>{kv2("Created", sc.created||"—")}{kv2("Runs", (sc.runs||[]).length)}</>)}
+        </div></div>;
+    }
+    if(scanTab==="runs") body = <div style={{padding:"20px 22px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>Runs</div>{runBtnS(sc)}</div>
+      {!(sc.runs||[]).length ? <div style={{textAlign:"center",padding:"40px",border:`1.5px dashed ${T.border}`,borderRadius:12,fontSize:12.5,color:T.textMuted}}>No runs yet</div>
+        : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr>{["Status","Run at","Trigger","Objects","Policies","Rules","Duration","New findings","Findings","Enforcement"].map(h=><th key={h} style={thS2}>{h}</th>)}</tr></thead>
+          <tbody>{sc.runs.map((r,ri)=><tr key={r.id} style={{boxShadow:`inset 3px 0 0 ${r.status==="success"?T.green:T.rose}`,background:ri===0?`${T.accent}05`:"transparent"}}>
+            <td style={tdS}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${T.green}10`,color:T.green,border:`1px solid ${T.green}30`}}>{r.status==="success"?"Completed":"Failed"}</span>{ri===0&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,textTransform:"uppercase"}}>Latest</span>}</td>
+            <td style={{...tdS,fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text,whiteSpace:"nowrap"}}>{r.ts}</td>
+            <td style={tdS}><span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:r.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:r.trigger==="Manual"?T.violet:T.blue,fontWeight:600}}>{r.trigger}</span></td>
+            <td style={tdS}>{r.assets}</td><td style={tdS}>{r.policies}</td><td style={tdS}>{r.rules}</td>
+            <td style={{...tdS,whiteSpace:"nowrap"}}>⏱ {r.duration}</td>
+            <td style={{...tdS,fontWeight:700,color:r.newFindings?T.rose:T.green}}>{r.newFindings?`+${r.newFindings}`:"0"}</td>
+            <td style={{...tdS,fontWeight:700,color:r.findings?T.rose:T.green}}>{r.findings}</td>
+            <td style={tdS}>{r.targets}</td></tr>)}</tbody></table></div>}
+    </div>;
+    if(scanTab==="findings") body = <div style={{padding:"20px 22px"}}>
+      {!last ? <div style={{fontSize:12.5,color:T.textMuted}}>Run the scan to see findings.</div> : !finds.length ? <div style={{padding:"12px 14px",borderRadius:9,background:`${T.green}10`,border:`1px solid ${T.green}25`,fontSize:12.5,color:T.green,fontWeight:600}}>✓ No findings</div>
+      : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr>{["Object","Policy","Rule","Severity","Status","Frameworks"].map(h=><th key={h} style={thS2}>{h}</th>)}</tr></thead>
+        <tbody>{finds.map(f=>{ const s=f.exc?.status==="accepted"?"Excepted":f.exc?.status==="pending"?"Exception requested":"Open"; const c={"Open":T.rose,"Exception requested":T.amber,"Excepted":T.textMuted}[s];
+          return <tr key={f.key} onClick={()=>openPolicy(f.pol.id,null,"violations")} style={{cursor:"pointer",opacity:s==="Excepted"?.6:1}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <td style={tdS}><div style={{fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.text}}>{f.asset.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{pm2SourceOf(f.asset)} · {f.asset.domain}</div></td>
+            <td style={tdS}><span style={{display:"inline-flex",alignItems:"center",gap:6}}>{srcBox(f.pol)}{f.pol.name}</span></td>
+            <td style={{...tdS,maxWidth:240}}><div style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.rule.name}</div></td>
+            <td style={tdS}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${SEV_COLOR[f.severity]||T.textMuted}14`,color:SEV_COLOR[f.severity]||T.textMuted,textTransform:"uppercase"}}>{f.severity}</span></td>
+            <td style={tdS}><span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:`${c}14`,color:c,border:`1.5px solid ${c}45`,whiteSpace:"nowrap"}}>{s}</span></td>
+            <td style={tdS}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{f.refs.slice(0,2).map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`)}</span>)}{f.refs.length>2&&<span style={{fontSize:10.5,color:T.textMuted}}>+{f.refs.length-2}</span>}</div></td>
+          </tr>; })}</tbody></table></div>}
+    </div>;
+    if(scanTab==="objects") body = <div style={{padding:"20px 22px"}}>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr>{["Object","Source","Type","Domain","Classifications","Owner","Findings"].map(h=><th key={h} style={thS2}>{h}</th>)}</tr></thead>
+        <tbody>{assets.map(a=>{ const n=openF.filter(f=>f.asset.name===a.name).length;
+          return <tr key={a.name}><td style={{...tdS,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.text}}>{a.name}</td><td style={tdS}>{pm2SourceOf(a)}</td><td style={tdS}>{pm2ObjOf(a)}</td><td style={tdS}>{a.domain}</td>
+            <td style={tdS}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm2Classes(a).map(classChip)}</div></td><td style={tdS}>{a.owner||"—"}</td>
+            <td style={{...tdS,fontWeight:700,color:!last?T.textMuted:n?T.rose:T.green}}>{!last?"—":n||"✓"}</td></tr>; })}
+          {!assets.length&&<tr><td colSpan={7} style={{padding:28,textAlign:"center",color:T.textMuted}}>No objects match.</td></tr>}</tbody></table></div>
+    </div>;
+    if(scanTab==="policies") body = <div style={{padding:"20px 22px"}}>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+        <thead><tr>{["Policy","Frameworks","Rules","Findings","Status"].map(h=><th key={h} style={thS2}>{h}</th>)}</tr></thead>
+        <tbody>{pols.map(p=>{ const n=openF.filter(f=>f.pol.id===p.id).length; const fwn=[...new Set(p.articles.filter(a=>a.ok!==false).map(a=>pm2Fw(a.fw)?.name).filter(Boolean))];
+          return <tr key={p.id} onClick={()=>openPolicy(p.id)} style={{cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <td style={tdS}><span style={{display:"inline-flex",alignItems:"center",gap:7,fontWeight:600,color:T.text}}>{srcBox(p)}{p.name}</span></td>
+            <td style={tdS}>{fwn.slice(0,3).join(", ")}{fwn.length>3?` +${fwn.length-3}`:""}</td>
+            <td style={tdS}>{p.rules.length}</td>
+            <td style={{...tdS,fontWeight:700,color:!last?T.textMuted:n?T.rose:T.green}}>{!last?"—":n}</td>
+            <td style={tdS}>{pill(statusColor(p.status), p.status)}</td></tr>; })}</tbody></table></div>
+    </div>;
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.bgSurface}}>
+          <button onClick={()=>setSelScan(null)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6}}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>All Scans</button>
+          <span style={{color:T.border}}>›</span><span style={{fontSize:13,fontWeight:700,color:T.text}}>{sc.name}</span>
+          {pill(sc.status==="Paused"?T.textMuted:T.green, sc.status==="Paused"?"Paused":"Active")}
+          <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>{runBtnS(sc)}<Btn small ghost onClick={()=>openScanEditor(sc)}>Edit</Btn>{menuBtn("scd:"+sc.id, scanMenu(sc))}</div>
+        </div>
+        <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px"}}>
+          {STABS.map(t=><button key={t.k} onClick={()=>setScanTab(t.k)} style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${scanTab===t.k?T.accent:"transparent"}`,color:scanTab===t.k?T.accent:T.textMuted,fontSize:12,fontWeight:scanTab===t.k?600:500,cursor:"pointer",marginBottom:-1}}>
+            {t.l}{t.b>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:scanTab===t.k?T.accent:t.d?`${T.rose}18`:T.bgElevated,color:scanTab===t.k?"#fff":t.d?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{t.b}</span>}</button>)}
+        </div>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{body}</div>
+      </div>);
+  };
+
+  // ═════ CREATE / EDIT A SCAN — Details · Objects · Policies · Schedule · Review ═════
+  const openScanEditor = (sc, preset) => {
+    if(sc){ setScanEd({id:sc.id, step:1, name:sc.name, desc:sc.desc||"", owner:sc.owner, objects:JSON.parse(JSON.stringify(sc.objects)), fws:[...(sc.frameworks||[])], policyIds:[...(sc.policyIds||[])], sched:sc.sched||null, runNow:false}); return; }
+    setScanEd({id:null, step:1, name:"", desc:"", owner:me, objects:{mode:"filter", sources:[], objectTypes:[], domains:[], classes:[], assets:[]}, fws:[], policyIds:[], sched:{freq:"daily",time:"02:00",day:"monday",cron:"0 2 * * *",tz:"UTC",enabled:true}, runNow:true, ...(preset||{})});
+  };
+  const saveScan = () => {
+    const e=scanEd; const sf = e.sched ? {sched:e.sched, schedule:contractCron(e.sched), nextRun:scheduleNextRun(e.sched), schedEnabled:e.sched.enabled!==false} : {sched:null, schedule:null, nextRun:null, schedEnabled:false};
+    const fields = {name:e.name.trim(), desc:e.desc.trim(), owner:e.owner, objects:e.objects, frameworks:e.fws, policyIds:e.policyIds, ...sf};
+    let id=e.id;
+    if(id) updScan(id, x=>({...x, ...fields}));
+    else { id="scan-"+Date.now(); pm2Set(s=>({...s, scans:[...(s.scans||[]), {id, ...fields, status:"Active", runs:[], created:pm2Today()}]})); }
+    setScanEd(null); setTab("scans"); setSelScan(id); setScanTab("overview");
+    if(e.runNow) setTimeout(()=>runScan({id, ...fields}),50); else onToast(e.id?"Scan saved":"Scan created","success");
+  };
+  const renderScanEditor = () => {
+    const e=scanEd; const setS=(k,v)=>setScanEd(x=>({...x,[k]:v})); const o=e.objects; const setO=(k,v)=>setScanEd(x=>({...x,objects:{...x.objects,[k]:v}}));
+    const preview = pm2ScanAssets({objects:o});
+    const classKeys = Object.keys(PM2_CLASS_META); const actPols = livePols.filter(p=>p.status==="Active");
+    const fwOpts = adoptedFws; const polsOfFw = fid => actPols.filter(p=>p.articles.some(a=>a.fw===fid&&a.ok!==false)).map(p=>p.id);
+    let body;
+    if(e.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
+      {secHead("Scan Details")}
+      <div><label style={lbl}>Name <span style={{color:T.rose}}>*</span></label><input autoFocus value={e.name} onChange={x=>setS("name",x.target.value)} placeholder="e.g. Snowflake finance — nightly" style={inp}/></div>
+      <div><label style={lbl}>Description</label><textarea rows={3} value={e.desc} onChange={x=>setS("desc",x.target.value)} style={{...inp,resize:"vertical"}}/></div>
+      <CatFieldDropdown label="Owner" multi={false} options={PM2_USERS} selected={e.owner} onChange={v=>setS("owner",v||e.owner)}/>
+    </div>;
+    if(e.step===2) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:640}}>
+      {secHead("Objects")}
+      <div><label style={lbl}>Selection</label><div style={{display:"flex",width:"fit-content",border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+        {[["filter","By filter"],["pick","Pick objects"]].map(([k,l])=><button key={k} onClick={()=>setO("mode",k)} style={{padding:"7px 16px",fontSize:12,fontWeight:o.mode===k?700:500,border:"none",cursor:"pointer",background:o.mode===k?T.accent:"transparent",color:o.mode===k?"#fff":T.textSub}}>{l}</button>)}</div></div>
+      {o.mode==="filter" ? <>
+        <CatFieldDropdown label="Source" options={PM2_SOURCES} selected={o.sources} onChange={v=>{ const ok=new Set(pm2ObjFor(v)); setScanEd(x=>({...x,objects:{...x.objects,sources:v,objectTypes:x.objects.objectTypes.filter(t=>ok.has(t))}})); }} placeholder="All sources"/>
+        <CatFieldDropdown label="Object Types" options={pm2ObjFor(o.sources)} selected={o.objectTypes} onChange={v=>setO("objectTypes",v)} placeholder="All object types"/>
+        <CatFieldDropdown label="Domain" options={PM2_DOMAINS} selected={o.domains} onChange={v=>setO("domains",v)} placeholder="All domains"/>
+        <CatFieldDropdown label="Data Classes" options={classKeys.map(k=>PM2_CLASS_META[k].label)} selected={o.classes.map(k=>PM2_CLASS_META[k]?.label).filter(Boolean)} onChange={v=>setO("classes",v.map(l=>classKeys.find(k=>PM2_CLASS_META[k].label===l)).filter(Boolean))} placeholder="Any classification"/>
+      </> : <CatFieldDropdown label="Objects" required options={PM2_ASSETS.map(a=>a.name)} selected={o.assets} onChange={v=>setO("assets",v)} placeholder="Search objects…" renderChip={x=><span style={{fontFamily:"'Geist Mono',monospace"}}>{x}</span>}/>}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        <div style={{padding:"9px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Matching objects · {preview.length}</div>
+        <div style={{maxHeight:220,overflowY:"auto"}}>{preview.map(a=><div key={a.name} style={{display:"flex",gap:10,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.border}`,fontSize:12}}>
+          <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text,width:170}}>{a.name}</span><span style={{color:T.textMuted,width:110}}>{pm2SourceOf(a)}</span><span style={{color:T.textMuted,width:90}}>{a.domain}</span><span style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm2Classes(a).map(classChip)}</span></div>)}
+          {!preview.length&&<div style={{padding:"16px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No objects match</div>}</div>
+      </div>
+    </div>;
+    if(e.step===3) body = <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:720}}>
+      {secHead("Policies")}
+      <CatFieldDropdown label="Frameworks" options={fwOpts.map(f=>f.name)} selected={e.fws.map(id=>pm2Fw(id)?.name).filter(Boolean)}
+        onChange={names=>{ const ids=names.map(n=>fwOpts.find(f=>f.name===n)?.id).filter(Boolean); const added=ids.filter(i=>!e.fws.includes(i)); const removed=e.fws.filter(i=>!ids.includes(i));
+          let pids=[...e.policyIds]; added.forEach(f=>polsOfFw(f).forEach(pid=>{ if(!pids.includes(pid)) pids.push(pid); }));
+          removed.forEach(f=>{ const keep=new Set(ids.flatMap(polsOfFw)); pids=pids.filter(pid=>!polsOfFw(f).includes(pid)||keep.has(pid)); });
+          setScanEd(x=>({...x, fws:ids, policyIds:pids})); }} placeholder="Select frameworks…"/>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",padding:"9px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+          <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",flex:1}}>Policies · {e.policyIds.length} selected</span>
+          <button onClick={()=>setS("policyIds", e.policyIds.length===actPols.length?[]:actPols.map(p=>p.id))} style={{fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600}}>{e.policyIds.length===actPols.length?"Clear":"Select all"}</button></div>
+        <div style={{maxHeight:320,overflowY:"auto"}}>{actPols.map(p=>{ const on=e.policyIds.includes(p.id); const fwn=[...new Set(p.articles.filter(a=>a.ok!==false&&st.adopted[a.fw]).map(a=>pm2Fw(a.fw)?.name).filter(Boolean))]; const hits=preview.filter(a=>pm2AssetInPolicy(a,p)).length;
+          return <label key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:on?T.accentDim:"transparent"}}>
+            <input type="checkbox" checked={on} onChange={()=>setS("policyIds", on?e.policyIds.filter(x=>x!==p.id):[...e.policyIds,p.id])} style={{accentColor:T.accent}}/>
+            {srcBox(p)}<span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{p.name}</span>
+            <span style={{fontSize:10.5,color:T.textMuted,maxWidth:220,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fwn.join(", ")}</span>
+            <span title="Matching objects that hold this policy's data classes" style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",color:hits?T.textSub:T.textMuted,width:70,textAlign:"right"}}>{hits} obj</span></label>; })}</div>
+      </div>
+    </div>;
+    if(e.step===4){ const sc=e.sched; const setSc=(k,v)=>setS("sched",{...(sc||{freq:"daily",time:"02:00",day:"monday",cron:"0 2 * * *",tz:"UTC",enabled:true}),[k]:v}); const fsel={...inp,width:"auto",padding:"7px 10px",cursor:"pointer"};
+      body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
+        {secHead("Schedule")}
+        <div><label style={lbl}>Frequency</label><select value={sc?sc.freq:"manual"} onChange={x=>x.target.value==="manual"?setS("sched",null):setSc("freq",x.target.value)} style={{...inp,cursor:"pointer"}}>
+          <option value="daily">Daily</option><option value="weekly">Weekly</option><option value="hourly">Hourly</option><option value="manual">Manual only</option></select></div>
+        {sc&&<div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+          {sc.freq==="weekly"&&<div><label style={lbl}>Day</label><select value={sc.day} onChange={x=>setSc("day",x.target.value)} style={fsel}>{CONTRACT_WEEKDAYS.map(d=><option key={d} value={d}>{d[0].toUpperCase()+d.slice(1)}</option>)}</select></div>}
+          {sc.freq!=="hourly"&&<div><label style={lbl}>Run at</label><input type="time" value={sc.time} onChange={x=>setSc("time",x.target.value)} style={fsel}/></div>}
+          <div><label style={lbl}>Timezone</label><select value={sc.tz} onChange={x=>setSc("tz",x.target.value)} style={fsel}>{CONTRACT_TZ_OPTS.map(z=><option key={z}>{z}</option>)}</select></div>
+          <div><label style={lbl}>Cron</label><div style={{...fsel,cursor:"default",fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{contractCron(sc)}</div></div></div>}
+        <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={e.runNow} onChange={x=>setS("runNow",x.target.checked)} style={{accentColor:T.accent}}/>Run now after saving</label>
+      </div>; }
+    if(e.step===5){ const rc=(t,rows)=><div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}><div style={{padding:"10px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:`1px solid ${T.border}`}}>{t}</div>{rows.map(([k,v],i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:14,padding:"9px 14px",fontSize:12,borderTop:i?`1px solid ${T.border}`:"none"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,textAlign:"right",fontWeight:500}}>{v}</span></div>)}</div>;
+      body = <div style={{maxWidth:680}}>{secHead("Review")}
+        {rc("Scan",[["Name",<b>{e.name||"—"}</b>],["Owner",e.owner]])}
+        {rc("Objects",[["Selection",o.mode==="pick"?"Picked objects":"Filter (dynamic)"],["Criteria",scanObjLabel({objects:o})],["Matching now",preview.length]])}
+        {rc("Policies",[["Frameworks",e.fws.map(id=>pm2Fw(id)?.name).join(", ")||"—"],["Policies",e.policyIds.length]])}
+        {rc("Schedule",[["Frequency",e.sched?contractScheduleLabel(e.sched):"Manual only"],["Run after saving",e.runNow?"Yes":"No"]])}
+      </div>; }
+    const ok1=!!e.name.trim(), ok2=preview.length>0, ok3=e.policyIds.length>0;
+    const canNext = e.step===1?ok1:e.step===2?ok2:e.step===3?ok3:true;
+    return drawer({title:e.id?"Edit Scan":"New Scan", steps:[{label:"Details",required:true},{label:"Objects",required:true},{label:"Policies",required:true},{label:"Schedule"},{label:"Review"}], step:e.step,
+      done:n=>n<e.step&&(n===1?ok1:n===2?ok2:n===3?ok3:true), onStep:n=>setS("step",n), body, onClose:()=>setScanEd(null), width:880, onBack:()=>setS("step",Math.max(1,e.step-1)),
+      right: e.step<5 ? continueBtn(()=>setS("step",e.step+1), canNext) : fBtn(e.id?"Save scan":(e.runNow?"Create & run":"Create scan"), saveScan, true, !(ok1&&ok2&&ok3))});
+  };
+
   // ═════ PAGE — the original Policy Manager shell: breadcrumb, icon tab bar, content ═════
   const waiting = pm2StatusPending.filter(r=>r.kind!=="pm2attestdue").length + pm2EnfPending.length;
   const TAB_ICON = {
     policies:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="8" y2="11.5"/></svg>,
     frameworks:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>,
+    scans:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/><path d="M5 7h4M7 5v4"/></svg>,
     findings:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 14h14L8 1z"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11.5" r=".5" fill="currentColor"/></svg>,
     approvals:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5 8l2 2 4-4"/></svg>,
   };
   const TABS = [
     {key:"frameworks", label:"Frameworks", badge:adoptedFws.length},
     {key:"policies",   label:"Policies",   badge:livePols.length},
+    {key:"scans",      label:"Scans",      badge:scans.length},
     {key:"findings",   label:"Findings",   badge:openFindings.length||null, danger:true},
   ];
   return (
@@ -15557,7 +15813,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
         <div style={{display:"flex",paddingLeft:24,overflowX:"auto"}}>
           {TABS.map(t=>{ const isA=tab===t.key; return (
-            <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);}}
+            <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);setSelScan(null);}}
               style={{display:"flex",alignItems:"center",gap:7,padding:"12px 20px",background:"transparent",border:"none",borderBottom:`2.5px solid ${isA?T.accent:"transparent"}`,color:isA?T.accent:T.textMuted,fontSize:13,fontWeight:isA?600:500,cursor:"pointer",transition:"all .15s",marginBottom:-1,whiteSpace:"nowrap",flexShrink:0}}
               onMouseEnter={e=>{if(!isA){e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}}} onMouseLeave={e=>{if(!isA){e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="transparent";}}}>
               <span style={{display:"flex",opacity:isA?1:.65,color:isA?T.accent:t.danger&&t.badge?T.rose:"currentColor"}}>{TAB_ICON[t.key]}</span>
@@ -15569,6 +15825,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         {tab==="policies"&&renderPolicies()}
         {tab==="frameworks"&&(selFw?renderFwDetail():renderFrameworks())}
+        {tab==="scans"&&renderScans()}
         {tab==="findings"&&renderFindings()}
       </div>
       {wiz&&renderWizard()}
@@ -15576,11 +15833,12 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       {fwEd&&renderFwEditor()}
       {ruleEd&&renderRuleEditor()}
       {addPol&&renderAddPolicy()}
-      {schedFor&&(()=>{ const sp=st.policies.find(x=>x.id===schedFor);
-        return <ScheduleControl title="Evaluation schedule" subtitle={sp?.name} schedule={sp?.sched} onClose={()=>setSchedFor(null)}
-          onRunNow={()=>{ setSchedFor(null); runNow(sp); }} running={runningPol===schedFor}
-          onRemove={sp?.schedule?()=>{ updPol(schedFor,x=>addHist({...x,sched:null,schedule:null,nextRun:null},"Evaluation schedule removed")); setSchedFor(null); onToast("Schedule removed","info"); }:undefined}
-          onSave={sched=>{ updPol(schedFor,x=>addHist({...x,sched,schedule:contractCron(sched),nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled},`Evaluation schedule set — ${contractScheduleLabel(sched)}`)); setSchedFor(null); onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success"); }}/>; })()}
+      {scanEd&&renderScanEditor()}
+      {schedScan&&(()=>{ const sp=scans.find(x=>x.id===schedScan);
+        return <ScheduleControl title="Scan schedule" subtitle={sp?.name} schedule={sp?.sched} onClose={()=>setSchedScan(null)}
+          onRunNow={()=>{ setSchedScan(null); runScan(sp); }} running={runningScan===schedScan}
+          onRemove={sp?.schedule?()=>{ updScan(schedScan,x=>({...x,sched:null,schedule:null,nextRun:null,schedEnabled:false})); setSchedScan(null); onToast("Schedule removed","info"); }:undefined}
+          onSave={sched=>{ updScan(schedScan,x=>({...x,sched,schedule:contractCron(sched),nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled})); setSchedScan(null); onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success"); }}/>; })()}
       {confirm&&<>
         <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
         <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
