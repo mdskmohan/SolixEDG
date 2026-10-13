@@ -81,6 +81,8 @@ const block = [
   + "\n\n" + ["const slSlug ", "const slKeys ", "const slPK ", "const slPKText ",
               "const slUniqueKeys ", "const slFromCols ", "const slToCols ", "const slJoinPairs ",
               "const slJoinText ", "const slIsComputed ", "const slFieldSql ", "const slFieldRaw ",
+              "const slJoinType ", "const slDefaultAgg ", "const slNonAdditiveOver ",
+              "const slEntFilters ", "const slEntFilterText ",
               "const slQ ", "const slMeasureName ",
               "const slEntConcept ", "const slConceptNames ", "const slSynList "].map(grab).join("\n\n")
   + "\n\n" + span("const OSSIE_VERSION", "const SL_ADAPTERS");
@@ -325,6 +327,73 @@ console.log("\n── Composite keys, composite joins, computed fields");
   const body = M.slAdaptOssie(ctx)[0].body;
   const round = M.slReadOssie(body, { mdl, ents, rels, dims, facts, metrics: mets });
   ok("and round trip unchanged", round.ok && round.changes.length === 0, round.ok ? round.changes : round.errors);
+}
+
+
+// ── What a knowledge graph needs in order to compute a number with no metric in the
+//    path. Every one of these used to live on the metric, so a reader that only has
+//    the joins and the fields had no aggregation, no filter and no rule about which
+//    dimension a measure may not be summed over.
+console.log("\n── Answerable without a metric");
+{
+  const mdl   = M.SL_MODELS.find(m => m.id === "mdl_retail");
+  const ents  = M.SL_ENTITIES.filter(e => (mdl.entityIds || []).includes(e.id));
+  const rels  = M.SL_RELATIONSHIPS.filter(r => ents.some(e => e.id === r.from) && ents.some(e => e.id === r.to));
+  const mets  = M.SL_METRICS.filter(m => m.model === mdl.id);
+  const dims  = M.SL_DIMENSIONS.filter(d => ents.some(e => e.id === d.entity));
+  const facts = M.SL_FACTS.filter(x => ents.some(e => e.id === x.entity));
+  const ctx   = { mdl, ents, rels, mets, dims, facts };
+  const doc   = M.slOssieDoc(ctx);
+
+  const solix = (o) => {
+    const hit = (o.custom_extensions || []).find(x => x.vendor_name === "SOLIX");
+    return hit ? JSON.parse(hit.data) : {};
+  };
+  const ds    = (t) => doc.datasets.find(d => d.name === t);
+  const field = (t, c) => (ds(t).fields || []).find(f => f.name === c);
+  const rel   = (n) => doc.relationships.find(r => r.name === n);
+
+  // A traversal that drops rows is a quietly smaller answer, not an error.
+  ok("every relationship declares how to join",
+     doc.relationships.every(r => ["inner", "left_outer"].includes(solix(r).join_type)),
+     doc.relationships.map(r => [r.name, solix(r).join_type]));
+  ok("the nullable join is left outer, so unshipped lines survive it",
+     solix(rel("order_lines_to_calendar_date_on_ship_date")).join_type === "left_outer");
+  ok("and a join on a mandatory column can still be inner",
+     solix(rel("order_lines_to_products")).join_type === "inner");
+
+  // Without this a reader has a number and no idea what to do with it.
+  ok("an additive measure carries a default aggregation",
+     solix(field("order_lines", "quantity")).default_aggregation === "sum",
+     solix(field("order_lines", "quantity")));
+  ok("a non-additive measure carries the aggregation that IS valid",
+     solix(field("order_lines", "unit_price")).default_aggregation === "average");
+
+  // "Not additive" says do not sum. It does not say sum across stores and not dates.
+  const onHand = solix(field("inventory_snapshot", "on_hand_qty"));
+  ok("a semi-additive measure names the dimension it may not be summed over",
+     onHand.additive === false && onHand.non_additive_over === "snapshot_date", onHand);
+  ok("an ordinary measure names none",
+     solix(field("order_lines", "quantity")).non_additive_over === null);
+
+  // The predicate that three metrics currently retype, declared once.
+  ok("a dataset carries its always-on filters",
+     JSON.stringify(solix(ds("orders")).filters) === '[{"col":"status","op":"is not","val":"cancelled"}]',
+     solix(ds("orders")).filters);
+  ok("a dataset with no filters says so rather than omitting the key",
+     Array.isArray(solix(ds("products")).filters) && solix(ds("products")).filters.length === 0);
+
+  const body  = M.slAdaptOssie(ctx)[0].body;
+  const round = M.slReadOssie(body, { mdl, ents, rels, dims, facts, metrics: mets });
+  ok("all four survive the round trip", round.ok && round.changes.length === 0,
+     round.ok ? round.changes : round.errors);
+
+  // The role-playing join is the one a reader keyed on the dataset pair gets wrong.
+  const flipped = body.replace("join_type\": \"left_outer\"", "join_type\": \"inner\"");
+  const r2 = M.slReadOssie(flipped, { mdl, ents, rels, dims, facts, metrics: mets });
+  ok("changing one of two joins between the same datasets moves only that one",
+     r2.ok && r2.changes.filter(c => /is now inner/.test(c)).length === 1,
+     r2.ok ? r2.changes : r2.errors);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

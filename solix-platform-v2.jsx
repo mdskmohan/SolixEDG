@@ -36089,6 +36089,9 @@ const slConceptLayout = (concepts, crels) => {
 const SL_ENTITIES = [
   {id:"e_order", assetId:1, concept:"tc3", name:"Order", table:"orders", key:"order_id", domain:"Commerce", owner:"maya.chen",
    timeDims:["created_at","updated_at"], desc:"One row per placed order. The grain every revenue metric resolves to.",
+   // A cancelled order is not a sale in any model that uses this dataset. Declared once
+   // here rather than retyped into every metric that reads it.
+   filters:[{col:"status", op:"is not", val:"cancelled"}],
    evidence:"order_id · 100% distinct · 0% null over 48.2M rows",
    bindings:{snowflake:"SNOWFLAKE_PROD.COMMERCE.ORDERS", databricks:"main.commerce.orders",
              dbt:"ref('fct_orders')", powerbi:"Orders", tableau:"Orders_Certified"}},
@@ -36434,11 +36437,11 @@ const SL_DIMENSIONS = [
 // A fact is row-level. SUM lives on the metric, not here — which is the whole point of
 // keeping them apart: one fact, many metrics over it.
 const SL_FACTS = [
-  {id:"f_ord_amount", entity:"e_order",    name:"Order Amount",       column:"amount",  additive:true,
+  {id:"f_ord_amount", entity:"e_order",    name:"Order Amount",       column:"amount",  additive:true, defaultAgg:"sum",
    desc:"The gross value of a single order line, before any filtering."},
-  {id:"f_txn_amount", entity:"e_txn",      name:"Transaction Amount", column:"amount",  additive:true,
+  {id:"f_txn_amount", entity:"e_txn",      name:"Transaction Amount", column:"amount",  additive:true, defaultAgg:"sum",
    desc:"The posted value of a single ledger entry."},
-  {id:"f_cus_id",     entity:"e_customer", name:"Customer Count",     column:"user_id", additive:false,
+  {id:"f_cus_id",     entity:"e_customer", name:"Customer Count",     column:"user_id", additive:false, defaultAgg:"count distinct",
    desc:"Counting key. Not additive — summing it is meaningless, only counting is."},
 ];
 
@@ -36633,7 +36636,7 @@ const RETAIL_RELS = [
    cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
    note:"A line belongs to exactly one order. This is the first hop of the chain that reaches Customer — a line-grain measure can be sliced by a customer attribute two joins away without anyone writing the join."},
   {id:"rr_line_product", from:"e_line", to:"e_product", fromKey:"product_id", toKey:"product_id",
-   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true, joinType:"inner",
    note:"Each line sells one product."},
   {id:"rr_product_category", from:"e_product", to:"e_category", fromKey:"category_id", toKey:"category_id",
    cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
@@ -36645,7 +36648,7 @@ const RETAIL_RELS = [
    cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
    note:"Role-playing, first role. Trending a measure over this join answers \"when was it sold\"."},
   {id:"rr_line_shipdate", from:"e_line", to:"e_date", fromKey:"ship_date", toKey:"date_day", role:"Ship date",
-   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
+   cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true, joinType:"left_outer",
    note:"Role-playing, second role — the same Calendar Date, joined again on a different column. The same measure trended over this one answers \"when did it leave\", and 3.8% of lines drop out because they have not shipped."},
   {id:"rr_line_inventory", from:"e_line", to:"e_inv", fromKeys:["store_id","sku"], toKeys:["store_id","sku"],
    cardinality:"many_to_one", filterDirection:"single", fanOutSafe:true,
@@ -36695,20 +36698,21 @@ const RETAIL_DIMS = [
 ];
 
 const RETAIL_FACTS = [
-  {id:"rf_line_qty", entity:"e_line", name:"Quantity", column:"quantity", additive:true,
+  {id:"rf_line_qty", entity:"e_line", name:"Quantity", column:"quantity", additive:true, defaultAgg:"sum",
    desc:"Units sold on the line."},
-  {id:"rf_line_price", entity:"e_line", name:"Unit Price", column:"unit_price", additive:false,
+  {id:"rf_line_price", entity:"e_line", name:"Unit Price", column:"unit_price", additive:false, defaultAgg:"average",
    desc:"Price per unit at point of sale. Not additive — summing prices across lines is meaningless, which is why the metric over it is an average and not a sum."},
-  {id:"rf_line_disc", entity:"e_line", name:"Discount Amount", column:"discount_amount", additive:true,
+  {id:"rf_line_disc", entity:"e_line", name:"Discount Amount", column:"discount_amount", additive:true, defaultAgg:"sum",
    desc:"Money given away on the line."},
-  {id:"rf_line_ext", entity:"e_line", name:"Extended Price", column:"extended_price", additive:true,
+  {id:"rf_line_ext", entity:"e_line", name:"Extended Price", column:"extended_price", additive:true, defaultAgg:"sum",
    expr:"quantity * unit_price - discount_amount",
    desc:"A calculated field, not a column. Row-level, so the calculation holds whatever a metric later groups it by."},
   {id:"rf_inv_onhand", entity:"e_inv", name:"On Hand Quantity", column:"on_hand_qty", additive:false,
+   defaultAgg:"sum", nonAdditiveOver:"snapshot_date",
    desc:"Units in the store on the snapshot date. Semi-additive: it adds across stores and SKUs, never across dates — adding Monday's stock to Tuesday's counts the same unit twice."},
-  {id:"rf_ship_cost", entity:"e_ship", name:"Shipping Cost", column:"shipping_cost", additive:true,
+  {id:"rf_ship_cost", entity:"e_ship", name:"Shipping Cost", column:"shipping_cost", additive:true, defaultAgg:"sum",
    desc:"What the parcel cost to send."},
-  {id:"rf_op_applied", entity:"e_ordpromo", name:"Promotion Amount", column:"applied_amount", additive:true,
+  {id:"rf_op_applied", entity:"e_ordpromo", name:"Promotion Amount", column:"applied_amount", additive:true, defaultAgg:"sum",
    desc:"The discount the promotion gave on that order."},
 ];
 
@@ -37897,6 +37901,34 @@ const slToCols   = (r) => (r.toKeys   && r.toKeys.length)   ? r.toKeys   : (r.to
 const slJoinPairs = (r) => slFromCols(r).map((c,i) => [c, slToCols(r)[i]]);
 const slJoinText = (r) => slJoinPairs(r).map(([a,b]) => `${a} = ${b||"?"}`).join(" AND ") || "—";
 
+// ── What a graph needs in order to compute a number WITHOUT a metric.
+//    Today every one of these lives on the metric: the aggregation, the filter, the
+//    rule about which dimension a measure may not be summed over. A knowledge graph
+//    answering a question from the joins and fields alone has none of them, so they
+//    belong one level down, on the thing they are actually true of.
+
+// How to join. LEFT OUTER keeps every row of the many side; INNER drops the ones with
+// no partner. On a nullable join column that is the difference between an answer and a
+// quietly smaller answer, so the safe one is the default.
+const slJoinType = (r) => (r && r.joinType) || "left_outer";
+const SL_JOIN_TYPES = [
+  {v:"left_outer", l:"Left outer — keep every row of the many side"},
+  {v:"inner",      l:"Inner — drop rows with no match"},
+];
+
+// How to add a measure up when nobody has written a metric over it. A measure that is
+// not additive has no safe default, and saying so is better than defaulting to SUM.
+const slDefaultAgg = (f) => (f && f.defaultAgg) || (f && f.additive===false ? "" : "sum");
+
+// Semi-additive: the dimension this measure may NOT be summed over. Stock on hand adds
+// across stores and SKUs and never across dates, and "not additive" alone cannot say so.
+const slNonAdditiveOver = (f) => (f && f.additive===false && f.nonAdditiveOver) || "";
+
+// Always-on predicates for a dataset. A cancelled order is not a sale in any model that
+// uses it, so the filter belongs to the dataset rather than being retyped per metric.
+const slEntFilters = (e) => ((e && e.filters) || []).filter(f => f && f.col && f.op);
+const slEntFilterText = (e) => slEntFilters(e).map(f=>`${f.col} ${f.op} ${f.val}`).join(" AND ");
+
 // Is the many side optional? In ER terms, a nullable join column means a row on the
 // many side need not have a partner — zero or one, not exactly one. It is read from
 // the column itself rather than declared, because the column already knows.
@@ -37986,7 +38018,10 @@ const slAdaptDbt = ({mdl, ents, rels, mets, dims, facts}) => {
         L.push(`        agg: ${m.agg==="count distinct"?"count_distinct":m.agg}`);
         L.push(`        expr: ${m.col}`);
         L.push(`        agg_time_dimension: ${m.timeDim}`);
-        if(fct && !fct.additive) L.push(`        non_additive_dimension: { name: ${m.timeDim}, window_choice: max }`);
+        if(fct && !fct.additive){
+          const over = slNonAdditiveOver(fct) || m.timeDim;
+          if(over) L.push(`        non_additive_dimension: { name: ${over}, window_choice: max }`);
+        }
       });
     }
     L.push("");
@@ -38375,7 +38410,11 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
       const c = col(x.column); c.roles.push("fact"); if(slIsComputed(x)) c.expr = x.expr;
       if(!c.label){ c.label = x.name; c.labelOf = "fact"; }
       if(!c.desc) c.desc = x.desc;
-      c.syn.push(x.name); c.solix.additive = x.additive!==false;
+      c.syn.push(x.name);
+      c.solix.additive = x.additive!==false;
+      // What a reader should do with this measure when no metric tells it.
+      c.solix.default_aggregation = slDefaultAgg(x) || null;
+      c.solix.non_additive_over   = slNonAdditiveOver(x) || null;
     });
     eDims.forEach(d=>{
       const c = col(d.column); c.roles.push("dimension"); if(slIsComputed(d)) c.expr = d.expr;
@@ -38419,6 +38458,8 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
           domain: e.domain, owner: e.owner,
           grain_evidence: e.evidence || null,
           time_dimensions: e.timeDims || [],
+          // Predicates that hold for every reader of this dataset, not just a metric.
+          filters: slEntFilters(e),
         }),
         ...Object.entries(e.bindings||{}).filter(([k])=>SL_VENDOR_OF[k]).map(([k,v])=>
           ({vendor_name: SL_VENDOR_OF[k], data: JSON.stringify({object: v}, null, 2)})),
@@ -38451,6 +38492,9 @@ const slOssieDoc = ({mdl, ents, rels, mets, dims, facts}) => {
         cardinality: r.cardinality,
         filter_direction: r.filterDirection,
         fan_out_safe: r.fanOutSafe!==false,
+        // Whether a traversal keeps or drops the rows with no partner. On a nullable
+        // column this is the difference between an answer and a quietly smaller one.
+        join_type: slJoinType(r),
       }),
     };
   });
@@ -38836,19 +38880,45 @@ const slApplyOssie = (doc, ctx) => {
       next.uniqueKeys = uk;
     }
     if(d.description && d.description!==e.desc){ changes.push(`${e.name} description updated`); next.desc = d.description; }
+    const dx = ext(d);
+    if(Array.isArray(dx.filters)){
+      const fl = dx.filters.filter(f=>f && f.col && f.op);
+      if(JSON.stringify(fl)!==JSON.stringify(slEntFilters(e))){
+        changes.push(fl.length
+          ? `${e.name} always filtered: ${fl.map(f=>`${f.col} ${f.op} ${f.val}`).join(" AND ")}`
+          : `${e.name} dataset filters cleared`);
+        next.filters = fl;
+      }
+    }
     return next;
   });
 
   const rels = (ctx.rels||[]).map(r=>{
     const f = ctx.ents.find(x=>x.id===r.from), t = ctx.ents.find(x=>x.id===r.to);
     if(!f||!t) return r;
-    const or = (doc.relationships||[]).find(x=>x.from===slSlug(f.table) && x.to===slSlug(t.table));
+    // Two datasets can be joined twice. Matching on the ends alone finds the first one
+    // every time, so the one that joins on THESE columns wins, and only a relationship
+    // that matches neither falls back to the pair.
+    const mine = (doc.relationships||[]).filter(x=>x.from===slSlug(f.table) && x.to===slSlug(t.table));
+    const or = mine.find(x=>(x.from_columns||[]).join(",")===slFromCols(r).join(","))
+            || (mine.length===1 ? mine[0] : null);
     if(!or) return r;
     const fc = (or.from_columns||[]).filter(Boolean), tc = (or.to_columns||[]).filter(Boolean);
     if(!fc.length || fc.length!==tc.length) return r;
-    if(fc.join(",")===slFromCols(r).join(",") && tc.join(",")===slToCols(r).join(",")) return r;
-    changes.push(`Join ${f.name} → ${t.name}: ${fc.map((c,i)=>`${c} = ${tc[i]}`).join(" AND ")}`);
-    return {...r, fromKeys:fc, toKeys:tc, fromKey:fc[0], toKey:tc[0]};
+    const rx = ext(or);
+    const next = {...r};
+    let moved = false;
+    if(fc.join(",")!==slFromCols(r).join(",") || tc.join(",")!==slToCols(r).join(",")){
+      changes.push(`Join ${f.name} → ${t.name}: ${fc.map((c,i)=>`${c} = ${tc[i]}`).join(" AND ")}`);
+      next.fromKeys = fc; next.toKeys = tc; next.fromKey = fc[0]; next.toKey = tc[0];
+      moved = true;
+    }
+    if(rx.join_type && rx.join_type!==slJoinType(r)){
+      changes.push(`Join ${f.name} → ${t.name} is now ${rx.join_type.replace("_"," ")}`);
+      next.joinType = rx.join_type;
+      moved = true;
+    }
+    return moved ? next : r;
   });
 
   const dims = ctx.dims.map(d=>{
@@ -38875,6 +38945,16 @@ const slApplyOssie = (doc, ctx) => {
       if(f.description && f.description!==x.desc){ changes.push(`Fact ${next.name} description updated`); next.desc = f.description; }
     }
     if(fx.additive!==undefined && !!fx.additive!==x.additive){ changes.push(`Fact ${next.name} additive → ${!!fx.additive}`); next.additive = !!fx.additive; }
+    if(fx.default_aggregation !== undefined && (fx.default_aggregation||"") !== slDefaultAgg(x)){
+      changes.push(`Measure ${next.name} default aggregation → ${fx.default_aggregation||"none"}`);
+      next.defaultAgg = fx.default_aggregation || "";
+    }
+    if(fx.non_additive_over !== undefined && (fx.non_additive_over||"") !== slNonAdditiveOver(x)){
+      changes.push(fx.non_additive_over
+        ? `Measure ${next.name} may not be summed over ${fx.non_additive_over}`
+        : `Measure ${next.name} no longer has a non-additive dimension`);
+      next.nonAdditiveOver = fx.non_additive_over || "";
+    }
     const fe = slOssieFieldExpr(f, slSlug(e.table));
     if(fe!==(x.expr||"")){ changes.push(fe ? `Fact ${next.name} is now computed` : `Fact ${next.name} is a plain column again`); next.expr = fe; }
     return next;
@@ -39352,7 +39432,8 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
   const [syn, setSyn] = useState("");
   useEffect(()=>{ if(open && obj) { setD({name:obj.name||"", synonyms:[...(obj.synonyms||[])],
-    keys:[...slKeys(obj)], uniqueKeys:slUniqueKeys(obj).map(k=>[...k])}); setSyn(""); } },[open,obj]);
+    keys:[...slKeys(obj)], uniqueKeys:slUniqueKeys(obj).map(k=>[...k]),
+    filters: slEntFilters(obj).map(f=>({...f}))}); setSyn(""); } },[open,obj]);
   if(!open || !obj || !d) return null;
   const meta = SL_RENAME_KINDS[kind] || SL_RENAME_KINDS.entity;
   const locked = !!term;
@@ -39429,6 +39510,34 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
                   ))}
                   <Btn small icon={Ic.plus(11)} onClick={()=>setD(p=>({...p, uniqueKeys:[...p.uniqueKeys, []]}))}>Add a unique key</Btn>
                 </SLField>
+
+                {/* The predicate that is true for every reader of this dataset. Today
+                    it gets retyped into each metric, which is three places to forget it. */}
+                <SLField label="Always filtered"
+                  hint="Conditions that hold wherever this dataset is read, not just inside one metric. A cancelled order is not a sale in any model that uses it.">
+                  {(d.filters||[]).map((fl,i)=>(
+                    <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:7}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <SLSelect value={fl.col} placeholder="column" options={cols}
+                          onChange={e=>setD(p=>({...p, filters:p.filters.map((x,j)=>j===i?{...x,col:e.target.value}:x)}))}/>
+                      </div>
+                      <div style={{width:112,flexShrink:0}}>
+                        <SLSelect value={fl.op} options={["is","is not","greater than","less than"]}
+                          onChange={e=>setD(p=>({...p, filters:p.filters.map((x,j)=>j===i?{...x,op:e.target.value}:x)}))}/>
+                      </div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <Input2 value={fl.val} placeholder="value"
+                          onChange={e=>setD(p=>({...p, filters:p.filters.map((x,j)=>j===i?{...x,val:e.target.value}:x)}))}/>
+                      </div>
+                      <button onClick={()=>setD(p=>({...p, filters:p.filters.filter((_,j)=>j!==i)}))}
+                        style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>×</button>
+                    </div>
+                  ))}
+                  <Btn small icon={Ic.plus(11)} onClick={()=>setD(p=>({...p, filters:[...(p.filters||[]), {col:"",op:"is not",val:""}]}))}>Add a filter</Btn>
+                  {(d.filters||[]).filter(f=>f.col&&f.op).length>0 && <div style={{marginTop:8,fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>
+                    WHERE {(d.filters||[]).filter(f=>f.col&&f.op).map(f=>`${f.col} ${f.op} ${f.val}`).join(" AND ")}
+                  </div>}
+                </SLField>
               </>
             );
           })()}
@@ -39467,7 +39576,8 @@ const SLRenameDrawer = ({open, kind, obj, term, onClose, onSave, onToast}) => {
           <Btn ghost onClick={onClose}>Cancel</Btn>
           <Btn variant="primary" disabled={!locked && !d.name.trim()}
             onClick={()=>{ onSave(kind, obj, {name: locked ? obj.name : d.name.trim(), synonyms:d.synonyms,
-              ...(kind==="entity" ? {keys:d.keys, key:d.keys[0]||null, uniqueKeys:d.uniqueKeys.filter(k=>k.length)} : {})});
+              ...(kind==="entity" ? {keys:d.keys, key:d.keys[0]||null, uniqueKeys:d.uniqueKeys.filter(k=>k.length),
+                                     filters:(d.filters||[]).filter(f=>f.col&&f.op)} : {})});
                            onToast && onToast("Saved","success"); }}>Save</Btn>
         </div>
       </div>
@@ -39544,11 +39654,12 @@ const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}
     if(!open) return;
     const isNew = join === "new";
     setD(isNew
-      ? {id:null, from:"", to:"", pairs:[{from:"",to:""}], cardinality:"many_to_one", filterDirection:"single", note:""}
+      ? {id:null, from:"", to:"", pairs:[{from:"",to:""}], cardinality:"many_to_one", filterDirection:"single", joinType:"left_outer", note:""}
       : {id:join.id, from:join.from, to:join.to,
          pairs: slJoinPairs(join).map(([a,b])=>({from:a, to:b})),
          cardinality: join.cardinality||"many_to_one",
          filterDirection: join.filterDirection||"single",
+         joinType: slJoinType(join),
          note: join.note||""});
   },[open, join]);
   if(!open || !d) return null;
@@ -39574,6 +39685,7 @@ const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}
       fromKeys: full.map(x=>x.from), toKeys: full.map(x=>x.to),
       fromKey: full[0].from, toKey: full[0].to,
       cardinality: d.cardinality, filterDirection: d.filterDirection,
+      joinType: d.joinType,
       fanOutSafe: !fanOut,
       note: d.note || `Declared by hand${full.length>1?` on ${full.length} column pairs`:""}. ${fanOut?"Flagged: the right-hand side is not unique.":"Checked against column profiles."}`,
     });
@@ -39640,6 +39752,28 @@ const SLJoinDrawer = ({open, join, entities, onClose, onSave, onDelete, onToast}
               ? <div style={{fontSize:11.5,color:T.green,fontWeight:600}}>✓ Checked against the column profiles — this join cannot fan out.</div>
               : issues.map((s,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:2}}>· {s}</div>)}
           </div>}
+
+          {(()=>{
+            // Whether the nullable side loses rows is not a preference — it is a number,
+            // and the profile already knows it.
+            const drops = fromEnt && full.some(pr=>{
+              const c = (SCHEMA[fromEnt.table]||[]).find(x=>x.name===pr.from);
+              const pct = (COL_PROFILES[pr.from]||{}).nullPct || 0;
+              return (c && c.nullable) || pct > 0;
+            });
+            const pct = fromEnt && Math.max(0, ...full.map(pr=>(COL_PROFILES[pr.from]||{}).nullPct||0));
+            return (
+              <SLField label="How to join"
+                hint={drops
+                  ? `The join column is not always filled in, so this is a real choice: inner drops those rows from every answer${pct?` — about ${pct}% of them`:""}.`
+                  : "Left outer keeps every row of the many side. Inner drops the ones with no match, which here is none, so either is safe."}>
+                <SLSelect value={d.joinType} onChange={e=>setD({...d,joinType:e.target.value})} options={SL_JOIN_TYPES}/>
+                {drops && d.joinType==="inner" && <div style={{fontSize:11,color:T.amber,marginTop:6,lineHeight:1.55}}>
+                  Rows with no match will not appear in any answer that goes through this join.
+                </div>}
+              </SLField>
+            );
+          })()}
 
           <div style={{display:"flex",gap:12}}>
             <div style={{flex:1}}>
@@ -39911,6 +40045,14 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                   <div style={{fontSize:10.5,color:"#16a34a",marginTop:3}}>{sel.evidence}</div>
                 </div>
 
+                {/* True for every reader of this dataset, so it belongs beside the grain
+                    rather than buried in whichever metric happened to declare it. */}
+                {slEntFilters(sel).length>0 && <div style={{padding:"9px 11px",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:"#b45309",letterSpacing:"0.06em",marginBottom:2}}>ALWAYS FILTERED</div>
+                  <div style={{fontSize:11.5,color:"#92400e",fontFamily:"ui-monospace,monospace"}}>WHERE {slEntFilterText(sel)}</div>
+                  <div style={{fontSize:10.5,color:"#b45309",marginTop:3}}>Applies wherever this dataset is read, metric or not.</div>
+                </div>}
+
                 {selRels.length>0 && <><SLabel>Joins</SLabel>
                   {selRels.map(r=>{
                     const other = entities.find(e=>e.id===(r.from===sel.id?r.to:r.from));
@@ -39928,7 +40070,12 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
                           </button>}
                         </div>
                         <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{slJoinText(r)}</div>
-                        <div style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706",marginTop:3}}>{r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}</div>
+                        <div style={{display:"flex",gap:10,marginTop:3,flexWrap:"wrap"}}>
+                          <span style={{fontSize:10,color:r.fanOutSafe?"#16a34a":"#d97706"}}>{r.fanOutSafe?"✓ cannot fan out":"⚠ may fan out"}</span>
+                          <span style={{fontSize:10,color:slJoinType(r)==="inner"?"#d97706":"#64748b"}}>
+                            {slJoinType(r)==="inner" ? "inner — drops unmatched rows" : "left outer — keeps every row"}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -39970,7 +40117,7 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
   useEffect(()=>{ if(open) setD({role:kind==="fact"?"measure":"dimension", entity:"", name:"", column:"", expr:"", mode:"column",
-                                 type:"categorical", termId:"", desc:"", additive:true}); },[open,kind]);
+                                 type:"categorical", termId:"", desc:"", additive:true, defaultAgg:"sum", nonAdditiveOver:""}); },[open,kind]);
   if(!open || !d) return null;
   const isDim = d.role === "dimension";
   const ent = entities.find(e=>e.id===d.entity);
@@ -40012,7 +40159,7 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
                         : "A measure is the row-level number a metric adds up. The SUM lives on the metric, not here — which is what lets several metrics share one measure."}>
             <div style={{display:"flex",gap:2,padding:3,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,width:"fit-content"}}>
               {[["dimension","Dimension"],["measure","Measure"]].map(([v,l])=>(
-                <button key={v} onClick={()=>setD(p=>({...p, role:v, type:"categorical", termId:"", additive:true}))}
+                <button key={v} onClick={()=>setD(p=>({...p, role:v, type:"categorical", termId:"", additive:true, defaultAgg:"sum", nonAdditiveOver:""}))}
                   style={{padding:"5px 16px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,
                     fontWeight:d.role===v?700:500, background:d.role===v?T.bgSurface:"transparent",
                     color:d.role===v?T.text:T.textMuted, boxShadow:d.role===v?"0 1px 2px rgba(0,0,0,.06)":"none"}}>{l}</button>
@@ -40120,11 +40267,36 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
               </Field>
             </>}
 
-            {!isDim && <Field label="Additive"
-              hint="Additive means summing across every dimension is valid. A balance or a counting key is not additive, and platforms that cannot express that will silently sum it anyway.">
-              <SLSelect value={d.additive?"yes":"no"} onChange={e=>setD({...d,additive:e.target.value==="yes"})}
-                options={[{v:"yes",l:"Additive — safe to sum across anything"},{v:"no",l:"Not additive — summing it is meaningless"}]}/>
-            </Field>}
+            {!isDim && <>
+              <Field label="Additive"
+                hint="Additive means summing across every dimension is valid. A balance or a counting key is not additive, and platforms that cannot express that will silently sum it anyway.">
+                <SLSelect value={d.additive?"yes":"no"}
+                  onChange={e=>setD({...d, additive:e.target.value==="yes", nonAdditiveOver:e.target.value==="yes"?"":d.nonAdditiveOver,
+                                     defaultAgg:e.target.value==="yes"?"sum":""})}
+                  options={[{v:"yes",l:"Additive — safe to sum across anything"},{v:"no",l:"Not additive — summing it is meaningless"}]}/>
+              </Field>
+
+              {/* Without a default, a reader that has no metric has a number and no
+                  idea what to do with it. Leaving it empty is a valid answer and says
+                  so out loud, rather than being a silent SUM. */}
+              <Field label="Default aggregation"
+                hint={d.additive
+                  ? "What to do with this measure when nothing more specific says. A metric can still override it."
+                  : "This measure does not sum, so name the aggregation that IS valid — or leave it unset and require a metric."}>
+                <SLSelect value={d.defaultAgg} onChange={e=>setD({...d,defaultAgg:e.target.value})}
+                  placeholder="No default — a metric has to say"
+                  options={["sum","count","count distinct","average","min","max","last value"]}/>
+              </Field>
+
+              {!d.additive && ent && <Field label="Cannot be summed over"
+                hint="A snapshot adds across stores and products and never across dates. Naming that dimension is the difference between a wrong number and a correct one.">
+                <SLSelect value={d.nonAdditiveOver} onChange={e=>setD({...d,nonAdditiveOver:e.target.value})}
+                  placeholder="Nothing in particular — it simply does not sum"
+                  options={(SCHEMA[ent.table]||[])
+                    .filter(c=>/DATE|TIME/i.test(c.type) || (ent.timeDims||[]).includes(c.name))
+                    .map(c=>({v:c.name,l:c.name}))}/>
+              </Field>}
+            </>}
           </>}
         </div>
 
@@ -40138,7 +40310,8 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
               const expr = computed ? d.expr.trim() : "";
               onSave(isDim?"dimension":"fact", isDim
                 ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, type:d.type, termId:d.termId||null, desc:d.desc}
-                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive, desc:d.desc});
+                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive,
+                     defaultAgg:d.defaultAgg, nonAdditiveOver:d.additive?"":d.nonAdditiveOver, desc:d.desc});
               onToast && onToast(`${d.name.trim()} added`,"success");
             }}>Add field</Btn>
           </div>
@@ -41075,6 +41248,10 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
                                 })}
                                 {dt && <span style={{fontSize:10,color:T.textMuted}}>{dt.l}</span>}
                                 {f.fact && f.fact.additive===false && <span style={{fontSize:10,color:T.amber}}>not additive</span>}
+                                {/* What a reader does with this measure when no metric tells it. */}
+                                {f.fact && slDefaultAgg(f.fact) && <span style={{fontSize:10,color:T.green,fontFamily:"ui-monospace,monospace"}}>{slDefaultAgg(f.fact)} by default</span>}
+                                {f.fact && !slDefaultAgg(f.fact) && <span style={{fontSize:10,color:T.textMuted}}>needs a metric to aggregate</span>}
+                                {f.fact && slNonAdditiveOver(f.fact) && <span style={{fontSize:10,color:T.amber}}>never summed over {slNonAdditiveOver(f.fact)}</span>}
                                 {slIsComputed(editable) && <span style={{fontSize:10,color:T.textMuted}}>calculated</span>}
                                 {term && <span style={{fontSize:10.5,color:T.violet}}>◆ {term.term}</span>}
                               </div>
