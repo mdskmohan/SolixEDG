@@ -36816,6 +36816,8 @@ const slSpareColumns = (ent, dims, facts) => {
 };
 
 // What a column looks like it should be, from the profile. A proposal, not a decision.
+const slPretty = (col) => String(col||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+
 const slSuggestDimType = (colName) => {
   const p = COL_PROFILES[colName] || {};
   if (p.dataType === "datetime") return "time";
@@ -36874,6 +36876,16 @@ const slGates = (m, metrics, opts) => {
 
 // ── The sentence. Business users author by filling brackets, never by writing SQL or
 //    YAML. The sentence IS the definition; the structured record is generated from it.
+// One line that says what a metric computes, whatever kind it is. The wizard and the
+// list both show it, so a metric reads the same wherever it appears.
+const slMetricLine = (m) => {
+  if(m.type==="ratio" && m.numerator && m.denominator)
+    return `${m.numerator.agg}(${m.numerator.col||"?"}) ÷ ${m.denominator.agg}(${m.denominator.col||"?"})`;
+  if(m.type==="derived")    return m.formula || m.expr || "derived";
+  if(m.type==="cumulative") return `${m.window||"running total"}`;
+  return `${m.agg||"sum"}(${m.col||"?"})${m.timeDim?` · by ${m.timeDim}`:""}`;
+};
+
 const slSentence = (m) => {
   const ent = slEntity(m.entity);
   const e = ent ? ent.name : "—";
@@ -37016,12 +37028,11 @@ const SLSelect = ({value, onChange, options, placeholder}) => (
 // THE BUILDER — a right-side drawer with a section rail, per the create/edit
 // convention. Five sections, because five things are genuine decisions.
 // ═══════════════════════════════════════════════════════════════════════════
-const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast}) => {
+const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, entities, onToast, saveLabel}) => {
   const SECTIONS = [
     {k:"identity",   l:"Identity",     d:"What it is called, and who owns it"},
     {k:"definition", l:"Definition",   d:"The sentence a business user fills in"},
-    {k:"bindings",   l:"Bindings",     d:"Which physical column implements it"},
-    {k:"dims",       l:"Dimensions",   d:"What it can be sliced by"},
+    {k:"columns",    l:"Columns",      d:"What implements it, and what it slices by"},
     {k:"review",     l:"Review",       d:"Gates, inherited policy, publish"},
   ];
   const [sec, setSec] = useState("identity");
@@ -37041,7 +37052,9 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
   if(!open || !m) return null;
   const patch = (p) => setM(prev=>({...prev,...p}));
-  const ent = m.entity ? slEntity(m.entity) : null;
+  // Scoped when a model is being created — only its own datasets exist yet.
+  const ents = entities || _slState.entities;
+  const ent = m.entity ? (ents.find(x=>x.id===m.entity) || slEntity(m.entity)) : null;
   const tableCols = ent ? (SCHEMA[ent.table]||[]) : [];
   const entFacts  = ent ? (facts||[]).filter(x=>x.entity===ent.id) : [];
   const entDims   = ent ? (dims ||[]).filter(d=>d.entity===ent.id) : [];
@@ -37100,15 +37113,15 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
           <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
 
             {sec==="identity" && <>
-              <SLSection title="Identity" note="A metric's identity lives on a Glossary term — one name, one owner, one approval path. If no term exists for this name, one is created on publish and goes through the Glossary's normal approval flow. Nothing is created silently.">
-                <SLField label="Metric name" hint="The name people will argue about. This becomes the Glossary term.">
+              <SLSection title="Identity" note="If no Glossary term exists for this name, one is created on publish and goes through the usual approval.">
+                <SLField label="Metric name" hint="Becomes the Glossary term.">
                   <Input2 value={m.name} onChange={e=>patch({name:e.target.value})} placeholder="e.g. Net Revenue"/>
                 </SLField>
-                <SLField label="What it means" hint="Plain English, for a business reader. Not a formula.">
+                <SLField label="What it means" hint="Plain English, not a formula.">
                   <Input2 multiline rows={3} value={m.definition} onChange={e=>patch({definition:e.target.value})} placeholder="Net revenue from orders placed in a calendar day, excluding cancelled orders."/>
                 </SLField>
                 <SLField label="Questions this answers"
-                  hint="One per line. These travel in the file as ai_context.examples — what an assistant matches a question against to know this is the metric to use. Write what people actually ask; a guessed example is worse than none, because an agent will trust it.">
+                  hint="One per line. An assistant matches questions against these — write what people actually ask.">
                   <Input2 multiline rows={3} value={(m.examples||[]).join("\n")}
                     onChange={e=>patch({examples:e.target.value.split("\n")})}
                     placeholder={"What was revenue last month?\nShow me daily revenue by region"}/>
@@ -37122,7 +37135,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
             </>}
 
             {sec==="definition" && <>
-              <SLSection title="Definition" note="Fill in the brackets. Every bracket is a picker over objects EDG already governs — no SQL, no YAML.">
+              <SLSection title="Definition" note="Fill in the brackets.">
                 <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px",marginBottom:18}}>
                   <SLSentenceView metric={m}/>
                 </div>
@@ -37133,7 +37146,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
 
                 <SLField label="Dataset" hint={ent ? `One row per ${ent.key} in ${ent.table}. ${ent.evidence}` : "The grain the metric resolves to. A metric with no grain cannot be certified."}>
                   <SLSelect value={m.entity} onChange={e=>patch({entity:e.target.value, col:"", timeDim:"", dims:[]})} placeholder="Select a dataset"
-                    options={_slState.entities.map(x=>({v:x.id,l:`${x.name} — one row per ${x.key}`}))}/>
+                    options={ents.map(x=>({v:x.id,l:`${x.name} — one row per ${slPKText(x)}`}))}/>
                 </SLField>
 
                 {m.type==="simple" && <div style={{display:"flex",gap:14}}>
@@ -37148,13 +37161,13 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                 </div>}
 
                 {m.type==="ratio" && <>
-                  <SLField label="Numerator" hint="What you are counting.">
+                  <SLField label="Numerator" hint="">
                     <div style={{display:"flex",gap:10}}>
                       <div style={{width:160}}><SLSelect value={m.numerator.agg} onChange={e=>patch({numerator:{...m.numerator,agg:e.target.value}})} options={SL_AGGS}/></div>
                       <div style={{flex:1}}><Input2 value={m.numerator.label} onChange={e=>patch({numerator:{...m.numerator,label:e.target.value}})} placeholder="customers who cancelled"/></div>
                     </div>
                   </SLField>
-                  <SLField label="Denominator" hint="What you are counting it against.">
+                  <SLField label="Denominator" hint="">
                     <div style={{display:"flex",gap:10}}>
                       <div style={{width:160}}><SLSelect value={m.denominator.agg} onChange={e=>patch({denominator:{...m.denominator,agg:e.target.value}})} options={SL_AGGS}/></div>
                       <div style={{flex:1}}><Input2 value={m.denominator.label} onChange={e=>patch({denominator:{...m.denominator,label:e.target.value}})} placeholder="customers at period start"/></div>
@@ -37163,7 +37176,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                 </>}
 
                 {derived && <>
-                  <SLField label="Based on" hint="Derived and cumulative metrics build on other metrics. Only certified ones may be used — otherwise an error in the base compounds silently, which is exactly what happened to the Power BI YoY measure.">
+                  <SLField label="Based on" hint="Only certified metrics — an error in the base compounds silently.">
                     <div style={{display:"flex",flexDirection:"column",gap:6}}>
                       {metrics.map(b=>{
                         const on = (m.basedOn||[]).includes(b.id); const ok = b.status==="Approved";
@@ -37180,16 +37193,16 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                     </div>
                   </SLField>
                   {m.type==="derived" && <>
-                    <SLField label="Formula" hint="Stated in business terms, not SQL. This is what the definition reads like.">
+                    <SLField label="Formula" hint="Business terms, not SQL.">
                       <Input2 value={m.formula} onChange={e=>patch({formula:e.target.value})} placeholder="(this period − same period last year) ÷ same period last year"/>
                     </SLField>
                     <SLField label="Expression"
-                      hint="What it computes. Refer to the metrics above by name and EDG inlines them — Apache Ossie has no metric-to-metric reference, so what leaves here has to stand on its own. A metric with no expression is carried, but cannot cross into another tool.">
+                      hint="Name a metric above and EDG inlines it. Without an expression it cannot leave EDG.">
                       <Input2 value={m.expr||""} onChange={e=>patch({expr:e.target.value})}
                         placeholder="(daily_revenue - LAG(daily_revenue) OVER (ORDER BY orders.created_at)) / NULLIF(LAG(daily_revenue) OVER (ORDER BY orders.created_at), 0)"/>
                       {(()=>{
                         if(!(m.expr||"").trim()) return null;
-                        const r = slInlineMetrics(m.expr, _slState.entities, metrics, 0);
+                        const r = slInlineMetrics(m.expr, ents, metrics, 0);
                         return (
                           <div style={{marginTop:7,padding:"9px 11px",borderRadius:8,
                             background:r.issues.length?T.roseDim:T.bgElevated,
@@ -37211,14 +37224,14 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                 </>}
 
                 <div style={{display:"flex",gap:14}}>
-                  <div style={{flex:1}}><SLField label="Time dimension" hint="Required. A metric that cannot be trended cannot be certified.">
+                  <div style={{flex:1}}><SLField label="Time dimension" hint="Required to certify.">
                     <SLSelect value={m.timeDim} onChange={e=>patch({timeDim:e.target.value})} placeholder={ent?"Select a time column":"Pick a dataset first"}
                       options={ent?ent.timeDims:[]}/></SLField></div>
                   <div style={{flex:1}}><SLField label="Time grain"><SLSelect value={m.timeGrain} onChange={e=>patch({timeGrain:e.target.value})} options={SL_GRAINS}/></SLField></div>
                   <div style={{flex:1}}><SLField label="Unit"><SLSelect value={m.unit} onChange={e=>patch({unit:e.target.value})} options={["USD","EUR","GBP","%","users","orders","count"]}/></SLField></div>
                 </div>
 
-                <SLField label="Filters" hint="What the number deliberately excludes. This is the single most common cause of two tools disagreeing.">
+                <SLField label="Filters" hint="What the number excludes.">
                   <div style={{display:"flex",flexDirection:"column",gap:7}}>
                     {(m.filters||[]).map((f,i)=>(
                       <div key={i} style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -37234,9 +37247,9 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
               </SLSection>
             </>}
 
-            {sec==="bindings" && <>
+            {sec==="columns" && <>
               <SLSection title="Bindings"
-                note="The business user never picks the column. EDG proposes candidates from what it already holds — column profiling, classifications and schema — and shows the evidence. A steward confirms. This keeps meaning, binding and code review as three jobs done by three people."
+                note="EDG proposes columns from profiling and classifications. A steward confirms."
                 right={<Btn small variant="primary" icon={Ic.bot(12)} onClick={runPropose} disabled={thinking}>{thinking?"Looking…":"Propose bindings"}</Btn>}>
                 {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick a dataset in Definition first — a binding needs a table to look in.</div>}
                 {ent && proposed.length===0 && !thinking &&
@@ -37275,8 +37288,10 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
               </SLSection>
             </>}
 
-            {sec==="dims" && <>
-              <SLSection title="Dimensions" note="Chosen from what this model declares, so a dimension means the same thing on every metric that uses it. To slice by something not listed, declare it on the Model tab first.">
+            {/* same step, second half */}
+            {sec==="columns" && <div style={{height:1,background:T.border,margin:"22px 0"}}/>}
+            {sec==="columns" && <>
+              <SLSection title="Dimensions" note="Only what this model declares. Add more on the Fields tab.">
                 {!ent && <div style={{padding:"28px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>Pick a dataset in Definition first.</div>}
                 {ent && entDims.length===0 && <div style={{padding:"24px 20px",textAlign:"center",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
                   <div style={{fontSize:12.5,color:T.text,fontWeight:600,marginBottom:4}}>No dimensions declared on {ent.name}</div>
@@ -37306,10 +37321,10 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
               <SLSection title="The definition">
                 <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"16px 18px"}}><SLSentenceView metric={m}/></div>
               </SLSection>
-              <SLSection title="Certification gates" note="A metric cannot be certified without a declared grain, a declared time dimension and at least one confirmed binding. Refusing to publish is the point — an ungrained number is what makes two dashboards disagree.">
+              <SLSection title="Certification gates" note="Certification needs a grain, a time dimension and a confirmed binding.">
                 <SLGateList metric={m} metrics={metrics} authoring/>
               </SLSection>
-              {slInheritedPolicy(m).length>0 && <SLSection title="Inherited policy" note="The metric touches governed columns, so it inherits their policy. No semantic-layer vendor can do this, because none of them hold the policy objects.">
+              {slInheritedPolicy(m).length>0 && <SLSection title="Inherited policy" note="Inherited from the columns it touches.">
                 {slInheritedPolicy(m).map(p=>(
                   <div key={p.col} style={{display:"flex",gap:10,padding:"11px 13px",background:T.roseDim,border:`1px solid ${T.rose}35`,borderRadius:9,marginBottom:7}}>
                     <span style={{color:T.rose,flexShrink:0,marginTop:1}}>{Ic.shield(14)}</span>
@@ -37318,7 +37333,7 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
                   </div>
                 ))}
               </SLSection>}
-              <SLSection title="What happens on publish" note="Authoring produces a proposal, never a production write. A business user cannot break a production model from here.">
+              <SLSection title="What happens on publish" note="This creates a proposal, not a production write.">
                 <div style={{display:"flex",flexDirection:"column",gap:7}}>
                   {[
                     m.termId ? "The existing Glossary term is updated with this semantic facet." : "A Glossary term is created and enters the Glossary's normal approval flow.",
@@ -37343,8 +37358,8 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, onToast})
           </div>
           <div style={{display:"flex",gap:9}}>
             <Btn ghost onClick={onClose}>Cancel</Btn>
-            <Btn onClick={()=>{ if(!m.name.trim()){onToast&&onToast("Give the metric a name first.","error");return;} onSave({...m,status:"Draft"}); }}>Save draft</Btn>
-            <Btn variant="primary" disabled={!ready} onClick={()=>{ onSave({...m,status:"In Review"}); }}>Publish for approval</Btn>
+            <Btn onClick={()=>{ if(!m.name.trim()){onToast&&onToast("Give the metric a name first.","error");return;} onSave({...m,status:"Draft"}); }}>{saveLabel||"Save draft"}</Btn>
+            {!saveLabel && <Btn variant="primary" disabled={!ready} onClick={()=>{ onSave({...m,status:"In Review"}); }}>Publish for approval</Btn>}
           </div>
         </div>
       </div>
@@ -37370,14 +37385,17 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
   const [srcF, setSrcF] = useState("all");
   const [domF, setDomF] = useState("all");
   const [nj, setNj]   = useState({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
-  const [nm, setNm]   = useState({name:"",col:"",agg:"sum",timeDim:""});
+  // Adding a field or a metric opens the SAME editor used everywhere else, stacked
+  // on top of this one. One object, one form, wherever you reach it from.
+  const [metricOpen, setMetricOpen] = useState(false);
+  const [fieldEdit,  setFieldEdit]  = useState(null);   // {field} | "new" | null
 
   useEffect(()=>{ if(!open) return;
     setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
     setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
     if(!model){
-      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[],fields:{},metrics:[]});
-      setNm({name:"",col:"",agg:"sum",timeDim:""});
+      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[],fields:{},fieldMeta:{},metrics:[]});
+      setMetricOpen(false); setFieldEdit(null);
       return;
     }
     // An existing model is described by the same four things, so it is loaded into the
@@ -37447,14 +37465,15 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
     }).filter(Boolean);
   const timeChoices = [...new Set(derived.flatMap(({entity})=>
     (SCHEMA[entity.table]||[]).filter(c=>/DATE|TIMESTAMP/i.test(c.type)).map(c=>c.name)))];
-  const addMetric = () => {
-    if(!nm.name.trim() || !nm.col){ onToast&&onToast("A metric needs a name and something to add up.","error"); return; }
-    const [entityId, column] = [nm.col.slice(0, nm.col.indexOf(".")), nm.col.slice(nm.col.indexOf(".")+1)];
-    setD(p=>({...p, metrics:[...p.metrics, {id:"m_"+Date.now(), name:nm.name.trim(), entity:entityId,
-      col:column, agg:nm.agg, timeDim:nm.timeDim || timeChoices[0] || ""}]}));
-    setNm({name:"",col:"",agg:"sum",timeDim:""});
-    onToast&&onToast("Metric added","success");
-  };
+  // Datasets as the shared editors expect them — the ones this model will create,
+  // not the ones already in the store.
+  const draftEnts  = derived.map(x=>x.entity);
+  const draftDims  = Object.entries(d.fields||{}).filter(([,r])=>r==="dimension")
+    .map(([fid])=>({id:fid, entity:fid.slice(0,fid.indexOf(".")), column:fid.slice(fid.indexOf(".")+1),
+                    name:slPretty(fid.slice(fid.indexOf(".")+1)), type:"categorical", ...(d.fieldMeta||{})[fid]}));
+  const draftFacts = Object.entries(d.fields||{}).filter(([,r])=>r==="measure")
+    .map(([fid])=>({id:fid, entity:fid.slice(0,fid.indexOf(".")), column:fid.slice(fid.indexOf(".")+1),
+                    name:slPretty(fid.slice(fid.indexOf(".")+1)), additive:true, defaultAgg:"sum", ...(d.fieldMeta||{})[fid]}));
 
   const noKey = derived.filter(x=>!slKeys(x.entity).length);
   const ready = d.name.trim() && d.owner && d.assetIds.length>0 && noKey.length===0;
@@ -37475,7 +37494,7 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?`Edit ${model.name}`:"New semantic model"}</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Pick the tables. EDG works out what one row means. You declare how they join.</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Pick the tables, declare how they join, say what each column is for.</div>
           </div>
           <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
         </div>
@@ -37670,8 +37689,12 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
             </>}
 
             {sec==="fields" && <>
-              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
-                Say what each column is for. A <b style={{color:T.text}}>dimension</b> is something you slice by, a <b style={{color:T.text}}>measure</b> is a row-level number a metric adds up. EDG reads the column profiles and proposes a role for each — change any of them. Columns left blank are simply not part of the model.
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <div style={{fontSize:12,color:T.textMuted,flex:1}}>
+                  What each column is used as. Blank means it is not in the model.
+                </div>
+                <Btn small icon={Ic.plus(11)} disabled={derived.length===0}
+                  onClick={()=>setFieldEdit("new")}>Add a calculated field</Btn>
               </div>
               {derived.length===0
                 ? <div style={{fontSize:12,color:T.textMuted}}>Pick at least one dataset first.</div>
@@ -37712,6 +37735,9 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                                          : p.topValues ? p.topValues.slice(0,3).join(", ")
                                          : p.distinctCount ? `${p.distinctCount} distinct` : c.desc||""}
                                 </span>
+                                {/* Named once it is in the model, so what the wizard makes and what
+                                    the field editor makes are the same object. */}
+                                {role && (d.fieldMeta||{})[fid] && <span style={{fontSize:10.5,color:T.text,fontWeight:600,flexShrink:0}}>{(d.fieldMeta||{})[fid].name}</span>}
                                 {c.pii && <span style={{fontSize:9.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,flexShrink:0}}>PII</span>}
                                 {isKey
                                   ? <span style={{fontSize:10.5,color:T.violet,width:188,textAlign:"right",flexShrink:0}}>Key — always in the model</span>
@@ -37726,6 +37752,18 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                                             boxShadow:role===v?"0 1px 2px rgba(0,0,0,.06)":"none"}}>{l}</button>
                                       ))}
                                     </div>}
+                                <button onClick={()=>setFieldEdit(role ? {
+                                      id:`${role==="dimension"?"d":"f"}_${entity.id}_${c.name}`,
+                                      role: role==="dimension" ? "dimension" : "measure",
+                                      entity: entity.id, column: c.name,
+                                      name: slPretty(c.name), desc: c.desc||"",
+                                      type: slSuggestDimType(c.name), additive:true, defaultAgg:"sum",
+                                      ...((d.fieldMeta||{})[fid] || {}),
+                                    } : null)}
+                                  disabled={!role} title={role?"Name it, describe it, set how it aggregates":"Give it a role first"}
+                                  style={{width:24,height:24,borderRadius:6,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                                    background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,
+                                    cursor:role?"pointer":"not-allowed",opacity:role?1:.3}}>{Ic.edit(11)}</button>
                               </div>
                             );
                           })}
@@ -37736,58 +37774,33 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
             </>}
 
             {sec==="metrics" && <>
-              <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
-                The numbers this model is for. Each one adds up a measure you declared, and can be trended over a time dimension. Ratios, period-over-period and running totals are built in the full metric editor once the model exists — these are the straightforward ones you already know you need.
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <div style={{fontSize:12,color:T.textMuted,flex:1}}>The numbers this model is for.</div>
+                <Btn small variant="primary" icon={Ic.plus(11)}
+                  disabled={measureChoices.length===0} onClick={()=>setMetricOpen(true)}>Add metric</Btn>
               </div>
-              {measureChoices.length===0
-                ? <div style={{padding:"18px 16px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,fontSize:12,color:T.textSub,lineHeight:1.6}}>
-                    No measures declared yet. Go back to <b style={{color:T.text}}>Fields</b> and mark at least one numeric column as a measure — a metric has to have something to add up.
-                  </div>
-                : <>
-                  <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:14}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:10}}>ADD A METRIC</div>
-                    <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
-                      <div style={{flex:2,minWidth:170}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Name</div>
-                        <Input2 value={nm.name} onChange={e=>setNm({...nm,name:e.target.value})} placeholder="e.g. Daily Revenue"/>
-                      </div>
-                      <div style={{flex:1,minWidth:110}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Adds up</div>
-                        <SLSelect value={nm.col} onChange={e=>setNm({...nm,col:e.target.value})} placeholder="measure"
-                          options={measureChoices.map(x=>({v:`${x.entityId}.${x.column}`,l:`${x.column} · ${x.entityName}`}))}/>
-                      </div>
-                      <div style={{flex:1,minWidth:100}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>How</div>
-                        <SLSelect value={nm.agg} onChange={e=>setNm({...nm,agg:e.target.value})}
-                          options={["sum","count","count distinct","average","min","max"]}/>
-                      </div>
-                      <div style={{flex:1,minWidth:120}}>
-                        <div style={{fontSize:10.5,color:T.textMuted,marginBottom:4}}>Trended over</div>
-                        <SLSelect value={nm.timeDim} onChange={e=>setNm({...nm,timeDim:e.target.value})} placeholder="time column"
-                          options={timeChoices}/>
-                      </div>
-                      <Btn small variant="primary" icon={Ic.plus(11)} onClick={addMetric}>Add</Btn>
-                    </div>
-                  </div>
 
-                  {d.metrics.length===0
-                    ? <div style={{fontSize:12,color:T.textMuted}}>No metrics yet. A model can be created without any — you can add them whenever the numbers are agreed.</div>
-                    : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                        {d.metrics.map((x,i)=>(
-                          <div key={x.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<d.metrics.length-1?`1px solid ${T.border}`:"none"}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</div>
-                              <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginTop:2}}>
-                                {x.agg}({x.col}){x.timeDim?` · by ${x.timeDim}`:""}
-                              </div>
+              {measureChoices.length===0
+                ? <div style={{padding:"16px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,fontSize:12,color:T.textSub,lineHeight:1.6}}>
+                    Mark a numeric column as a measure in <b style={{color:T.text}}>Fields</b> first — a metric needs something to add up.
+                  </div>
+                : d.metrics.length===0
+                  ? <div style={{fontSize:12,color:T.textMuted}}>None yet. A model can be created without any.</div>
+                  : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+                      {d.metrics.map((x,i)=>(
+                        <div key={x.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",borderBottom:i<d.metrics.length-1?`1px solid ${T.border}`:"none"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{x.name}</div>
+                            <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginTop:2}}>
+                              {slMetricLine(x)}
                             </div>
-                            <span style={{fontSize:10.5,color:T.textMuted}}>Draft</span>
-                            <button onClick={()=>setD(p=>({...p,metrics:p.metrics.filter(y=>y.id!==x.id)}))}
-                              style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:4}}>{Ic.x(13)}</button>
                           </div>
-                        ))}
-                      </div>}
-                </>}
+                          <span style={{fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{(SL_TYPES[x.type]||{}).l||x.type}</span>
+                          <button onClick={()=>setD(p=>({...p,metrics:p.metrics.filter(y=>y.id!==x.id)}))}
+                            style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:4}}>{Ic.x(13)}</button>
+                        </div>
+                      ))}
+                    </div>}
             </>}
 
             {sec==="review" && <>
@@ -37850,27 +37863,54 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
               newDims: Object.entries(d.fields||{}).filter(([,r])=>r==="dimension").map(([fid])=>{
                 const ent = fid.slice(0, fid.indexOf(".")), col = fid.slice(fid.indexOf(".")+1);
                 return {id:`d_${ent}_${col}`, entity:ent, column:col, expr:"",
-                        name:col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
-                        type:slSuggestDimType(col), termId:null,
-                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||""};
+                        name:slPretty(col), type:slSuggestDimType(col), termId:null,
+                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||"",
+                        // Anything refined in the field editor wins over the proposal.
+                        ...((d.fieldMeta||{})[fid] || {})};
               }),
               newFacts: Object.entries(d.fields||{}).filter(([,r])=>r==="measure").map(([fid])=>{
                 const ent = fid.slice(0, fid.indexOf(".")), col = fid.slice(fid.indexOf(".")+1);
-                return {id:`f_${ent}_${col}`, entity:ent, column:col, expr:"", additive:true,
-                        name:col.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase()),
-                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||""};
+                return {id:`f_${ent}_${col}`, entity:ent, column:col, expr:"", additive:true, defaultAgg:"sum",
+                        name:slPretty(col),
+                        desc:((SCHEMA[(derived.find(x=>x.entity.id===ent)||{entity:{}}).entity.table]||[]).find(c=>c.name===col)||{}).desc||"",
+                        ...((d.fieldMeta||{})[fid] || {})};
               }),
               newMetrics: d.metrics.map(x=>({
-                id:x.id, name:x.name, type:"simple", status:"Draft", termId:null,
-                domain:d.domain, owner:d.owner, steward:d.steward||d.owner, unit:"count",
-                entity:x.entity, agg:x.agg, col:x.col, timeDim:x.timeDim, timeGrain:"day",
-                filters:[], dims:[], bindings:[], basedOn:[], formula:"", expr:"", examples:[],
-                definition:`${x.name} is the ${x.agg} of ${x.col}.`,
+                ...x,
+                id:x.id, name:x.name, type:x.type||"simple", status:x.status||"Draft", termId:x.termId||null,
+                domain:x.domain||d.domain, owner:x.owner||d.owner, steward:x.steward||d.steward||d.owner, unit:x.unit||"count",
+                timeGrain:x.timeGrain||"day",
+                filters:x.filters||[], dims:x.dims||[], bindings:x.bindings||[], basedOn:x.basedOn||[],
+                formula:x.formula||"", expr:x.expr||"", examples:x.examples||[],
+                definition:x.definition || `${x.name} is the ${x.agg} of ${x.col}.`,
               })),
             })}>{isEdit?"Save changes":"Create model"}</Btn>
           </div>
         </div>
       </div>
+
+      {/* The same editors the model profile uses, pointed at the draft. A field or a
+          metric is one object with one form, whether it is made here or later. */}
+      <SLDimFactDrawer open={!!fieldEdit} kind="fact"
+        field={fieldEdit && fieldEdit!=="new" ? fieldEdit : null}
+        entities={draftEnts} dims={draftDims} facts={draftFacts} gTerms={GLOSSARY_TERMS}
+        onClose={()=>setFieldEdit(null)} onToast={onToast}
+        onSave={(k, fld)=>{
+          const fid = `${fld.entity}.${fld.column}`;
+          setD(p=>({...p,
+            fields:    {...p.fields, [fid]: k==="dimension" ? "dimension" : "measure"},
+            fieldMeta: {...(p.fieldMeta||{}), [fid]: {
+              name: fld.name, desc: fld.desc, expr: fld.expr,
+              ...(k==="dimension" ? {type: fld.type, termId: fld.termId}
+                                  : {additive: fld.additive, defaultAgg: fld.defaultAgg, nonAdditiveOver: fld.nonAdditiveOver}),
+            }}}));
+          setFieldEdit(null);
+        }}/>
+
+      <SLBuilderDrawer open={metricOpen} metrics={d.metrics} dims={draftDims} facts={draftFacts}
+        entities={draftEnts} saveLabel="Add to model" onToast={onToast}
+        onClose={()=>setMetricOpen(false)}
+        onSave={(m)=>{ setD(p=>({...p, metrics:[...p.metrics, {...m, id:"m_"+Date.now()}]})); setMetricOpen(false); }}/>
     </div>
   );
 };
@@ -40114,10 +40154,21 @@ const SLRelCanvas = ({entities, rels, metrics, dims, facts, selected, onSelect, 
 
 // ── Declare a field. One drawer with a role, because Ossie has one field type and
 //    what the column is for: slicing, or being aggregated.
-const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
+const SLDimFactDrawer = ({open, kind, field, lockEntity, entities, dims, facts, gTerms, onClose, onSave, onToast}) => {
   const [d, setD] = useState(null);
-  useEffect(()=>{ if(open) setD({role:kind==="fact"?"measure":"dimension", entity:"", name:"", column:"", expr:"", mode:"column",
-                                 type:"categorical", termId:"", desc:"", additive:true, defaultAgg:"sum", nonAdditiveOver:""}); },[open,kind]);
+  useEffect(()=>{
+    if(!open) return;
+    // Editing an existing field opens the same form on its current values, so the
+    // thing you declared in a wizard and the thing you refine later are one object.
+    setD(field
+      ? {role: field.role, entity: field.entity, name: field.name||"", column: field.column||"",
+         expr: field.expr||"", mode: field.expr ? "calculation" : "column",
+         type: field.type||"categorical", termId: field.termId||"", desc: field.desc||"",
+         additive: field.additive!==false, defaultAgg: field.defaultAgg||"", nonAdditiveOver: field.nonAdditiveOver||"",
+         id: field.id}
+      : {role:kind==="fact"?"measure":"dimension", entity:lockEntity||"", name:"", column:"", expr:"", mode:"column",
+         type:"categorical", termId:"", desc:"", additive:true, defaultAgg:"sum", nonAdditiveOver:""});
+  },[open, kind, field, lockEntity]);
   if(!open || !d) return null;
   const isDim = d.role === "dimension";
   const ent = entities.find(e=>e.id===d.entity);
@@ -40145,7 +40196,7 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
         style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
         <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Add a field</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{field?"Edit field":"Add a field"}</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
               A column this model exposes, and what it is used as.
             </div>
@@ -40309,11 +40360,11 @@ const SLDimFactDrawer = ({open, kind, entities, dims, facts, gTerms, onClose, on
             <Btn variant="primary" disabled={!ready} onClick={()=>{
               const expr = computed ? d.expr.trim() : "";
               onSave(isDim?"dimension":"fact", isDim
-                ? {id:"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, type:d.type, termId:d.termId||null, desc:d.desc}
-                : {id:"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive,
+                ? {id:d.id||"d_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, type:d.type, termId:d.termId||null, desc:d.desc}
+                : {id:d.id||"f_"+Date.now(), entity:d.entity, name:d.name.trim(), column:d.column, expr, additive:d.additive,
                      defaultAgg:d.defaultAgg, nonAdditiveOver:d.additive?"":d.nonAdditiveOver, desc:d.desc});
-              onToast && onToast(`${d.name.trim()} added`,"success");
-            }}>Add field</Btn>
+              onToast && onToast(`${d.name.trim()} ${field?"saved":"added"}`,"success");
+            }}>{field?"Save field":"Add field"}</Btn>
           </div>
         </div>
       </div>
