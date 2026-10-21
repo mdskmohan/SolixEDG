@@ -1649,7 +1649,53 @@ const DQ_TEST_DEFINITIONS = [
   {id:"td25", name:"Column Values Sum To Be Between",        entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],            fn:"columnValuesSumToBeBetween",        desc:"Test the sum of values in a column is between min and max."},
   {id:"td26", name:"Column Value Count To Be Between",       entityType:"COLUMN", dim:"Completeness", testPlatforms:["OpenMetadata"],           enabled:true,  params:["minValue","maxValue"],            fn:"columnValueCountToBeBetween",       desc:"This schema defines the test ColumnValueCountToBeBetween. Test the number of values in a column is between min and max."},
   {id:"td27", name:"Column Values Distinct Ratio To Be Between", entityType:"COLUMN", dim:"Uniqueness", testPlatforms:["OpenMetadata"],        enabled:true,  params:["minValue","maxValue"],            fn:"columnValuesDistinctRatioToBeBetween", desc:"This schema defines the test ColumnValuesDistinctRatioToBeBetween. Test the ratio of distinct values to total values in a column is between min and max."},
+  // -- Great Expectations core checks EDG had no equivalent for. Multi-column checks are
+  //    TABLE level (they name their columns as parameters, like Compare 2 tables).
+  //    rowLevel: judged row by row, so they take a tolerance. schema: judged on the table's
+  //    structure, so a row filter means nothing to them. --
+  {id:"td28", name:"Table Row Count To Equal Other Table",   entityType:"TABLE",  dim:"Consistency",  testPlatforms:["EDG"], enabled:true, params:[{name:"otherTable",ph:"finance.orders_archive"}], fn:"tableRowCountToEqualOtherTable", gx:"expect_table_row_count_to_equal_other_table", desc:"Test the number of rows equals the row count of another table."},
+  {id:"td29", name:"Column Pair Values A To Be Greater Than B", entityType:"TABLE", dim:"Validity",   testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnA",ph:"ship_date"},{name:"columnB",ph:"order_date"},{name:"orEqual",options:["false","true"]}], fn:"columnPairValuesAToBeGreaterThanB", gx:"expect_column_pair_values_a_to_be_greater_than_b", desc:"Test the value in column A is greater than (or equal to) the value in column B on every row."},
+  {id:"td30", name:"Column Pair Values To Be Equal",         entityType:"TABLE",  dim:"Consistency",  testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnA",ph:"billing_country"},{name:"columnB",ph:"tax_country"}], fn:"columnPairValuesToBeEqual", gx:"expect_column_pair_values_to_be_equal", desc:"Test the values in two columns are equal on every row."},
+  {id:"td31", name:"Column Pair Values To Be In Set",        entityType:"TABLE",  dim:"Validity",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnA",ph:"country"},{name:"columnB",ph:"currency"},{name:"valuePairs",ph:"US:USD, GB:GBP, DE:EUR"}], fn:"columnPairValuesToBeInSet", gx:"expect_column_pair_values_to_be_in_set", desc:"Test each row's pair of values from two columns is one of the allowed pairs."},
+  {id:"td32", name:"Compound Columns To Be Unique",          entityType:"TABLE",  dim:"Uniqueness",   testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"order_id, line_no"}], fn:"compoundColumnsToBeUnique", gx:"expect_compound_columns_to_be_unique", desc:"Test the combination of values across several columns is unique."},
+  {id:"td33", name:"Column Values To Be Unique Within Record", entityType:"TABLE", dim:"Uniqueness",   testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"primary_email, secondary_email"}], fn:"selectColumnValuesToBeUniqueWithinRecord", gx:"expect_select_column_values_to_be_unique_within_record", desc:"Test the listed columns hold different values within each row."},
+  {id:"td34", name:"Multicolumn Sum To Equal",               entityType:"TABLE",  dim:"Accuracy",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"pct_online, pct_store, pct_partner"},{name:"sumTotal",ph:"100"}], fn:"multicolumnSumToEqual", gx:"expect_multicolumn_sum_to_equal", desc:"Test the listed columns add up to the same total on every row."},
+  {id:"td35", name:"Table Data Freshness",                   entityType:"TABLE",  dim:"Timeliness",   testPlatforms:["EDG"], enabled:true, params:[{name:"timestampColumn",ph:"updated_at"},{name:"maxAgeHours",ph:"24"}], fn:"tableDataFreshness", gx:"GX Cloud freshness", desc:"Test the newest value in a timestamp column is no older than a number of hours."},
+  {id:"td36", name:"Column Values To Be Of Type",            entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, schema:true, params:[{name:"type",ph:"DECIMAL"}], fn:"columnValuesToBeOfType", gx:"expect_column_values_to_be_of_type", desc:"Test the column's data type is the expected type."},
+  {id:"td37", name:"Column Values To Be In Type List",       entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, schema:true, params:[{name:"typeList",ph:"INT, BIGINT, NUMBER"}], fn:"columnValuesToBeInTypeList", gx:"expect_column_values_to_be_in_type_list", desc:"Test the column's data type is one of a list of types."},
+  {id:"td38", name:"Column Values To Be Null",               entityType:"COLUMN", dim:"Completeness", testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[], fn:"columnValuesToBeNull", gx:"expect_column_values_to_be_null", desc:"Test every value in the column is null."},
+  {id:"td39", name:"Column Value Lengths To Equal",          entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"value",ph:"2"}], fn:"columnValueLengthsToEqual", gx:"expect_column_value_lengths_to_equal", desc:"Test every value in the column has exactly the given length."},
+  {id:"td40", name:"Column Values To Match Regex List",      entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"regexList",ph:"^\\d{5}$, ^\\d{5}-\\d{4}$"},{name:"matchOn",options:["any","all"]}], fn:"columnValuesToMatchRegexList", gx:"expect_column_values_to_match_regex_list", desc:"Test the values in a column match any (or all) of a list of regex patterns."},
+  {id:"td41", name:"Column Values To Not Match Regex List",  entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"regexList",ph:"^test, @example\\.com$"}], fn:"columnValuesToNotMatchRegexList", gx:"expect_column_values_to_not_match_regex_list", desc:"Test the values in a column match none of a list of regex patterns."},
+  {id:"td42", name:"Column Values To Match Like Pattern",    entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"likePattern",ph:"ORD-%"}], fn:"columnValuesToMatchLikePattern", gx:"expect_column_values_to_match_like_pattern", desc:"Test the values in a column match a SQL LIKE pattern."},
+  {id:"td43", name:"Column Values To Not Match Like Pattern", entityType:"COLUMN", dim:"Validity",    testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"likePattern",ph:"%test%"}], fn:"columnValuesToNotMatchLikePattern", gx:"expect_column_values_to_not_match_like_pattern", desc:"Test the values in a column do not match a SQL LIKE pattern."},
+  {id:"td44", name:"Column Values To Match Like Pattern List", entityType:"COLUMN", dim:"Validity",    testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"likePatternList",ph:"ORD-%, RET-%"},{name:"matchOn",options:["any","all"]}], fn:"columnValuesToMatchLikePatternList", gx:"expect_column_values_to_match_like_pattern_list", desc:"Test the values in a column match any (or all) of a list of SQL LIKE patterns."},
+  {id:"td45", name:"Column Values To Not Match Like Pattern List", entityType:"COLUMN", dim:"Validity", testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"likePatternList",ph:"%test%, %dummy%"}], fn:"columnValuesToNotMatchLikePatternList", gx:"expect_column_values_to_not_match_like_pattern_list", desc:"Test the values in a column match none of a list of SQL LIKE patterns."},
+  {id:"td46", name:"Column Distinct Values To Be In Set",    entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, params:[{name:"valueSet",ph:"pending, shipped, delivered"}], fn:"columnDistinctValuesToBeInSet", gx:"expect_column_distinct_values_to_be_in_set", desc:"Test every distinct value in the column belongs to the set."},
+  {id:"td47", name:"Column Distinct Values To Contain Set",  entityType:"COLUMN", dim:"Completeness", testPlatforms:["EDG"], enabled:true, params:[{name:"valueSet",ph:"US, GB, DE"}], fn:"columnDistinctValuesToContainSet", gx:"expect_column_distinct_values_to_contain_set", desc:"Test the column's distinct values include every value in the set."},
+  {id:"td48", name:"Column Distinct Values To Equal Set",    entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, params:[{name:"valueSet",ph:"DEBIT, CREDIT"}], fn:"columnDistinctValuesToEqualSet", gx:"expect_column_distinct_values_to_equal_set", desc:"Test the column's distinct values are exactly the set."},
+  {id:"td49", name:"Column Unique Value Count To Be Between", entityType:"COLUMN", dim:"Uniqueness",  testPlatforms:["EDG"], enabled:true, params:[{name:"minValue",ph:"5"},{name:"maxValue",ph:"12"}], fn:"columnUniqueValueCountToBeBetween", gx:"expect_column_unique_value_count_to_be_between", desc:"Test the number of distinct values in the column is between min and max."},
+  {id:"td50", name:"Column Most Common Value To Be In Set",  entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, params:[{name:"valueSet",ph:"delivered, shipped"},{name:"tiesOkay",options:["false","true"]}], fn:"columnMostCommonValueToBeInSet", gx:"expect_column_most_common_value_to_be_in_set", desc:"Test the most frequent value in the column belongs to the set."},
+  {id:"td51", name:"Column Quantile Values To Be Between",   entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["EDG"], enabled:true, params:[{name:"quantiles",ph:"0.25, 0.5, 0.75"},{name:"valueRanges",ph:"20-60, 80-140, 180-300"}], fn:"columnQuantileValuesToBeBetween", gx:"expect_column_quantile_values_to_be_between", desc:"Test each quantile of the column falls in its range."},
+  {id:"td52", name:"Column KL Divergence To Be Less Than",   entityType:"COLUMN", dim:"Consistency",  testPlatforms:["EDG"], enabled:true, params:[{name:"baselineWindow",options:["Last 7 runs","Last 30 runs","Pinned run"]},{name:"threshold",ph:"0.1"}], fn:"columnKLDivergenceToBeLessThan", gx:"expect_column_kl_divergence_to_be_less_than", desc:"Test the column's value distribution has not drifted from the baseline by more than the threshold."},
+  {id:"td53", name:"Column Proportion Of Non-Null Values To Be Between", entityType:"COLUMN", dim:"Completeness", testPlatforms:["EDG"], enabled:true, params:[{name:"minValue",ph:"0.95"},{name:"maxValue",ph:"1"}], fn:"columnProportionOfNonNullValuesToBeBetween", gx:"expect_column_proportion_of_non_null_values_to_be_between", desc:"Test the share of non-null values in the column is between min and max."},
+  {id:"td54", name:"Column Value Z-Scores To Be Less Than",  entityType:"COLUMN", dim:"Accuracy",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"threshold",ph:"3"},{name:"doubleSided",options:["true","false"]}], fn:"columnValueZScoresToBeLessThan", gx:"expect_column_value_z_scores_to_be_less_than", desc:"Test no value sits more than the threshold number of standard deviations from the column mean."},
 ];
+// The presets above that GX also has, and how they run. A row-level check takes a
+// tolerance; a schema check takes no row filter.
+const DQ_PRESET_TRAITS = {
+  td1:{gx:"expect_table_row_count_to_be_between"}, td2:{gx:"expect_table_row_count_to_equal"},
+  td3:{gx:"expect_table_column_count_to_be_between",schema:true}, td4:{gx:"expect_table_column_count_to_equal",schema:true},
+  td5:{gx:"expect_column_to_exist",schema:true}, td6:{gx:"expect_table_columns_to_match_set",schema:true},
+  td10:{gx:"expect_column_value_lengths_to_be_between",rowLevel:true}, td11:{gx:"expect_column_max_to_be_between"},
+  td12:{gx:"expect_column_mean_to_be_between"}, td13:{gx:"expect_column_median_to_be_between"}, td14:{gx:"expect_column_min_to_be_between"},
+  td16:{gx:"expect_column_stdev_to_be_between"}, td18:{gx:"expect_column_values_to_be_between",rowLevel:true},
+  td19:{gx:"expect_column_values_to_be_in_set",rowLevel:true}, td20:{gx:"expect_column_values_to_not_be_in_set",rowLevel:true},
+  td21:{gx:"expect_column_values_to_not_be_null",rowLevel:true}, td22:{gx:"expect_column_values_to_be_unique",rowLevel:true},
+  td23:{gx:"expect_column_values_to_match_regex",rowLevel:true}, td24:{gx:"expect_column_values_to_not_match_regex",rowLevel:true},
+  td25:{gx:"expect_column_sum_to_be_between"}, td27:{gx:"expect_column_proportion_of_unique_values_to_be_between"},
+};
+DQ_TEST_DEFINITIONS.forEach(d=>Object.assign(d,DQ_PRESET_TRAITS[d.id]||{}));
 
 // -- dbt-authored tests are ingested, not authored in EDG. They arrive with the dbt run
 //    results (run_results.json / the dbt Cloud API) and are marked source:"dbt" so a steward
@@ -1692,6 +1738,25 @@ const DQ_TEST_CASES = [
   {id:"tc17",name:"orders timeliness — row inserted",   suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td9", defName:"Table Row Inserted Count To Be Between",dim:"Timeliness",   status:"Success", lastVal:"1,482 rows", expected:"500 — 5,000 rows/day",                               lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minCount:500,maxCount:5000,rangeType:"HOUR",rangeInterval:24},failedReason:"",  incidentId:null},
   {id:"tc18",name:"orders.shipping_address not null",   suiteId:"ts1",table:"commerce.orders",         col:"shipping_address",defId:"td21",defName:"Column Values To Be Not Null",    dim:"Completeness", status:"Aborted", lastVal:"—",         expected:"0 null values",                                       lastRun:"5h ago",  history:[1,1,1,1,0.5,0.5,1,1,1,1,1,1,1,1,1], params:{},                          failedReason:"",                                incidentId:null},
 ];
+// What the row-level seeds see in the table: rows scanned, rows that break the check,
+// and the most frequent failing values. A run judges these against the case's tolerance
+// (mostly) and row filter. severity is what a failure's incident opens at.
+const DQ_SEED_OBSERVED = {
+  tc1:{data:{rows:48293,unexpected:0}},
+  tc3:{severity:"High",data:{rows:48293,unexpected:847,sample:[{value:"refunded_pending",count:847}]}},
+  tc4:{data:{rows:48293,unexpected:0}},
+  tc5:{mostly:99.9,lastVal:"37 rows (0.02%)",data:{rows:182440,unexpected:37,sample:[{value:"jane.doe@@acme.com",count:14},{value:"m.ruiz@acme",count:11},{value:"support@",count:8},{value:"k.ito acme.com",count:4}]}},
+  tc6:{data:{rows:182440,unexpected:0}},
+  tc7:{severity:"Critical"},
+  tc8:{data:{rows:1243,unexpected:0}},
+  tc10:{data:{rows:2104880,unexpected:0}},
+  tc11:{data:{rows:182440,unexpected:0}},
+  tc14:{data:{rows:48293,unexpected:0}},
+  tc15:{data:{rows:48293,unexpected:0}},
+  tc16:{data:{rows:48293,unexpected:3,sample:[{value:"1.25",count:2},{value:"1.4",count:1}]}},
+  tc18:{data:{rows:48293,unexpected:0}},
+};
+DQ_TEST_CASES.forEach(t=>Object.assign(t,DQ_SEED_OBSERVED[t.id]||{}));
 
 const DQ_INCIDENTS = [
   {
@@ -1769,6 +1834,7 @@ const _dqiSubs = new Set();
 let _dqiState = DQ_INCIDENTS.map(i => ({...i}));
 const dqiSet = (updater) => {
   _dqiState = typeof updater === "function" ? updater(_dqiState) : updater;
+  DQ_INCIDENTS.splice(0, DQ_INCIDENTS.length, ..._dqiState); // panels that read the array directly stay current
   _dqiSubs.forEach(fn => fn());
 };
 const resolveIncidentsForAsset = (assetPath, assetName, note="") => dqiSet(prev => prev.map(i =>
@@ -1781,6 +1847,87 @@ const useDQIncidents = () => {
   useEffect(() => { const fn = () => force(n => n + 1); _dqiSubs.add(fn); return () => { _dqiSubs.delete(fn); }; }, []);
   return [_dqiState, dqiSet];
 };
+
+// ── Shared reactive store for DQ test cases ──
+// The Data Quality section and every asset's Tests tab run the same cases, so a run in
+// one shows in the other. Writes go into DQ_TEST_CASES itself, which contracts and the
+// profile panels read directly.
+const _dqtcSubs = new Set();
+let _dqtcSnap = DQ_TEST_CASES.slice();
+const dqtcSet = (updater) => {
+  const next = typeof updater === "function" ? updater(_dqtcSnap) : updater;
+  DQ_TEST_CASES.splice(0, DQ_TEST_CASES.length, ...next);
+  _dqtcSnap = DQ_TEST_CASES.slice();
+  _dqtcSubs.forEach(fn => fn());
+};
+const useDQTestCases = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _dqtcSubs.add(fn); return () => { _dqtcSubs.delete(fn); }; }, []);
+  return [_dqtcSnap, dqtcSet];
+};
+
+// ── Running a test case (Great Expectations semantics) ──
+// A row-level check counts the rows that break it and passes when the share of compliant
+// rows reaches the case's tolerance (GX `mostly`, 100 = every row). A row filter (GX
+// `row_condition`) narrows the rows it looks at. Aggregate and schema checks keep their
+// observed value. A failure opens an incident on the table owner, or adds to the open one.
+const DQ_SEVERITIES = ["Critical","High","Medium","Low"];
+const dqDef = (id) => DQ_TEST_DEFINITIONS.find(d => d.id === id);
+const dqColIsPII = (table, col) => !!(col && (SCHEMA[(table||"").split(".").pop()]||[]).find(c => c.name === col)?.pii);
+const dqHash = (s) => { let h = 0; for (const ch of String(s||"")) h = (h*31 + ch.charCodeAt(0)) >>> 0; return h; };
+const dqFmt = (n) => Number(n).toLocaleString("en-US");
+const dqPct = (p) => p > 0 && p < 0.01 ? "<0.01%" : `${+p.toFixed(2)}%`;
+const dqMeasure = (tc) => {
+  const d = tc.data; if (!d) return null;
+  const keep = tc.rowFilter && tc.rowFilter.trim() ? 0.25 + (dqHash(tc.rowFilter.trim()) % 50) / 100 : 1; // share of rows the filter keeps
+  const evaluated = Math.max(1, Math.round(d.rows * keep));
+  const unexpected = Math.round(d.unexpected * keep);
+  return { evaluated, unexpected, pct: unexpected / evaluated * 100,
+    sample: unexpected > 0 ? (d.sample||[]).map(s => ({ ...s, count: Math.max(1, Math.round(s.count * keep)) })) : [] };
+};
+const dqEvaluate = (tc) => {
+  const r = dqMeasure(tc);
+  if (!r) { // aggregate / schema / custom SQL: the run re-reads the same observed value
+    const status = tc.status === "Aborted" ? "Success" : tc.status;
+    return { ...tc, status, failedReason: status === "Success" ? "" : tc.failedReason };
+  }
+  const mostly = tc.mostly === "" || tc.mostly == null ? 100 : +tc.mostly;
+  const pass = 100 - r.pct >= mostly;
+  return { ...tc, result: r, status: pass ? "Success" : "Failed",
+    lastVal: r.unexpected === 0 ? `0 of ${dqFmt(r.evaluated)} rows` : `${dqFmt(r.unexpected)} rows (${dqPct(r.pct)})`,
+    failedReason: pass ? "" : `${dqFmt(r.unexpected)} of ${dqFmt(r.evaluated)} rows (${dqPct(r.pct)}) failed. Tolerance allows ${dqPct(100 - mostly)}.` };
+};
+const dqCaseOwner = (tc) => DQ_SUITES.find(s => s.id === tc.suiteId && s.type === "table")?.owner || "admin";
+const runDQCase = (id) => {
+  const cur = DQ_TEST_CASES.find(t => t.id === id);
+  if (!cur || cur.readOnly) return cur;
+  const ev = dqEvaluate(cur);
+  let next = { ...ev, lastRun: "just now", history: [...(cur.history||[]), ev.status === "Success" ? 1 : 0].slice(-15) };
+  const open = _dqiState.find(i => i.tcId === id && (i.status === "Open" || i.status === "In Progress"));
+  const at = "just now";
+  if (next.status === "Failed") {
+    if (open) {
+      dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, affectedRows: next.result ? next.result.unexpected : i.affectedRows,
+        timeline: [...(i.timeline||[]), { action: "Test case failed again", by: "system", at, note: next.failedReason || undefined }] } : i));
+      next = { ...next, incidentId: open.id };
+    } else {
+      const owner = dqCaseOwner(next);
+      const inc = { id: `inc${Date.now()}`, title: `${next.defName} failed on ${next.table}${next.col ? "." + next.col : ""}`,
+        severity: next.severity || "Medium", status: "Open", table: next.table, col: next.col, tcId: id, opened: at,
+        assignee: owner, rootCause: "", resolutionReason: "", resolved: null, affectedRows: next.result ? next.result.unexpected : null,
+        timeline: [{ action: "Incident created — test case failed", by: "system", at }, { action: `Assigned to ${owner} (table owner)`, by: "system", at }],
+        comments: [], desc: next.failedReason || `${next.name} failed.`, fromRun: true };
+      dqiSet(prev => [inc, ...prev]);
+      next = { ...next, incidentId: inc.id };
+    }
+  } else if (open) {
+    dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, timeline: [...(i.timeline||[]), { action: "Test case passed on re-run", by: "system", at }] } : i));
+  }
+  dqtcSet(prev => prev.map(t => t.id === id ? next : t));
+  return next;
+};
+DQ_TEST_CASES.forEach(t => { if (t.data && t.status !== "Aborted") t.result = dqMeasure(t); });
+_dqtcSnap = DQ_TEST_CASES.slice();
 
 const POLICIES = [
   {id:1,name:"PII Data Handling",     category:"Data Privacy",  lifecycle:"Active", scope:"All Tables",    severity:"Critical",status:"Active",assets:23,violations:2,owner:"maya.chen",  updated:"3d ago",conformity:91,regulations:["GDPR","CCPA"],  description:"Governs handling of personally identifiable information across all data assets."},
@@ -5201,6 +5348,130 @@ const DQStatusDot = ({status,size=10})=>{
   );
 };
 
+// One parameter input for a test definition. Presets store bare names; newer ones carry
+// {name, ph} or {name, options} (options render as a dropdown).
+const dqWithDefaults = (def, vals) => ({...Object.fromEntries(normDefParams(def?.params).filter(p=>p.options).map(p=>[p.name,p.options[0]])), ...vals});
+const dqParamLabel = (n) => n.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase()).trim();
+const DQParamInput = ({param, value, onChange}) => {
+  const p = typeof param === "string" ? {name:param} : param;
+  const n = p.name;
+  const ph = p.ph || (/min/i.test(n)?"0":/max/i.test(n)?"1000":/regex/i.test(n)?"^[A-Z].*":/Values|Set|List/.test(n)?"value1, value2":"…");
+  const mono = /regex|sql|like|pattern|column|table/i.test(n);
+  const st = {width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${value?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:mono?"'Geist Mono',monospace":"inherit"};
+  if (p.options) return (
+    <select value={value||p.options[0]} onChange={e=>onChange(e.target.value)} style={{...st,cursor:"pointer",border:`1.5px solid ${T.accent}`}}>
+      {p.options.map(o=><option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+  return <input value={value||""} onChange={e=>onChange(e.target.value)} placeholder={`e.g. ${ph}`} style={st}
+    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=value?T.accent:T.border}/>;
+};
+
+// Tolerance / row filter / severity for a test case. Tolerance only for row-level checks,
+// row filter for anything that reads rows; custom SQL writes its own WHERE.
+const DQRunSettings = ({def, customSql=false, value, onChange}) => {
+  const showTol = !customSql && !!def?.rowLevel;
+  const showFilter = !customSql && !def?.schema;
+  const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+  const box = {width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"};
+  const set = (k,v) => onChange({...value,[k]:v});
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"grid",gridTemplateColumns:showTol?"1fr 1fr":"1fr",gap:10}}>
+        {showTol&&(
+          <div>
+            <label style={lab}>Min. Passing Rows</label>
+            <div style={{position:"relative"}}>
+              <input type="number" min={0} max={100} step={0.1} value={value.mostly??100}
+                onChange={e=>set("mostly",e.target.value===""?"":Math.min(100,Math.max(0,+e.target.value)))}
+                style={{...box,paddingRight:28}}/>
+              <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.textMuted}}>%</span>
+            </div>
+          </div>
+        )}
+        <div>
+          <label style={lab}>Incident Severity</label>
+          <select value={value.severity||"Medium"} onChange={e=>set("severity",e.target.value)} style={{...box,cursor:"pointer"}}>
+            {DQ_SEVERITIES.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      </div>
+      {showFilter&&(
+        <div>
+          <label style={lab}>Row Filter <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+          <input value={value.rowFilter||""} onChange={e=>set("rowFilter",e.target.value)}
+            placeholder="e.g. country = 'US' AND created_at >= CURRENT_DATE - 30"
+            style={{...box,fontSize:12,fontFamily:"'Geist Mono',monospace"}}/>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Latest result + run settings inside a test case's detail panel. Failing values from a
+// PII column are masked.
+const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
+  const def = dqDef(tc.defId);
+  const r = tc.result;
+  const head = {fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"};
+  const pii = dqColIsPII(tc.table, tc.col);
+  const mostly = tc.mostly === "" || tc.mostly == null ? 100 : +tc.mostly;
+  const stat = (label, val, color) => (
+    <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.4,marginBottom:4}}>{label}</div>
+      <div style={{fontSize:14,fontWeight:700,color:color||T.text,fontFamily:"'Geist Mono',monospace"}}>{val}</div>
+    </div>
+  );
+  const row = (k,v,mono) => (
+    <div style={{display:"flex",gap:12,padding:"8px 13px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,alignItems:"center"}}>
+      <span style={{fontSize:11.5,color:T.textMuted,minWidth:130,flexShrink:0}}>{k}</span>
+      <span style={{fontSize:12,color:T.text,fontFamily:mono?"'Geist Mono',monospace":"inherit",wordBreak:"break-all"}}>{v}</span>
+    </div>
+  );
+  return <>
+    {r&&(
+      <div>
+        <div style={head}>Latest Result</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+          {stat("Rows checked",dqFmt(r.evaluated))}
+          {stat("Failed rows",dqFmt(r.unexpected),r.unexpected>0?T.rose:"#16a34a")}
+          {stat("Failed %",dqPct(r.pct),r.unexpected>0?T.rose:"#16a34a")}
+          {stat("Must pass",`${mostly}%`)}
+        </div>
+        {r.sample&&r.sample.length>0&&(
+          <div style={{marginTop:10,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.4}}>
+              <span style={{flex:1}}>Failing value{tc.col?` · ${tc.col}`:""}</span>
+              {pii&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:4,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}30`,textTransform:"none",letterSpacing:0,marginRight:12}}>PII · masked</span>}
+              <span style={{width:70,textAlign:"right"}}>Rows</span>
+            </div>
+            {r.sample.map((s,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",padding:"7px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:12}}>
+                <span style={{flex:1,fontFamily:"'Geist Mono',monospace",color:pii?T.textMuted:T.text}}>{pii?"•".repeat(Math.min(12,Math.max(6,String(s.value).length))):String(s.value)}</span>
+                <span style={{width:70,textAlign:"right",fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{dqFmt(s.count)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+    {tc.source!=="dbt"&&(
+      <div>
+        <div style={head}>Run Settings</div>
+        {editing
+          ? <DQRunSettings def={def} customSql={tc.defId==="custom_sql"||def?.logic==="customSql"} value={{mostly:draft?.mostly??mostly,rowFilter:draft?.rowFilter??tc.rowFilter??"",severity:draft?.severity??tc.severity??"Medium"}}
+              onChange={v=>setDraft(d=>({...d,...v}))}/>
+          : <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {def?.rowLevel&&row("Min. passing rows",`${mostly}%`)}
+              {!def?.schema&&tc.defId!=="custom_sql"&&row("Row filter",tc.rowFilter||"—",!!tc.rowFilter)}
+              {row("Incident severity",tc.severity||"Medium")}
+              {def?.gx&&row("Great Expectations",def.gx,true)}
+            </div>}
+      </div>
+    )}
+  </>;
+};
+
 const TC_STATUS_CFG = {
   Success:{color:"#16a34a",bg:"#16a34a12",label:"Success"},
   Failed: {color:T.rose,   bg:T.roseDim,  label:"Failed"},
@@ -5211,7 +5482,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const [tab, setTab] = useState("testcases");
 
   // mutable state
-  const [testCases,  setTestCases]  = useState(DQ_TEST_CASES);
+  const [testCases,  setTestCases]  = useDQTestCases(); // shared with every asset's Tests tab
   const [suites,     setSuites]     = useState(DQ_SUITES);
   const [incidents]  = useDQIncidents(); // shared store — read-only in this section
   // Read-only: incident state changes happen in the Inbox, not here. Every section
@@ -5287,6 +5558,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const [tcSQLPartitionExpr, setTcSQLPartitionExpr] = useState("");
   const [tcParams,     setTcParams]    = useState({});
   const [tcDim,        setTcDim]       = useState("");
+  const [tcRun,        setTcRun]       = useState({mostly:100,rowFilter:"",severity:"Medium"});
 
   // DQ Suite schedule modal
   const [dqSchedModal,   setDqSchedModal]   = useState(null);
@@ -5377,14 +5649,20 @@ const QualityView = ({onToast=()=>{}}) => {
   // ── handlers ─────────────────────────────────────────────────
   const showT = (msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3200);};
 
+  // the open detail panel follows the shared store (runs, edits made elsewhere)
+  useEffect(()=>{
+    if(!tcDetail) return;
+    const live=testCases.find(t=>t.id===tcDetail.id);
+    if(live&&live!==tcDetail) setTcDetail(live);
+  },[testCases]);
+
   const runTC = (id,onDone,silent=false)=>{
     setRunningIds(p=>new Set([...p,id]));
     setTimeout(()=>{
       setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
-      setTestCases(prev=>prev.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
-      setTcDetail(prev=>prev?.id===id?{...prev,lastRun:"just now",status:prev.status==="Aborted"?"Success":prev.status}:prev);
-      onDone&&onDone();
-      if(!silent) showT("Test run complete — result updated");
+      const r=runDQCase(id);
+      onDone&&onDone(r);
+      if(!silent) showT(r?.status==="Failed"?"Test failed — incident opened for the table owner":"Test run complete — passed",r?.status==="Failed"?"error":"success");
     },1400+Math.floor(Math.random()*800));
   };
 
@@ -5405,28 +5683,35 @@ const QualityView = ({onToast=()=>{}}) => {
   const confirmResolve   = ()=>{if(!incResolveReason.trim())return;setIncidents(prev=>prev.map(i=>i.id===incResolveId?{...i,status:"Resolved",resolved:"Just now",resolutionReason:incResolveReason,timeline:[...(i.timeline||[]),{action:"Resolved",by:"dev.patel",at:"Just now",note:incResolveReason}]}:i));setIncResolveModal(false);showT("Incident resolved");};
   const addIncComment    = (id)=>{const txt=(incCommentText[id]||"").trim();if(!txt)return;setIncidents(prev=>prev.map(i=>i.id===id?{...i,comments:[...(i.comments||[]),{text:txt,by:"dev.patel",at:"Just now"}]}:i));setIncCommentText(prev=>({...prev,[id]:""}));};
 
-  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcParams({});setTcDim("");};
+  const openTCModal = ()=>{setNewTCModal(true);setTcLevel("table");setTcSelTable("");setTcSelCol("");setTcSelType(null);setTcName("");setTcDesc("");setTcTags([]);setTcGlossary([]);setTcCustomSQL(false);setTcSQLQuery("");setTcSQLStrategy("");setTcSQLOperator("");setTcSQLThreshold("");setTcSQLPartitionExpr("");setTcParams({});setTcDim("");setTcRun({mostly:100,rowFilter:"",severity:"Medium"});};
   const handleAddTC = (runImmediately)=>{
     if((!tcSelType&&!tcCustomSQL)||!tcSelTable) return;
     const level = tcLevel;
     const matchedSuite = suites.find(s=>s.type==="table"&&s.table===tcSelTable);
     const sId = matchedSuite?.id||"ts1";
+    // the table's row count as the seeds observed it; a new check starts clean
+    const seenRows = testCases.find(t=>t.table===tcSelTable&&t.data)?.data.rows || 10000+dqHash(tcSelTable)%90000;
     let newCase;
     if(tcCustomSQL){
       // inline quick custom SQL — one-off
       const uParams = userSQLParams(tcSQLQuery);
       const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_custom_sql`:`${tcSelTable}_custom_sql`);
       const resolved = resolveSQLTemplate(tcSQLQuery,tcSelTable,tcSelCol,tcParams);
-      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:"custom_sql",defName:"Custom SQL",dim:tcDim||"Consistency",status:"Success",lastVal:"—",expected:uParams.map(k=>`${k}: ${tcParams[k]||"—"}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,sql:tcSQLQuery,resolvedSql:resolved,failedReason:"",incidentId:null};
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:"custom_sql",defName:"Custom SQL",dim:tcDim||"Consistency",status:"Success",lastVal:"—",expected:uParams.map(k=>`${k}: ${tcParams[k]||"—"}`).join(", ")||"—",lastRun:"Never",history:[],params:tcParams,sql:tcSQLQuery,resolvedSql:resolved,
+        sqlStrategy:tcSQLStrategy||"ROWS",sqlOperator:tcSQLOperator||"==",sqlThreshold:tcSQLThreshold===""?0:+tcSQLThreshold,partitionExpr:tcSQLPartitionExpr,severity:tcRun.severity,failedReason:"",incidentId:null};
     } else {
       const isCustomDef = tcSelType.logic==="customSql";
       const autoName = tcName||(level==="column"&&tcSelCol?`${tcSelTable}.${tcSelCol}_${tcSelType.fn}`:level==="table"?`${tcSelTable}_${tcSelType.fn}`:tcSelType.name);
       const resolved = isCustomDef?resolveSQLTemplate(tcSelType.sql,tcSelTable,tcSelCol,tcParams):undefined;
-      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(tcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:runImmediately?"just now":"Never",history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],params:tcParams,...(isCustomDef?{sql:tcSelType.sql,resolvedSql:resolved}:{}),failedReason:"",incidentId:null};
+      const params = dqWithDefaults(tcSelType,tcParams);
+      newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,...(isCustomDef?{sql:tcSelType.sql,resolvedSql:resolved}:{}),
+        ...(tcSelType.rowLevel?{mostly:tcRun.mostly===""?100:tcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),...(!tcSelType.schema&&!isCustomDef&&tcRun.rowFilter.trim()?{rowFilter:tcRun.rowFilter.trim()}:{}),
+        severity:tcRun.severity,failedReason:"",incidentId:null};
     }
     setTestCases(prev=>[...prev,newCase]);
     setSuites(prev=>prev.map(s=>s.id===sId?{...s,testCount:s.testCount+1,success:s.success+1}:s));
-    setNewTCModal(false);setTab("testcases");showT(runImmediately?"Test case created — running now…":"Test case created");
+    setNewTCModal(false);setTab("testcases");
+    if(runImmediately){ runTC(newCase.id); showT("Test case created — running now…"); } else showT("Test case created");
   };
   // promote an inline custom-SQL one-off into a reusable Test Definition
   const handleCreateBundleSuite = ()=>{
@@ -5591,17 +5876,15 @@ const QualityView = ({onToast=()=>{}}) => {
               disabled={!!runAllProgress}
               onClick={()=>{
                 if(runAllProgress) return;
-                const ids=testCases.map(t=>t.id);
-                const willPass=testCases.filter(t=>t.status!=="Failed").length;
-                const willFail=testCases.filter(t=>t.status==="Failed").length;
-                let done=0;
+                const ids=testCases.filter(t=>!t.readOnly).map(t=>t.id);
+                let done=0, failed=0;
                 setRunAllProgress({done:0,total:ids.length});
-                ids.forEach(id=>runTC(id,()=>{
-                  done++;
+                ids.forEach(id=>runTC(id,(r)=>{
+                  done++; if(r?.status==="Failed") failed++;
                   setRunAllProgress(prev=>({...prev,done}));
                   if(done===ids.length){
                     setTimeout(()=>setRunAllProgress(null),800);
-                    showT(`Run complete — ${willPass} passed · ${willFail} failed`,"success");
+                    showT(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success");
                   }
                 },true));
               }}
@@ -6444,6 +6727,8 @@ const QualityView = ({onToast=()=>{}}) => {
                 </div>
               </div>
 
+              <DQCaseRunSection tc={tcDetail} editing={tcDetailEditing} draft={tcDetailDraft} setDraft={setTcDetailDraft}/>
+
               {/* Definition */}
               <div>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Test Definition</div>
@@ -6483,7 +6768,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   setTestCases(prev=>prev.map(t=>t.id===tcDetail.id?{...t,...tcDetailDraft}:t));
                   setTcDetail(prev=>({...prev,...tcDetailDraft}));
                   setTcDetailEditing(false); setTcDetailDraft(null);
-                  showT("Test case updated","success");
+                  showT("Test case updated — applies on the next run","success");
                 }}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>
                   Save Changes
@@ -6494,16 +6779,16 @@ const QualityView = ({onToast=()=>{}}) => {
                 </button>
               </> : <>
                 <button onClick={()=>{runTC(tcDetail.id);}}
-                  disabled={runningIds.has(tcDetail.id)}
+                  disabled={runningIds.has(tcDetail.id)||tcDetail.readOnly}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,fontSize:12,fontWeight:600,cursor:runningIds.has(tcDetail.id)?"not-allowed":"pointer",opacity:runningIds.has(tcDetail.id)?0.5:1,whiteSpace:"nowrap"}}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
                   {runningIds.has(tcDetail.id)?"Running…":"Run now"}
                 </button>
-                <button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
+                {!tcDetail.readOnly&&<button onClick={()=>{setTcDetailEditing(true);setTcDetailDraft({name:tcDetail.name,params:{...(tcDetail.params||{})}});}}
                   style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 16px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>
                   <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
                   Edit
-                </button>
+                </button>}
               </>}
               <button onClick={()=>{setTestCases(prev=>prev.filter(t=>t.id!==tcDetail.id));setTcDetail(null);showT("Test case deleted","error");}}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12,cursor:"pointer",marginLeft:"auto",whiteSpace:"nowrap"}}
@@ -6615,7 +6900,7 @@ const QualityView = ({onToast=()=>{}}) => {
                 </div>
                 {/* Definition dropdown */}
                 {!tcCustomSQL&&(
-                  <select value={tcSelType?.id||""} onChange={e=>{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);}}
+                  <select value={tcSelType?.id||""} onChange={e=>{const def=definitions.find(d=>d.id===e.target.value);setTcSelType(def||null);setTcParams({});}}
                     style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${tcSelType?T.accent:T.border}`,borderRadius:9,color:tcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
                     <option value="">Choose a definition…</option>
                     {definitions.filter(d=>(tcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE")&&(!tcDim||d.dim===tcDim||d.dim?.toLowerCase()===tcDim.toLowerCase())).map(def=>(
@@ -6721,16 +7006,20 @@ const QualityView = ({onToast=()=>{}}) => {
                       <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ table_name }}"}</code>{tcLevel==="column"&&<> / <code style={{color:"#2dd4bf",fontFamily:"'Geist Mono',monospace"}}>{"{{ column_name }}"}</code></>} auto-bind to your selections above. Fill the parameters below.
                     </div>
                   )}
-                  {normDefParams(tcSelType.params).map(({name:param,description})=>(
-                    <div key={param} style={{marginBottom:10}}>
-                      <label style={{display:"block",fontSize:11,fontWeight:500,color:T.textSub,marginBottom:5,textTransform:"capitalize"}}>{param.replace(/([A-Z])/g," $1").trim()}</label>
-                      {description&&<div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>{description}</div>}
-                      <input value={tcParams[param]||""} onChange={e=>setTcParams(p=>({...p,[param]:e.target.value}))}
-                        placeholder={`e.g. ${param.includes("min")||param.includes("Min")?"0":param.includes("max")||param.includes("Max")?"1000":param.includes("regex")?"^[A-Z].*":param.includes("Values")||param.includes("Set")?"value1, value2":"..."}`}
-                        style={{width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${tcParams[param]?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:param.includes("regex")||param.includes("sql")?"'Geist Mono',monospace":"inherit"}}
-                        onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=tcParams[param]?T.accent:T.border}/>
+                  {normDefParams(tcSelType.params).map((p)=>(
+                    <div key={p.name} style={{marginBottom:10}}>
+                      <label style={{display:"block",fontSize:11,fontWeight:500,color:T.textSub,marginBottom:5}}>{dqParamLabel(p.name)}</label>
+                      {p.description&&<div style={{fontSize:10.5,color:T.textMuted,marginBottom:5}}>{p.description}</div>}
+                      <DQParamInput param={p} value={tcParams[p.name]} onChange={v=>setTcParams(prev=>({...prev,[p.name]:v}))}/>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {(tcCustomSQL||tcSelType)&&(
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Run Settings</div>
+                  <DQRunSettings def={tcSelType} customSql={tcCustomSQL||tcSelType?.logic==="customSql"} value={tcRun} onChange={setTcRun}/>
                 </div>
               )}
 
@@ -7083,6 +7372,8 @@ const QualityView = ({onToast=()=>{}}) => {
                   {meta("Asset Type",<span style={{fontWeight:700,color:d.entityType==="TABLE"?T.accent:T.violet}}>{d.entityType}</span>)}
                   {meta("DQ Dimension",d.dim||"—")}
                   {meta("Status",<span style={{color:d.enabled?"#16a34a":T.textMuted,fontWeight:600}}>{d.enabled?"Enabled":"Disabled"}</span>)}
+                  {!custom&&meta("Evaluated",d.rowLevel?"Row by row":d.schema?"Table structure":"Aggregate")}
+                  {!custom&&meta("Great Expectations",d.gx?<code style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.violet,wordBreak:"break-all"}}>{d.gx}</code>:"—")}
                 </div>
                 <div>
                   <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Description</div>
@@ -7116,7 +7407,9 @@ const QualityView = ({onToast=()=>{}}) => {
                 </div>
                 <div>
                   <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Evaluation</div>
-                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>The test <strong style={{color:T.text}}>passes when the query returns 0 rows</strong>{custom?" (subject to the case's strategy/operator/threshold).":"."}</div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{d.rowLevel
+                    ?<>The test <strong style={{color:T.text}}>passes when the share of passing rows reaches the case's Min. Passing Rows</strong> (100% by default).</>
+                    :<>The test <strong style={{color:T.text}}>passes when the query returns 0 rows</strong>{custom?" (subject to the case's strategy/operator/threshold).":"."}</>}</div>
                 </div>
               </div>
               <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",gap:8,justifyContent:"space-between",alignItems:"center"}}>
@@ -19473,14 +19766,14 @@ const AssetContractTab = ({asset,onToast})=>{
         const already=DQ_INCIDENTS.some(i=>i.contractFqn===c.name && i.status!=="Resolved" && i.status!=="Dismissed");
         if(!already){
           incidentOpened=true;
-          DQ_INCIDENTS.unshift({
+          dqiSet(prev=>[{ // through the shared store so the Data Quality Incidents tab sees it
             id:"inc_c"+Date.now(), title:`Contract violation — ${c.name}`, severity:status==="Failed"?"Critical":"High",
             table:(asset.db&&asset.db.includes("/")?asset.db.split("/").slice(-2,-1)[0].trim()+"."+asset.name:asset.name), col:null, tcId:null, contractFqn:c.name,
             opened:"Just now", assignee:null, rootCause:"", resolutionReason:"", resolved:null, affectedRows:null,
             timeline:[{action:`Contract ${c.name} failed validation — ${res.failedSections.join(", ")}`,by:"system",at:"Just now"}],
             comments:[],
             desc:`Data contract "${c.name}" validation ${status==="Failed"?"failed":"partially failed"}. Failing checks: ${res.failedSections.join(", ")}.`,
-          });
+          },...prev]);
         }
       }
       return next;
@@ -20511,11 +20804,21 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   const [aqTcGlossary,  setAqTcGlossary]  = useState([]);
   const [aqTcDim,       setAqTcDim]       = useState("");
   const [aqTcGlInput,   setAqTcGlInput]   = useState("");
-  const [localCases,setLocalCases]=useState(()=>{
+  const [aqTcRun,       setAqTcRun]       = useState({mostly:100,rowFilter:"",severity:"Medium"});
+  // Cases come from the shared store (runs here show in Data Quality and back). Remove only
+  // takes a case off this tab; Select Test puts it back.
+  const [allCases]=useDQTestCases();
+  const [hiddenIds,setHiddenIds]=useState(new Set());
+  const localCases=(()=>{
     // match DQ test cases to this asset — table field is like "commerce.orders", asset.name is "orders"
-    const matched=DQ_TEST_CASES.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
-    return matched.length>0?matched:DQ_TEST_CASES.slice(0,3);
-  });
+    const matched=allCases.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
+    return (matched.length>0?matched:allCases.slice(0,3)).filter(t=>!hiddenIds.has(t.id));
+  })();
+  useEffect(()=>{
+    if(!tcDetail) return;
+    const live=allCases.find(t=>t.id===tcDetail.id);
+    if(live&&live!==tcDetail) setTcDetail(live);
+  },[allCases]);
   const tcSuccess=localCases.filter(t=>t.status==="Success").length;
   const tcFailed=localCases.filter(t=>t.status==="Failed").length;
   const tcAborted=localCases.filter(t=>t.status==="Aborted").length;
@@ -20529,12 +20832,12 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
     setRunningIds(p=>new Set([...p,id]));
     setTimeout(()=>{
       setRunningIds(p=>{const n=new Set(p);n.delete(id);return n;});
-      setLocalCases(p=>p.map(t=>t.id===id?{...t,lastRun:"just now",status:t.status==="Aborted"?"Success":t.status}:t));
-      setTcDetail(prev=>prev?.id===id?{...prev,lastRun:"just now",status:prev.status==="Aborted"?"Success":prev.status}:prev);
-      onDone&&onDone();
+      const r=runDQCase(id);
+      if(onDone) onDone(r);
+      else if(r?.status==="Failed") onToast&&onToast("Test failed — incident opened for the table owner","error");
     },1400+Math.floor(Math.random()*800));
   };
-  const deleteTest=(id)=>setLocalCases(p=>p.filter(t=>t.id!==id));
+  const deleteTest=(id)=>setHiddenIds(p=>new Set([...p,id]));
 
   return <div className="fadeIn" style={{display:"flex",flexDirection:"column",gap:16}}>
     {/* Score cards */}
@@ -20598,17 +20901,16 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
             disabled={!!runAllProgress}
             onClick={()=>{
               if(runAllProgress)return;
-              const ids=localCases.map(t=>t.id);
-              const willPass=localCases.filter(t=>t.status!=="Failed").length;
-              const willFail=localCases.filter(t=>t.status==="Failed").length;
-              let done=0;
+              const ids=localCases.filter(t=>!t.readOnly).map(t=>t.id);
+              if(!ids.length) return;
+              let done=0, failed=0;
               setRunAllProgress({done:0,total:ids.length});
-              ids.forEach(id=>runTest(id,()=>{
-                done++;
+              ids.forEach(id=>runTest(id,(r)=>{
+                done++; if(r?.status==="Failed") failed++;
                 setRunAllProgress(prev=>({...prev,done}));
                 if(done===ids.length){
                   setTimeout(()=>setRunAllProgress(null),800);
-                  onToast&&onToast(`Run complete — ${willPass} passed · ${willFail} failed`,"success");
+                  onToast&&onToast(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success");
                 }
               }));
             }}
@@ -20701,7 +21003,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                     </button>
                   </div>
                   {!aqTcCustomSQL&&(
-                    <select value={aqTcSelType?.id||""} onChange={e=>{const def=DQ_TEST_DEFINITIONS.find(d=>d.id===e.target.value);setAqTcSelType(def||null);setAqTcParams({});}}
+                    <select value={aqTcSelType?.id||""} onChange={e=>{const def=DQ_TEST_DEFINITIONS.find(d=>d.id===e.target.value);setAqTcSelType(def||null);setAqTcParams({});setAqTcRun({mostly:100,rowFilter:"",severity:"Medium"});}}
                       style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${aqTcSelType?T.accent:T.border}`,borderRadius:9,color:aqTcSelType?T.text:T.textMuted,fontSize:13,outline:"none",cursor:"pointer",boxSizing:"border-box"}}>
                       <option value="">Choose a definition…</option>
                       {DQ_TEST_DEFINITIONS.filter(d=>(aqTcLevel==="column"?d.entityType==="COLUMN":d.entityType==="TABLE")&&(!aqTcDim||d.dim===aqTcDim||d.dim?.toLowerCase()===aqTcDim.toLowerCase())).map(def=>(
@@ -20806,13 +21108,20 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                   <div>
                     <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:10}}>Parameters</div>
                     <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {aqTcSelType.params.map(p=>(
-                        <div key={p}>
-                          <label style={{display:"block",fontSize:11,color:T.textMuted,marginBottom:4,textTransform:"capitalize"}}>{p.replace(/([A-Z])/g," $1").replace(/^./,s=>s.toUpperCase())}</label>
-                          <Input2 placeholder={p} value={aqTcParams[p]||""} onChange={e=>setAqTcParams(prev=>({...prev,[p]:e.target.value}))}/>
+                      {normDefParams(aqTcSelType.params).map(p=>(
+                        <div key={p.name}>
+                          <label style={{display:"block",fontSize:11,color:T.textMuted,marginBottom:4}}>{dqParamLabel(p.name)}</label>
+                          <DQParamInput param={p} value={aqTcParams[p.name]} onChange={v=>setAqTcParams(prev=>({...prev,[p.name]:v}))}/>
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {(aqTcCustomSQL||aqTcSelType)&&(
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Run Settings</div>
+                    <DQRunSettings def={aqTcSelType} customSql={aqTcCustomSQL||aqTcSelType?.logic==="customSql"} value={aqTcRun} onChange={setAqTcRun}/>
                   </div>
                 )}
 
@@ -20858,9 +21167,17 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
               <button onClick={()=>{
                 if(!aqTcName.trim()) return;
-                const def=aqTcSelType||{id:"custom",name:"Custom SQL",dim:"Consistency"};
-                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId:"ts1",table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:def.dim,status:"Success",lastVal:"—",expected:Object.entries(aqTcParams).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"just now",history:[],params:aqTcParams,failedReason:"",incidentId:null};
-                setLocalCases(p=>[...p,newCase]);
+                const def=aqTcSelType||{id:"custom_sql",name:"Custom SQL",dim:"Consistency"};
+                const params=aqTcSelType?dqWithDefaults(aqTcSelType,aqTcParams):aqTcParams;
+                const seenRows=allCases.find(t=>(t.table.endsWith("."+asset.name)||t.table===asset.name)&&t.data)?.data.rows||10000+dqHash(asset.name)%90000;
+                const suiteId=DQ_SUITES.find(s=>s.type==="table"&&s.table.endsWith("."+asset.name))?.id||"ts1";
+                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId,table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:aqTcDim||def.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,
+                  ...(aqTcCustomSQL?{sql:aqTcSQLQuery,sqlStrategy:aqTcSQLStrategy||"ROWS",sqlOperator:aqTcSQLOperator||"==",sqlThreshold:aqTcSQLThreshold===""?0:+aqTcSQLThreshold,partitionExpr:aqTcSQLPartitionExpr}:{}),
+                  ...(def.rowLevel?{mostly:aqTcRun.mostly===""?100:aqTcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),
+                  ...(!aqTcCustomSQL&&!def.schema&&aqTcRun.rowFilter.trim()?{rowFilter:aqTcRun.rowFilter.trim()}:{}),
+                  severity:aqTcRun.severity,failedReason:"",incidentId:null};
+                dqtcSet(p=>[...p,newCase]);
+                runTest(newCase.id);
                 setAddTestOpen(false);
                 onToast&&onToast("Test case created — running now…","success");
               }}
@@ -20926,8 +21243,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
             <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0,background:T.bgSurface}}>
               <button disabled={selectTestIds.size===0}
                 onClick={()=>{
-                  const toAdd=DQ_TEST_CASES.filter(t=>selectTestIds.has(t.id));
-                  setLocalCases(p=>{const existIds=new Set(p.map(x=>x.id));return [...p,...toAdd.filter(t=>!existIds.has(t.id))];});
+                  setHiddenIds(p=>new Set([...p].filter(id=>!selectTestIds.has(id))));
                   setSelectTestOpen(false);setSelectTestIds(new Set());
                 }}
                 style={{flex:1,padding:"9px",borderRadius:9,background:selectTestIds.size>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:13,fontWeight:700,cursor:selectTestIds.size>0?"pointer":"default",transition:"background .15s"}}>
@@ -21089,6 +21405,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 <span>15 runs ago</span><span>Latest</span>
               </div>
             </div>
+            <DQCaseRunSection tc={tcDetail} editing={tcDetailEditing} draft={tcDetailDraft} setDraft={setTcDetailDraft}/>
             {(()=>{const l=tcPolicyLink(tcDetail);return l?(
               <div>
                 <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"}}>Governance</div>
@@ -21129,10 +21446,10 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
           <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
             {tcDetailEditing ? <>
               <button onClick={()=>{
-                setLocalCases(prev=>prev.map(t=>t.id===tcDetail.id?{...t,...tcDetailDraft}:t));
+                dqtcSet(prev=>prev.map(t=>t.id===tcDetail.id?{...t,...tcDetailDraft}:t));
                 setTcDetail(prev=>({...prev,...tcDetailDraft}));
                 setTcDetailEditing(false);setTcDetailDraft(null);
-                onToast&&onToast("Test case updated","success");
+                onToast&&onToast("Test case updated — applies on the next run","success");
               }} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save Changes</button>
               <button onClick={()=>{setTcDetailEditing(false);setTcDetailDraft(null);}}
                 style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
@@ -21148,7 +21465,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 Edit
               </button>
             </>}
-            <button onClick={()=>{setLocalCases(prev=>prev.filter(t=>t.id!==tcDetail.id));setTcDetail(null);onToast&&onToast("Test case removed","error");}}
+            <button onClick={()=>{deleteTest(tcDetail.id);setTcDetail(null);onToast&&onToast("Test case removed","error");}}
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12,cursor:"pointer",marginLeft:"auto",whiteSpace:"nowrap"}}
               onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.border;}}>
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -47565,7 +47882,16 @@ const InboxView = ({onToast}) => {
     body:r.body, requestedBy:r.requestedBy, klKind:r.kind, klTargetId:r.targetId,
     klPayload:r.payload, reqId:r.id, readAt:null,
   }));
-  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...AID_REQ_ITEMS, ...KL_REQ_ITEMS, ...items];
+  // Incidents a test run opened — the table owner resolves them here.
+  const [dqIncs] = useDQIncidents();
+  const DQ_RUN_ITEMS = dqIncs.filter(i=>i.fromRun).map(i=>({
+    id:"dqi-"+i.id, type:"dq_alert", severity:i.severity==="Critical"||i.severity==="High"?"high":i.severity==="Medium"?"medium":"low",
+    section:"quality", timeAgo:i.opened, title:i.title,
+    asset:{name:i.table.split(".").pop(), path:i.table, type:"Table"},
+    body:`${i.severity} · ${i.title}`, failures:[i.desc], assignee:i.assignee, dqIncidentId:i.id,
+    readAt:(i.status==="Resolved"||i.status==="Dismissed")?(i.resolved||"just now"):null,
+  }));
+  const allItems = [...contractApprovals.filter(ca=>!items.some(i=>i.id===ca.id)), ...ROLE_REQ_ITEMS, ...STATUS_REQ_ITEMS, ...DELETE_REQ_ITEMS, ...ENF_APPROVAL_ITEMS, ...PROP_REQ_ITEMS, ...AID_REQ_ITEMS, ...KL_REQ_ITEMS, ...DQ_RUN_ITEMS, ...items];
   const isActionItem   = i => itemRole(i)!=="fyi" && !i.readAt;
   const isActivityItem = i => itemRole(i)==="fyi";
   const isDoneItem     = i => itemRole(i)!=="fyi" && !!i.readAt;
@@ -47603,7 +47929,8 @@ const InboxView = ({onToast}) => {
   const navNext = ()=>{ if(selIdx<shown.length-1) { setSel(shown[selIdx+1].id); closeForms(); }};
 
   const ack     = (id,msg)=>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); onToast(msg||"Acknowledged","success"); };
-  const dism    = id      =>{ setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); };
+  const dism    = id      =>{ if(String(id).startsWith("dqi-")){ const incId=String(id).slice(4); dqiSet(prev=>prev.map(i=>i.id===incId?{...i,status:"Dismissed",timeline:[...(i.timeline||[]),{action:"Dismissed from Inbox",by:"You",at:"Just now"}]}:i)); }
+                              setItems(p=>p.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i)); _contractApprovalItems=_contractApprovalItems.map(i=>i.id===id?{...i,readAt:new Date().toISOString()}:i); _contractApprovalSubs.forEach(fn=>fn()); setSel(null); closeForms(); };
   const markAll = ()      =>{ setItems(p=>p.map(i=>({...i,readAt:i.readAt||new Date().toISOString()}))); setSel(null); closeForms(); onToast("All caught up","success"); };
   // Assignee display only — real reassignment isn't implemented yet (add when there's a
   // real workflow behind it, not just a label that resets on reload).
