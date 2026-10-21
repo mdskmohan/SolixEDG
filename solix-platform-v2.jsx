@@ -5882,6 +5882,9 @@ const QualityView = ({onToast=()=>{}}) => {
   const [tcTypeFilter,  setTcTypeFilter]  = useState("all");
   const [tcStatusSel,   setTcStatusSel]   = useState([]);   // multi-select status filter ([] = all)
   const [tcSearch,      setTcSearch]      = useState("");
+  const [tcSuiteSel,    setTcSuiteSel]    = useState("");          // custom suite filter ("" = all tests)
+  const [tcSel,         setTcSel]         = useState(new Set());   // selected test ids (Run / Add to suite)
+  const [tcCollapsed,   setTcCollapsed]   = useState(new Set());   // collapsed table groups
   const [tcDetail,      setTcDetail]      = useState(null);
   const [tcDetailEditing, setTcDetailEditing] = useState(false);
   const [tcDetailDraft,   setTcDetailDraft]   = useState(null);
@@ -5892,8 +5895,6 @@ const QualityView = ({onToast=()=>{}}) => {
   const TC_PAGE_SIZE = 10;
 
   // test suites tab
-  const [suiteOwner,    setSuiteOwner]    = useState("all");
-  const [expandedSuite, setExpandedSuite] = useState(null);
 
   // data quality rules tab
   const [defEntitySel,  setDefEntitySel]  = useState([]);   // multi-select entity-type filter ([] = all)
@@ -6056,7 +6057,7 @@ const QualityView = ({onToast=()=>{}}) => {
   };
   // live counts: a table suite owns its cases, a bundle lists the cases it picked
   const suiteCases = (s)=>s.type!=="table"?testCases.filter(t=>(s.caseIds||[]).includes(t.id)):testCases.filter(t=>t.suiteId===s.id);
-  const openNewSuite = ()=>setSuiteCfg({id:null,kind:"custom",name:"",desc:"",owner:TEAMS[0],caseIds:[],q:"",tableF:"",batch:{mode:"inherit",column:""},actions:[]});
+  const openNewSuite = (ids)=>setSuiteCfg({id:null,kind:"custom",name:"",desc:"",owner:TEAMS[0],caseIds:Array.isArray(ids)?[...ids]:[],q:"",tableF:"",batch:{mode:"inherit",column:""},actions:[]});
   const openEditSuite = (s)=>setSuiteCfg({id:s.id,kind:"custom",name:s.name,desc:s.desc||"",owner:s.owner,caseIds:[...(s.caseIds||[])],q:"",tableF:"",batch:{mode:"inherit",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))});
   const suiteStats = (s)=>{const c=suiteCases(s);return {testCount:c.length,success:c.filter(t=>t.status==="Success").length,failed:c.filter(t=>t.status==="Failed").length,aborted:c.filter(t=>t.status==="Aborted").length,warned:c.filter(t=>t.status==="Warning").length};};
 
@@ -6142,8 +6143,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
     {key:"overview",   label:"Overview"},
-    {key:"testcases",  label:"Test Cases"},
-    {key:"testsuites", label:"Test Suites"},
+    {key:"testcases",  label:"Tests"},
     {key:"rules",      label:"Test Definitions"},
     {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
   ];
@@ -6153,35 +6153,6 @@ const QualityView = ({onToast=()=>{}}) => {
       {children}
     </button>
   );
-
-  // ── Three OM-style metric cards ──────────────────────────────────────────
-  const MetricDonut = ({pct,label,sub,icon,breakdown})=>{
-    const c=pct>=90?"#16a34a":pct>=70?T.amber:T.rose;
-    return (
-      <Card2 style={{padding:0,flex:1}}>
-        <div style={{padding:"18px 20px",display:"flex",alignItems:"center",gap:16}}>
-          <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
-            <svg width="64" height="64" viewBox="0 0 64 64">
-              <circle cx="32" cy="32" r="24" stroke={T.bgElevated} strokeWidth="8" fill="none"/>
-              <circle cx="32" cy="32" r="24" stroke={c} strokeWidth="8" fill="none"
-                strokeDasharray={`${2*Math.PI*24}`}
-                strokeDashoffset={`${2*Math.PI*24*(1-pct/100)}`}
-                strokeLinecap="round"
-                style={{transformOrigin:"32px 32px",transform:"rotate(-90deg)"}}/>
-            </svg>
-            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{fontSize:12,fontWeight:800,color:c}}>{pct}%</span>
-            </div>
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>{icon}</div>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>{label}</div>
-            {breakdown?breakdown:<div style={{fontSize:11,color:T.textMuted}}>{sub}</div>}
-          </div>
-        </div>
-      </Card2>
-    );
-  };
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
@@ -6210,413 +6181,245 @@ const QualityView = ({onToast=()=>{}}) => {
           onOpenTest={t=>setTcDetail(t)} onOpenIncidents={()=>setTab("incidents")}/>}
 
         {tab==="testcases"&&<>
-          {/* ── Three metric donuts ── */}
-          <div style={{display:"flex",gap:14,marginBottom:20,alignItems:"stretch"}}>
-            <MetricDonut
-              pct={successRate}
-              label="Total Tests"
-              breakdown={
-                <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:2}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:"#16a34a",fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Success</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcSuccess}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:"#ea580c",fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Warning</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcWarning}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:T.rose,fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Failed</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcFailed}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:T.amber,fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Aborted</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcAborted}</span>
-                  </div>
-                </div>
-              }
-            />
-            <MetricDonut
-              pct={healthyPct}
-              label="Healthy Data Assets"
-              sub={`${healthyTables.length} healthy · ${coveredTables.length} covered`}
-            />
-            <MetricDonut
-              pct={coveragePct}
-              label="Data Assets with Tests"
-              sub={`${coveredTables.length} of ${totalKnownTables} tables covered`}
-            />
-          </div>
-
-          {/* ── Test Cases summary bar + Run All ── */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Cases ({testCases.length})</span>
-              <span style={{fontSize:12,color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
-              {tcWarning>0&&<span style={{fontSize:12,color:"#ea580c",fontWeight:600}}>{tcWarning} warning</span>}
-              {tcFailed>0&&<span style={{fontSize:12,color:T.rose,fontWeight:600}}>{tcFailed} failing</span>}
-              {tcAborted>0&&<span style={{fontSize:12,color:T.amber,fontWeight:600}}>{tcAborted} aborted</span>}
-            </div>
-            <button
-              disabled={!!runAllProgress}
-              onClick={()=>{
-                if(runAllProgress) return;
-                const ids=testCases.filter(t=>!t.readOnly).map(t=>t.id);
-                let done=0, failed=0;
-                setRunAllProgress({done:0,total:ids.length});
-                ids.forEach(id=>runTC(id,(r)=>{
-                  done++; if(r?.status==="Failed") failed++;
-                  setRunAllProgress(prev=>({...prev,done}));
-                  if(done===ids.length){
-                    setTimeout(()=>setRunAllProgress(null),800);
-                    showT(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success");
-                  }
-                },true));
-              }}
-              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${runAllProgress?T.accent:T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:12,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",opacity:runAllProgress?0.75:1,transition:"all .15s"}}
-              onMouseEnter={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
-              onMouseLeave={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}}>
-              {runAllProgress
-                ?<><svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="20 40"/></svg>Running {runAllProgress.done}/{runAllProgress.total}…</>
-                :<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All</>
-              }
-            </button>
-          </div>
-
-          {/* ── Filter bar: search + status + tables, one horizontal row ── */}
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            {/* search */}
-            <div style={{flex:"1 1 240px",minWidth:200,position:"relative"}}>
+          {/* ── Toolbar: filters (incl. Suite) + Run All + New Test Suite ── */}
+          {(()=>{
+            const customSuites=suites.filter(s=>s.type!=="table");
+            const suiteSel=customSuites.find(s=>s.id===tcSuiteSel)||null;
+            const shown=filteredTC.filter(t=>!suiteSel||(suiteSel.caseIds||[]).includes(t.id));
+            const groups=[...new Set(shown.map(t=>t.table))].map(tb=>{const c=shown.filter(t=>t.table===tb);return {tb,cases:c,ds:suites.find(s=>s.type==="table"&&s.id===c[0].suiteId)};});
+            const selIds=[...tcSel].filter(id=>testCases.some(t=>t.id===id));
+            const stOf=c=>({ok:c.filter(t=>t.status==="Success").length,warn:c.filter(t=>t.status==="Warning").length,bad:c.filter(t=>t.status==="Failed").length,ab:c.filter(t=>t.status==="Aborted").length});
+            const counts=st=>(<span style={{fontSize:11,display:"inline-flex",gap:7,whiteSpace:"nowrap"}}>
+              <span style={{color:"#16a34a",fontWeight:600}}>{st.ok} passing</span>
+              {st.warn>0&&<span style={{color:"#ea580c",fontWeight:600}}>{st.warn} warning</span>}
+              {st.bad>0&&<span style={{color:T.rose,fontWeight:600}}>{st.bad} failing</span>}
+              {st.ab>0&&<span style={{color:T.amber,fontWeight:600}}>{st.ab} aborted</span>}
+            </span>);
+            const schedCtl=s=>{const has=!!s.schedule&&s.schedule!=="",paused=has&&s.schedEnabled===false;return (
+              <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+                {has?<code style={{fontSize:10.5,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 6px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{paused?"paused":s.schedule}</code>
+                    :<span style={{fontSize:11,color:T.textMuted}}>No schedule</span>}
+                <button onClick={e=>{e.stopPropagation();setDqSchedModal(s.id);}} title={has?"Edit schedule":"Set schedule"}
+                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                </button>
+              </span>);};
+            const btnSm=(label,onClick,primary,disabled)=>(
+              <button onClick={e=>{e.stopPropagation();onClick();}} disabled={disabled}
+                style={{padding:"4px 11px",borderRadius:7,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap",cursor:disabled?"default":"pointer",opacity:disabled?.5:1,
+                  background:primary?T.accentDim:T.bgSurface,border:`1px solid ${primary?T.accent+"33":T.border}`,color:primary?T.accent:T.textSub}}>{label}</button>
+            );
+            const addTo=v=>{
+              if(!v) return;
+              if(v==="__new"){ openNewSuite(selIds); return; }
+              const s=customSuites.find(x=>x.id===v); if(!s) return;
+              const add=selIds.filter(id=>!(s.caseIds||[]).includes(id));
+              setSuites(prev=>prev.map(x=>x.id===v?{...x,caseIds:[...(x.caseIds||[]),...add]}:x));
+              setTcSel(new Set()); showT(add.length?`${add.length} test${add.length>1?"s":""} added to ${s.name}`:`Already in ${s.name}`);
+            };
+            const sel={padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer"};
+            return <>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <div style={{flex:"1 1 220px",minWidth:180,position:"relative"}}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
                 <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
                 <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
-              <input
-                value={tcSearch}
-                onChange={e=>setTcSearch(e.target.value)}
-                placeholder="Search test cases, tables…"
-                style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
-                onFocus={e=>e.target.style.borderColor=T.accent}
-                onBlur={e=>e.target.style.borderColor=tcSearch?T.accent:T.border}
-              />
+              <input value={tcSearch} onChange={e=>setTcSearch(e.target.value)} placeholder="Search tests, tables…"
+                style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
               {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
             </div>
-            {/* status filter — multi-select dropdown */}
             <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Warning:tcWarning,Failed:tcFailed,Aborted:tcAborted}}/>
-            {/* tables filter — same multi-select dropdown as status (consistent size) */}
-            <StatusFilterDropdown
-              selected={tcTableSel}
-              onChange={setTcTableSel}
-              placeholder="Tables"
+            <StatusFilterDropdown selected={tcTableSel} onChange={setTcTableSel} placeholder="Tables"
               options={[...new Set(testCases.map(t=>t.table))].map(tbl=>({v:tbl}))}
-              counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}
-            />
-            {(tcTableSel.length>0||tcStatusSel.length>0||tcSearch)&&(
-              <button
-                onClick={()=>{setTcTableSel([]);setTcStatusSel([]);setTcSearch("");}}
-                style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
-              >
-                ✕ Clear
-              </button>
+              counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}/>
+            <select value={tcSuiteSel} onChange={e=>{setTcSuiteSel(e.target.value);setTcSel(new Set());}} style={{...sel,border:`1.5px solid ${tcSuiteSel?T.accent:T.border}`,color:tcSuiteSel?T.accent:T.text}}>
+              <option value="">All suites</option>
+              {customSuites.map(s=>{const st=suiteStats(s);return <option key={s.id} value={s.id}>{s.name} · {st.testCount?Math.round(st.success/st.testCount*100):0}%</option>;})}
+            </select>
+            {(tcTableSel.length>0||tcStatusSel.length>0||tcSearch||tcSuiteSel)&&(
+              <button onClick={()=>{setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcSuiteSel("");}}
+                style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}>✕ Clear</button>
             )}
+            <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+              <button disabled={!!runAllProgress}
+                onClick={()=>{
+                  if(runAllProgress) return;
+                  const ids=shown.filter(t=>!t.readOnly).map(t=>t.id);
+                  if(!ids.length) return;
+                  let done=0, failed=0;
+                  setRunAllProgress({done:0,total:ids.length});
+                  ids.forEach(id=>runTC(id,(r)=>{
+                    done++; if(r?.status==="Failed") failed++;
+                    setRunAllProgress(prev=>({...prev,done}));
+                    if(done===ids.length){ setTimeout(()=>setRunAllProgress(null),800); showT(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success"); }
+                  },true));
+                }}
+                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${runAllProgress?T.accent:T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:12,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+                {runAllProgress?<>Running {runAllProgress.done}/{runAllProgress.total}…</>:<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run {(tcFiltersActive||tcSuiteSel)?"Shown":"All"}</>}
+              </button>
+              <button onClick={()=>openNewSuite([])} style={{padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>New Test Suite</button>
+            </div>
           </div>
 
-          {/* ── Test Cases Table ── */}
+          {/* ── Custom suite header: the filter turns into that suite's controls ── */}
+          {suiteSel&&(()=>{const st=suiteStats(suiteSel);const s=suiteSel;const isRun=runningSuites.has(s.id);return (
+            <Card2 style={{padding:"12px 16px",marginBottom:14,borderColor:`${T.accent}40`}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                <div style={{minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{fontSize:14,fontWeight:700,color:T.text}}>{s.name}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`}}>Suite</span>
+                    <span style={{fontSize:11.5,color:T.textMuted}}>{s.owner}</span>
+                  </div>
+                  {s.desc&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{s.desc}</div>}
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:14,marginLeft:"auto",flexWrap:"wrap"}}>
+                  {counts({ok:st.success,warn:st.warned,bad:st.failed,ab:st.aborted})}
+                  <span style={{fontSize:11,color:T.textMuted}}>Batch · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{dqBatchLabel(s.batch||{mode:"inherit"})}</span></span>
+                  {schedCtl(s)}
+                  <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{isRun?"Running…":s.lastRun}</span>
+                  {btnSm(isRun?"Running…":"Run suite",()=>runSuite(s.id),true,isRun||!st.testCount)}
+                  {btnSm("Edit",()=>openEditSuite(s))}
+                </div>
+              </div>
+              {(s.actions||[]).filter(a=>a.target).length>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:7}}>Actions · {(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":a.trigger==="warning"?"on warning or failure":"on failure"})`).join(", ")}</div>}
+            </Card2>
+          );})()}
+
+          {/* ── Selection bar ── */}
+          {selIds.length>0&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",marginBottom:12,background:T.accentDim,border:`1px solid ${T.accent}33`,borderRadius:10}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.accent}}>{selIds.length} selected</span>
+              {btnSm("Run",()=>{selIds.forEach(id=>runTC(id,null,true));setTcSel(new Set());showT(`Running ${selIds.length} test${selIds.length>1?"s":""}…`);},true)}
+              <select value="" onChange={e=>addTo(e.target.value)} style={{...sel,padding:"5px 9px",fontSize:12}}>
+                <option value="">Add to suite…</option>
+                {customSuites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                <option value="__new">+ New suite</option>
+              </select>
+              {suiteSel&&btnSm("Remove from suite",()=>{setSuites(prev=>prev.map(x=>x.id===suiteSel.id?{...x,caseIds:(x.caseIds||[]).filter(id=>!selIds.includes(id))}:x));setTcSel(new Set());showT(`Removed from ${suiteSel.name}`);})}
+              <button onClick={()=>setTcSel(new Set())} style={{marginLeft:"auto",fontSize:12,color:T.textSub,background:"none",border:"none",cursor:"pointer"}}>Clear selection</button>
+            </div>
+          )}
+
+          {/* ── Tests, grouped by table; the group header is the table's default suite ── */}
           <Card2 style={{padding:0,overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  {[
-                    {l:"",w:40},
-                    {l:"Name"},
-                    {l:"Table"},
-                    {l:"Column"},
-                    {l:"Last Run"},
-                    {l:"Incident"},
-                    {l:"Actions",w:110},
-                  ].map(({l,w},i)=>(
+                  <th style={{padding:"9px 8px 9px 14px",width:28}}>
+                    <input type="checkbox" checked={shown.length>0&&shown.every(t=>tcSel.has(t.id))}
+                      onChange={e=>setTcSel(e.target.checked?new Set(shown.map(t=>t.id)):new Set())} style={{cursor:"pointer",accentColor:T.accent}}/>
+                  </th>
+                  {[{l:"",w:36},{l:"Name"},{l:"Column"},{l:"Last Run"},{l:"Incident"},{l:"Actions",w:110}].map(({l,w},i)=>(
                     <th key={i} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap",width:w||"auto"}}>{l}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {pagedTC.map((t,i)=>{
-                  const isRunning=runningIds.has(t.id);
+                {groups.map(g=>{
+                  const open=!tcCollapsed.has(g.tb);
+                  const st=stOf(g.cases);
+                  const ds=g.ds; const dsRun=ds&&runningSuites.has(ds.id);
+                  const allSel=g.cases.every(t=>tcSel.has(t.id));
                   return (
-                  <tr
-                    key={t.id}
-                    onClick={()=>setTcDetail(t)}
-                    style={{borderBottom:i<pagedTC.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",background:isRunning?T.amberDim:"transparent"}}
-                    onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.background=T.bgHover;}}
-                    onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.background="transparent";}}
-                  >
-                    <td style={{padding:"10px 14px",width:40}}>
-                      <DQStatusDot status={isRunning?"Aborted":t.status}/>
-                    </td>
-                    <td style={{padding:"10px 14px"}}>
-                      <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{t.name}</div>
-                    </td>
-                    <td style={{padding:"10px 14px"}}>
-                      <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.accent,whiteSpace:"nowrap"}}>{t.table}</span>
-                    </td>
-                    <td style={{padding:"10px 14px"}}>
-                      {t.col
-                        ? <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>
-                        : <span style={{color:T.textMuted,fontSize:12}}>—</span>
-                      }
-                    </td>
-                    <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
-                    <td style={{padding:"10px 14px"}}>
-                      {t.incidentId
-                        ? <button
-                            onClick={e=>{e.stopPropagation();setExpandedInc(t.incidentId);setTab("incidents");}}
-                            style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
-                          >🔴 View</button>
-                        : <span style={{color:T.textMuted,fontSize:12}}>—</span>
-                      }
-                    </td>
-                    <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
-                      <div style={{display:"flex",alignItems:"center",gap:4}}>
-                        {/* Run */}
-                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning}
-                          onClick={e=>{e.stopPropagation();runTC(t.id);}}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,flexShrink:0,transition:"opacity .1s"}}
-                          onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".75";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                        </button>
-                        {/* Edit */}
-                        <button title="Edit test case"
-                          onClick={e=>{e.stopPropagation();setTcDetail(t);setTcDetailEditing(true);setTcDetailDraft({name:t.name,params:{...(t.params||{})}});}}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",flexShrink:0,transition:"all .1s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                        </button>
-                        {/* Delete */}
-                        <button title="Delete test case"
-                          onClick={e=>{e.stopPropagation();setTestCases(prev=>prev.filter(tc=>tc.id!==t.id));showT("Test case deleted","error");}}
-                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid transparent`,color:T.textMuted,cursor:"pointer",flexShrink:0,transition:"all .1s"}}
-                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                    <React.Fragment key={g.tb}>
+                      <tr onClick={()=>setTcCollapsed(p=>{const n=new Set(p);n.has(g.tb)?n.delete(g.tb):n.add(g.tb);return n;})}
+                        style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+                        <td style={{padding:"9px 8px 9px 14px"}} onClick={e=>e.stopPropagation()}>
+                          <input type="checkbox" checked={allSel} onChange={e=>setTcSel(p=>{const n=new Set(p);g.cases.forEach(t=>e.target.checked?n.add(t.id):n.delete(t.id));return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
+                        </td>
+                        <td colSpan={6} style={{padding:"8px 14px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                            <span style={{fontSize:10,color:T.textMuted,display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform .12s"}}>▶</span>
+                            <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{g.tb}</span>
+                            <span style={{fontSize:11,color:T.textMuted}}>{g.cases.length} test{g.cases.length===1?"":"s"}</span>
+                            {counts(st)}
+                            {ds&&!suiteSel&&(
+                              <div style={{display:"flex",alignItems:"center",gap:10,marginLeft:"auto"}} onClick={e=>e.stopPropagation()}>
+                                {ds.source==="dbt"
+                                  ? <span style={{fontSize:11,color:T.textMuted}}>Runs in dbt · {ds.lastRun}</span>
+                                  : <>
+                                      {ds.batch&&ds.batch.mode!=="table"&&<span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(ds.batch)}</span>}
+                                      {schedCtl(ds)}
+                                      <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{dsRun?"Running…":ds.lastRun}</span>
+                                      {btnSm(dsRun?"Running…":"Run",()=>runSuite(ds.id),true,dsRun)}
+                                      {btnSm("Settings",()=>setSuiteCfg({id:ds.id,kind:"table",caseIds:[],batch:{mode:"table",column:"",...(ds.batch||{})},actions:(ds.actions||[]).map(a=>({...a}))}))}
+                                    </>}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {open&&g.cases.map((t,i)=>{
+                        const isRunning=runningIds.has(t.id);
+                        const inSuites=customSuites.filter(s=>(s.caseIds||[]).includes(t.id));
+                        const isSel=tcSel.has(t.id);
+                        return (
+                          <tr key={t.id} onClick={()=>setTcDetail(t)}
+                            style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:isSel?T.accentDim:isRunning?T.amberDim:"transparent"}}
+                            onMouseEnter={e=>{if(!isRunning&&!isSel)e.currentTarget.style.background=T.bgHover;}}
+                            onMouseLeave={e=>{if(!isRunning&&!isSel)e.currentTarget.style.background="transparent";}}>
+                            <td style={{padding:"10px 8px 10px 14px"}} onClick={e=>e.stopPropagation()}>
+                              <input type="checkbox" checked={isSel} onChange={e=>setTcSel(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
+                            </td>
+                            <td style={{padding:"10px 14px",width:36}}><DQStatusDot status={isRunning?"Aborted":t.status}/></td>
+                            <td style={{padding:"10px 14px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                <span style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{t.name}</span>
+                                <TestSourceChip source={t.source}/>
+                                {inSuites.map(s=>(
+                                  <span key={s.id} onClick={e=>{e.stopPropagation();setTcSuiteSel(s.id);setTcSel(new Set());}} title="Show this suite"
+                                    style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",whiteSpace:"nowrap"}}>{s.name}</span>
+                                ))}
+                              </div>
+                            </td>
+                            <td style={{padding:"10px 14px"}}>
+                              {t.col?<span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}
+                            </td>
+                            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
+                            <td style={{padding:"10px 14px"}}>
+                              {t.incidentId
+                                ? <button onClick={e=>{e.stopPropagation();setExpandedInc(t.incidentId);setTab("incidents");}}
+                                    style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>🔴 View</button>
+                                : <span style={{color:T.textMuted,fontSize:12}}>—</span>}
+                            </td>
+                            <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
+                              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                                <button title={t.readOnly?"Runs in dbt":isRunning?"Running…":"Run now"} disabled={isRunning||t.readOnly}
+                                  onClick={e=>{e.stopPropagation();runTC(t.id);}}
+                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:(isRunning||t.readOnly)?"not-allowed":"pointer",opacity:(isRunning||t.readOnly)?0.4:1,flexShrink:0}}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+                                </button>
+                                {!t.readOnly&&<button title="Edit test case"
+                                  onClick={e=>{e.stopPropagation();setTcDetail(t);setTcDetailEditing(true);setTcDetailDraft({name:t.name,params:{...(t.params||{})}});}}
+                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",flexShrink:0}}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                                </button>}
+                                <button title="Delete test case"
+                                  onClick={e=>{e.stopPropagation();setTestCases(prev=>prev.filter(tc=>tc.id!==t.id));setSuites(prev=>prev.map(x=>x.caseIds?{...x,caseIds:x.caseIds.filter(id=>id!==t.id)}:x));showT("Test case deleted","error");}}
+                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid transparent`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>
+                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
             </table>
-            {tcTotalPages>1&&(
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
-                <span style={{fontSize:11.5,color:T.textMuted}}>Showing {safeTcPage*TC_PAGE_SIZE+1}{"–"}{Math.min((safeTcPage+1)*TC_PAGE_SIZE,filteredTC.length)} of {filteredTC.length}</span>
-                <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                  <button disabled={safeTcPage===0} onClick={()=>setTcPage(p=>p-1)}
-                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===0?"not-allowed":"pointer",opacity:safeTcPage===0?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>← Prev</button>
-                  {Array.from({length:tcTotalPages},(_,i)=>(
-                    <button key={i} onClick={()=>setTcPage(i)}
-                      style={{width:26,height:26,borderRadius:6,fontSize:11.5,fontWeight:safeTcPage===i?700:400,cursor:"pointer",background:safeTcPage===i?T.accent:T.bgSurface,border:`1px solid ${safeTcPage===i?T.accent:T.border}`,color:safeTcPage===i?"#fff":T.textSub}}>
-                      {i+1}
-                    </button>
-                  ))}
-                  <button disabled={safeTcPage===tcTotalPages-1} onClick={()=>setTcPage(p=>p+1)}
-                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===tcTotalPages-1?"not-allowed":"pointer",opacity:safeTcPage===tcTotalPages-1?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>Next →</button>
-                </div>
-              </div>
-            )}
-            {filteredTC.length===0&&(
+            {shown.length===0&&(
               <div style={{textAlign:"center",padding:"48px 0"}}>
-                <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
-                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No test cases match these filters</div>
-                <button
-                  onClick={()=>{setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");}}
-                  style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}
-                >Clear all filters</button>
+                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>{suiteSel&&!(suiteSel.caseIds||[]).length?"This suite has no tests yet":"No tests match these filters"}</div>
+                <button onClick={()=>{setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");if(!(suiteSel&&!(suiteSel.caseIds||[]).length))setTcSuiteSel("");}}
+                  style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear filters</button>
               </div>
             )}
           </Card2>
-        </>}
-
-        {/* ════════════════ TEST SUITES ════════════════ */}
-        {tab==="testsuites"&&<>
-          {/* ── Three metric donuts ── */}
-          <div style={{display:"flex",gap:14,marginBottom:20,alignItems:"stretch"}}>
-            <MetricDonut
-              pct={successRate}
-              label="Total Tests"
-              breakdown={
-                <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:2}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:"#16a34a",fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Success</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcSuccess}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:"#ea580c",fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Warning</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcWarning}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:T.rose,fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Failed</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcFailed}</span>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
-                    <span style={{color:T.amber,fontSize:10}}>●</span>
-                    <span style={{color:T.textMuted}}>Aborted</span>
-                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcAborted}</span>
-                  </div>
-                </div>
-              }
-            />
-            <MetricDonut
-              pct={healthyPct}
-              label="Healthy Data Assets"
-              sub={`${healthyTables.length} healthy · ${coveredTables.length} covered`}
-            />
-            <MetricDonut
-              pct={coveragePct}
-              label="Data Assets with Tests"
-              sub={`${coveredTables.length} of ${totalKnownTables} tables covered`}
-            />
-          </div>
-
-          {/* ── Header + owner filter ── */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Suites <span style={{fontSize:11.5,fontWeight:500,color:T.textMuted}}>{suites.length}</span></span>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:12,color:T.textMuted}}>Owner:</span>
-              <select
-                value={suiteOwner}
-                onChange={e=>setSuiteOwner(e.target.value)}
-                style={{padding:"5px 10px",background:T.bgElevated,border:`1.5px solid ${suiteOwner!=="all"?T.accent:T.border}`,borderRadius:7,color:suiteOwner!=="all"?T.accent:T.textSub,fontSize:12,outline:"none",cursor:"pointer"}}
-              >
-                <option value="all">All Owners</option>
-                {TEAMS.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-              <button onClick={openNewSuite}
-                style={{padding:"6px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>New Test Suite</button>
-            </div>
-          </div>
-
-          {/* ── All suites: one per table (Default) + user-created (Custom) ── */}
-          {(()=>{
-            const list=suites.filter(s=>suiteOwner==="all"||s.owner===suiteOwner).sort((a,b)=>(a.type==="table"?0:1)-(b.type==="table"?0:1));
-            if(list.length===0) return (
-              <div style={{textAlign:"center",padding:"56px 0"}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:10}}>No test suites</div>
-                <button onClick={openNewSuite} style={{padding:"7px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>New Test Suite</button>
-              </div>
-            );
-            return (
-              <Card2 style={{padding:0,overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                      {["Name","Tables","Tests","Success %","Owner","Last Run","Schedule","Next Run","Actions"].map(l=>(
-                        <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {list.map((s,i,arr)=>{
-                      const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
-                      const cases=suiteCases(s);
-                      const tables=[...new Set(cases.map(t=>t.table))];
-                      const isExp=expandedSuite===s.id;
-                      const isRunning=runningSuites.has(s.id);
-                      const has=!!s.schedule&&s.schedule!=="", paused=has&&s.schedEnabled===false;
-                      return (
-                        <React.Fragment key={s.id}>
-                          <tr onClick={()=>setExpandedSuite(isExp?null:s.id)}
-                            style={{borderBottom:(!isExp&&i<arr.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:isExp?`${T.accent}06`:"transparent"}}
-                            onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover}
-                            onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}>
-                            <td style={{padding:"10px 14px"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                                <span style={{fontSize:13,fontWeight:700,color:T.text}}>{s.name}</span>
-                                <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:s.type==="table"?T.bgElevated:T.accentDim,color:s.type==="table"?T.textMuted:T.accent,border:`1px solid ${s.type==="table"?T.border:T.accent+"33"}`}}>{s.type==="table"?"Default":"Custom"}</span>
-                              </div>
-                              {s.desc&&<div style={{fontSize:11,color:T.textMuted,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.desc}</div>}
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11.5,color:T.textSub}} title={tables.join(", ")}>
-                              {tables.length===1?<span style={{fontFamily:"'Geist Mono',monospace"}}>{tables[0]}</span>:`${tables.length} tables`}
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
-                              <div style={{fontSize:11,display:"flex",gap:6}}>
-                                <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
-                                {st.warned>0&&<span style={{color:"#ea580c",fontWeight:600}}>{st.warned}W</span>}
-                                <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
-                                <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
-                              </div>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <span style={{fontSize:14,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:sRate>=90?"#16a34a":sRate>=70?T.amber:T.rose}}>{isRunning?"…":sRate+"%"}</span>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <span style={{fontSize:12,padding:"3px 9px",borderRadius:20,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{s.owner}</span>
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":s.lastRun}</td>
-                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                {has
-                                  ? <code style={{fontSize:11,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{paused?"paused":s.schedule}</code>
-                                  : <span style={{fontSize:11,color:T.textMuted}}>—</span>}
-                                <button onClick={()=>setDqSchedModal(s.id)} title={has?"Edit schedule":"Set schedule"}
-                                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                                </button>
-                              </div>
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
-                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              {s.source==="dbt"?<span style={{fontSize:11,color:T.textMuted}}>Runs in dbt</span>:
-                              <div style={{display:"flex",gap:6}}>
-                                <button onClick={e=>runSuite(s.id,e)} disabled={isRunning||st.testCount===0}
-                                  style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",whiteSpace:"nowrap"}}
-                                >{isRunning?"Running…":"Run now"}</button>
-                                <button onClick={()=>s.type==="table"
-                                    ?setSuiteCfg({id:s.id,kind:"table",caseIds:[],batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})
-                                    :openEditSuite(s)}
-                                  style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>{s.type==="table"?"Settings":"Edit"}</button>
-                              </div>}
-                            </td>
-                          </tr>
-                          {isExp&&(
-                            <tr style={{borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
-                              <td colSpan={9} style={{padding:0}}>
-                                <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
-                                  <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px",fontSize:11.5,color:T.textMuted}}>
-                                    <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch||{mode:s.type==="table"?"table":"inherit"})}</span></span>
-                                    <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":a.trigger==="warning"?"on warning or failure":"on failure"})`).join(", "):"Inbox only"}</span></span>
-                                    {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed{s.runs[0].warned?` · ${s.runs[0].warned} warned`:""} · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
-                                  </div>
-                                  {cases.map(t=>(
-                                    <div key={t.id} onClick={e=>{e.stopPropagation();setTcDetail(t);}}
-                                      style={{display:"flex",alignItems:"center",gap:12,padding:"9px 20px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}
-                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                      <DQStatusDot status={t.status}/>
-                                      <span style={{flex:1,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-                                      <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>{t.table}{t.col?`.${t.col}`:""}</span>
-                                      <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${dimColor(t.dim)}12`,color:dimColor(t.dim),fontWeight:600,flexShrink:0}}>{t.dim}</span>
-                                      <DQSparkline data={t.history} w={52} h={18}/>
-                                      <DQStatusBadge status={t.status}/>
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </Card2>
-            );
+            </>;
           })()}
         </>}
 
@@ -7103,7 +6906,7 @@ const QualityView = ({onToast=()=>{}}) => {
               <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",justifyContent:"space-between"}}>
                 <div style={{display:"flex",gap:8}}>
                   <button onClick={()=>setSuiteCfg(null)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
-                  {custom&&s&&<button onClick={()=>{setSuites(prev=>prev.filter(x=>x.id!==s.id));setSuiteCfg(null);setExpandedSuite(null);showT("Test suite deleted","error");}}
+                  {custom&&s&&<button onClick={()=>{setSuites(prev=>prev.filter(x=>x.id!==s.id));setSuiteCfg(null);if(tcSuiteSel===s.id)setTcSuiteSel("");showT("Test suite deleted","error");}}
                     style={{padding:"8px 14px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12.5,cursor:"pointer"}}>Delete</button>}
                 </div>
                 <button disabled={!canSave} onClick={()=>{
@@ -7111,7 +6914,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   if(custom&&!s){
                     const ns={id:`ts${Date.now()}`,name:suiteCfg.name.trim(),table:"",type:"custom",desc:suiteCfg.desc.trim(),owner:suiteCfg.owner,caseIds:suiteCfg.caseIds,
                       batch:suiteCfg.batch,actions,lastRun:"Never",nextRun:"",schedule:"",testCount:0,success:0,failed:0,aborted:0};
-                    setSuites(prev=>[...prev,ns]); setExpandedSuite(ns.id);
+                    setSuites(prev=>[...prev,ns]); setTcSuiteSel(ns.id); setTcSel(new Set()); setTab("testcases");
                     setSuiteCfg(null); showT("Test suite created");
                     return;
                   }
