@@ -5650,7 +5650,6 @@ const QualityView = ({onToast=()=>{}}) => {
   const TC_PAGE_SIZE = 10;
 
   // test suites tab
-  const [suitesSubTab,  setSuitesSubTab]  = useState("table");
   const [suiteOwner,    setSuiteOwner]    = useState("all");
   const [expandedSuite, setExpandedSuite] = useState(null);
 
@@ -6224,22 +6223,9 @@ const QualityView = ({onToast=()=>{}}) => {
             />
           </div>
 
-          {/* ── Sub-tab + owner filter ── */}
+          {/* ── Header + owner filter ── */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
-            <div style={{display:"flex",gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,padding:3}}>
-              {[
-                {k:"table",l:"Default Suites",n:suites.filter(s=>s.type==="table").length},
-                {k:"custom",l:"Custom Suites",n:suites.filter(s=>s.type!=="table").length},
-              ].map(({k,l,n})=>(
-                <button
-                  key={k}
-                  onClick={()=>setSuitesSubTab(k)}
-                  style={{padding:"6px 16px",borderRadius:7,fontSize:12.5,fontWeight:suitesSubTab===k?600:400,background:suitesSubTab===k?T.bgSurface:"transparent",border:`1px solid ${suitesSubTab===k?T.border:"transparent"}`,color:suitesSubTab===k?T.text:T.textMuted,cursor:"pointer",transition:"all .12s"}}
-                >
-                  {l}&nbsp;<span style={{fontSize:10.5,opacity:.65}}>{n}</span>
-                </button>
-              ))}
-            </div>
+            <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Suites <span style={{fontSize:11.5,fontWeight:500,color:T.textMuted}}>{suites.length}</span></span>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:12,color:T.textMuted}}>Owner:</span>
               <select
@@ -6255,139 +6241,12 @@ const QualityView = ({onToast=()=>{}}) => {
             </div>
           </div>
 
-          {/* ── Default Suites sub-tab ── */}
-          {suitesSubTab==="table"&&(
-            <>
-              <Card2 style={{padding:0,overflow:"hidden"}}>
-                <table style={{width:"100%",borderCollapse:"collapse"}}>
-                  <thead>
-                    <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                      {["Name","Tests","Success %","Owner","Last Run","Schedule","Next Run","Actions"].map(l=>(
-                        <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {suites.filter(s=>s.type==="table"&&(suiteOwner==="all"||s.owner===suiteOwner)).map((s,i,arr)=>{
-                      const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
-                      const isExp=expandedSuite===s.id;
-                      const isRunning=runningSuites.has(s.id);
-                      return (
-                        <React.Fragment key={s.id}>
-                          <tr
-                            onClick={()=>setExpandedSuite(isExp?null:s.id)}
-                            style={{borderBottom:(!isExp&&i<arr.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",background:isExp?`${T.accent}06`:"transparent"}}
-                            onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover}
-                            onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}
-                          >
-                            <td style={{padding:"10px 14px"}}>
-                              <div style={{fontSize:13,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",marginBottom:2}}>{s.name}</div>
-                              <div style={{fontSize:11,color:T.textMuted}}>{s.table}</div>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
-                              <div style={{fontSize:11,display:"flex",gap:6}}>
-                                <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
-                                <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
-                                <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
-                              </div>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <span style={{fontSize:14,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:sRate>=90?"#16a34a":sRate>=70?T.amber:T.rose}}>{isRunning?"…":sRate+"%"}</span>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              <span style={{fontSize:12,padding:"3px 9px",borderRadius:20,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{s.owner}</span>
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":s.lastRun}</td>
-                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              {(()=>{
-                                const has=!!s.schedule&&s.schedule!=="", paused=has&&s.schedEnabled===false;
-                                const openSched=e=>{e.stopPropagation();setDqSchedModal(s.id);};
-                                return <div style={{display:"flex",alignItems:"center",gap:6}}>
-                                  {has
-                                    ? <code style={{fontSize:11,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace"}}>{paused?"paused":s.schedule}</code>
-                                    : <span style={{fontSize:11,color:T.textMuted}}>—</span>}
-                                  <button onClick={openSched}
-                                    style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .1s"}}
-                                    title={has?"Edit schedule":"Set schedule"}
-                                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                                    onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
-                                  </button>
-                                </div>;
-                              })()}
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
-                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              {s.source==="dbt"
-                                ? <span style={{fontSize:11,color:T.textMuted}}>Runs in dbt</span>
-                                : <div style={{display:"flex",gap:6}}>
-                                    <button
-                                      onClick={e=>runSuite(s.id,e)}
-                                      disabled={isRunning}
-                                      style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
-                                    >{isRunning?"Running…":"Run now"}</button>
-                                    <button onClick={()=>setSuiteCfg({id:s.id,kind:"table",caseIds:[],batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})}
-                                      style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>Settings</button>
-                                  </div>}
-                            </td>
-                          </tr>
-                          {isExp&&(
-                            <tr style={{borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
-                              <td colSpan={8} style={{padding:0}}>
-                                <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
-                                  {s.source!=="dbt"&&(
-                                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px 0",fontSize:11.5,color:T.textMuted}}>
-                                      <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch)}</span></span>
-                                      <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":"on failure"})`).join(", "):"Inbox only"}</span></span>
-                                      {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
-                                    </div>
-                                  )}
-                                  <div style={{padding:"10px 20px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                                    <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6}}>Test Cases ({testCases.filter(t=>t.suiteId===s.id).length})</span>
-                                    <button onClick={e=>{e.stopPropagation();openTCModal();}} style={{fontSize:11.5,color:T.accent,background:`${T.accent}10`,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}>+ Add Test Case</button>
-                                  </div>
-                                  {testCases.filter(t=>t.suiteId===s.id).map((t,ti,tarr)=>(
-                                    <div
-                                      key={t.id}
-                                      onClick={e=>{e.stopPropagation();setTcDetail(t);}}
-                                      style={{display:"flex",alignItems:"center",gap:12,padding:"9px 20px",borderTop:`1px solid ${T.border}`,cursor:"pointer",transition:"background .1s"}}
-                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                                    >
-                                      <DQStatusDot status={t.status}/>
-                                      <span style={{flex:1,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-                                      {t.col&&<span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>.{t.col}</span>}
-                                      <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${dimColor(t.dim)}12`,color:dimColor(t.dim),fontWeight:600,flexShrink:0}}>{t.dim}</span>
-                                      <DQSparkline data={t.history} w={52} h={18}/>
-                                      <DQStatusBadge status={t.status}/>
-                                    </div>
-                                  ))}
-                                  {testCases.filter(t=>t.suiteId===s.id).length===0&&(
-                                    <div style={{padding:"16px 20px",textAlign:"center",fontSize:12,color:T.textMuted}}>
-                                      No test cases yet.{" "}
-                                      <button onClick={e=>{e.stopPropagation();openTCModal();}} style={{color:T.accent,background:"none",border:"none",cursor:"pointer",fontSize:12}}>Add the first one →</button>
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </Card2>
-            </>
-          )}
-
-          {/* ── Custom Suites sub-tab ── */}
-          {suitesSubTab==="custom"&&(()=>{
-            const list=suites.filter(s=>s.type!=="table"&&(suiteOwner==="all"||s.owner===suiteOwner));
+          {/* ── All suites: one per table (Default) + user-created (Custom) ── */}
+          {(()=>{
+            const list=suites.filter(s=>suiteOwner==="all"||s.owner===suiteOwner).sort((a,b)=>(a.type==="table"?0:1)-(b.type==="table"?0:1));
             if(list.length===0) return (
               <div style={{textAlign:"center",padding:"56px 0"}}>
-                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:10}}>No custom test suites</div>
+                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:10}}>No test suites</div>
                 <button onClick={openNewSuite} style={{padding:"7px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>New Test Suite</button>
               </div>
             );
@@ -6416,7 +6275,10 @@ const QualityView = ({onToast=()=>{}}) => {
                             onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover}
                             onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}>
                             <td style={{padding:"10px 14px"}}>
-                              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:2}}>{s.name}</div>
+                              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                                <span style={{fontSize:13,fontWeight:700,color:T.text}}>{s.name}</span>
+                                <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:s.type==="table"?T.bgElevated:T.accentDim,color:s.type==="table"?T.textMuted:T.accent,border:`1px solid ${s.type==="table"?T.border:T.accent+"33"}`}}>{s.type==="table"?"Default":"Custom"}</span>
+                              </div>
                               {s.desc&&<div style={{fontSize:11,color:T.textMuted,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.desc}</div>}
                             </td>
                             <td style={{padding:"10px 14px",fontSize:11.5,color:T.textSub}} title={tables.join(", ")}>
@@ -6450,13 +6312,16 @@ const QualityView = ({onToast=()=>{}}) => {
                             </td>
                             <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
                             <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                              {s.source==="dbt"?<span style={{fontSize:11,color:T.textMuted}}>Runs in dbt</span>:
                               <div style={{display:"flex",gap:6}}>
                                 <button onClick={e=>runSuite(s.id,e)} disabled={isRunning||st.testCount===0}
                                   style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",whiteSpace:"nowrap"}}
                                 >{isRunning?"Running…":"Run now"}</button>
-                                <button onClick={()=>openEditSuite(s)}
-                                  style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>Edit</button>
-                              </div>
+                                <button onClick={()=>s.type==="table"
+                                    ?setSuiteCfg({id:s.id,kind:"table",caseIds:[],batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})
+                                    :openEditSuite(s)}
+                                  style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>{s.type==="table"?"Settings":"Edit"}</button>
+                              </div>}
                             </td>
                           </tr>
                           {isExp&&(
@@ -6464,7 +6329,7 @@ const QualityView = ({onToast=()=>{}}) => {
                               <td colSpan={9} style={{padding:0}}>
                                 <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
                                   <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px",fontSize:11.5,color:T.textMuted}}>
-                                    <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch||{mode:"inherit"})}</span></span>
+                                    <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch||{mode:s.type==="table"?"table":"inherit"})}</span></span>
                                     <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":"on failure"})`).join(", "):"Inbox only"}</span></span>
                                     {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
                                   </div>
@@ -6984,7 +6849,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   if(custom&&!s){
                     const ns={id:`ts${Date.now()}`,name:suiteCfg.name.trim(),table:"",type:"custom",desc:suiteCfg.desc.trim(),owner:suiteCfg.owner,caseIds:suiteCfg.caseIds,
                       batch:suiteCfg.batch,actions,lastRun:"Never",nextRun:"",schedule:"",testCount:0,success:0,failed:0,aborted:0};
-                    setSuites(prev=>[...prev,ns]); setSuitesSubTab("custom"); setExpandedSuite(ns.id);
+                    setSuites(prev=>[...prev,ns]); setExpandedSuite(ns.id);
                     setSuiteCfg(null); showT("Test suite created");
                     return;
                   }
