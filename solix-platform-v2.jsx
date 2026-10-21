@@ -5927,8 +5927,6 @@ const QualityView = ({onToast=()=>{}}) => {
   const [tcFocus,       setTcFocus]       = useState(null);        // {label, ids} — the exact tests an Overview number counted
   const [testsView,     setTestsView]     = useState("cases");     // Tests tab: "cases" | "suites"
   const [expandedSuite, setExpandedSuite] = useState(null);        // suite row opened in Test Suites
-  const [tcSel,         setTcSel]         = useState(new Set());   // selected test ids (Run / Add to suite)
-  const [tcCollapsed,   setTcCollapsed]   = useState(new Set());   // collapsed table groups
   const [tcDetail,      setTcDetail]      = useState(null);
   const [tcDetailEditing, setTcDetailEditing] = useState(false);
   const [tcDetailDraft,   setTcDetailDraft]   = useState(null);
@@ -6199,6 +6197,35 @@ const QualityView = ({onToast=()=>{}}) => {
     </button>
   );
 
+  // ── Three OM-style metric cards ──────────────────────────────────────────
+  const MetricDonut = ({pct,label,sub,icon,breakdown})=>{
+    const c=pct>=90?"#16a34a":pct>=70?T.amber:T.rose;
+    return (
+      <Card2 style={{padding:0,flex:1}}>
+        <div style={{padding:"18px 20px",display:"flex",alignItems:"center",gap:16}}>
+          <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="24" stroke={T.bgElevated} strokeWidth="8" fill="none"/>
+              <circle cx="32" cy="32" r="24" stroke={c} strokeWidth="8" fill="none"
+                strokeDasharray={`${2*Math.PI*24}`}
+                strokeDashoffset={`${2*Math.PI*24*(1-pct/100)}`}
+                strokeLinecap="round"
+                style={{transformOrigin:"32px 32px",transform:"rotate(-90deg)"}}/>
+            </svg>
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontSize:12,fontWeight:800,color:c}}>{pct}%</span>
+            </div>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:2}}>{icon}</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:6}}>{label}</div>
+            {breakdown?breakdown:<div style={{fontSize:11,color:T.textMuted}}>{sub}</div>}
+          </div>
+        </div>
+      </Card2>
+    );
+  };
+
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Data Quality"}]}/>
@@ -6222,7 +6249,7 @@ const QualityView = ({onToast=()=>{}}) => {
 
         {/* ════════════════ TEST CASES ════════════════ */}
         {tab==="overview"&&<DQOverview testCases={testCases} incidents={incidents}
-          onFocusTests={(label,ids)=>{setTcFocus({label,ids});setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcSel(new Set());setTestsView("cases");setTab("testcases");}}
+          onFocusTests={(label,ids)=>{setTcFocus({label,ids});setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcPage(0);setTestsView("cases");setTab("testcases");}}
           onOpenTest={t=>setTcDetail(t)}
           onOpenIncident={id=>{setIncStatusSel([]);setIncAssigneeSel([]);setIncTcFilter("");setExpandedInc(id);setTab("incidents");}}
           onOpenIncidents={st=>{setIncStatusSel(st);setIncAssigneeSel([]);setIncTcFilter("");setTab("incidents");}}
@@ -6239,197 +6266,242 @@ const QualityView = ({onToast=()=>{}}) => {
             ))}
           </div>
 
-          {/* ── Test Cases: filters + Run, cases grouped by table ── */}
-          {testsView==="cases"&&(()=>{
-            const customSuites=suites.filter(s=>s.type!=="table");
-            const shown=filteredTC;
-            const groups=[...new Set(shown.map(t=>t.table))].map(tb=>({tb,cases:shown.filter(t=>t.table===tb)}));
-            const selIds=[...tcSel].filter(id=>testCases.some(t=>t.id===id));
-            const stOf=c=>({ok:c.filter(t=>t.status==="Success").length,warn:c.filter(t=>t.status==="Warning").length,bad:c.filter(t=>t.status==="Failed").length,ab:c.filter(t=>t.status==="Aborted").length});
-            const counts=st=>(<span style={{fontSize:11,display:"inline-flex",gap:7,whiteSpace:"nowrap"}}>
-              <span style={{color:"#16a34a",fontWeight:600}}>{st.ok} passing</span>
-              {st.warn>0&&<span style={{color:"#ea580c",fontWeight:600}}>{st.warn} warning</span>}
-              {st.bad>0&&<span style={{color:T.rose,fontWeight:600}}>{st.bad} failing</span>}
-              {st.ab>0&&<span style={{color:T.amber,fontWeight:600}}>{st.ab} aborted</span>}
-            </span>);
-            const btnSm=(label,onClick,primary,disabled)=>(
-              <button onClick={e=>{e.stopPropagation();onClick();}} disabled={disabled}
-                style={{padding:"4px 11px",borderRadius:7,fontSize:11.5,fontWeight:600,whiteSpace:"nowrap",cursor:disabled?"default":"pointer",opacity:disabled?.5:1,
-                  background:primary?T.accentDim:T.bgSurface,border:`1px solid ${primary?T.accent+"33":T.border}`,color:primary?T.accent:T.textSub}}>{label}</button>
-            );
-            const addTo=v=>{
-              if(!v) return;
-              if(v==="__new"){ openNewSuite(selIds); return; }
-              const s=customSuites.find(x=>x.id===v); if(!s) return;
-              const add=selIds.filter(id=>!(s.caseIds||[]).includes(id));
-              setSuites(prev=>prev.map(x=>x.id===v?{...x,caseIds:[...(x.caseIds||[]),...add]}:x));
-              setTcSel(new Set()); showT(add.length?`${add.length} test${add.length>1?"s":""} added to ${s.name}`:`Already in ${s.name}`);
-            };
-            const sel={padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",cursor:"pointer"};
-            return <>
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <div style={{flex:"1 1 220px",minWidth:180,position:"relative"}}>
+          {/* ── Test Cases ── */}
+          {testsView==="cases"&&<>
+          {/* ── Three metric donuts ── */}
+          <div style={{display:"flex",gap:14,marginBottom:20,alignItems:"stretch"}}>
+            <MetricDonut
+              pct={successRate}
+              label="Total Tests"
+              breakdown={
+                <div style={{display:"flex",flexDirection:"column",gap:4,marginTop:2}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:"#16a34a",fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Success</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcSuccess}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:"#ea580c",fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Warning</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcWarning}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:T.rose,fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Failed</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcFailed}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:T.amber,fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Aborted</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcAborted}</span>
+                  </div>
+                </div>
+              }
+            />
+            <MetricDonut
+              pct={healthyPct}
+              label="Healthy Data Assets"
+              sub={`${healthyTables.length} healthy · ${coveredTables.length} covered`}
+            />
+            <MetricDonut
+              pct={coveragePct}
+              label="Data Assets with Tests"
+              sub={`${coveredTables.length} of ${totalKnownTables} tables covered`}
+            />
+          </div>
+
+          {/* ── Test Cases summary bar + Run All ── */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"11px 16px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Cases ({testCases.length})</span>
+              <span style={{fontSize:12,color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
+              {tcWarning>0&&<span style={{fontSize:12,color:"#ea580c",fontWeight:600}}>{tcWarning} warning</span>}
+              {tcFailed>0&&<span style={{fontSize:12,color:T.rose,fontWeight:600}}>{tcFailed} failing</span>}
+              {tcAborted>0&&<span style={{fontSize:12,color:T.amber,fontWeight:600}}>{tcAborted} aborted</span>}
+            </div>
+            <button
+              disabled={!!runAllProgress}
+              onClick={()=>{
+                if(runAllProgress) return;
+                const ids=testCases.filter(t=>!t.readOnly).map(t=>t.id);
+                let done=0, failed=0;
+                setRunAllProgress({done:0,total:ids.length});
+                ids.forEach(id=>runTC(id,(r)=>{
+                  done++; if(r?.status==="Failed") failed++;
+                  setRunAllProgress(prev=>({...prev,done}));
+                  if(done===ids.length){
+                    setTimeout(()=>setRunAllProgress(null),800);
+                    showT(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success");
+                  }
+                },true));
+              }}
+              style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${runAllProgress?T.accent:T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:12,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",opacity:runAllProgress?0.75:1,transition:"all .15s"}}
+              onMouseEnter={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}}
+              onMouseLeave={e=>{if(!runAllProgress){e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}}>
+              {runAllProgress
+                ?<><svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2.5" strokeDasharray="20 40"/></svg>Running {runAllProgress.done}/{runAllProgress.total}…</>
+                :<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run All</>
+              }
+            </button>
+          </div>
+
+          {/* ── Filter bar: search + status + tables, one horizontal row ── */}
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"12px 16px",marginBottom:18,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            {/* search */}
+            <div style={{flex:"1 1 240px",minWidth:200,position:"relative"}}>
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}>
                 <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/>
                 <path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
               </svg>
-              <input value={tcSearch} onChange={e=>setTcSearch(e.target.value)} placeholder="Search test cases, tables…"
-                style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
+              <input
+                value={tcSearch}
+                onChange={e=>setTcSearch(e.target.value)}
+                placeholder="Search test cases, tables…"
+                style={{width:"100%",padding:"8px 12px 8px 33px",background:T.bgElevated,border:`1.5px solid ${tcSearch?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",transition:"border-color .15s"}}
+                onFocus={e=>e.target.style.borderColor=T.accent}
+                onBlur={e=>e.target.style.borderColor=tcSearch?T.accent:T.border}
+              />
               {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
             </div>
+            {/* status filter — multi-select dropdown */}
             <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Warning:tcWarning,Failed:tcFailed,Aborted:tcAborted}}/>
-            <StatusFilterDropdown selected={tcTableSel} onChange={setTcTableSel} placeholder="Tables"
+            {/* tables filter — same multi-select dropdown as status (consistent size) */}
+            <StatusFilterDropdown
+              selected={tcTableSel}
+              onChange={setTcTableSel}
+              placeholder="Tables"
               options={[...new Set(testCases.map(t=>t.table))].map(tbl=>({v:tbl}))}
-              counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}/>
+              counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}
+            />
             {tcFocus&&(
               <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:12,color:T.accent,fontWeight:600}}>
                 From Overview · {tcFocus.label}
-                <button onClick={()=>setTcFocus(null)} title="Show all tests" style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:14,lineHeight:1,padding:0}}>×</button>
+                <button onClick={()=>setTcFocus(null)} title="Show all test cases" style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:14,lineHeight:1,padding:0}}>×</button>
               </span>
             )}
             {(tcFocus||tcTableSel.length>0||tcStatusSel.length>0||tcSearch)&&(
-              <button onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcStatusSel([]);setTcSearch("");}}
-                style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}>✕ Clear</button>
-            )}
-            <div style={{marginLeft:"auto",display:"flex",gap:8}}>
-              <button disabled={!!runAllProgress}
-                onClick={()=>{
-                  if(runAllProgress) return;
-                  const ids=shown.filter(t=>!t.readOnly).map(t=>t.id);
-                  if(!ids.length) return;
-                  let done=0, failed=0;
-                  setRunAllProgress({done:0,total:ids.length});
-                  ids.forEach(id=>runTC(id,(r)=>{
-                    done++; if(r?.status==="Failed") failed++;
-                    setRunAllProgress(prev=>({...prev,done}));
-                    if(done===ids.length){ setTimeout(()=>setRunAllProgress(null),800); showT(`Run complete — ${done-failed} passed · ${failed} failed`,failed?"error":"success"); }
-                  },true));
-                }}
-                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:7,background:T.bgSurface,border:`1px solid ${runAllProgress?T.accent:T.border}`,color:runAllProgress?T.accent:T.textSub,fontSize:12,fontWeight:500,cursor:runAllProgress?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
-                {runAllProgress?<>Running {runAllProgress.done}/{runAllProgress.total}…</>:<><svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>Run {tcFiltersActive?"Shown":"All"}</>}
+              <button
+                onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcStatusSel([]);setTcSearch("");}}
+                style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}
+              >
+                ✕ Clear
               </button>
-            </div>
+            )}
           </div>
 
-          {/* ── Selection bar ── */}
-          {selIds.length>0&&(
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",marginBottom:12,background:T.accentDim,border:`1px solid ${T.accent}33`,borderRadius:10}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.accent}}>{selIds.length} selected</span>
-              {btnSm("Run",()=>{selIds.forEach(id=>runTC(id,null,true));setTcSel(new Set());showT(`Running ${selIds.length} test${selIds.length>1?"s":""}…`);},true)}
-              <select value="" onChange={e=>addTo(e.target.value)} style={{...sel,padding:"5px 9px",fontSize:12}}>
-                <option value="">Add to suite…</option>
-                {customSuites.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-                <option value="__new">+ New suite</option>
-              </select>
-              <button onClick={()=>setTcSel(new Set())} style={{marginLeft:"auto",fontSize:12,color:T.textSub,background:"none",border:"none",cursor:"pointer"}}>Clear selection</button>
-            </div>
-          )}
-
-          {/* ── Test cases, grouped by table ── */}
+          {/* ── Test Cases Table ── */}
           <Card2 style={{padding:0,overflow:"hidden"}}>
             <table style={{width:"100%",borderCollapse:"collapse"}}>
               <thead>
                 <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                  <th style={{padding:"9px 8px 9px 14px",width:28}}>
-                    <input type="checkbox" checked={shown.length>0&&shown.every(t=>tcSel.has(t.id))}
-                      onChange={e=>setTcSel(e.target.checked?new Set(shown.map(t=>t.id)):new Set())} style={{cursor:"pointer",accentColor:T.accent}}/>
-                  </th>
-                  {[{l:"",w:36},{l:"Name"},{l:"Column"},{l:"Last Run"},{l:"Incident"},{l:"Actions",w:110}].map(({l,w},i)=>(
+                  {[
+                    {l:"",w:40},
+                    {l:"Name"},
+                    {l:"Table"},
+                    {l:"Column"},
+                    {l:"Last Run"},
+                    {l:"Incident"},
+                    {l:"Actions",w:110},
+                  ].map(({l,w},i)=>(
                     <th key={i} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap",width:w||"auto"}}>{l}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {groups.map(g=>{
-                  const open=!tcCollapsed.has(g.tb);
-                  const st=stOf(g.cases);
-                  const allSel=g.cases.every(t=>tcSel.has(t.id));
+                {pagedTC.map((t,i)=>{
+                  const isRunning=runningIds.has(t.id);
                   return (
-                    <React.Fragment key={g.tb}>
-                      <tr onClick={()=>setTcCollapsed(p=>{const n=new Set(p);n.has(g.tb)?n.delete(g.tb):n.add(g.tb);return n;})}
-                        style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
-                        <td style={{padding:"9px 8px 9px 14px"}} onClick={e=>e.stopPropagation()}>
-                          <input type="checkbox" checked={allSel} onChange={e=>setTcSel(p=>{const n=new Set(p);g.cases.forEach(t=>e.target.checked?n.add(t.id):n.delete(t.id));return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
-                        </td>
-                        <td colSpan={6} style={{padding:"8px 14px"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-                            <span style={{fontSize:10,color:T.textMuted,display:"inline-block",transform:open?"rotate(90deg)":"none",transition:"transform .12s"}}>▶</span>
-                            <span style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{g.tb}</span>
-                            <span style={{fontSize:11,color:T.textMuted}}>{g.cases.length} test{g.cases.length===1?"":"s"}</span>
-                            {counts(st)}
-                          </div>
-                        </td>
-                      </tr>
-                      {open&&g.cases.map((t,i)=>{
-                        const isRunning=runningIds.has(t.id);
-                        const inSuites=customSuites.filter(s=>(s.caseIds||[]).includes(t.id));
-                        const isSel=tcSel.has(t.id);
-                        return (
-                          <tr key={t.id} onClick={()=>setTcDetail(t)}
-                            style={{borderBottom:`1px solid ${T.border}`,cursor:"pointer",background:isSel?T.accentDim:isRunning?T.amberDim:"transparent"}}
-                            onMouseEnter={e=>{if(!isRunning&&!isSel)e.currentTarget.style.background=T.bgHover;}}
-                            onMouseLeave={e=>{if(!isRunning&&!isSel)e.currentTarget.style.background="transparent";}}>
-                            <td style={{padding:"10px 8px 10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              <input type="checkbox" checked={isSel} onChange={e=>setTcSel(p=>{const n=new Set(p);e.target.checked?n.add(t.id):n.delete(t.id);return n;})} style={{cursor:"pointer",accentColor:T.accent}}/>
-                            </td>
-                            <td style={{padding:"10px 14px",width:36}}><DQStatusDot status={isRunning?"Aborted":t.status}/></td>
-                            <td style={{padding:"10px 14px"}}>
-                              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                                <span style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:260}}>{t.name}</span>
-                                <TestSourceChip source={t.source}/>
-                                {inSuites.map(s=>(
-                                  <span key={s.id} onClick={e=>{e.stopPropagation();setExpandedSuite(s.id);setTestsView("suites");}} title="Open this suite"
-                                    style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",whiteSpace:"nowrap"}}>{s.name}</span>
-                                ))}
-                              </div>
-                            </td>
-                            <td style={{padding:"10px 14px"}}>
-                              {t.col?<span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>:<span style={{color:T.textMuted,fontSize:12}}>—</span>}
-                            </td>
-                            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
-                            <td style={{padding:"10px 14px"}}>
-                              {t.incidentId
-                                ? <button onClick={e=>{e.stopPropagation();setExpandedInc(t.incidentId);setTab("incidents");}}
-                                    style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>🔴 View</button>
-                                : <span style={{color:T.textMuted,fontSize:12}}>—</span>}
-                            </td>
-                            <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
-                              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                                <button title={t.readOnly?"Runs in dbt":isRunning?"Running…":"Run now"} disabled={isRunning||t.readOnly}
-                                  onClick={e=>{e.stopPropagation();runTC(t.id);}}
-                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:(isRunning||t.readOnly)?"not-allowed":"pointer",opacity:(isRunning||t.readOnly)?0.4:1,flexShrink:0}}>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
-                                </button>
-                                {!t.readOnly&&<button title="Edit test case"
-                                  onClick={e=>{e.stopPropagation();setTcDetail(t);setTcDetailEditing(true);setTcDetailDraft({name:t.name,params:{...(t.params||{})}});}}
-                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",flexShrink:0}}>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                                </button>}
-                                <button title="Delete test case"
-                                  onClick={e=>{e.stopPropagation();setTestCases(prev=>prev.filter(tc=>tc.id!==t.id));setSuites(prev=>prev.map(x=>x.caseIds?{...x,caseIds:x.caseIds.filter(id=>id!==t.id)}:x));showT("Test case deleted","error");}}
-                                  style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid transparent`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>
-                                  <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
+                  <tr
+                    key={t.id}
+                    onClick={()=>setTcDetail(t)}
+                    style={{borderBottom:i<pagedTC.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s",background:isRunning?T.amberDim:"transparent"}}
+                    onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.background=T.bgHover;}}
+                    onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.background="transparent";}}
+                  >
+                    <td style={{padding:"10px 14px",width:40}}>
+                      <DQStatusDot status={isRunning?"Aborted":t.status}/>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{t.name}</div>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.accent,whiteSpace:"nowrap"}}>{t.table}</span>
+                    </td>
+                    <td style={{padding:"10px 14px"}}>
+                      {t.col
+                        ? <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{t.col}</span>
+                        : <span style={{color:T.textMuted,fontSize:12}}>—</span>
+                      }
+                    </td>
+                    <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":t.lastRun}</td>
+                    <td style={{padding:"10px 14px"}}>
+                      {t.incidentId
+                        ? <button
+                            onClick={e=>{e.stopPropagation();setExpandedInc(t.incidentId);setTab("incidents");}}
+                            style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.roseDim,border:`1px solid ${T.rose}30`,color:T.rose,cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}
+                          >🔴 View</button>
+                        : <span style={{color:T.textMuted,fontSize:12}}>—</span>
+                      }
+                    </td>
+                    <td style={{padding:"8px 14px"}} onClick={e=>e.stopPropagation()}>
+                      <div style={{display:"flex",alignItems:"center",gap:4}}>
+                        {/* Run */}
+                        <button title={isRunning?"Running…":"Run now"} disabled={isRunning}
+                          onClick={e=>{e.stopPropagation();runTC(t.id);}}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent,cursor:isRunning?"not-allowed":"pointer",opacity:isRunning?0.4:1,flexShrink:0,transition:"opacity .1s"}}
+                          onMouseEnter={e=>{if(!isRunning)e.currentTarget.style.opacity=".75";}} onMouseLeave={e=>{if(!isRunning)e.currentTarget.style.opacity="1";}}>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 2l7 4-7 4V2z" fill="currentColor"/></svg>
+                        </button>
+                        {/* Edit */}
+                        <button title="Edit test case"
+                          onClick={e=>{e.stopPropagation();setTcDetail(t);setTcDetailEditing(true);setTcDetailDraft({name:t.name,params:{...(t.params||{})}});}}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",flexShrink:0,transition:"all .1s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2-7 7H1.5v-2l7-7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
+                        </button>
+                        {/* Delete */}
+                        <button title="Delete test case"
+                          onClick={e=>{e.stopPropagation();setTestCases(prev=>prev.filter(tc=>tc.id!==t.id));showT("Test case deleted","error");}}
+                          style={{width:28,height:28,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",background:"transparent",border:`1px solid transparent`,color:T.textMuted,cursor:"pointer",flexShrink:0,transition:"all .1s"}}
+                          onMouseEnter={e=>{e.currentTarget.style.background=T.roseDim;e.currentTarget.style.borderColor=T.rose+"44";e.currentTarget.style.color=T.rose;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";e.currentTarget.style.color=T.textMuted;}}>
+                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 3v7h4V3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                   );
                 })}
               </tbody>
             </table>
-            {shown.length===0&&(
+            {tcTotalPages>1&&(
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+                <span style={{fontSize:11.5,color:T.textMuted}}>Showing {safeTcPage*TC_PAGE_SIZE+1}{"–"}{Math.min((safeTcPage+1)*TC_PAGE_SIZE,filteredTC.length)} of {filteredTC.length}</span>
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <button disabled={safeTcPage===0} onClick={()=>setTcPage(p=>p-1)}
+                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===0?"not-allowed":"pointer",opacity:safeTcPage===0?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>← Prev</button>
+                  {Array.from({length:tcTotalPages},(_,i)=>(
+                    <button key={i} onClick={()=>setTcPage(i)}
+                      style={{width:26,height:26,borderRadius:6,fontSize:11.5,fontWeight:safeTcPage===i?700:400,cursor:"pointer",background:safeTcPage===i?T.accent:T.bgSurface,border:`1px solid ${safeTcPage===i?T.accent:T.border}`,color:safeTcPage===i?"#fff":T.textSub}}>
+                      {i+1}
+                    </button>
+                  ))}
+                  <button disabled={safeTcPage===tcTotalPages-1} onClick={()=>setTcPage(p=>p+1)}
+                    style={{padding:"3px 10px",borderRadius:6,fontSize:11.5,fontWeight:500,cursor:safeTcPage===tcTotalPages-1?"not-allowed":"pointer",opacity:safeTcPage===tcTotalPages-1?0.4:1,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>Next →</button>
+                </div>
+              </div>
+            )}
+            {filteredTC.length===0&&(
               <div style={{textAlign:"center",padding:"48px 0"}}>
+                <div style={{fontSize:32,marginBottom:10,opacity:.15}}>◎</div>
                 <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>No test cases match these filters</div>
-                <button onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");}}
-                  style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear filters</button>
+                <button
+                  onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");}}
+                  style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}
+                >Clear all filters</button>
               </div>
             )}
           </Card2>
-            </>;
-          })()}
+          </>}
 
           {/* ── Test Suites: every suite — one Default per table + Custom ones ── */}
           {testsView==="suites"&&(()=>{
@@ -7045,7 +7117,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   if(custom&&!s){
                     const ns={id:`ts${Date.now()}`,name:suiteCfg.name.trim(),table:"",type:"custom",desc:suiteCfg.desc.trim(),owner:suiteCfg.owner,caseIds:suiteCfg.caseIds,
                       batch:suiteCfg.batch,actions,lastRun:"Never",nextRun:"",schedule:"",testCount:0,success:0,failed:0,aborted:0};
-                    setSuites(prev=>[...prev,ns]); setTcSel(new Set()); setTestsView("suites"); setExpandedSuite(ns.id); setTab("testcases");
+                    setSuites(prev=>[...prev,ns]); setTestsView("suites"); setExpandedSuite(ns.id); setTab("testcases");
                     setSuiteCfg(null); showT("Test suite created");
                     return;
                   }
