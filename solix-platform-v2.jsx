@@ -1660,7 +1660,7 @@ const DQ_TEST_DEFINITIONS = [
   {id:"td32", name:"Compound Columns To Be Unique",          entityType:"TABLE",  dim:"Uniqueness",   testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"order_id, line_no"}], fn:"compoundColumnsToBeUnique", gx:"expect_compound_columns_to_be_unique", desc:"Test the combination of values across several columns is unique."},
   {id:"td33", name:"Column Values To Be Unique Within Record", entityType:"TABLE", dim:"Uniqueness",   testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"primary_email, secondary_email"}], fn:"selectColumnValuesToBeUniqueWithinRecord", gx:"expect_select_column_values_to_be_unique_within_record", desc:"Test the listed columns hold different values within each row."},
   {id:"td34", name:"Multicolumn Sum To Equal",               entityType:"TABLE",  dim:"Accuracy",     testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[{name:"columnList",ph:"pct_online, pct_store, pct_partner"},{name:"sumTotal",ph:"100"}], fn:"multicolumnSumToEqual", gx:"expect_multicolumn_sum_to_equal", desc:"Test the listed columns add up to the same total on every row."},
-  {id:"td35", name:"Table Data Freshness",                   entityType:"TABLE",  dim:"Timeliness",   testPlatforms:["EDG"], enabled:true, params:[{name:"timestampColumn",ph:"updated_at"},{name:"maxAgeHours",ph:"24"}], fn:"tableDataFreshness", gx:"GX Cloud freshness", desc:"Test the newest value in a timestamp column is no older than a number of hours."},
+  {id:"td35", name:"Table Data Freshness",                   entityType:"TABLE",  dim:"Timeliness",   testPlatforms:["EDG"], enabled:true, freshness:true, params:[{name:"timestampColumn",ph:"updated_at"},{name:"warnAfterHours",ph:"12"},{name:"errorAfterHours",ph:"24"}], fn:"tableDataFreshness", gx:"GX Cloud freshness · dbt source freshness", desc:"Test the newest value in a timestamp column: warn after one age, fail after a later one."},
   {id:"td36", name:"Column Values To Be Of Type",            entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, schema:true, params:[{name:"type",ph:"DECIMAL"}], fn:"columnValuesToBeOfType", gx:"expect_column_values_to_be_of_type", desc:"Test the column's data type is the expected type."},
   {id:"td37", name:"Column Values To Be In Type List",       entityType:"COLUMN", dim:"Validity",     testPlatforms:["EDG"], enabled:true, schema:true, params:[{name:"typeList",ph:"INT, BIGINT, NUMBER"}], fn:"columnValuesToBeInTypeList", gx:"expect_column_values_to_be_in_type_list", desc:"Test the column's data type is one of a list of types."},
   {id:"td38", name:"Column Values To Be Null",               entityType:"COLUMN", dim:"Completeness", testPlatforms:["EDG"], enabled:true, rowLevel:true, params:[], fn:"columnValuesToBeNull", gx:"expect_column_values_to_be_null", desc:"Test every value in the column is null."},
@@ -1722,12 +1722,12 @@ const DQ_SUITES = [
   DBT_TEST_SUITE,
   {id:"ts8",name:"PII Column Tests",     table:"",                            type:"custom",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas", caseIds:["tc4","tc5","tc11"]},
   {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"custom",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off", caseIds:["tc9","tc10"]},
-  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"custom",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables", caseIds:["tc2","tc7","tc17"]},
+  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"custom",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables", caseIds:["tc2","tc7","tc17","tc19"]},
   {id:"ts9",name:"orders_critical",      table:"",                            type:"custom",testCount:3, success:2, failed:1,aborted:0,lastRun:"40m ago",nextRun:"in 20m",schedule:"0 * * * *",   owner:"dev.patel",    desc:"Volume, status and key checks on orders, run hourly", caseIds:["tc2","tc3","tc14"],
     batch:{mode:"inherit",column:""}, actions:[{type:"Slack",target:"#orders-oncall",trigger:"failure"}]},
 ];
 
-// status: "Success" | "Failed" | "Aborted"
+// status: "Success" | "Warning" | "Failed" | "Aborted"
 const DQ_TEST_CASES = [
   // -- Ingested from dbt (read-only in EDG; declared in the dbt repo's schema.yml) --
   {id:"tcd1", name:"fct_revenue.order_id not null",        suiteId:"ts5",table:"commerce.orders_fact", col:"order_id",    defId:"td21",defName:"Column Values To Be Not Null", dim:"Completeness", status:"Success", lastVal:"0 nulls",           expected:"0 null values",                                              lastRun:"35m ago", history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{}, source:"dbt", dbtTest:"not_null_fct_revenue_order_id", readOnly:true, failedReason:"", incidentId:null},
@@ -1750,6 +1750,7 @@ const DQ_TEST_CASES = [
   {id:"tc15",name:"orders.created_at not null",         suiteId:"ts1",table:"commerce.orders",         col:"created_at",   defId:"td21",defName:"Column Values To Be Not Null",        dim:"Completeness", status:"Success", lastVal:"0 nulls",    expected:"0 null values",                                       lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{},                              failedReason:"",                                incidentId:null},
   {id:"tc16",name:"orders.discount_pct between 0–1",   suiteId:"ts1",table:"commerce.orders",         col:"discount_pct", defId:"td18",defName:"Column Values To Be Between",        dim:"Validity",     status:"Failed",  lastVal:"1.25",      expected:"0.0 — 1.0",                                           lastRun:"2h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,0,0,0,0], params:{minValue:0,maxValue:1},         failedReason:"Found discount_pct > 1.0 in 3 rows",              incidentId:null},
   {id:"tc17",name:"orders timeliness — row inserted",   suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td9", defName:"Table Row Inserted Count To Be Between",dim:"Timeliness",   status:"Success", lastVal:"1,482 rows", expected:"500 — 5,000 rows/day",                               lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1], params:{minCount:500,maxCount:5000,rangeType:"HOUR",rangeInterval:24},failedReason:"",  incidentId:null},
+  {id:"tc19",name:"orders freshness",                   suiteId:"ts1",table:"commerce.orders",         col:null,           defId:"td35",defName:"Table Data Freshness",               dim:"Timeliness",   status:"Warning", lastVal:"3.4 h",      expected:"warn > 2 h · fail > 6 h",                             lastRun:"1h ago",  history:[1,1,1,1,1,1,1,1,1,1,1,1,1,0.5,0.5], params:{timestampColumn:"created_at",warnAfterHours:2,errorAfterHours:6}, data:{ageHours:3.4}, failedReason:"Newest created_at is 3.4 h old — past the 2 h warning level.", incidentId:null},
   {id:"tc18",name:"orders.shipping_address not null",   suiteId:"ts1",table:"commerce.orders",         col:"shipping_address",defId:"td21",defName:"Column Values To Be Not Null",    dim:"Completeness", status:"Aborted", lastVal:"—",         expected:"0 null values",                                       lastRun:"5h ago",  history:[1,1,1,1,0.5,0.5,1,1,1,1,1,1,1,1,1], params:{},                          failedReason:"",                                incidentId:null},
 ];
 // What the row-level seeds see in the table: rows scanned, rows that break the check,
@@ -1936,8 +1937,11 @@ const dqBatchLabel = (batch) => {
   if (b.mode === "monthly") return `${b.column} in ${new Date().toISOString().slice(0,7)}`;
   return "Whole table";
 };
+const dqNum = (v, dflt) => v === "" || v == null || isNaN(+v) ? dflt : +v;
 const dqMeasure = (tc, batchOverride) => {
   const d = tc.data; if (!d) return null;
+  if (d.ageHours != null) // freshness: age of the newest timestamp vs the warn / error ages
+    return { kind: "freshness", age: d.ageHours, warnAfter: dqNum(tc.params?.warnAfterHours, null), errorAfter: dqNum(tc.params?.errorAfterHours, null), batch: "Whole table" };
   const batch = dqResolveBatch(tc, batchOverride);
   const share = DQ_BATCH_SHARE[batch?.mode || "table"] || 1;
   const def = dqDef(tc.defId);
@@ -1970,16 +1974,33 @@ const dqEvaluate = (tc, batchOverride) => {
     const status = tc.status === "Aborted" ? "Success" : tc.status;
     return { ...tc, status, failedReason: status === "Success" ? "" : tc.failedReason };
   }
+  if (r.kind === "freshness") {
+    const fail = r.errorAfter != null && r.age > r.errorAfter;
+    const warn = !fail && r.warnAfter != null && r.age > r.warnAfter;
+    return { ...tc, result: r, status: fail ? "Failed" : warn ? "Warning" : "Success", lastVal: `${dqFmt(r.age)} h`,
+      failedReason: fail ? `Newest ${tc.params?.timestampColumn || "row"} is ${dqFmt(r.age)} h old — past the ${dqFmt(r.errorAfter)} h error level.`
+        : warn ? `Newest ${tc.params?.timestampColumn || "row"} is ${dqFmt(r.age)} h old — past the ${dqFmt(r.warnAfter)} h warning level.` : "" };
+  }
   if (r.kind === "range") {
     const pass = r.observed >= r.low && r.observed <= r.high;
     return { ...tc, result: r, status: pass ? "Success" : "Failed", lastVal: dqFmt(r.observed),
       failedReason: pass ? "" : `Observed ${dqFmt(r.observed)} is outside ${dqRangeText(r)}${r.baseline != null ? ` (mean of the last ${tc.dynWindow || 7} runs ± ${tc.dynPct ?? 10}%)` : ""}.` };
   }
-  const mostly = tc.mostly === "" || tc.mostly == null ? 100 : +tc.mostly;
-  const pass = 100 - r.pct >= mostly;
-  return { ...tc, result: r, status: pass ? "Success" : "Failed",
-    lastVal: r.unexpected === 0 ? `0 of ${dqFmt(r.evaluated)} rows` : `${dqFmt(r.unexpected)} rows (${dqPct(r.pct)})`,
-    failedReason: pass ? "" : `${dqFmt(r.unexpected)} of ${dqFmt(r.evaluated)} rows (${dqPct(r.pct)}) failed. Tolerance allows ${dqPct(100 - mostly)}.` };
+  // Two levels, like dbt's warn_if / error_if: by share of passing rows (GX `mostly`) or by
+  // failing-row count. A warning is recorded and can notify, but opens no incident.
+  const lead = `${dqFmt(r.unexpected)} of ${dqFmt(r.evaluated)} rows (${dqPct(r.pct)}) failed`;
+  let fail, warn, why = "";
+  if (tc.thresholdUnit === "count") {
+    const errorIf = dqNum(tc.errorIf, 0), warnIf = dqNum(tc.warnIf, null);
+    fail = r.unexpected > errorIf; warn = !fail && warnIf != null && r.unexpected > warnIf;
+    why = fail ? `${lead} — more than the ${dqFmt(errorIf)} allowed.` : warn ? `${lead} — above the warning level of ${dqFmt(warnIf)}.` : "";
+  } else {
+    const mostly = dqNum(tc.mostly, 100), warnMostly = dqNum(tc.warnMostly, null);
+    fail = 100 - r.pct < mostly; warn = !fail && warnMostly != null && 100 - r.pct < warnMostly;
+    why = fail ? `${lead}. Tolerance allows ${dqPct(100 - mostly)}.` : warn ? `${lead} — under the ${warnMostly}% warning level.` : "";
+  }
+  return { ...tc, result: r, status: fail ? "Failed" : warn ? "Warning" : "Success",
+    lastVal: r.unexpected === 0 ? `0 of ${dqFmt(r.evaluated)} rows` : `${dqFmt(r.unexpected)} rows (${dqPct(r.pct)})`, failedReason: why };
 };
 const dqCaseOwner = (tc) => dqTableSuite(tc)?.owner || "admin";
 let _dqIncSeq = 0;
@@ -1987,7 +2008,7 @@ const runDQCase = (id, batchOverride) => {
   const cur = DQ_TEST_CASES.find(t => t.id === id);
   if (!cur || cur.readOnly) return cur;
   const ev = dqEvaluate(cur, batchOverride);
-  let next = { ...ev, lastRun: "just now", history: [...(cur.history||[]), ev.status === "Success" ? 1 : 0].slice(-15) };
+  let next = { ...ev, lastRun: "just now", history: [...(cur.history||[]), ev.status === "Success" ? 1 : ev.status === "Warning" ? 0.5 : 0].slice(-15) };
   // a range check's observation joins the series the next relative threshold averages
   if (cur.data?.value != null) next = { ...next, data: { ...cur.data, series: [...(cur.data.series||[]), cur.data.value].slice(-30) } };
   const affected = next.result?.kind === "rows" ? next.result.unexpected : null;
@@ -2009,7 +2030,7 @@ const runDQCase = (id, batchOverride) => {
       next = { ...next, incidentId: inc.id };
     }
   } else if (open) {
-    dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, timeline: [...(i.timeline||[]), { action: "Test case passed on re-run", by: "system", at }] } : i));
+    dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, timeline: [...(i.timeline||[]), { action: next.status === "Warning" ? "Test case re-ran with a warning" : "Test case passed on re-run", by: "system", at }] } : i));
   }
   dqtcSet(prev => prev.map(t => t.id === id ? next : t));
   return next;
@@ -2022,8 +2043,9 @@ const runDQSuite = (suiteId) => {
   const ids = custom ? (s.caseIds||[]) : DQ_TEST_CASES.filter(t => t.suiteId === suiteId).map(t => t.id);
   const results = ids.map(id => DQ_TEST_CASES.find(t => t.id === id)).filter(t => t && !t.readOnly).map(t => runDQCase(t.id, custom ? s.batch : undefined));
   const failed = results.filter(r => r?.status === "Failed").length;
-  const fired = (s.actions||[]).filter(a => a.target && (a.trigger === "always" || failed > 0));
-  const run = { at: "just now", passed: results.length - failed, failed, batch: dqBatchLabel(s.batch), sent: fired.map(a => `${a.type} · ${a.target}`) };
+  const warned = results.filter(r => r?.status === "Warning").length;
+  const fired = (s.actions||[]).filter(a => a.target && (a.trigger === "always" || failed > 0 || (a.trigger === "warning" && warned > 0)));
+  const run = { at: "just now", passed: results.length - failed - warned, warned, failed, batch: dqBatchLabel(s.batch), sent: fired.map(a => `${a.type} · ${a.target}`) };
   dqsSet(prev => prev.map(x => x.id === suiteId ? { ...x, lastRun: "Just now", runs: [run, ...(x.runs||[])].slice(0, 10) } : x));
   return run;
 };
@@ -5427,6 +5449,7 @@ const DQStatusBadge = ({status,size="sm"}) => {
   const cfg = {
     passing:{color:"#16a34a",bg:"#16a34a15",label:"Passing"},warning:{color:T.amber,bg:`${T.amber}18`,label:"Warning"},failing:{color:T.rose,bg:T.roseDim,label:"Failing"},
     Success:{color:"#16a34a",bg:"#16a34a15",label:"Success"},Failed:{color:T.rose,bg:T.roseDim,label:"Failed"},Aborted:{color:T.amber,bg:`${T.amber}18`,label:"Aborted"},
+    Warning:{color:"#ea580c",bg:"#ea580c15",label:"Warning"},
   };
   const c = cfg[status]||cfg.Success;
   const p = size==="sm"?"2px 8px":"3px 11px";
@@ -5440,7 +5463,7 @@ const DQSeverityBadge = ({severity}) => {
 };
 
 const DQStatusDot = ({status,size=10})=>{
-  const cfg={Success:{c:"#16a34a",icon:"✓"},Failed:{c:T.rose,icon:"✕"},Aborted:{c:T.amber,icon:"!"}};
+  const cfg={Success:{c:"#16a34a",icon:"✓"},Failed:{c:T.rose,icon:"✕"},Aborted:{c:T.amber,icon:"!"},Warning:{c:"#ea580c",icon:"!"}};
   const {c,icon}=cfg[status]||cfg.Success;
   return (
     <div style={{width:size+8,height:size+8,borderRadius:"50%",background:`${c}18`,border:`1.5px solid ${c}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -5481,13 +5504,11 @@ const DQRunSettings = ({def, customSql=false, value, onChange}) => {
       <div style={{display:"grid",gridTemplateColumns:showTol?"1fr 1fr":"1fr",gap:10}}>
         {showTol&&(
           <div>
-            <label style={lab}>Min. Passing Rows</label>
-            <div style={{position:"relative"}}>
-              <input type="number" min={0} max={100} step={0.1} value={value.mostly??100}
-                onChange={e=>set("mostly",e.target.value===""?"":Math.min(100,Math.max(0,+e.target.value)))}
-                style={{...box,paddingRight:28}}/>
-              <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.textMuted}}>%</span>
-            </div>
+            <label style={lab}>Threshold By</label>
+            <select value={value.thresholdUnit||"pct"} onChange={e=>set("thresholdUnit",e.target.value)} style={{...box,cursor:"pointer"}}>
+              <option value="pct">Passing rows %</option>
+              <option value="count">Failing row count</option>
+            </select>
           </div>
         )}
         <div>
@@ -5497,6 +5518,29 @@ const DQRunSettings = ({def, customSql=false, value, onChange}) => {
           </select>
         </div>
       </div>
+      {showTol&&(()=>{
+        const count=value.thresholdUnit==="count";
+        const num=(k,v,unit,ph,clamp)=>(
+          <div style={{position:"relative"}}>
+            <input type="number" min={0} max={clamp?100:undefined} step={clamp?0.1:1} value={v??""} placeholder={ph}
+              onChange={e=>set(k,e.target.value===""?"":(clamp?Math.min(100,Math.max(0,+e.target.value)):Math.max(0,Math.round(+e.target.value))))}
+              style={{...box,paddingRight:unit?40:12}}/>
+            {unit&&<span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.textMuted}}>{unit}</span>}
+          </div>
+        );
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <div>
+              <label style={lab}>{count?"Warn Above":"Warn Below"} <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+              {count?num("warnIf",value.warnIf,"rows","e.g. 10",false):num("warnMostly",value.warnMostly,"%","e.g. 99.9",true)}
+            </div>
+            <div>
+              <label style={lab}>{count?"Fail Above":"Fail Below"}</label>
+              {count?num("errorIf",value.errorIf??0,"rows","0",false):num("mostly",value.mostly??100,"%","100",true)}
+            </div>
+          </div>
+        );
+      })()}
       {!customSql&&def?.bounds&&(
         <div style={{display:"grid",gridTemplateColumns:value.thresholdMode==="dynamic"?"1.4fr 1fr 1fr":"1fr",gap:10}}>
           <div>
@@ -5543,6 +5587,10 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
   const head = {fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,marginBottom:8,textTransform:"uppercase"};
   const pii = dqColIsPII(tc.table, tc.col);
   const mostly = tc.mostly === "" || tc.mostly == null ? 100 : +tc.mostly;
+  const byCount = tc.thresholdUnit === "count";
+  const warnLvl = byCount ? (dqNum(tc.warnIf,null)!=null?`> ${dqFmt(tc.warnIf)} failing rows`:"—") : (dqNum(tc.warnMostly,null)!=null?`< ${tc.warnMostly}% passing`:"—");
+  const failLvl = byCount ? `> ${dqFmt(dqNum(tc.errorIf,0))} failing rows` : `< ${mostly}% passing`;
+  const stColor = tc.status==="Failed"?T.rose:tc.status==="Warning"?"#ea580c":"#16a34a";
   const stat = (label, val, color) => (
     <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.4,marginBottom:4}}>{label}</div>
@@ -5556,6 +5604,16 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
     </div>
   );
   return <>
+    {r&&r.kind==="freshness"&&(
+      <div>
+        <div style={head}>Latest Result</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+          {stat("Age",`${dqFmt(r.age)} h`,stColor)}
+          {stat("Warn after",r.warnAfter!=null?`${dqFmt(r.warnAfter)} h`:"—")}
+          {stat("Fail after",r.errorAfter!=null?`${dqFmt(r.errorAfter)} h`:"—")}
+        </div>
+      </div>
+    )}
     {r&&r.kind==="range"&&(
       <div>
         <div style={head}>Latest Result</div>
@@ -5567,14 +5625,14 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
         <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Batch · <span style={{fontFamily:"'Geist Mono',monospace"}}>{r.batch}</span></div>
       </div>
     )}
-    {r&&r.kind!=="range"&&(
+    {r&&r.kind==="rows"&&(
       <div>
         <div style={head}>Latest Result</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
           {stat("Rows checked",dqFmt(r.evaluated))}
-          {stat("Failed rows",dqFmt(r.unexpected),r.unexpected>0?T.rose:"#16a34a")}
-          {stat("Failed %",dqPct(r.pct),r.unexpected>0?T.rose:"#16a34a")}
-          {stat("Must pass",`${mostly}%`)}
+          {stat("Failed rows",dqFmt(r.unexpected),r.unexpected>0?stColor:"#16a34a")}
+          {stat("Failed %",dqPct(r.pct),r.unexpected>0?stColor:"#16a34a")}
+          {stat("Fails at",failLvl.replace(" failing rows"," rows").replace(" passing",""))}
         </div>
         {r.batch&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Batch · <span style={{fontFamily:"'Geist Mono',monospace"}}>{r.batch}</span></div>}
         {r.sample&&r.sample.length>0&&(
@@ -5600,10 +5658,12 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
         {editing
           ? <DQRunSettings def={def} customSql={tc.defId==="custom_sql"||def?.logic==="customSql"}
               value={{mostly:draft?.mostly??mostly,rowFilter:draft?.rowFilter??tc.rowFilter??"",severity:draft?.severity??tc.severity??"Medium",
+                thresholdUnit:draft?.thresholdUnit??tc.thresholdUnit??"pct",warnMostly:draft?.warnMostly??tc.warnMostly??"",warnIf:draft?.warnIf??tc.warnIf??"",errorIf:draft?.errorIf??tc.errorIf??0,
                 thresholdMode:draft?.thresholdMode??tc.thresholdMode??"fixed",dynWindow:draft?.dynWindow??tc.dynWindow??7,dynPct:draft?.dynPct??tc.dynPct??10}}
               onChange={v=>setDraft(d=>({...d,...v}))}/>
           : <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {def?.rowLevel&&row("Min. passing rows",`${mostly}%`)}
+              {def?.rowLevel&&row("Warn when",warnLvl)}
+              {def?.rowLevel&&row("Fail when",failLvl)}
               {def?.bounds&&row("Threshold",tc.thresholdMode==="dynamic"?`Last ${tc.dynWindow||7} runs ± ${tc.dynPct??10}%`:"Fixed (parameters)")}
               {!def?.schema&&tc.defId!=="custom_sql"&&row("Row filter",tc.rowFilter||"—",!!tc.rowFilter)}
               {row("Incident severity",tc.severity||"Medium")}
@@ -5618,10 +5678,192 @@ const TC_STATUS_CFG = {
   Success:{color:"#16a34a",bg:"#16a34a12",label:"Success"},
   Failed: {color:T.rose,   bg:T.roseDim,  label:"Failed"},
   Aborted:{color:T.amber,  bg:T.amberDim, label:"Aborted"},
+  Warning:{color:"#ea580c",bg:"#ea580c12",label:"Warning"},
+};
+
+// ── Data Quality Overview — the observability dashboard over every result EDG holds
+// (EDG-run tests and ingested dbt tests): pass rate, coverage, warnings, incidents,
+// health by dimension, trend, and the tables and tests that need attention.
+const DQ_STATUS_COLOR = {Success:"#16a34a",Warning:"#ea580c",Failed:T.rose,Aborted:T.amber};
+const dqAgoDays = (s) => { const m = /^(\d+(?:\.\d+)?)\s*([mhdw])/.exec(String(s||"").trim()); if(!m) return s && /just now/i.test(s) ? 0 : null; const n=+m[1]; return m[2]==="m"?n/1440:m[2]==="h"?n/24:m[2]==="w"?n*7:n; };
+const DQOverview = ({testCases, incidents, onOpenTable, onOpenTest, onOpenIncidents}) => {
+  const [fOwner,setFOwner]=useState("all");
+  const [fDim,setFDim]=useState("all");
+  const [fSrc,setFSrc]=useState("all");
+  const owners=[...new Set(testCases.map(dqCaseOwner))].sort();
+  const cases=testCases.filter(t=>(fOwner==="all"||dqCaseOwner(t)===fOwner)&&(fDim==="all"||t.dim===fDim)&&(fSrc==="all"||(fSrc==="dbt")===(t.source==="dbt")));
+  const tables=[...new Set(cases.map(t=>t.table))];
+  const by=st=>cases.filter(t=>t.status===st).length;
+  const ok=by("Success"), warn=by("Warning"), bad=by("Failed"), ab=by("Aborted");
+  const passRate=cases.length?Math.round(ok/cases.length*100):0; // same definition as the Total Tests donut
+  const allTables=[...new Set([...Object.keys(DQ_TABLE_COLS),...testCases.map(t=>t.table)])];
+  const tableSet=new Set(tables);
+  const filtered=fOwner!=="all"||fDim!=="all"||fSrc!=="all";
+  const incs=filtered?incidents.filter(i=>tableSet.has(i.table)||cases.some(t=>t.id===i.tcId)):incidents;
+  const openInc=incs.filter(i=>i.status==="Open"||i.status==="In Progress");
+  const resolvedDays=incs.filter(i=>i.status==="Resolved").map(i=>{const o=dqAgoDays(i.opened),r=dqAgoDays(i.resolved);return o!=null&&r!=null?o-r:null;}).filter(v=>v!=null&&v>=0);
+  const mttr=resolvedDays.length?(resolvedDays.reduce((a,b)=>a+b,0)/resolvedDays.length):null;
+  const band=v=>v>=90?"#16a34a":v>=70?T.amber:T.rose;
+  // pass rate per run position, latest last (tests with shorter history line up on the right)
+  const trend=Array.from({length:15},(_,p)=>{const vals=cases.map(t=>{const h=t.history||[];return h[h.length-15+p];}).filter(v=>v!=null);return vals.length?Math.round(vals.filter(v=>v===1).length/vals.length*100):null;});
+  if(cases.length) trend[14]=passRate; // the latest point is the current status, so it matches the tile
+  const dims=["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"].map(d=>{const c=cases.filter(t=>t.dim===d),j=c.filter(t=>t.status!=="Aborted");return {d,n:c.length,rate:j.length?Math.round(j.filter(t=>t.status==="Success").length/j.length*100):null};});
+  const tableRows=tables.map(tb=>{const c=cases.filter(t=>t.table===tb);const fr=c.find(t=>dqDef(t.defId)?.freshness);return {tb,n:c.length,ok:c.filter(t=>t.status==="Success").length,warn:c.filter(t=>t.status==="Warning").length,bad:c.filter(t=>t.status==="Failed").length,ab:c.filter(t=>t.status==="Aborted").length,
+    owner:dqCaseOwner(c[0]),fresh:fr?fr.status:null,freshVal:fr?.lastVal,inc:openInc.filter(i=>i.table===tb).length};})
+    .sort((a,b)=>(b.bad*3+b.warn+b.inc*2)-(a.bad*3+a.warn+a.inc*2)||a.tb.localeCompare(b.tb));
+  const flaky=cases.map(t=>({t,fails:(t.history||[]).filter(v=>v===0).length})).filter(x=>x.fails>0||x.t.status==="Failed").sort((a,b)=>(b.t.status==="Failed")-(a.t.status==="Failed")||b.fails-a.fails).slice(0,6);
+  const sevs=["Critical","High","Medium","Low"].map(s=>({s,n:openInc.filter(i=>i.severity===s).length}));
+  const src={edg:cases.filter(t=>t.source!=="dbt").length,dbt:cases.filter(t=>t.source==="dbt").length};
+
+  const sel={padding:"6px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"};
+  const head={fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:12};
+  const tile=(label,value,sub,color)=>(
+    <Card2 style={{padding:"14px 16px"}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{label}</div>
+      <div style={{fontSize:24,fontWeight:800,color:color||T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
+      {sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{sub}</div>}
+    </Card2>
+  );
+  const W=520,H=120,pad=22;
+  const pts=trend.map((v,i)=>v==null?null:[pad+i*(W-2*pad)/14,H-pad-(v/100)*(H-2*pad)]);
+  const path=pts.filter(Boolean).map((p,i)=>`${i?"L":"M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+  const latest=trend[trend.length-1];
+  const [hover,setHover]=useState(null);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      {/* filters, one row */}
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <select value={fOwner} onChange={e=>setFOwner(e.target.value)} style={sel}><option value="all">All owners</option>{owners.map(o=><option key={o} value={o}>{o}</option>)}</select>
+        <select value={fDim} onChange={e=>setFDim(e.target.value)} style={sel}><option value="all">All dimensions</option>{dims.map(x=><option key={x.d} value={x.d}>{x.d}</option>)}</select>
+        <select value={fSrc} onChange={e=>setFSrc(e.target.value)} style={sel}><option value="all">All sources</option><option value="edg">EDG</option><option value="dbt">dbt</option></select>
+        {(fOwner!=="all"||fDim!=="all"||fSrc!=="all")&&<button onClick={()=>{setFOwner("all");setFDim("all");setFSrc("all");}} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear</button>}
+        <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>{cases.length} tests · EDG {src.edg} · dbt {src.dbt}</span>
+      </div>
+
+      {/* headline tiles */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
+        {tile("Pass rate",`${passRate}%`,`${ok} of ${cases.length} tests passing`,band(passRate))}
+        {tile("Coverage",`${tables.length} / ${allTables.length}`,"tables with tests")}
+        {tile("Failing",bad,bad?"tests failing now":"none",bad?T.rose:"#16a34a")}
+        {tile("Warnings",warn,warn?"tests at warning level":"none",warn?"#ea580c":T.textMuted)}
+        {tile("Open incidents",openInc.length,sevs.filter(x=>x.n).map(x=>`${x.n} ${x.s}`).join(" · ")||"none",openInc.length?T.rose:"#16a34a")}
+        {tile("Time to resolve",mttr!=null?`${mttr.toFixed(1)} d`:"—","average, resolved incidents")}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)",gap:16}}>
+        {/* trend */}
+        <Card2 style={{padding:"14px 16px"}}>
+          <div style={{...head,display:"flex",justifyContent:"space-between"}}><span>Pass rate · last 15 runs</span>{latest!=null&&<span style={{color:T.text,textTransform:"none",letterSpacing:0,fontSize:12}}>Latest {latest}%</span>}</div>
+          <div style={{position:"relative"}}>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block"}} onMouseLeave={()=>setHover(null)}>
+              {[0,50,100].map(v=>{const y=H-pad-(v/100)*(H-2*pad);return <g key={v}><line x1={pad} x2={W-pad} y1={y} y2={y} stroke={T.border} strokeWidth="1"/><text x={pad-6} y={y+3} textAnchor="end" fontSize="9" fill={T.textMuted}>{v}</text></g>;})}
+              {path&&<path d={path} fill="none" stroke={T.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>}
+              {hover!=null&&pts[hover]&&<line x1={pts[hover][0]} x2={pts[hover][0]} y1={pad} y2={H-pad} stroke={T.textMuted} strokeDasharray="3 3"/>}
+              {pts.map((p,i)=>p&&<circle key={i} cx={p[0]} cy={p[1]} r={hover===i||i===14?4.5:3} fill={T.blue} stroke={T.bgSurface} strokeWidth="2"/>)}
+              {pts.map((p,i)=>p&&<rect key={"h"+i} x={p[0]-(W-2*pad)/28} y={0} width={(W-2*pad)/14} height={H} fill="transparent" onMouseEnter={()=>setHover(i)}/>)}
+            </svg>
+            {hover!=null&&trend[hover]!=null&&(
+              <div style={{position:"absolute",top:0,left:`${(pts[hover][0]/W)*100}%`,transform:"translateX(-50%)",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,padding:"4px 8px",fontSize:11,color:T.text,boxShadow:"0 4px 14px rgba(0,0,0,.12)",whiteSpace:"nowrap",pointerEvents:"none"}}>
+                {hover===14?"Latest run":`${14-hover} run${14-hover>1?"s":""} ago`} · <b>{trend[hover]}%</b>
+              </div>
+            )}
+          </div>
+        </Card2>
+
+        {/* status split + dimensions */}
+        <Card2 style={{padding:"14px 16px"}}>
+          <div style={head}>Test status</div>
+          <div style={{display:"flex",height:12,borderRadius:4,overflow:"hidden",gap:2,background:T.bgElevated}}>
+            {[["Success",ok],["Warning",warn],["Failed",bad],["Aborted",ab]].filter(x=>x[1]).map(([k,n])=>(
+              <div key={k} title={`${k}: ${n}`} style={{flex:n,background:DQ_STATUS_COLOR[k]}}/>
+            ))}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"4px 14px",marginTop:8,fontSize:11.5,color:T.textSub}}>
+            {[["Success","Passing",ok],["Warning","Warning",warn],["Failed","Failing",bad],["Aborted","Aborted",ab]].map(([k,l,n])=>(
+              <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:2,background:DQ_STATUS_COLOR[k]}}/>{l} <b style={{color:T.text}}>{n}</b></span>
+            ))}
+          </div>
+          <div style={{...head,marginTop:16}}>Health by dimension</div>
+          <div style={{display:"flex",flexDirection:"column",gap:7}}>
+            {dims.map(x=>(
+              <div key={x.d} title={x.rate==null?`${x.d}: no tests`:`${x.d}: ${x.rate}% passing (${x.n} tests)`} style={{display:"grid",gridTemplateColumns:"96px 1fr 42px",alignItems:"center",gap:8,fontSize:11.5}}>
+                <span style={{color:T.textSub}}>{x.d}</span>
+                <div style={{height:8,background:T.bgElevated,borderRadius:4,overflow:"hidden"}}>{x.rate!=null&&<div style={{width:`${Math.max(x.rate,2)}%`,height:"100%",background:band(x.rate),borderRadius:"0 4px 4px 0"}}/>}</div>
+                <span style={{textAlign:"right",fontFamily:"'Geist Mono',monospace",color:x.rate==null?T.textMuted:T.text}}>{x.rate==null?"—":`${x.rate}%`}</span>
+              </div>
+            ))}
+          </div>
+        </Card2>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)",gap:16}}>
+        {/* tables needing attention */}
+        <Card2 style={{padding:0,overflow:"hidden"}}>
+          <div style={{...head,padding:"14px 16px 0"}}>Tables</div>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
+              {["Table","Tests","Status","Freshness","Incidents","Owner"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".05em"}}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {tableRows.map((r,i)=>(
+                <tr key={r.tb} onClick={()=>onOpenTable(r.tb)} style={{borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{r.tb}</td>
+                  <td style={{padding:"9px 14px",fontSize:12,color:T.textSub}}>{r.n}</td>
+                  <td style={{padding:"9px 14px",fontSize:11,whiteSpace:"nowrap"}}>
+                    <span style={{color:"#16a34a",fontWeight:600}}>{r.ok}✓</span>
+                    {r.warn>0&&<span style={{color:"#ea580c",fontWeight:600,marginLeft:7}}>{r.warn}!</span>}
+                    {r.bad>0&&<span style={{color:T.rose,fontWeight:600,marginLeft:7}}>{r.bad}✕</span>}
+                    {r.ab>0&&<span style={{color:T.amber,fontWeight:600,marginLeft:7}}>{r.ab} aborted</span>}
+                  </td>
+                  <td style={{padding:"9px 14px"}}>{r.fresh?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><DQStatusBadge status={r.fresh}/><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.freshVal}</span></span>:<span style={{fontSize:11.5,color:T.textMuted}}>—</span>}</td>
+                  <td style={{padding:"9px 14px",fontSize:12,color:r.inc?T.rose:T.textMuted,fontWeight:r.inc?700:400}}>{r.inc||"—"}</td>
+                  <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>{r.owner}</td>
+                </tr>
+              ))}
+              {tableRows.length===0&&<tr><td colSpan={6} style={{padding:"20px",textAlign:"center",fontSize:12,color:T.textMuted}}>No tests match</td></tr>}
+            </tbody>
+          </table>
+        </Card2>
+
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          {/* most-failing tests */}
+          <Card2 style={{padding:"14px 16px"}}>
+            <div style={head}>Most failing tests</div>
+            {flaky.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None</div>}
+            {flaky.map(({t,fails})=>(
+              <div key={t.id} onClick={()=>onOpenTest(t)} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}>
+                <DQStatusDot status={t.status} size={8}/>
+                <span style={{flex:1,minWidth:0}}>
+                  <span style={{display:"block",fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                  <span style={{display:"block",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{t.table}</span>
+                </span>
+                <span title="Failed runs out of the last 15" style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fails}/15</span>
+                <DQSparkline data={t.history} w={44} h={16}/>
+              </div>
+            ))}
+          </Card2>
+          {/* open incidents */}
+          <Card2 style={{padding:"14px 16px",cursor:"pointer"}} >
+            <div style={{...head,display:"flex",justifyContent:"space-between"}}><span>Open incidents</span><button onClick={onOpenIncidents} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",textTransform:"none",letterSpacing:0,fontWeight:600}}>View all</button></div>
+            {openInc.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None</div>}
+            {openInc.slice(0,5).map(i=>(
+              <div key={i.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
+                <DQSeverityBadge severity={i.severity}/>
+                <span style={{flex:1,minWidth:0,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{i.title}</span>
+                <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{i.assignee||"unassigned"} · {i.opened}</span>
+              </div>
+            ))}
+          </Card2>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const QualityView = ({onToast=()=>{}}) => {
-  const [tab, setTab] = useState("testcases");
+  const [tab, setTab] = useState("overview");
 
   // mutable state
   const [testCases,  setTestCases]  = useDQTestCases(); // shared with every asset's Tests tab
@@ -5716,6 +5958,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const tcSuccess    = testCases.filter(t=>t.status==="Success").length;
   const tcFailed     = testCases.filter(t=>t.status==="Failed").length;
   const tcAborted    = testCases.filter(t=>t.status==="Aborted").length;
+  const tcWarning    = testCases.filter(t=>t.status==="Warning").length;
   const successRate  = totalTests>0?Math.round(tcSuccess/totalTests*100):0;
   const openIncCount = incidents.filter(i=>i.status==="Open"||i.status==="In Progress").length;
   // unique tables covered
@@ -5808,14 +6051,14 @@ const QualityView = ({onToast=()=>{}}) => {
       setRunningSuites(prev=>{const n=new Set(prev);n.delete(suiteId);return n;});
       const run=runDQSuite(suiteId);
       if(!run) return;
-      showT(`${run.passed} passed · ${run.failed} failed${run.sent.length?` — notified ${run.sent.join(", ")}`:""}`,run.failed?"error":"success");
+      showT(`${run.passed} passed${run.warned?` · ${run.warned} warned`:""} · ${run.failed} failed${run.sent.length?` — notified ${run.sent.join(", ")}`:""}`,run.failed?"error":"success");
     },2200);
   };
   // live counts: a table suite owns its cases, a bundle lists the cases it picked
   const suiteCases = (s)=>s.type!=="table"?testCases.filter(t=>(s.caseIds||[]).includes(t.id)):testCases.filter(t=>t.suiteId===s.id);
   const openNewSuite = ()=>setSuiteCfg({id:null,kind:"custom",name:"",desc:"",owner:TEAMS[0],caseIds:[],q:"",tableF:"",batch:{mode:"inherit",column:""},actions:[]});
   const openEditSuite = (s)=>setSuiteCfg({id:s.id,kind:"custom",name:s.name,desc:s.desc||"",owner:s.owner,caseIds:[...(s.caseIds||[])],q:"",tableF:"",batch:{mode:"inherit",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))});
-  const suiteStats = (s)=>{const c=suiteCases(s);return {testCount:c.length,success:c.filter(t=>t.status==="Success").length,failed:c.filter(t=>t.status==="Failed").length,aborted:c.filter(t=>t.status==="Aborted").length};};
+  const suiteStats = (s)=>{const c=suiteCases(s);return {testCount:c.length,success:c.filter(t=>t.status==="Success").length,failed:c.filter(t=>t.status==="Failed").length,aborted:c.filter(t=>t.status==="Aborted").length,warned:c.filter(t=>t.status==="Warning").length};};
 
   const acknowledgeInc = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"In Progress",timeline:[...(i.timeline||[]),{action:"Acknowledged — moved to In Progress",by:"dev.patel",at:"Just now"}]}:i));showT("Incident acknowledged");};
   const dismissInc     = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"Dismissed",timeline:[...(i.timeline||[]),{action:"Dismissed",by:"dev.patel",at:"Just now"}]}:i));showT("Incident dismissed");};
@@ -5846,7 +6089,8 @@ const QualityView = ({onToast=()=>{}}) => {
       const resolved = isCustomDef?resolveSQLTemplate(tcSelType.sql,tcSelTable,tcSelCol,tcParams):undefined;
       const params = dqWithDefaults(tcSelType,tcParams);
       newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,...(isCustomDef?{sql:tcSelType.sql,resolvedSql:resolved}:{}),
-        ...(tcSelType.rowLevel?{mostly:tcRun.mostly===""?100:tcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),
+        ...(tcSelType.rowLevel?{mostly:tcRun.mostly===""||tcRun.mostly==null?100:tcRun.mostly,thresholdUnit:tcRun.thresholdUnit||"pct",warnMostly:tcRun.warnMostly??"",warnIf:tcRun.warnIf??"",errorIf:tcRun.errorIf===""||tcRun.errorIf==null?0:tcRun.errorIf,data:{rows:seenRows,unexpected:0}}:{}),
+        ...(tcSelType.freshness?{data:{ageHours:+(0.5+(dqHash(tcSelTable)%40)/10).toFixed(1)}}:{}),
         ...(tcSelType.bounds?{thresholdMode:tcRun.thresholdMode||"fixed",dynWindow:tcRun.dynWindow||7,dynPct:tcRun.dynPct===""||tcRun.dynPct==null?10:tcRun.dynPct}:{}),...(!tcSelType.schema&&!isCustomDef&&tcRun.rowFilter.trim()?{rowFilter:tcRun.rowFilter.trim()}:{}),
         severity:tcRun.severity,failedReason:"",incidentId:null};
     }
@@ -5897,6 +6141,7 @@ const QualityView = ({onToast=()=>{}}) => {
   };
   const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
+    {key:"overview",   label:"Overview"},
     {key:"testcases",  label:"Test Cases"},
     {key:"testsuites", label:"Test Suites"},
     {key:"rules",      label:"Test Definitions"},
@@ -5960,6 +6205,10 @@ const QualityView = ({onToast=()=>{}}) => {
         {toast&&<div style={{position:"fixed",bottom:24,right:24,zIndex:2000,padding:"11px 20px",background:toast.type==="success"?"#16a34a":T.rose,color:"#fff",borderRadius:10,fontSize:13,fontWeight:600,boxShadow:"0 8px 28px rgba(0,0,0,.28)"}}>{toast.msg}</div>}
 
         {/* ════════════════ TEST CASES ════════════════ */}
+        {tab==="overview"&&<DQOverview testCases={testCases} incidents={incidents}
+          onOpenTable={tb=>{setTcTableSel([tb]);setTcStatusSel([]);setTcSearch("");setTab("testcases");}}
+          onOpenTest={t=>setTcDetail(t)} onOpenIncidents={()=>setTab("incidents")}/>}
+
         {tab==="testcases"&&<>
           {/* ── Three metric donuts ── */}
           <div style={{display:"flex",gap:14,marginBottom:20,alignItems:"stretch"}}>
@@ -5972,6 +6221,11 @@ const QualityView = ({onToast=()=>{}}) => {
                     <span style={{color:"#16a34a",fontSize:10}}>●</span>
                     <span style={{color:T.textMuted}}>Success</span>
                     <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcSuccess}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:"#ea580c",fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Warning</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcWarning}</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
                     <span style={{color:T.rose,fontSize:10}}>●</span>
@@ -6003,6 +6257,7 @@ const QualityView = ({onToast=()=>{}}) => {
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:13,fontWeight:700,color:T.text}}>Test Cases ({testCases.length})</span>
               <span style={{fontSize:12,color:"#16a34a",fontWeight:600}}>{tcSuccess} passing</span>
+              {tcWarning>0&&<span style={{fontSize:12,color:"#ea580c",fontWeight:600}}>{tcWarning} warning</span>}
               {tcFailed>0&&<span style={{fontSize:12,color:T.rose,fontWeight:600}}>{tcFailed} failing</span>}
               {tcAborted>0&&<span style={{fontSize:12,color:T.amber,fontWeight:600}}>{tcAborted} aborted</span>}
             </div>
@@ -6051,7 +6306,7 @@ const QualityView = ({onToast=()=>{}}) => {
               {tcSearch&&<button onClick={()=>setTcSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
             </div>
             {/* status filter — multi-select dropdown */}
-            <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Failed:tcFailed,Aborted:tcAborted}}/>
+            <StatusFilterDropdown selected={tcStatusSel} onChange={setTcStatusSel} counts={{Success:tcSuccess,Warning:tcWarning,Failed:tcFailed,Aborted:tcAborted}}/>
             {/* tables filter — same multi-select dropdown as status (consistent size) */}
             <StatusFilterDropdown
               selected={tcTableSel}
@@ -6199,6 +6454,11 @@ const QualityView = ({onToast=()=>{}}) => {
                     <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcSuccess}</span>
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
+                    <span style={{color:"#ea580c",fontSize:10}}>●</span>
+                    <span style={{color:T.textMuted}}>Warning</span>
+                    <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcWarning}</span>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5}}>
                     <span style={{color:T.rose,fontSize:10}}>●</span>
                     <span style={{color:T.textMuted}}>Failed</span>
                     <span style={{fontWeight:700,color:T.text,marginLeft:"auto"}}>{tcFailed}</span>
@@ -6288,6 +6548,7 @@ const QualityView = ({onToast=()=>{}}) => {
                               <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
                               <div style={{fontSize:11,display:"flex",gap:6}}>
                                 <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
+                                {st.warned>0&&<span style={{color:"#ea580c",fontWeight:600}}>{st.warned}W</span>}
                                 <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
                                 <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
                               </div>
@@ -6330,8 +6591,8 @@ const QualityView = ({onToast=()=>{}}) => {
                                 <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
                                   <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px",fontSize:11.5,color:T.textMuted}}>
                                     <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch||{mode:s.type==="table"?"table":"inherit"})}</span></span>
-                                    <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":"on failure"})`).join(", "):"Inbox only"}</span></span>
-                                    {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
+                                    <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":a.trigger==="warning"?"on warning or failure":"on failure"})`).join(", "):"Inbox only"}</span></span>
+                                    {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed{s.runs[0].warned?` · ${s.runs[0].warned} warned`:""} · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
                                   </div>
                                   {cases.map(t=>(
                                     <div key={t.id} onClick={e=>{e.stopPropagation();setTcDetail(t);}}
@@ -6813,6 +7074,7 @@ const QualityView = ({onToast=()=>{}}) => {
                           style={{...box,padding:"7px 10px",fontFamily:"'Geist Mono',monospace",fontSize:12}}/>
                         <select value={a.trigger||"failure"} onChange={e=>setAct(i,"trigger",e.target.value)} style={{...box,padding:"7px 8px",cursor:"pointer"}}>
                           <option value="failure">On failure</option>
+                          <option value="warning">On warning or failure</option>
                           <option value="always">Always</option>
                         </select>
                         <button onClick={()=>setSuiteCfg(c=>({...c,actions:c.actions.filter((_,j)=>j!==i)}))}
@@ -6830,7 +7092,7 @@ const QualityView = ({onToast=()=>{}}) => {
                       {s.runs.map((r,i)=>(
                         <div key={i} style={{display:"flex",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5,alignItems:"center"}}>
                           <span style={{color:T.textMuted,width:62}}>{r.at}</span>
-                          <span style={{color:r.failed?T.rose:"#16a34a",fontWeight:600,width:120}}>{r.passed} passed · {r.failed} failed</span>
+                          <span style={{color:r.failed?T.rose:r.warned?"#ea580c":"#16a34a",fontWeight:600,width:150}}>{r.passed} passed{r.warned?` · ${r.warned} warned`:""} · {r.failed} failed</span>
                           <span style={{flex:1,color:T.textMuted,fontFamily:"'Geist Mono',monospace",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.batch}{r.sent.length?` → ${r.sent.join(", ")}`:""}</span>
                         </div>
                       ))}
@@ -7594,7 +7856,7 @@ const StatusFilterDropdown = ({selected, onChange, counts, options, placeholder=
     document.addEventListener("mousedown",h);
     return()=>document.removeEventListener("mousedown",h);
   },[open]);
-  const OPTS=(options||[{v:"Success",c:"#16a34a"},{v:"Failed",c:T.rose},{v:"Aborted",c:T.amber}]).map(o=>({label:o.v,...o}));
+  const OPTS=(options||[{v:"Success",c:"#16a34a"},{v:"Warning",c:"#ea580c"},{v:"Failed",c:T.rose},{v:"Aborted",c:T.amber}]).map(o=>({label:o.v,...o}));
   const labelFor=v=>{const o=OPTS.find(x=>x.v===v);return o?o.label:v;};
   const active = selected.length>0;
   const label = selected.length===0?placeholder:selected.length===1?labelFor(selected[0]):`${selected.length} selected`;
@@ -20965,7 +21227,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   const tcAborted=localCases.filter(t=>t.status==="Aborted").length;
   const trend=[91,94,93,96,94,92,95,97,94,96,94,asset.quality];
   const dimColor=(dim)=>({Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"}[dim]||T.textMuted);
-  const TC_CFG={Success:{color:"#16a34a",bg:"#16a34a12"},Failed:{color:"#e11d48",bg:"rgba(225,29,72,.1)"},Aborted:{color:"#d97706",bg:"rgba(217,119,6,.1)"}};
+  const TC_CFG={Success:{color:"#16a34a",bg:"#16a34a12"},Failed:{color:"#e11d48",bg:"rgba(225,29,72,.1)"},Aborted:{color:"#d97706",bg:"rgba(217,119,6,.1)"},Warning:{color:"#ea580c",bg:"#ea580c12"}};
   const totalPages=Math.ceil(localCases.length/PAGE_SIZE);
   const pagedCases=localCases.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
 
@@ -21314,7 +21576,8 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 const suiteId=DQ_SUITES.find(s=>s.type==="table"&&s.table.endsWith("."+asset.name))?.id||"ts1";
                 const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId,table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:aqTcDim||def.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,
                   ...(aqTcCustomSQL?{sql:aqTcSQLQuery,sqlStrategy:aqTcSQLStrategy||"ROWS",sqlOperator:aqTcSQLOperator||"==",sqlThreshold:aqTcSQLThreshold===""?0:+aqTcSQLThreshold,partitionExpr:aqTcSQLPartitionExpr}:{}),
-                  ...(def.rowLevel?{mostly:aqTcRun.mostly===""?100:aqTcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),
+                  ...(def.rowLevel?{mostly:aqTcRun.mostly===""||aqTcRun.mostly==null?100:aqTcRun.mostly,thresholdUnit:aqTcRun.thresholdUnit||"pct",warnMostly:aqTcRun.warnMostly??"",warnIf:aqTcRun.warnIf??"",errorIf:aqTcRun.errorIf===""||aqTcRun.errorIf==null?0:aqTcRun.errorIf,data:{rows:seenRows,unexpected:0}}:{}),
+                  ...(def.freshness?{data:{ageHours:+(0.5+(dqHash(asset.name)%40)/10).toFixed(1)}}:{}),
                   ...(def.bounds?{thresholdMode:aqTcRun.thresholdMode||"fixed",dynWindow:aqTcRun.dynWindow||7,dynPct:aqTcRun.dynPct===""||aqTcRun.dynPct==null?10:aqTcRun.dynPct}:{}),
                   ...(!aqTcCustomSQL&&!def.schema&&aqTcRun.rowFilter.trim()?{rowFilter:aqTcRun.rowFilter.trim()}:{}),
                   severity:aqTcRun.severity,failedReason:"",incidentId:null};
