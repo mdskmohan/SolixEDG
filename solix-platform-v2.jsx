@@ -5681,183 +5681,225 @@ const TC_STATUS_CFG = {
   Warning:{color:"#ea580c",bg:"#ea580c12",label:"Warning"},
 };
 
-// ── Data Quality Overview — the observability dashboard over every result EDG holds
-// (EDG-run tests and ingested dbt tests): pass rate, coverage, warnings, incidents,
-// health by dimension, trend, and the tables and tests that need attention.
+// ── Data Quality Overview — one question per block, and every number opens the exact
+// tests or incidents behind it:
+//   tiles          → how healthy is the data right now, and how much is broken?
+//   Needs attention → what must someone act on, why, and who owns it?
+//   Pass-rate trend → is it getting better or worse?
+//   By dimension   → what kind of quality is weak?
+//   Tables         → which tables, and which have no tests at all?
 const DQ_STATUS_COLOR = {Success:"#16a34a",Warning:"#ea580c",Failed:T.rose,Aborted:T.amber};
 const dqAgoDays = (s) => { const m = /^(\d+(?:\.\d+)?)\s*([mhdw])/.exec(String(s||"").trim()); if(!m) return s && /just now/i.test(s) ? 0 : null; const n=+m[1]; return m[2]==="m"?n/1440:m[2]==="h"?n/24:m[2]==="w"?n*7:n; };
-const DQOverview = ({testCases, incidents, onOpenTable, onOpenTest, onOpenIncidents}) => {
+const DQ_SEV_RANK = {Critical:0,High:1,Medium:2,Low:3};
+const DQOverview = ({testCases, incidents, onFocusTests, onOpenTest, onOpenIncident, onOpenIncidents, onAddTest}) => {
   const [fOwner,setFOwner]=useState("all");
   const [fDim,setFDim]=useState("all");
   const [fSrc,setFSrc]=useState("all");
-  const owners=[...new Set(testCases.map(dqCaseOwner))].sort();
-  const cases=testCases.filter(t=>(fOwner==="all"||dqCaseOwner(t)===fOwner)&&(fDim==="all"||t.dim===fDim)&&(fSrc==="all"||(fSrc==="dbt")===(t.source==="dbt")));
-  const tables=[...new Set(cases.map(t=>t.table))];
-  const by=st=>cases.filter(t=>t.status===st).length;
-  const ok=by("Success"), warn=by("Warning"), bad=by("Failed"), ab=by("Aborted");
-  const passRate=cases.length?Math.round(ok/cases.length*100):0; // same definition as the Total Tests donut
-  const allTables=[...new Set([...Object.keys(DQ_TABLE_COLS),...testCases.map(t=>t.table)])];
-  const tableSet=new Set(tables);
-  const filtered=fOwner!=="all"||fDim!=="all"||fSrc!=="all";
-  const incs=filtered?incidents.filter(i=>tableSet.has(i.table)||cases.some(t=>t.id===i.tcId)):incidents;
-  const openInc=incs.filter(i=>i.status==="Open"||i.status==="In Progress");
-  const resolvedDays=incs.filter(i=>i.status==="Resolved").map(i=>{const o=dqAgoDays(i.opened),r=dqAgoDays(i.resolved);return o!=null&&r!=null?o-r:null;}).filter(v=>v!=null&&v>=0);
-  const mttr=resolvedDays.length?(resolvedDays.reduce((a,b)=>a+b,0)/resolvedDays.length):null;
-  const band=v=>v>=90?"#16a34a":v>=70?T.amber:T.rose;
-  // pass rate per run position, latest last (tests with shorter history line up on the right)
-  const trend=Array.from({length:15},(_,p)=>{const vals=cases.map(t=>{const h=t.history||[];return h[h.length-15+p];}).filter(v=>v!=null);return vals.length?Math.round(vals.filter(v=>v===1).length/vals.length*100):null;});
-  if(cases.length) trend[14]=passRate; // the latest point is the current status, so it matches the tile
-  const dims=["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"].map(d=>{const c=cases.filter(t=>t.dim===d),j=c.filter(t=>t.status!=="Aborted");return {d,n:c.length,rate:j.length?Math.round(j.filter(t=>t.status==="Success").length/j.length*100):null};});
-  const tableRows=tables.map(tb=>{const c=cases.filter(t=>t.table===tb);const fr=c.find(t=>dqDef(t.defId)?.freshness);return {tb,n:c.length,ok:c.filter(t=>t.status==="Success").length,warn:c.filter(t=>t.status==="Warning").length,bad:c.filter(t=>t.status==="Failed").length,ab:c.filter(t=>t.status==="Aborted").length,
-    owner:dqCaseOwner(c[0]),fresh:fr?fr.status:null,freshVal:fr?.lastVal,inc:openInc.filter(i=>i.table===tb).length};})
-    .sort((a,b)=>(b.bad*3+b.warn+b.inc*2)-(a.bad*3+a.warn+a.inc*2)||a.tb.localeCompare(b.tb));
-  const flaky=cases.map(t=>({t,fails:(t.history||[]).filter(v=>v===0).length})).filter(x=>x.fails>0||x.t.status==="Failed").sort((a,b)=>(b.t.status==="Failed")-(a.t.status==="Failed")||b.fails-a.fails).slice(0,6);
-  const sevs=["Critical","High","Medium","Low"].map(s=>({s,n:openInc.filter(i=>i.severity===s).length}));
-  const src={edg:cases.filter(t=>t.source!=="dbt").length,dbt:cases.filter(t=>t.source==="dbt").length};
-
-  const sel={padding:"6px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"};
-  const head={fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:12};
-  const tile=(label,value,sub,color)=>(
-    <Card2 style={{padding:"14px 16px"}}>
-      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{label}</div>
-      <div style={{fontSize:24,fontWeight:800,color:color||T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
-      {sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{sub}</div>}
-    </Card2>
-  );
-  const W=520,H=120,pad=22;
-  const pts=trend.map((v,i)=>v==null?null:[pad+i*(W-2*pad)/14,H-pad-(v/100)*(H-2*pad)]);
-  const path=pts.filter(Boolean).map((p,i)=>`${i?"L":"M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
-  const latest=trend[trend.length-1];
   const [hover,setHover]=useState(null);
+  const DIMS=["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"];
+  const owners=[...new Set(testCases.map(dqCaseOwner))].sort();
+  const filtered=fOwner!=="all"||fDim!=="all"||fSrc!=="all";
+  const scope=[fOwner!=="all"&&fOwner,fDim!=="all"&&fDim,fSrc!=="all"&&(fSrc==="dbt"?"dbt":"EDG")].filter(Boolean).join(" · ");
+  const cases=testCases.filter(t=>(fOwner==="all"||dqCaseOwner(t)===fOwner)&&(fDim==="all"||t.dim===fDim)&&(fSrc==="all"||(fSrc==="dbt")===(t.source==="dbt")));
+  const of=st=>cases.filter(t=>t.status===st);
+  const passing=of("Success"), warning=of("Warning"), failing=of("Failed"), notRun=of("Aborted");
+  const passRate=cases.length?Math.round(passing.length/cases.length*100):0;
+  const band=v=>v>=90?"#16a34a":v>=70?T.amber:T.rose;
+  const label=(base)=>scope?`${base} · ${scope}`:base;
+
+  // incidents in scope: unfiltered = all; filtered = those on a table / test in scope
+  const tableSet=new Set(cases.map(t=>t.table));
+  const incs=filtered?incidents.filter(i=>cases.some(t=>t.id===i.tcId)||(!i.tcId&&tableSet.has(i.table))):incidents;
+  const openInc=incs.filter(i=>i.status==="Open"||i.status==="In Progress");
+  const resolved=incs.filter(i=>i.status==="Resolved").map(i=>{const o=dqAgoDays(i.opened),r=dqAgoDays(i.resolved);return o!=null&&r!=null&&o>=r?o-r:null;}).filter(v=>v!=null);
+  const mttr=resolved.length?resolved.reduce((a,b)=>a+b,0)/resolved.length:null;
+
+  // tables: every table EDG knows; owner/dimension/source filters only narrow tested ones
+  const allTables=[...new Set([...Object.keys(DQ_TABLE_COLS),...testCases.map(t=>t.table)])];
+  const untested=filtered?[]:allTables.filter(tb=>!testCases.some(t=>t.table===tb));
+
+  // Needs attention: every test that is not passing, plus open incidents with no such test
+  const fails15=t=>(t.history||[]).filter(v=>v===0).length;
+  const rank={Failed:0,Warning:1,Aborted:2};
+  const attention=[...failing,...warning,...notRun].map(t=>{
+    const inc=openInc.find(i=>i.tcId===t.id);
+    return {kind:"test",key:t.id,t,inc,status:t.status,sev:inc?.severity||t.severity||"Medium",owner:dqCaseOwner(t),
+      why:t.status==="Aborted"?(t.failedReason||(t.source==="dbt"?"Did not complete its last dbt run — re-run it in dbt.":"Did not complete its last run — re-run it to get a result.")):(t.failedReason||(t.status==="Warning"?"Above its warning level.":"Its last run failed.")),
+      since:t.lastRun,chronic:fails15(t)};
+  }).concat(openInc.filter(i=>!cases.some(t=>t.id===i.tcId&&t.status!=="Success")).map(i=>({kind:"incident",key:i.id,inc:i,status:"Incident",sev:i.severity,owner:i.assignee||"unassigned",why:i.desc,since:i.opened})))
+    .sort((a,b)=>(rank[a.status]??0.5)-(rank[b.status]??0.5)||(DQ_SEV_RANK[a.sev]??9)-(DQ_SEV_RANK[b.sev]??9));
+
+  // trend: share of tests passing at each of the last 15 runs; the latest point is today's status
+  const trend=Array.from({length:15},(_,p)=>{const vals=cases.map(t=>{const h=t.history||[];return h[h.length-15+p];}).filter(v=>v!=null);return vals.length?{pass:vals.filter(v=>v===1).length,total:vals.length}:null;});
+  if(cases.length) trend[14]={pass:passing.length,total:cases.length};
+  const rate=x=>x?Math.round(x.pass/x.total*100):null;
+  const first=trend.find(Boolean), last=trend[14];
+  const delta=first&&last?rate(last)-rate(first):null;
+
+  const dims=DIMS.map(d=>{const c=cases.filter(t=>t.dim===d);return {d,n:c.length,pass:c.filter(t=>t.status==="Success").length,notPassing:c.filter(t=>t.status!=="Success")};});
+  const tableRows=[...tableSet].map(tb=>{const c=cases.filter(t=>t.table===tb);const fr=c.find(t=>dqDef(t.defId)?.freshness);
+    return {tb,c,n:c.length,ok:c.filter(t=>t.status==="Success").length,warn:c.filter(t=>t.status==="Warning").length,bad:c.filter(t=>t.status==="Failed").length,ab:c.filter(t=>t.status==="Aborted").length,
+      owner:dqCaseOwner(c[0]),fresh:fr,inc:openInc.filter(i=>i.table===tb)};})
+    .sort((a,b)=>(b.bad*3+b.warn+b.ab+b.inc.length*2)-(a.bad*3+a.warn+a.ab+a.inc.length*2)||a.tb.localeCompare(b.tb));
+
+  // ── pieces ──
+  const sel={padding:"6px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"};
+  const head={fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"};
+  const link={fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0,whiteSpace:"nowrap"};
+  const tile=(lab,value,sub,color,onClick,hint)=>(
+    <button onClick={onClick} disabled={!onClick} title={hint}
+      style={{textAlign:"left",padding:"14px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,cursor:onClick?"pointer":"default",font:"inherit"}}
+      onMouseEnter={e=>{if(onClick)e.currentTarget.style.borderColor=T.accent;}} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>{lab}</div>
+      <div style={{fontSize:24,fontWeight:800,color:color||T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1.1}}>{value}</div>
+      <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{sub}</div>
+    </button>
+  );
+  const statusText=r=>[r.ok&&`${r.ok} pass`,r.warn&&`${r.warn} warn`,r.bad&&`${r.bad} fail`,r.ab&&`${r.ab} not run`].filter(Boolean);
+  const W=520,H=130,pad=24;
+  const pts=trend.map((x,i)=>x==null?null:[pad+i*(W-2*pad)/14,H-pad-(rate(x)/100)*(H-2*pad)]);
+  const path=pts.filter(Boolean).map((p,i)=>`${i?"L":"M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
 
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      {/* filters, one row */}
+      {/* scope */}
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
         <select value={fOwner} onChange={e=>setFOwner(e.target.value)} style={sel}><option value="all">All owners</option>{owners.map(o=><option key={o} value={o}>{o}</option>)}</select>
-        <select value={fDim} onChange={e=>setFDim(e.target.value)} style={sel}><option value="all">All dimensions</option>{dims.map(x=><option key={x.d} value={x.d}>{x.d}</option>)}</select>
+        <select value={fDim} onChange={e=>setFDim(e.target.value)} style={sel}><option value="all">All dimensions</option>{DIMS.map(d=><option key={d} value={d}>{d}</option>)}</select>
         <select value={fSrc} onChange={e=>setFSrc(e.target.value)} style={sel}><option value="all">All sources</option><option value="edg">EDG</option><option value="dbt">dbt</option></select>
-        {(fOwner!=="all"||fDim!=="all"||fSrc!=="all")&&<button onClick={()=>{setFOwner("all");setFDim("all");setFSrc("all");}} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear</button>}
-        <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>{cases.length} tests · EDG {src.edg} · dbt {src.dbt}</span>
+        {filtered&&<button onClick={()=>{setFOwner("all");setFDim("all");setFSrc("all");}} style={link}>Clear</button>}
+        <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>{cases.length} tests on {tableSet.size} tables · latest run of each test</span>
       </div>
 
-      {/* headline tiles */}
+      {/* tiles — each opens exactly the items it counts */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}}>
-        {tile("Pass rate",`${passRate}%`,`${ok} of ${cases.length} tests passing`,band(passRate))}
-        {tile("Coverage",`${tables.length} / ${allTables.length}`,"tables with tests")}
-        {tile("Failing",bad,bad?"tests failing now":"none",bad?T.rose:"#16a34a")}
-        {tile("Warnings",warn,warn?"tests at warning level":"none",warn?"#ea580c":T.textMuted)}
-        {tile("Open incidents",openInc.length,sevs.filter(x=>x.n).map(x=>`${x.n} ${x.s}`).join(" · ")||"none",openInc.length?T.rose:"#16a34a")}
-        {tile("Time to resolve",mttr!=null?`${mttr.toFixed(1)} d`:"—","average, resolved incidents")}
+        {tile("Passing",`${passRate}%`,`${passing.length} of ${cases.length} tests passed their last run`,band(passRate),
+          cases.length?()=>onFocusTests(label(`all ${cases.length} tests`),cases.map(t=>t.id)):null,"Open these tests")}
+        {tile("Failing",failing.length,"last run failed",failing.length?T.rose:"#16a34a",
+          failing.length?()=>onFocusTests(label(`${failing.length} failing test${failing.length===1?"":"s"}`),failing.map(t=>t.id)):null,"Open the failing tests")}
+        {tile("Warning",warning.length,"past their warning level",warning.length?"#ea580c":T.textMuted,
+          warning.length?()=>onFocusTests(label(`${warning.length} test${warning.length===1?"":"s"} at warning`),warning.map(t=>t.id)):null,"Open the tests at warning")}
+        {tile("Not run",notRun.length,"last run did not complete",notRun.length?T.amber:T.textMuted,
+          notRun.length?()=>onFocusTests(label(`${notRun.length} test${notRun.length===1?"":"s"} not run`),notRun.map(t=>t.id)):null,"Open the tests that did not complete")}
+        {tile("Open incidents",openInc.length,mttr!=null?`avg ${mttr.toFixed(1)} d to resolve (${resolved.length} resolved)`:"none resolved yet",openInc.length?T.rose:"#16a34a",
+          openInc.length?()=>onOpenIncidents(["Open","In Progress"]):null,"Open the incident list")}
+        {!filtered&&tile("Untested tables",untested.length,`of ${allTables.length} tables have no tests`,untested.length?T.amber:"#16a34a",
+          untested.length?()=>document.getElementById("dq-ov-tables")?.scrollIntoView({behavior:"smooth"}):null,"Show them in Tables")}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)",gap:16}}>
+      {/* needs attention — the action list */}
+      <Card2 style={{padding:0,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px 10px"}}>
+          <span style={head}>Needs attention · {attention.length}</span>
+          {attention.some(a=>a.kind==="test")&&<button style={link} onClick={()=>onFocusTests(label("tests needing attention"),attention.filter(a=>a.kind==="test").map(a=>a.t.id))}>Open as list</button>}
+        </div>
+        {attention.length===0&&<div style={{padding:"4px 16px 16px",fontSize:12.5,color:"#16a34a"}}>Every test passed its last run and no incident is open.</div>}
+        {attention.map(a=>(
+          <div key={a.key} onClick={()=>a.kind==="test"?onOpenTest(a.t):onOpenIncident(a.inc.id)}
+            style={{display:"grid",gridTemplateColumns:"84px minmax(0,1fr) 120px 110px",gap:12,alignItems:"center",padding:"10px 16px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <span>{a.kind==="test"?<DQStatusBadge status={a.status==="Aborted"?"Aborted":a.status}/>:<DQSeverityBadge severity={a.sev}/>}</span>
+            <div style={{minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="test"?a.t.name:a.inc.title}</span>
+                <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{a.kind==="test"?`${a.t.table}${a.t.col?"."+a.t.col:""}`:a.inc.table}</span>
+              </div>
+              <div style={{fontSize:11.5,color:T.textSub,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                {a.why}{a.kind==="test"&&a.chronic>1?` · failed ${a.chronic} of the last 15 runs`:""}
+              </div>
+            </div>
+            <div style={{fontSize:11.5,color:T.textSub}}>
+              <div>{a.owner}</div>
+              <div style={{fontSize:10.5,color:T.textMuted}}>{a.kind==="test"?`last run ${a.since}`:`opened ${a.since}`}</div>
+            </div>
+            <div style={{textAlign:"right"}} onClick={e=>e.stopPropagation()}>
+              {a.inc
+                ? <button style={{...link,color:T.rose}} onClick={()=>onOpenIncident(a.inc.id)}>{a.inc.severity} incident →</button>
+                : <button style={link} onClick={()=>onOpenTest(a.t)}>Open test →</button>}
+            </div>
+          </div>
+        ))}
+      </Card2>
+
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.3fr) minmax(0,1fr)",gap:16}}>
         {/* trend */}
         <Card2 style={{padding:"14px 16px"}}>
-          <div style={{...head,display:"flex",justifyContent:"space-between"}}><span>Pass rate · last 15 runs</span>{latest!=null&&<span style={{color:T.text,textTransform:"none",letterSpacing:0,fontSize:12}}>Latest {latest}%</span>}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+            <span style={head}>Tests passing · last 15 runs</span>
+            {delta!=null&&<span style={{fontSize:11.5,color:delta<0?T.rose:delta>0?"#16a34a":T.textMuted,fontWeight:600}}>{delta>0?"+":""}{delta} pts since 15 runs ago</span>}
+          </div>
           <div style={{position:"relative"}}>
             <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block"}} onMouseLeave={()=>setHover(null)}>
-              {[0,50,100].map(v=>{const y=H-pad-(v/100)*(H-2*pad);return <g key={v}><line x1={pad} x2={W-pad} y1={y} y2={y} stroke={T.border} strokeWidth="1"/><text x={pad-6} y={y+3} textAnchor="end" fontSize="9" fill={T.textMuted}>{v}</text></g>;})}
+              {[0,50,100].map(v=>{const y=H-pad-(v/100)*(H-2*pad);return <g key={v}><line x1={pad} x2={W-pad} y1={y} y2={y} stroke={T.border} strokeWidth="1"/><text x={pad-6} y={y+3} textAnchor="end" fontSize="9" fill={T.textMuted}>{v}%</text></g>;})}
+              <text x={pad} y={H-6} fontSize="9" fill={T.textMuted}>15 runs ago</text>
+              <text x={W-pad} y={H-6} fontSize="9" fill={T.textMuted} textAnchor="end">latest</text>
               {path&&<path d={path} fill="none" stroke={T.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>}
               {hover!=null&&pts[hover]&&<line x1={pts[hover][0]} x2={pts[hover][0]} y1={pad} y2={H-pad} stroke={T.textMuted} strokeDasharray="3 3"/>}
               {pts.map((p,i)=>p&&<circle key={i} cx={p[0]} cy={p[1]} r={hover===i||i===14?4.5:3} fill={T.blue} stroke={T.bgSurface} strokeWidth="2"/>)}
               {pts.map((p,i)=>p&&<rect key={"h"+i} x={p[0]-(W-2*pad)/28} y={0} width={(W-2*pad)/14} height={H} fill="transparent" onMouseEnter={()=>setHover(i)}/>)}
             </svg>
-            {hover!=null&&trend[hover]!=null&&(
+            {hover!=null&&trend[hover]&&(
               <div style={{position:"absolute",top:0,left:`${(pts[hover][0]/W)*100}%`,transform:"translateX(-50%)",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:7,padding:"4px 8px",fontSize:11,color:T.text,boxShadow:"0 4px 14px rgba(0,0,0,.12)",whiteSpace:"nowrap",pointerEvents:"none"}}>
-                {hover===14?"Latest run":`${14-hover} run${14-hover>1?"s":""} ago`} · <b>{trend[hover]}%</b>
+                {hover===14?"Latest":`${14-hover} run${14-hover>1?"s":""} ago`} · <b>{rate(trend[hover])}%</b> · {trend[hover].pass} of {trend[hover].total} passed
               </div>
             )}
           </div>
         </Card2>
 
-        {/* status split + dimensions */}
+        {/* by dimension */}
         <Card2 style={{padding:"14px 16px"}}>
-          <div style={head}>Test status</div>
-          <div style={{display:"flex",height:12,borderRadius:4,overflow:"hidden",gap:2,background:T.bgElevated}}>
-            {[["Success",ok],["Warning",warn],["Failed",bad],["Aborted",ab]].filter(x=>x[1]).map(([k,n])=>(
-              <div key={k} title={`${k}: ${n}`} style={{flex:n,background:DQ_STATUS_COLOR[k]}}/>
-            ))}
-          </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:"4px 14px",marginTop:8,fontSize:11.5,color:T.textSub}}>
-            {[["Success","Passing",ok],["Warning","Warning",warn],["Failed","Failing",bad],["Aborted","Aborted",ab]].map(([k,l,n])=>(
-              <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:8,height:8,borderRadius:2,background:DQ_STATUS_COLOR[k]}}/>{l} <b style={{color:T.text}}>{n}</b></span>
-            ))}
-          </div>
-          <div style={{...head,marginTop:16}}>Health by dimension</div>
-          <div style={{display:"flex",flexDirection:"column",gap:7}}>
-            {dims.map(x=>(
-              <div key={x.d} title={x.rate==null?`${x.d}: no tests`:`${x.d}: ${x.rate}% passing (${x.n} tests)`} style={{display:"grid",gridTemplateColumns:"96px 1fr 42px",alignItems:"center",gap:8,fontSize:11.5}}>
+          <div style={{...head,marginBottom:10}}>Passing by dimension</div>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {dims.map(x=>{const r=x.n?Math.round(x.pass/x.n*100):null;return (
+              <button key={x.d} disabled={!x.n} onClick={()=>x.notPassing.length?onFocusTests(label(`${x.d} tests not passing`),x.notPassing.map(t=>t.id)):onFocusTests(label(`${x.d} tests`),cases.filter(t=>t.dim===x.d).map(t=>t.id))}
+                title={x.n?(x.notPassing.length?`Open the ${x.notPassing.length} ${x.d} tests not passing`:`Open the ${x.n} ${x.d} tests`):"No tests in this dimension"}
+                style={{display:"grid",gridTemplateColumns:"96px 1fr 64px",alignItems:"center",gap:8,fontSize:11.5,background:"none",border:"none",padding:"4px 0",cursor:x.n?"pointer":"default",font:"inherit",textAlign:"left"}}>
                 <span style={{color:T.textSub}}>{x.d}</span>
-                <div style={{height:8,background:T.bgElevated,borderRadius:4,overflow:"hidden"}}>{x.rate!=null&&<div style={{width:`${Math.max(x.rate,2)}%`,height:"100%",background:band(x.rate),borderRadius:"0 4px 4px 0"}}/>}</div>
-                <span style={{textAlign:"right",fontFamily:"'Geist Mono',monospace",color:x.rate==null?T.textMuted:T.text}}>{x.rate==null?"—":`${x.rate}%`}</span>
-              </div>
-            ))}
+                <div style={{height:8,background:T.bgElevated,borderRadius:4,overflow:"hidden"}}>{r!=null&&<div style={{width:`${Math.max(r,2)}%`,height:"100%",background:band(r),borderRadius:"0 4px 4px 0"}}/>}</div>
+                <span style={{textAlign:"right",fontFamily:"'Geist Mono',monospace",color:x.n?T.text:T.textMuted}}>{x.n?`${x.pass}/${x.n}`:"no tests"}</span>
+              </button>
+            );})}
           </div>
         </Card2>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.4fr) minmax(0,1fr)",gap:16}}>
-        {/* tables needing attention */}
-        <Card2 style={{padding:0,overflow:"hidden"}}>
-          <div style={{...head,padding:"14px 16px 0"}}>Tables</div>
-          <table style={{width:"100%",borderCollapse:"collapse"}}>
-            <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
-              {["Table","Tests","Status","Freshness","Incidents","Owner"].map(h=><th key={h} style={{padding:"8px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".05em"}}>{h}</th>)}
-            </tr></thead>
-            <tbody>
-              {tableRows.map((r,i)=>(
-                <tr key={r.tb} onClick={()=>onOpenTable(r.tb)} style={{borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{r.tb}</td>
-                  <td style={{padding:"9px 14px",fontSize:12,color:T.textSub}}>{r.n}</td>
-                  <td style={{padding:"9px 14px",fontSize:11,whiteSpace:"nowrap"}}>
-                    <span style={{color:"#16a34a",fontWeight:600}}>{r.ok}✓</span>
-                    {r.warn>0&&<span style={{color:"#ea580c",fontWeight:600,marginLeft:7}}>{r.warn}!</span>}
-                    {r.bad>0&&<span style={{color:T.rose,fontWeight:600,marginLeft:7}}>{r.bad}✕</span>}
-                    {r.ab>0&&<span style={{color:T.amber,fontWeight:600,marginLeft:7}}>{r.ab} aborted</span>}
-                  </td>
-                  <td style={{padding:"9px 14px"}}>{r.fresh?<span style={{display:"inline-flex",alignItems:"center",gap:6}}><DQStatusBadge status={r.fresh}/><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.freshVal}</span></span>:<span style={{fontSize:11.5,color:T.textMuted}}>—</span>}</td>
-                  <td style={{padding:"9px 14px",fontSize:12,color:r.inc?T.rose:T.textMuted,fontWeight:r.inc?700:400}}>{r.inc||"—"}</td>
-                  <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>{r.owner}</td>
-                </tr>
-              ))}
-              {tableRows.length===0&&<tr><td colSpan={6} style={{padding:"20px",textAlign:"center",fontSize:12,color:T.textMuted}}>No tests match</td></tr>}
-            </tbody>
-          </table>
-        </Card2>
-
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
-          {/* most-failing tests */}
-          <Card2 style={{padding:"14px 16px"}}>
-            <div style={head}>Most failing tests</div>
-            {flaky.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None</div>}
-            {flaky.map(({t,fails})=>(
-              <div key={t.id} onClick={()=>onOpenTest(t)} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}>
-                <DQStatusDot status={t.status} size={8}/>
-                <span style={{flex:1,minWidth:0}}>
-                  <span style={{display:"block",fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-                  <span style={{display:"block",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{t.table}</span>
-                </span>
-                <span title="Failed runs out of the last 15" style={{fontSize:11,color:T.textSub,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{fails}/15</span>
-                <DQSparkline data={t.history} w={44} h={16}/>
-              </div>
+      {/* tables */}
+      <Card2 style={{padding:0,overflow:"hidden"}}>
+        <div id="dq-ov-tables" style={{...head,padding:"14px 16px 8px"}}>Tables · {tableRows.length+untested.length}</div>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{borderTop:`1px solid ${T.border}`,borderBottom:`1px solid ${T.border}`}}>
+            {["Table","Tests (last run)","Freshness","Open incidents","Owner",""].map((h,i)=><th key={i} style={{padding:"8px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".05em"}}>{h}</th>)}
+          </tr></thead>
+          <tbody>
+            {tableRows.map((r,i)=>(
+              <tr key={r.tb} style={{borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{r.tb}</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>
+                  {r.n} · {statusText(r).map((s,k)=><span key={k} style={{color:s.includes("fail")?T.rose:s.includes("warn")?"#ea580c":s.includes("not run")?T.amber:"#16a34a",fontWeight:600}}>{k?", ":""}{s}</span>)}
+                </td>
+                <td style={{padding:"9px 14px"}}>{r.fresh
+                  ?<button onClick={()=>onOpenTest(r.fresh)} style={{...link,color:T.text,fontWeight:400,display:"inline-flex",alignItems:"center",gap:6}}><DQStatusBadge status={r.fresh.status}/><span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{r.fresh.lastVal}</span></button>
+                  :<span style={{fontSize:11.5,color:T.textMuted}}>not monitored</span>}</td>
+                <td style={{padding:"9px 14px",fontSize:12}}>{r.inc.length
+                  ?<button onClick={()=>onOpenIncident(r.inc[0].id)} style={{...link,color:T.rose}}>{r.inc.length} · {r.inc[0].severity}{r.inc.length>1?" +":""}</button>
+                  :<span style={{color:T.textMuted}}>—</span>}</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub}}>{r.owner}</td>
+                <td style={{padding:"9px 14px",textAlign:"right"}}><button style={link} onClick={()=>onFocusTests(label(`tests on ${r.tb}`),r.c.map(t=>t.id))}>Open tests →</button></td>
+              </tr>
             ))}
-          </Card2>
-          {/* open incidents */}
-          <Card2 style={{padding:"14px 16px",cursor:"pointer"}} >
-            <div style={{...head,display:"flex",justifyContent:"space-between"}}><span>Open incidents</span><button onClick={onOpenIncidents} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",textTransform:"none",letterSpacing:0,fontWeight:600}}>View all</button></div>
-            {openInc.length===0&&<div style={{fontSize:12,color:T.textMuted}}>None</div>}
-            {openInc.slice(0,5).map(i=>(
-              <div key={i.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
-                <DQSeverityBadge severity={i.severity}/>
-                <span style={{flex:1,minWidth:0,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{i.title}</span>
-                <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{i.assignee||"unassigned"} · {i.opened}</span>
-              </div>
+            {untested.map(tb=>(
+              <tr key={tb} style={{borderTop:`1px solid ${T.border}`,background:`${T.amber}08`}}>
+                <td style={{padding:"9px 14px",fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{tb}</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.amber,fontWeight:600}}>No tests</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textMuted}}>not monitored</td>
+                <td style={{padding:"9px 14px",color:T.textMuted,fontSize:12}}>—</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textMuted}}>—</td>
+                <td style={{padding:"9px 14px",textAlign:"right"}}><button style={link} onClick={()=>onAddTest(tb)}>Add test →</button></td>
+              </tr>
             ))}
-          </Card2>
-        </div>
-      </div>
+          </tbody>
+        </table>
+      </Card2>
     </div>
   );
 };
@@ -5882,6 +5924,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const [tcTypeFilter,  setTcTypeFilter]  = useState("all");
   const [tcStatusSel,   setTcStatusSel]   = useState([]);   // multi-select status filter ([] = all)
   const [tcSearch,      setTcSearch]      = useState("");
+  const [tcFocus,       setTcFocus]       = useState(null);        // {label, ids} — the exact tests an Overview number counted
   const [tcSuiteSel,    setTcSuiteSel]    = useState("");          // custom suite filter ("" = all tests)
   const [tcSel,         setTcSel]         = useState(new Set());   // selected test ids (Run / Add to suite)
   const [tcCollapsed,   setTcCollapsed]   = useState(new Set());   // collapsed table groups
@@ -5986,13 +6029,14 @@ const QualityView = ({onToast=()=>{}}) => {
   };
 
   const filteredTC = testCases.filter(t=>{
+    if(tcFocus&&!tcFocus.ids.includes(t.id)) return false;
     if(tcTableSel.length>0&&!tcTableSel.includes(t.table)) return false;
     if(tcTypeFilter!=="all"&&t.defId!==tcTypeFilter) return false;
     if(tcStatusSel.length>0&&!tcStatusSel.includes(t.status)) return false;
     if(tcSearch&&!t.name.toLowerCase().includes(tcSearch.toLowerCase())&&!t.table.toLowerCase().includes(tcSearch.toLowerCase())) return false;
     return true;
   });
-  const tcFiltersActive = tcTableSel.length>0||tcTypeFilter!=="all"||tcStatusSel.length>0||tcSearch;
+  const tcFiltersActive = !!tcFocus||tcTableSel.length>0||tcTypeFilter!=="all"||tcStatusSel.length>0||tcSearch;
   const tcTotalPages = Math.ceil(filteredTC.length/TC_PAGE_SIZE);
   const safeTcPage = Math.min(tcPage, Math.max(0, tcTotalPages-1));
   const pagedTC = filteredTC.slice(safeTcPage*TC_PAGE_SIZE, (safeTcPage+1)*TC_PAGE_SIZE);
@@ -6177,8 +6221,11 @@ const QualityView = ({onToast=()=>{}}) => {
 
         {/* ════════════════ TEST CASES ════════════════ */}
         {tab==="overview"&&<DQOverview testCases={testCases} incidents={incidents}
-          onOpenTable={tb=>{setTcTableSel([tb]);setTcStatusSel([]);setTcSearch("");setTab("testcases");}}
-          onOpenTest={t=>setTcDetail(t)} onOpenIncidents={()=>setTab("incidents")}/>}
+          onFocusTests={(label,ids)=>{setTcFocus({label,ids});setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcSuiteSel("");setTcSel(new Set());setTab("testcases");}}
+          onOpenTest={t=>setTcDetail(t)}
+          onOpenIncident={id=>{setIncStatusSel([]);setIncAssigneeSel([]);setIncTcFilter("");setExpandedInc(id);setTab("incidents");}}
+          onOpenIncidents={st=>{setIncStatusSel(st);setIncAssigneeSel([]);setIncTcFilter("");setTab("incidents");}}
+          onAddTest={tb=>{openTCModal();setTcSelTable(tb);}}/>}
 
         {tab==="testcases"&&<>
           {/* ── Toolbar: filters (incl. Suite) + Run All + New Test Suite ── */}
@@ -6233,12 +6280,18 @@ const QualityView = ({onToast=()=>{}}) => {
             <StatusFilterDropdown selected={tcTableSel} onChange={setTcTableSel} placeholder="Tables"
               options={[...new Set(testCases.map(t=>t.table))].map(tbl=>({v:tbl}))}
               counts={Object.fromEntries([...new Set(testCases.map(t=>t.table))].map(tbl=>[tbl,testCases.filter(t=>t.table===tbl).length]))}/>
+            {tcFocus&&(
+              <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:12,color:T.accent,fontWeight:600}}>
+                From Overview · {tcFocus.label}
+                <button onClick={()=>setTcFocus(null)} title="Show all tests" style={{background:"none",border:"none",cursor:"pointer",color:T.accent,fontSize:14,lineHeight:1,padding:0}}>×</button>
+              </span>
+            )}
             <select value={tcSuiteSel} onChange={e=>{setTcSuiteSel(e.target.value);setTcSel(new Set());}} style={{...sel,border:`1.5px solid ${tcSuiteSel?T.accent:T.border}`,color:tcSuiteSel?T.accent:T.text}}>
               <option value="">All suites</option>
               {customSuites.map(s=>{const st=suiteStats(s);return <option key={s.id} value={s.id}>{s.name} · {st.testCount?Math.round(st.success/st.testCount*100):0}%</option>;})}
             </select>
-            {(tcTableSel.length>0||tcStatusSel.length>0||tcSearch||tcSuiteSel)&&(
-              <button onClick={()=>{setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcSuiteSel("");}}
+            {(tcFocus||tcTableSel.length>0||tcStatusSel.length>0||tcSearch||tcSuiteSel)&&(
+              <button onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcStatusSel([]);setTcSearch("");setTcSuiteSel("");}}
                 style={{fontSize:11,color:T.rose,background:T.roseDim,border:"none",cursor:"pointer",padding:"3px 8px",borderRadius:6}}>✕ Clear</button>
             )}
             <div style={{marginLeft:"auto",display:"flex",gap:8}}>
@@ -6414,7 +6467,7 @@ const QualityView = ({onToast=()=>{}}) => {
             {shown.length===0&&(
               <div style={{textAlign:"center",padding:"48px 0"}}>
                 <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:6}}>{suiteSel&&!(suiteSel.caseIds||[]).length?"This suite has no tests yet":"No tests match these filters"}</div>
-                <button onClick={()=>{setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");if(!(suiteSel&&!(suiteSel.caseIds||[]).length))setTcSuiteSel("");}}
+                <button onClick={()=>{setTcFocus(null);setTcTableSel([]);setTcTypeFilter("all");setTcStatusSel([]);setTcSearch("");if(!(suiteSel&&!(suiteSel.caseIds||[]).length))setTcSuiteSel("");}}
                   style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear filters</button>
               </div>
             )}
@@ -6641,7 +6694,7 @@ const QualityView = ({onToast=()=>{}}) => {
                       </tr>
 
                       {/* ── Expanded incident detail ── */}
-                      {isExp&&(inc.status==="Open"||inc.status==="Resolved"||inc.status==="Dismissed")&&(
+                      {isExp&&(
                         <tr style={{borderBottom:i<filteredInc.length-1?`1px solid ${T.border}`:"none"}}>
                           <td colSpan={6} style={{padding:0}}>
                             <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
