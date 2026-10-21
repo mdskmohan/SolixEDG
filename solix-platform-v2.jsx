@@ -1695,6 +1695,17 @@ const DQ_PRESET_TRAITS = {
   td23:{gx:"expect_column_values_to_match_regex",rowLevel:true}, td24:{gx:"expect_column_values_to_not_match_regex",rowLevel:true},
   td25:{gx:"expect_column_sum_to_be_between"}, td27:{gx:"expect_column_proportion_of_unique_values_to_be_between"},
 };
+// Range checks: the [min,max] parameter pair a fixed threshold reads, and whether the
+// observed value grows with the rows in the batch (a count or a sum does; a mean does not).
+// Only these can switch to a threshold relative to recent runs.
+const DQ_RANGE_TRAITS = {
+  td1:{bounds:["minValue","maxValue"],countLike:true}, td9:{bounds:["minCount","maxCount"],countLike:true},
+  td11:{bounds:["minValue","maxValue"]}, td12:{bounds:["minValue","maxValue"]}, td13:{bounds:["minValue","maxValue"]},
+  td14:{bounds:["minValue","maxValue"]}, td16:{bounds:["minValue","maxValue"]}, td25:{bounds:["minValue","maxValue"],countLike:true},
+  td26:{bounds:["minValue","maxValue"],countLike:true}, td27:{bounds:["minValue","maxValue"]},
+  td49:{bounds:["minValue","maxValue"]}, td53:{bounds:["minValue","maxValue"]},
+};
+Object.entries(DQ_RANGE_TRAITS).forEach(([id,t])=>{ DQ_PRESET_TRAITS[id]={...(DQ_PRESET_TRAITS[id]||{}),...t}; });
 DQ_TEST_DEFINITIONS.forEach(d=>Object.assign(d,DQ_PRESET_TRAITS[d.id]||{}));
 
 // -- dbt-authored tests are ingested, not authored in EDG. They arrive with the dbt run
@@ -1703,14 +1714,15 @@ DQ_TEST_DEFINITIONS.forEach(d=>Object.assign(d,DQ_PRESET_TRAITS[d.id]||{}));
 const DBT_TEST_SUITE = {id:"ts5",name:"orders_fact_dbt",table:"commerce.orders_fact",type:"table",testCount:3,success:1,failed:1,aborted:1,lastRun:"35m ago",nextRun:"in 8h",schedule:"0 2 * * *",owner:"sarah.kim",desc:"dbt tests declared in the fct_revenue model's schema.yml, ingested from dbt Cloud run results",source:"dbt"};
 
 const DQ_SUITES = [
-  {id:"ts1",name:"orders_suite",         table:"commerce.orders",             type:"table", testCount:8, success:6,failed:1,aborted:1,lastRun:"2h ago",  nextRun:"in 6h", schedule:"0 */8 * * *", owner:"dev.patel",    desc:"All quality checks for the orders table"},
+  {id:"ts1",name:"orders_suite",         table:"commerce.orders",             type:"table", testCount:8, success:6,failed:1,aborted:1,lastRun:"2h ago",  nextRun:"in 6h", schedule:"0 */8 * * *", owner:"dev.patel",    desc:"All quality checks for the orders table",
+    batch:{mode:"table",column:"created_at"}, actions:[{type:"Slack",target:"#orders-data-quality",trigger:"failure"}]},
   {id:"ts2",name:"users_suite",          table:"platform.users",              type:"table", testCount:5, success:5,failed:0,aborted:0,lastRun:"1h ago",  nextRun:"in 7h", schedule:"0 */8 * * *", owner:"maya.chen",    desc:"User data completeness and format checks"},
   {id:"ts3",name:"product_events_suite", table:"analytics.product_events",    type:"table", testCount:6, success:4,failed:2,aborted:0,lastRun:"3h ago",  nextRun:"in 5h", schedule:"0 */4 * * *", owner:"arjun.sharma", desc:"Event pipeline volume and schema checks"},
   {id:"ts4",name:"fact_revenue_suite",   table:"finance.fact_revenue",        type:"table", testCount:7, success:7,failed:0,aborted:0,lastRun:"6h ago",  nextRun:"in 6h", schedule:"0 6 * * *",   owner:"dev.patel",    desc:"Finance accuracy and sum validation"},
   DBT_TEST_SUITE,
-  {id:"ts5",name:"PII Column Tests",     table:"",                            type:"bundle",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas"},
-  {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"bundle",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off"},
-  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"bundle",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables"},
+  {id:"ts8",name:"PII Column Tests",     table:"",                            type:"bundle",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas", caseIds:["tc4","tc5","tc11"]},
+  {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"bundle",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off", caseIds:["tc9","tc10"]},
+  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"bundle",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables", caseIds:["tc2","tc7","tc17"]},
 ];
 
 // status: "Success" | "Failed" | "Aborted"
@@ -1747,7 +1759,12 @@ const DQ_SEED_OBSERVED = {
   tc4:{data:{rows:48293,unexpected:0}},
   tc5:{mostly:99.9,lastVal:"37 rows (0.02%)",data:{rows:182440,unexpected:37,sample:[{value:"jane.doe@@acme.com",count:14},{value:"m.ruiz@acme",count:11},{value:"support@",count:8},{value:"k.ito acme.com",count:4}]}},
   tc6:{data:{rows:182440,unexpected:0}},
-  tc7:{severity:"Critical"},
+  // range checks: the observed value and what earlier runs observed (oldest first)
+  tc2:{data:{value:48293,series:[61800,60950,59400,58200,57100,55400,53900,52600,51300,50100,49400,48800,48500,48400]}},
+  tc7:{severity:"Critical",data:{value:1243,series:[1210400,1198300,1224900,1189200,1204100,1250,1190,1301,1215,1238]}},
+  tc9:{data:{value:18429304,series:[17902110,18120450,18388020,17766900,18240310,18501200,18310980]}},
+  tc12:{data:{value:127.43,series:[124.1,126.8,125.2,129.9,127.1,126.4,128.2]}},
+  tc17:{data:{value:1482,series:[1390,1512,1455,1601,1378,1420,1533]}},
   tc8:{data:{rows:1243,unexpected:0}},
   tc10:{data:{rows:2104880,unexpected:0}},
   tc11:{data:{rows:182440,unexpected:0}},
@@ -1866,30 +1883,83 @@ const useDQTestCases = () => {
   return [_dqtcSnap, dqtcSet];
 };
 
+// ── Shared reactive store for DQ suites ──
+// A table suite is what runs: its cases, the batch it validates and the actions that fire
+// when a run finishes (GX checkpoint = suite + batch + actions). Writes go into DQ_SUITES.
+const _dqsSubs = new Set();
+let _dqsSnap = DQ_SUITES.slice();
+const dqsSet = (updater) => {
+  const next = typeof updater === "function" ? updater(_dqsSnap) : updater;
+  DQ_SUITES.splice(0, DQ_SUITES.length, ...next);
+  _dqsSnap = DQ_SUITES.slice();
+  _dqsSubs.forEach(fn => fn());
+};
+const useDQSuites = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _dqsSubs.add(fn); return () => { _dqsSubs.delete(fn); }; }, []);
+  return [_dqsSnap, dqsSet];
+};
+
 // ── Running a test case (Great Expectations semantics) ──
-// A row-level check counts the rows that break it and passes when the share of compliant
-// rows reaches the case's tolerance (GX `mostly`, 100 = every row). A row filter (GX
-// `row_condition`) narrows the rows it looks at. Aggregate and schema checks keep their
-// observed value. A failure opens an incident on the table owner, or adds to the open one.
+// The run reads the batch its table suite validates (whole table, or the latest daily /
+// monthly partition). A row-level check counts the rows that break it and passes when the
+// share of compliant rows reaches the case's tolerance (GX `mostly`, 100 = every row); a row
+// filter (GX `row_condition`) narrows those rows. A range check compares one observed value
+// with fixed bounds, or with the mean of recent runs ± an allowed change. A failure opens an
+// incident on the table owner, or adds to the open one.
 const DQ_SEVERITIES = ["Critical","High","Medium","Low"];
+const DQ_BATCH_SHARE = { table: 1, daily: 1/30, monthly: 0.31 }; // share of the table one batch holds
+const DQ_ACTION_TYPES = ["Slack","Email","Microsoft Teams","Webhook"];
 const dqDef = (id) => DQ_TEST_DEFINITIONS.find(d => d.id === id);
 const dqColIsPII = (table, col) => !!(col && (SCHEMA[(table||"").split(".").pop()]||[]).find(c => c.name === col)?.pii);
 const dqHash = (s) => { let h = 0; for (const ch of String(s||"")) h = (h*31 + ch.charCodeAt(0)) >>> 0; return h; };
-const dqFmt = (n) => Number(n).toLocaleString("en-US");
+const dqFmt = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
 const dqPct = (p) => p > 0 && p < 0.01 ? "<0.01%" : `${+p.toFixed(2)}%`;
+const dqTableSuite = (tc) => DQ_SUITES.find(s => s.id === tc.suiteId && s.type === "table");
+const dqBatchLabel = (batch) => {
+  const b = batch || { mode: "table" };
+  if (b.mode === "daily") return `${b.column} = ${new Date().toISOString().slice(0,10)}`;
+  if (b.mode === "monthly") return `${b.column} in ${new Date().toISOString().slice(0,7)}`;
+  return "Whole table";
+};
 const dqMeasure = (tc) => {
   const d = tc.data; if (!d) return null;
-  const keep = tc.rowFilter && tc.rowFilter.trim() ? 0.25 + (dqHash(tc.rowFilter.trim()) % 50) / 100 : 1; // share of rows the filter keeps
+  const batch = dqTableSuite(tc)?.batch;
+  const share = DQ_BATCH_SHARE[batch?.mode || "table"] || 1;
+  const def = dqDef(tc.defId);
+  if (d.value != null) { // range check
+    const scale = def?.countLike ? share : 1;
+    const observed = def?.countLike ? Math.round(d.value * scale) : +(d.value * scale).toFixed(2);
+    let low, high, baseline = null;
+    if (tc.thresholdMode === "dynamic") {
+      const win = (d.series||[]).slice(-(+tc.dynWindow || 7)).map(v => v * scale);
+      baseline = win.length ? win.reduce((a,b) => a + b, 0) / win.length : observed;
+      const pct = +(tc.dynPct ?? 10);
+      low = baseline * (1 - pct/100); high = baseline * (1 + pct/100);
+    } else {
+      const [kMin, kMax] = def?.bounds || [];
+      low = tc.params?.[kMin] === "" || tc.params?.[kMin] == null ? -Infinity : +tc.params[kMin];
+      high = tc.params?.[kMax] === "" || tc.params?.[kMax] == null ? Infinity : +tc.params[kMax];
+    }
+    return { kind: "range", observed, low, high, baseline, batch: dqBatchLabel(batch) };
+  }
+  const keep = (tc.rowFilter && tc.rowFilter.trim() ? 0.25 + (dqHash(tc.rowFilter.trim()) % 50) / 100 : 1) * share;
   const evaluated = Math.max(1, Math.round(d.rows * keep));
   const unexpected = Math.round(d.unexpected * keep);
-  return { evaluated, unexpected, pct: unexpected / evaluated * 100,
+  return { kind: "rows", evaluated, unexpected, pct: unexpected / evaluated * 100, batch: dqBatchLabel(batch),
     sample: unexpected > 0 ? (d.sample||[]).map(s => ({ ...s, count: Math.max(1, Math.round(s.count * keep)) })) : [] };
 };
+const dqRangeText = (r) => `${r.low === -Infinity ? "−∞" : dqFmt(r.low)} – ${r.high === Infinity ? "∞" : dqFmt(r.high)}`;
 const dqEvaluate = (tc) => {
   const r = dqMeasure(tc);
-  if (!r) { // aggregate / schema / custom SQL: the run re-reads the same observed value
+  if (!r) { // schema / custom SQL / no observation: the run re-reads the same observed value
     const status = tc.status === "Aborted" ? "Success" : tc.status;
     return { ...tc, status, failedReason: status === "Success" ? "" : tc.failedReason };
+  }
+  if (r.kind === "range") {
+    const pass = r.observed >= r.low && r.observed <= r.high;
+    return { ...tc, result: r, status: pass ? "Success" : "Failed", lastVal: dqFmt(r.observed),
+      failedReason: pass ? "" : `Observed ${dqFmt(r.observed)} is outside ${dqRangeText(r)}${r.baseline != null ? ` (mean of the last ${tc.dynWindow || 7} runs ± ${tc.dynPct ?? 10}%)` : ""}.` };
   }
   const mostly = tc.mostly === "" || tc.mostly == null ? 100 : +tc.mostly;
   const pass = 100 - r.pct >= mostly;
@@ -1897,24 +1967,28 @@ const dqEvaluate = (tc) => {
     lastVal: r.unexpected === 0 ? `0 of ${dqFmt(r.evaluated)} rows` : `${dqFmt(r.unexpected)} rows (${dqPct(r.pct)})`,
     failedReason: pass ? "" : `${dqFmt(r.unexpected)} of ${dqFmt(r.evaluated)} rows (${dqPct(r.pct)}) failed. Tolerance allows ${dqPct(100 - mostly)}.` };
 };
-const dqCaseOwner = (tc) => DQ_SUITES.find(s => s.id === tc.suiteId && s.type === "table")?.owner || "admin";
+const dqCaseOwner = (tc) => dqTableSuite(tc)?.owner || "admin";
+let _dqIncSeq = 0;
 const runDQCase = (id) => {
   const cur = DQ_TEST_CASES.find(t => t.id === id);
   if (!cur || cur.readOnly) return cur;
   const ev = dqEvaluate(cur);
   let next = { ...ev, lastRun: "just now", history: [...(cur.history||[]), ev.status === "Success" ? 1 : 0].slice(-15) };
+  // a range check's observation joins the series the next relative threshold averages
+  if (cur.data?.value != null) next = { ...next, data: { ...cur.data, series: [...(cur.data.series||[]), cur.data.value].slice(-30) } };
+  const affected = next.result?.kind === "rows" ? next.result.unexpected : null;
   const open = _dqiState.find(i => i.tcId === id && (i.status === "Open" || i.status === "In Progress"));
   const at = "just now";
   if (next.status === "Failed") {
     if (open) {
-      dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, affectedRows: next.result ? next.result.unexpected : i.affectedRows,
+      dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, affectedRows: affected ?? i.affectedRows,
         timeline: [...(i.timeline||[]), { action: "Test case failed again", by: "system", at, note: next.failedReason || undefined }] } : i));
       next = { ...next, incidentId: open.id };
     } else {
       const owner = dqCaseOwner(next);
-      const inc = { id: `inc${Date.now()}`, title: `${next.defName} failed on ${next.table}${next.col ? "." + next.col : ""}`,
+      const inc = { id: `inc${Date.now()}_${++_dqIncSeq}`, title: `${next.defName} failed on ${next.table}${next.col ? "." + next.col : ""}`,
         severity: next.severity || "Medium", status: "Open", table: next.table, col: next.col, tcId: id, opened: at,
-        assignee: owner, rootCause: "", resolutionReason: "", resolved: null, affectedRows: next.result ? next.result.unexpected : null,
+        assignee: owner, rootCause: "", resolutionReason: "", resolved: null, affectedRows: affected,
         timeline: [{ action: "Incident created — test case failed", by: "system", at }, { action: `Assigned to ${owner} (table owner)`, by: "system", at }],
         comments: [], desc: next.failedReason || `${next.name} failed.`, fromRun: true };
       dqiSet(prev => [inc, ...prev]);
@@ -1925,6 +1999,18 @@ const runDQCase = (id) => {
   }
   dqtcSet(prev => prev.map(t => t.id === id ? next : t));
   return next;
+};
+// Run every case of a suite (a table suite's own cases, a bundle's picked cases), record the
+// run, and fire the suite's actions: on failure, or always.
+const runDQSuite = (suiteId) => {
+  const s = DQ_SUITES.find(x => x.id === suiteId); if (!s) return null;
+  const ids = s.type === "bundle" ? (s.caseIds||[]) : DQ_TEST_CASES.filter(t => t.suiteId === suiteId).map(t => t.id);
+  const results = ids.map(id => DQ_TEST_CASES.find(t => t.id === id)).filter(t => t && !t.readOnly).map(t => runDQCase(t.id));
+  const failed = results.filter(r => r?.status === "Failed").length;
+  const fired = (s.actions||[]).filter(a => a.target && (a.trigger === "always" || failed > 0));
+  const run = { at: "just now", passed: results.length - failed, failed, batch: dqBatchLabel(s.batch), sent: fired.map(a => `${a.type} · ${a.target}`) };
+  dqsSet(prev => prev.map(x => x.id === suiteId ? { ...x, lastRun: "Just now", runs: [run, ...(x.runs||[])].slice(0, 10) } : x));
+  return run;
 };
 DQ_TEST_CASES.forEach(t => { if (t.data && t.status !== "Aborted") t.result = dqMeasure(t); });
 _dqtcSnap = DQ_TEST_CASES.slice();
@@ -5396,6 +5482,32 @@ const DQRunSettings = ({def, customSql=false, value, onChange}) => {
           </select>
         </div>
       </div>
+      {!customSql&&def?.bounds&&(
+        <div style={{display:"grid",gridTemplateColumns:value.thresholdMode==="dynamic"?"1.4fr 1fr 1fr":"1fr",gap:10}}>
+          <div>
+            <label style={lab}>Threshold</label>
+            <select value={value.thresholdMode||"fixed"} onChange={e=>set("thresholdMode",e.target.value)} style={{...box,cursor:"pointer"}}>
+              <option value="fixed">Fixed (parameters)</option>
+              <option value="dynamic">Relative to recent runs</option>
+            </select>
+          </div>
+          {value.thresholdMode==="dynamic"&&<>
+            <div>
+              <label style={lab}>Window</label>
+              <select value={value.dynWindow||7} onChange={e=>set("dynWindow",+e.target.value)} style={{...box,cursor:"pointer"}}>
+                {[7,14,30].map(n=><option key={n} value={n}>Last {n} runs</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lab}>Allowed Change</label>
+              <div style={{position:"relative"}}>
+                <input type="number" min={0} step={1} value={value.dynPct??10} onChange={e=>set("dynPct",e.target.value===""?"":Math.max(0,+e.target.value))} style={{...box,paddingRight:28}}/>
+                <span style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.textMuted}}>±%</span>
+              </div>
+            </div>
+          </>}
+        </div>
+      )}
       {showFilter&&(
         <div>
           <label style={lab}>Row Filter <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
@@ -5429,7 +5541,18 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
     </div>
   );
   return <>
-    {r&&(
+    {r&&r.kind==="range"&&(
+      <div>
+        <div style={head}>Latest Result</div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+          {stat("Observed",dqFmt(r.observed),tc.status==="Failed"?T.rose:"#16a34a")}
+          {stat("Expected",dqRangeText(r))}
+          {stat("Threshold",r.baseline!=null?`±${tc.dynPct??10}% of ${dqFmt(r.baseline)}`:"Fixed")}
+        </div>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Batch · <span style={{fontFamily:"'Geist Mono',monospace"}}>{r.batch}</span></div>
+      </div>
+    )}
+    {r&&r.kind!=="range"&&(
       <div>
         <div style={head}>Latest Result</div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
@@ -5438,6 +5561,7 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
           {stat("Failed %",dqPct(r.pct),r.unexpected>0?T.rose:"#16a34a")}
           {stat("Must pass",`${mostly}%`)}
         </div>
+        {r.batch&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Batch · <span style={{fontFamily:"'Geist Mono',monospace"}}>{r.batch}</span></div>}
         {r.sample&&r.sample.length>0&&(
           <div style={{marginTop:10,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
             <div style={{display:"flex",alignItems:"center",padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.4}}>
@@ -5459,10 +5583,13 @@ const DQCaseRunSection = ({tc, editing, draft, setDraft}) => {
       <div>
         <div style={head}>Run Settings</div>
         {editing
-          ? <DQRunSettings def={def} customSql={tc.defId==="custom_sql"||def?.logic==="customSql"} value={{mostly:draft?.mostly??mostly,rowFilter:draft?.rowFilter??tc.rowFilter??"",severity:draft?.severity??tc.severity??"Medium"}}
+          ? <DQRunSettings def={def} customSql={tc.defId==="custom_sql"||def?.logic==="customSql"}
+              value={{mostly:draft?.mostly??mostly,rowFilter:draft?.rowFilter??tc.rowFilter??"",severity:draft?.severity??tc.severity??"Medium",
+                thresholdMode:draft?.thresholdMode??tc.thresholdMode??"fixed",dynWindow:draft?.dynWindow??tc.dynWindow??7,dynPct:draft?.dynPct??tc.dynPct??10}}
               onChange={v=>setDraft(d=>({...d,...v}))}/>
           : <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {def?.rowLevel&&row("Min. passing rows",`${mostly}%`)}
+              {def?.bounds&&row("Threshold",tc.thresholdMode==="dynamic"?`Last ${tc.dynWindow||7} runs ± ${tc.dynPct??10}%`:"Fixed (parameters)")}
               {!def?.schema&&tc.defId!=="custom_sql"&&row("Row filter",tc.rowFilter||"—",!!tc.rowFilter)}
               {row("Incident severity",tc.severity||"Medium")}
               {def?.gx&&row("Great Expectations",def.gx,true)}
@@ -5483,7 +5610,8 @@ const QualityView = ({onToast=()=>{}}) => {
 
   // mutable state
   const [testCases,  setTestCases]  = useDQTestCases(); // shared with every asset's Tests tab
-  const [suites,     setSuites]     = useState(DQ_SUITES);
+  const [suites,     setSuites]     = useDQSuites();
+  const [suiteCfg,   setSuiteCfg]   = useState(null); // {id, batch, actions} draft for the suite settings drawer
   const [incidents]  = useDQIncidents(); // shared store — read-only in this section
   // Read-only: incident state changes happen in the Inbox, not here. Every section
   // mutation routes through this guarded setter so the view only displays state + history.
@@ -5671,10 +5799,14 @@ const QualityView = ({onToast=()=>{}}) => {
     setRunningSuites(prev=>new Set([...prev,suiteId]));
     setTimeout(()=>{
       setRunningSuites(prev=>{const n=new Set(prev);n.delete(suiteId);return n;});
-      setSuites(prev=>prev.map(s=>s.id===suiteId?{...s,lastRun:"Just now"}:s));
-      showT("Pipeline run completed — all tests executed");
+      const run=runDQSuite(suiteId);
+      if(!run) return;
+      showT(`${run.passed} passed · ${run.failed} failed${run.sent.length?` — notified ${run.sent.join(", ")}`:""}`,run.failed?"error":"success");
     },2200);
   };
+  // live counts: a table suite owns its cases, a bundle lists the cases it picked
+  const suiteCases = (s)=>s.type==="bundle"?testCases.filter(t=>(s.caseIds||[]).includes(t.id)):testCases.filter(t=>t.suiteId===s.id);
+  const suiteStats = (s)=>{const c=suiteCases(s);return {testCount:c.length,success:c.filter(t=>t.status==="Success").length,failed:c.filter(t=>t.status==="Failed").length,aborted:c.filter(t=>t.status==="Aborted").length};};
 
   const acknowledgeInc = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"In Progress",timeline:[...(i.timeline||[]),{action:"Acknowledged — moved to In Progress",by:"dev.patel",at:"Just now"}]}:i));showT("Incident acknowledged");};
   const dismissInc     = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"Dismissed",timeline:[...(i.timeline||[]),{action:"Dismissed",by:"dev.patel",at:"Just now"}]}:i));showT("Incident dismissed");};
@@ -5705,7 +5837,8 @@ const QualityView = ({onToast=()=>{}}) => {
       const resolved = isCustomDef?resolveSQLTemplate(tcSelType.sql,tcSelTable,tcSelCol,tcParams):undefined;
       const params = dqWithDefaults(tcSelType,tcParams);
       newCase = {id:`tc${Date.now()}`,name:autoName,suiteId:sId,table:tcSelTable,col:level!=="table"?tcSelCol:null,defId:tcSelType.id,defName:tcSelType.name,dim:tcSelType.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,...(isCustomDef?{sql:tcSelType.sql,resolvedSql:resolved}:{}),
-        ...(tcSelType.rowLevel?{mostly:tcRun.mostly===""?100:tcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),...(!tcSelType.schema&&!isCustomDef&&tcRun.rowFilter.trim()?{rowFilter:tcRun.rowFilter.trim()}:{}),
+        ...(tcSelType.rowLevel?{mostly:tcRun.mostly===""?100:tcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),
+        ...(tcSelType.bounds?{thresholdMode:tcRun.thresholdMode||"fixed",dynWindow:tcRun.dynWindow||7,dynPct:tcRun.dynPct===""||tcRun.dynPct==null?10:tcRun.dynPct}:{}),...(!tcSelType.schema&&!isCustomDef&&tcRun.rowFilter.trim()?{rowFilter:tcRun.rowFilter.trim()}:{}),
         severity:tcRun.severity,failedReason:"",incidentId:null};
     }
     setTestCases(prev=>[...prev,newCase]);
@@ -5716,7 +5849,7 @@ const QualityView = ({onToast=()=>{}}) => {
   // promote an inline custom-SQL one-off into a reusable Test Definition
   const handleCreateBundleSuite = ()=>{
     if(!nsName.trim()||nsSelectedTCs.length===0) return;
-    const ns = {id:`ts${Date.now()}`,name:nsName,table:"",type:"bundle",testCount:nsSelectedTCs.length,success:0,failed:0,aborted:0,lastRun:"Never",nextRun:"",schedule:"",owner:"dev.patel",desc:nsDesc};
+    const ns = {id:`ts${Date.now()}`,name:nsName,table:"",type:"bundle",testCount:nsSelectedTCs.length,success:0,failed:0,aborted:0,lastRun:"Never",nextRun:"",schedule:"",owner:"dev.patel",desc:nsDesc,caseIds:[...nsSelectedTCs]};
     setSuites(prev=>[...prev,ns]);
     setNewSuiteModal(false);setNsName("");setNsDesc("");setNsSelectedTCs([]);setNsSearchTC("");
     setSuitesSubTab("bundle");showT("Bundle suite created successfully");
@@ -5765,6 +5898,7 @@ const QualityView = ({onToast=()=>{}}) => {
   const INC_STATE_LABEL = {"In Progress":"In Review","In Review":"In Review","Open":"Open","Resolved":"Resolved","Dismissed":"Dismissed"};
   const TABS = [
     {key:"testcases",  label:"Test Cases"},
+    {key:"testsuites", label:"Test Suites"},
     {key:"rules",      label:"Test Definitions"},
     {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
   ];
@@ -6138,7 +6272,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   </thead>
                   <tbody>
                     {suites.filter(s=>s.type==="table"&&(suiteOwner==="all"||s.owner===suiteOwner)).map((s,i,arr)=>{
-                      const sRate=s.testCount>0?Math.round(s.success/s.testCount*100):0;
+                      const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
                       const isExp=expandedSuite===s.id;
                       const isRunning=runningSuites.has(s.id);
                       return (
@@ -6154,11 +6288,11 @@ const QualityView = ({onToast=()=>{}}) => {
                               <div style={{fontSize:11,color:T.textMuted}}>{s.table}</div>
                             </td>
                             <td style={{padding:"10px 14px"}}>
-                              <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{s.testCount} tests</div>
+                              <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
                               <div style={{fontSize:11,display:"flex",gap:6}}>
-                                <span style={{color:"#16a34a",fontWeight:600}}>{s.success}S</span>
-                                <span style={{color:T.rose,fontWeight:600}}>{s.failed}F</span>
-                                <span style={{color:T.amber,fontWeight:600}}>{s.aborted}A</span>
+                                <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
+                                <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
+                                <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
                               </div>
                             </td>
                             <td style={{padding:"10px 14px"}}>
@@ -6188,17 +6322,30 @@ const QualityView = ({onToast=()=>{}}) => {
                             </td>
                             <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
                             <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                              <button
-                                onClick={e=>runSuite(s.id,e)}
-                                disabled={isRunning}
-                                style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
-                              >{isRunning?"Running…":"Run now"}</button>
+                              {s.source==="dbt"
+                                ? <span style={{fontSize:11,color:T.textMuted}}>Runs in dbt</span>
+                                : <div style={{display:"flex",gap:6}}>
+                                    <button
+                                      onClick={e=>runSuite(s.id,e)}
+                                      disabled={isRunning}
+                                      style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
+                                    >{isRunning?"Running…":"Run now"}</button>
+                                    <button onClick={()=>setSuiteCfg({id:s.id,batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})}
+                                      style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>Settings</button>
+                                  </div>}
                             </td>
                           </tr>
                           {isExp&&(
                             <tr style={{borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
                               <td colSpan={8} style={{padding:0}}>
                                 <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
+                                  {s.source!=="dbt"&&(
+                                    <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px 0",fontSize:11.5,color:T.textMuted}}>
+                                      <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch)}</span></span>
+                                      <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":"on failure"})`).join(", "):"Inbox only"}</span></span>
+                                      {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
+                                    </div>
+                                  )}
                                   <div style={{padding:"10px 20px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                                     <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6}}>Test Cases ({testCases.filter(t=>t.suiteId===s.id).length})</span>
                                     <button onClick={e=>{e.stopPropagation();openTCModal();}} style={{fontSize:11.5,color:T.accent,background:`${T.accent}10`,border:"none",cursor:"pointer",padding:"4px 9px",borderRadius:6}}>+ Add Test Case</button>
@@ -6266,7 +6413,7 @@ const QualityView = ({onToast=()=>{}}) => {
                       </thead>
                       <tbody>
                         {suites.filter(s=>s.type==="bundle"&&(suiteOwner==="all"||s.owner===suiteOwner)).map((s,i,arr)=>{
-                          const sRate=s.testCount>0?Math.round(s.success/s.testCount*100):0;
+                          const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
                           const isRunning=runningSuites.has(s.id);
                           return (
                             <tr
@@ -6280,11 +6427,11 @@ const QualityView = ({onToast=()=>{}}) => {
                                 <div style={{fontSize:11,color:T.textMuted}}>Multi-table</div>
                               </td>
                               <td style={{padding:"10px 14px"}}>
-                                <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{s.testCount} tests</div>
+                                <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
                                 <div style={{fontSize:11,display:"flex",gap:6}}>
-                                  <span style={{color:"#16a34a",fontWeight:600}}>{s.success}S</span>
-                                  <span style={{color:T.rose,fontWeight:600}}>{s.failed}F</span>
-                                  <span style={{color:T.amber,fontWeight:600}}>{s.aborted}A</span>
+                                  <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
+                                  <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
+                                  <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
                                 </div>
                               </td>
                               <td style={{padding:"10px 14px"}}>
@@ -6641,6 +6788,105 @@ const QualityView = ({onToast=()=>{}}) => {
               </div>
             </div>
           </>
+        );
+      })()}
+
+      {/* ════════════════ SUITE SETTINGS DRAWER (batch + actions) ════════════════ */}
+      {suiteCfg&&(()=>{
+        const s=suites.find(x=>x.id===suiteCfg.id); if(!s) return null;
+        const cols=KNOWN_COLS[s.table]||[];
+        const lab={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+        const box={width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"};
+        const sec={fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,textTransform:"uppercase",marginBottom:10};
+        const setBatch=(k,v)=>setSuiteCfg(c=>({...c,batch:{...c.batch,[k]:v}}));
+        const setAct=(i,k,v)=>setSuiteCfg(c=>({...c,actions:c.actions.map((a,j)=>j===i?{...a,[k]:v}:a)}));
+        const partitioned=suiteCfg.batch.mode!=="table";
+        const canSave=!partitioned||!!suiteCfg.batch.column;
+        return (
+          <div style={{position:"fixed",inset:0,zIndex:1100,display:"flex"}}>
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",backdropFilter:"blur(2px)"}} onClick={()=>setSuiteCfg(null)}/>
+            <div className="slideInRight" style={{position:"relative",width:480,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)",marginLeft:"auto"}}>
+              <div style={{padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Suite Settings</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{s.name} · {s.table}</div>
+                </div>
+                <button onClick={()=>setSuiteCfg(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:22}}>
+                <div>
+                  <div style={sec}>Batch</div>
+                  <div style={{display:"grid",gridTemplateColumns:partitioned?"1fr 1fr":"1fr",gap:10}}>
+                    <div>
+                      <label style={lab}>Validate</label>
+                      <select value={suiteCfg.batch.mode} onChange={e=>setBatch("mode",e.target.value)} style={{...box,cursor:"pointer"}}>
+                        <option value="table">Whole table</option>
+                        <option value="daily">Latest daily partition</option>
+                        <option value="monthly">Latest monthly partition</option>
+                      </select>
+                    </div>
+                    {partitioned&&(
+                      <div>
+                        <label style={lab}>Partition Column <span style={{color:T.rose}}>*</span></label>
+                        <select value={suiteCfg.batch.column||""} onChange={e=>setBatch("column",e.target.value)} style={{...box,cursor:"pointer"}}>
+                          <option value="">Select a column…</option>
+                          {cols.map(c=><option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                  {partitioned&&suiteCfg.batch.column&&<div style={{fontSize:11,color:T.textMuted,marginTop:7}}>Next run · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{dqBatchLabel(suiteCfg.batch)}</span></div>}
+                </div>
+                <div>
+                  <div style={sec}>Actions After Run</div>
+                  <div style={{padding:"9px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:12,color:T.textSub,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
+                    <span>Incident + Inbox alert to table owner</span><span style={{color:T.textMuted}}>On failure · always on</span>
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {suiteCfg.actions.map((a,i)=>(
+                      <div key={i} style={{display:"grid",gridTemplateColumns:"130px 1fr 110px 28px",gap:6,alignItems:"center"}}>
+                        <select value={a.type} onChange={e=>setAct(i,"type",e.target.value)} style={{...box,padding:"7px 8px",cursor:"pointer"}}>
+                          {DQ_ACTION_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <input value={a.target||""} onChange={e=>setAct(i,"target",e.target.value)}
+                          placeholder={a.type==="Slack"?"#channel":a.type==="Email"?"team@company.com":a.type==="Webhook"?"https://…":"Team / channel"}
+                          style={{...box,padding:"7px 10px",fontFamily:"'Geist Mono',monospace",fontSize:12}}/>
+                        <select value={a.trigger||"failure"} onChange={e=>setAct(i,"trigger",e.target.value)} style={{...box,padding:"7px 8px",cursor:"pointer"}}>
+                          <option value="failure">On failure</option>
+                          <option value="always">Always</option>
+                        </select>
+                        <button onClick={()=>setSuiteCfg(c=>({...c,actions:c.actions.filter((_,j)=>j!==i)}))}
+                          style={{width:28,height:28,borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(9)}</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={()=>setSuiteCfg(c=>({...c,actions:[...c.actions,{type:"Slack",target:"",trigger:"failure"}]}))}
+                    style={{marginTop:10,fontSize:12,color:T.accent,background:`${T.accent}10`,border:"none",cursor:"pointer",padding:"6px 11px",borderRadius:7,fontWeight:600}}>+ Add Action</button>
+                </div>
+                {s.runs&&s.runs.length>0&&(
+                  <div>
+                    <div style={sec}>Recent Runs</div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                      {s.runs.map((r,i)=>(
+                        <div key={i} style={{display:"flex",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5,alignItems:"center"}}>
+                          <span style={{color:T.textMuted,width:62}}>{r.at}</span>
+                          <span style={{color:r.failed?T.rose:"#16a34a",fontWeight:600,width:120}}>{r.passed} passed · {r.failed} failed</span>
+                          <span style={{flex:1,color:T.textMuted,fontFamily:"'Geist Mono',monospace",fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.batch}{r.sent.length?` → ${r.sent.join(", ")}`:""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",justifyContent:"space-between"}}>
+                <button onClick={()=>setSuiteCfg(null)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+                <button disabled={!canSave} onClick={()=>{
+                  setSuites(prev=>prev.map(x=>x.id===s.id?{...x,batch:suiteCfg.batch,actions:suiteCfg.actions.filter(a=>a.target&&a.target.trim())}:x));
+                  setSuiteCfg(null); showT("Suite settings saved — applies on the next run");
+                }} style={{padding:"9px 22px",borderRadius:9,background:canSave?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:canSave?"pointer":"default"}}>Save</button>
+              </div>
+            </div>
+          </div>
         );
       })()}
 
@@ -21174,6 +21420,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId,table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:aqTcDim||def.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,
                   ...(aqTcCustomSQL?{sql:aqTcSQLQuery,sqlStrategy:aqTcSQLStrategy||"ROWS",sqlOperator:aqTcSQLOperator||"==",sqlThreshold:aqTcSQLThreshold===""?0:+aqTcSQLThreshold,partitionExpr:aqTcSQLPartitionExpr}:{}),
                   ...(def.rowLevel?{mostly:aqTcRun.mostly===""?100:aqTcRun.mostly,data:{rows:seenRows,unexpected:0}}:{}),
+                  ...(def.bounds?{thresholdMode:aqTcRun.thresholdMode||"fixed",dynWindow:aqTcRun.dynWindow||7,dynPct:aqTcRun.dynPct===""||aqTcRun.dynPct==null?10:aqTcRun.dynPct}:{}),
                   ...(!aqTcCustomSQL&&!def.schema&&aqTcRun.rowFilter.trim()?{rowFilter:aqTcRun.rowFilter.trim()}:{}),
                   severity:aqTcRun.severity,failedReason:"",incidentId:null};
                 dqtcSet(p=>[...p,newCase]);
