@@ -1720,9 +1720,11 @@ const DQ_SUITES = [
   {id:"ts3",name:"product_events_suite", table:"analytics.product_events",    type:"table", testCount:6, success:4,failed:2,aborted:0,lastRun:"3h ago",  nextRun:"in 5h", schedule:"0 */4 * * *", owner:"arjun.sharma", desc:"Event pipeline volume and schema checks"},
   {id:"ts4",name:"fact_revenue_suite",   table:"finance.fact_revenue",        type:"table", testCount:7, success:7,failed:0,aborted:0,lastRun:"6h ago",  nextRun:"in 6h", schedule:"0 6 * * *",   owner:"dev.patel",    desc:"Finance accuracy and sum validation"},
   DBT_TEST_SUITE,
-  {id:"ts8",name:"PII Column Tests",     table:"",                            type:"bundle",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas", caseIds:["tc4","tc5","tc11"]},
-  {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"bundle",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off", caseIds:["tc9","tc10"]},
-  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"bundle",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables", caseIds:["tc2","tc7","tc17"]},
+  {id:"ts8",name:"PII Column Tests",     table:"",                            type:"custom",testCount:12,success:10,failed:1,aborted:1,lastRun:"2h ago", nextRun:"",       schedule:"",            owner:"maya.chen",    desc:"All tests on columns tagged as PII across all schemas", caseIds:["tc4","tc5","tc11"]},
+  {id:"ts6",name:"Finance Quality Gate", table:"",                            type:"custom",testCount:15,success:14,failed:0,aborted:1,lastRun:"4h ago", nextRun:"",       schedule:"",            owner:"dev.patel",    desc:"Revenue and transaction accuracy checks required for FP&A sign-off", caseIds:["tc9","tc10"]},
+  {id:"ts7",name:"Critical Tables SLA",  table:"",                            type:"custom",testCount:9, success:8, failed:0,aborted:1,lastRun:"1h ago", nextRun:"",       schedule:"",            owner:"arjun.sharma", desc:"Freshness and row count checks for all SLA-monitored tables", caseIds:["tc2","tc7","tc17"]},
+  {id:"ts9",name:"orders_critical",      table:"",                            type:"custom",testCount:3, success:2, failed:1,aborted:0,lastRun:"40m ago",nextRun:"in 20m",schedule:"0 * * * *",   owner:"dev.patel",    desc:"Volume, status and key checks on orders, run hourly", caseIds:["tc2","tc3","tc14"],
+    batch:{mode:"inherit",column:""}, actions:[{type:"Slack",target:"#orders-oncall",trigger:"failure"}]},
 ];
 
 // status: "Success" | "Failed" | "Aborted"
@@ -1916,15 +1918,27 @@ const dqHash = (s) => { let h = 0; for (const ch of String(s||"")) h = (h*31 + c
 const dqFmt = (n) => Number(n).toLocaleString("en-US", { maximumFractionDigits: 2 });
 const dqPct = (p) => p > 0 && p < 0.01 ? "<0.01%" : `${+p.toFixed(2)}%`;
 const dqTableSuite = (tc) => DQ_SUITES.find(s => s.id === tc.suiteId && s.type === "table");
+// Columns per table, for partition pickers and for checking a custom suite's partition
+// column exists on each table it runs against.
+const DQ_TABLE_COLS = {"commerce.orders":["order_id","customer_id","total_amount","status","created_at"],"platform.users":["user_id","email","phone","name","created_at"],"analytics.product_events":["event_id","event_type","user_id","timestamp"],"finance.fact_revenue":["revenue_id","amount","date","product_id"],"finance.dim_customer":["customer_id","name","email","tier"],"platform.sessions":["session_id","user_id","started_at","duration_s"]};
+const dqTableCols = (table) => DQ_TABLE_COLS[table] || Object.entries(DQ_TABLE_COLS).find(([k]) => k.endsWith("." + table))?.[1] || [];
+// The batch one case runs against. No override (or "inherit") = its table's default-suite
+// batch; a custom suite's partition falls back to the whole table where the column is missing.
+const dqResolveBatch = (tc, override) => {
+  if (!override || override.mode === "inherit") return dqTableSuite(tc)?.batch;
+  if (override.mode === "table") return { mode: "table" };
+  return dqTableCols(tc.table).includes(override.column) ? override : { mode: "table" };
+};
 const dqBatchLabel = (batch) => {
   const b = batch || { mode: "table" };
+  if (b.mode === "inherit") return "Table default";
   if (b.mode === "daily") return `${b.column} = ${new Date().toISOString().slice(0,10)}`;
   if (b.mode === "monthly") return `${b.column} in ${new Date().toISOString().slice(0,7)}`;
   return "Whole table";
 };
-const dqMeasure = (tc) => {
+const dqMeasure = (tc, batchOverride) => {
   const d = tc.data; if (!d) return null;
-  const batch = dqTableSuite(tc)?.batch;
+  const batch = dqResolveBatch(tc, batchOverride);
   const share = DQ_BATCH_SHARE[batch?.mode || "table"] || 1;
   const def = dqDef(tc.defId);
   if (d.value != null) { // range check
@@ -1950,8 +1964,8 @@ const dqMeasure = (tc) => {
     sample: unexpected > 0 ? (d.sample||[]).map(s => ({ ...s, count: Math.max(1, Math.round(s.count * keep)) })) : [] };
 };
 const dqRangeText = (r) => `${r.low === -Infinity ? "−∞" : dqFmt(r.low)} – ${r.high === Infinity ? "∞" : dqFmt(r.high)}`;
-const dqEvaluate = (tc) => {
-  const r = dqMeasure(tc);
+const dqEvaluate = (tc, batchOverride) => {
+  const r = dqMeasure(tc, batchOverride);
   if (!r) { // schema / custom SQL / no observation: the run re-reads the same observed value
     const status = tc.status === "Aborted" ? "Success" : tc.status;
     return { ...tc, status, failedReason: status === "Success" ? "" : tc.failedReason };
@@ -1969,10 +1983,10 @@ const dqEvaluate = (tc) => {
 };
 const dqCaseOwner = (tc) => dqTableSuite(tc)?.owner || "admin";
 let _dqIncSeq = 0;
-const runDQCase = (id) => {
+const runDQCase = (id, batchOverride) => {
   const cur = DQ_TEST_CASES.find(t => t.id === id);
   if (!cur || cur.readOnly) return cur;
-  const ev = dqEvaluate(cur);
+  const ev = dqEvaluate(cur, batchOverride);
   let next = { ...ev, lastRun: "just now", history: [...(cur.history||[]), ev.status === "Success" ? 1 : 0].slice(-15) };
   // a range check's observation joins the series the next relative threshold averages
   if (cur.data?.value != null) next = { ...next, data: { ...cur.data, series: [...(cur.data.series||[]), cur.data.value].slice(-30) } };
@@ -2000,12 +2014,13 @@ const runDQCase = (id) => {
   dqtcSet(prev => prev.map(t => t.id === id ? next : t));
   return next;
 };
-// Run every case of a suite (a table suite's own cases, a bundle's picked cases), record the
-// run, and fire the suite's actions: on failure, or always.
+// Run every case of a suite (a default suite's own cases, a custom suite's picked cases —
+// against the custom suite's batch), record the run, and fire the suite's actions.
 const runDQSuite = (suiteId) => {
   const s = DQ_SUITES.find(x => x.id === suiteId); if (!s) return null;
-  const ids = s.type === "bundle" ? (s.caseIds||[]) : DQ_TEST_CASES.filter(t => t.suiteId === suiteId).map(t => t.id);
-  const results = ids.map(id => DQ_TEST_CASES.find(t => t.id === id)).filter(t => t && !t.readOnly).map(t => runDQCase(t.id));
+  const custom = s.type !== "table";
+  const ids = custom ? (s.caseIds||[]) : DQ_TEST_CASES.filter(t => t.suiteId === suiteId).map(t => t.id);
+  const results = ids.map(id => DQ_TEST_CASES.find(t => t.id === id)).filter(t => t && !t.readOnly).map(t => runDQCase(t.id, custom ? s.batch : undefined));
   const failed = results.filter(r => r?.status === "Failed").length;
   const fired = (s.actions||[]).filter(a => a.target && (a.trigger === "always" || failed > 0));
   const run = { at: "just now", passed: results.length - failed, failed, batch: dqBatchLabel(s.batch), sent: fired.map(a => `${a.type} · ${a.target}`) };
@@ -5697,13 +5712,6 @@ const QualityView = ({onToast=()=>{}}) => {
   const [dqSchedTz,      setDqSchedTz]      = useState("UTC");
   const [dqSchedEnabled, setDqSchedEnabled] = useState(true);
 
-  // Add Bundle Suite modal
-  const [newSuiteModal, setNewSuiteModal] = useState(false);
-  const [nsName,        setNsName]        = useState("");
-  const [nsDesc,        setNsDesc]        = useState("");
-  const [nsSearchTC,    setNsSearchTC]    = useState("");
-  const [nsSelectedTCs, setNsSelectedTCs] = useState([]);
-
   // ── computed values ─────────────────────────────────────────
   const totalTests   = testCases.length;
   const tcSuccess    = testCases.filter(t=>t.status==="Success").length;
@@ -5760,7 +5768,7 @@ const QualityView = ({onToast=()=>{}}) => {
   });
 
   const KNOWN_TABLES = [...new Set(DQ_TEST_CASES.map(t=>t.table)),"finance.dim_customer","platform.sessions"];
-  const KNOWN_COLS = {"commerce.orders":["order_id","customer_id","total_amount","status","created_at"],"platform.users":["user_id","email","phone","name","created_at"],"analytics.product_events":["event_id","event_type","user_id","timestamp"],"finance.fact_revenue":["revenue_id","amount","date","product_id"],"finance.dim_customer":["customer_id","name","email","tier"],"platform.sessions":["session_id","user_id","started_at","duration_s"]};
+  const KNOWN_COLS = DQ_TABLE_COLS;
   const TEAMS = ["dev.patel","maya.chen","arjun.sharma","sarah.kim","priya.nair","james.wilson"];
   const dimColor = (dim) => ({Accuracy:"#8b5cf6",Completeness:"#3b82f6",Consistency:"#06b6d4",Timeliness:"#f59e0b",Validity:"#10b981",Uniqueness:"#ec4899"}[dim]||T.textMuted);
   const DQ_DIMS = ["Accuracy","Completeness","Consistency","Timeliness","Validity","Uniqueness"];
@@ -5805,7 +5813,9 @@ const QualityView = ({onToast=()=>{}}) => {
     },2200);
   };
   // live counts: a table suite owns its cases, a bundle lists the cases it picked
-  const suiteCases = (s)=>s.type==="bundle"?testCases.filter(t=>(s.caseIds||[]).includes(t.id)):testCases.filter(t=>t.suiteId===s.id);
+  const suiteCases = (s)=>s.type!=="table"?testCases.filter(t=>(s.caseIds||[]).includes(t.id)):testCases.filter(t=>t.suiteId===s.id);
+  const openNewSuite = ()=>setSuiteCfg({id:null,kind:"custom",name:"",desc:"",owner:TEAMS[0],caseIds:[],q:"",tableF:"",batch:{mode:"inherit",column:""},actions:[]});
+  const openEditSuite = (s)=>setSuiteCfg({id:s.id,kind:"custom",name:s.name,desc:s.desc||"",owner:s.owner,caseIds:[...(s.caseIds||[])],q:"",tableF:"",batch:{mode:"inherit",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))});
   const suiteStats = (s)=>{const c=suiteCases(s);return {testCount:c.length,success:c.filter(t=>t.status==="Success").length,failed:c.filter(t=>t.status==="Failed").length,aborted:c.filter(t=>t.status==="Aborted").length};};
 
   const acknowledgeInc = (id,e)=>{e&&e.stopPropagation();setIncidents(prev=>prev.map(i=>i.id===id?{...i,status:"In Progress",timeline:[...(i.timeline||[]),{action:"Acknowledged — moved to In Progress",by:"dev.patel",at:"Just now"}]}:i));showT("Incident acknowledged");};
@@ -5846,15 +5856,6 @@ const QualityView = ({onToast=()=>{}}) => {
     setNewTCModal(false);setTab("testcases");
     if(runImmediately){ runTC(newCase.id); showT("Test case created — running now…"); } else showT("Test case created");
   };
-  // promote an inline custom-SQL one-off into a reusable Test Definition
-  const handleCreateBundleSuite = ()=>{
-    if(!nsName.trim()||nsSelectedTCs.length===0) return;
-    const ns = {id:`ts${Date.now()}`,name:nsName,table:"",type:"bundle",testCount:nsSelectedTCs.length,success:0,failed:0,aborted:0,lastRun:"Never",nextRun:"",schedule:"",owner:"dev.patel",desc:nsDesc,caseIds:[...nsSelectedTCs]};
-    setSuites(prev=>[...prev,ns]);
-    setNewSuiteModal(false);setNsName("");setNsDesc("");setNsSelectedTCs([]);setNsSearchTC("");
-    setSuitesSubTab("bundle");showT("Bundle suite created successfully");
-  };
-
   const toggleDefEnabled = (id)=>{
     setDefinitions(prev=>prev.map(d=>d.id===id?{...d,enabled:!d.enabled}:d));
   };
@@ -6227,8 +6228,8 @@ const QualityView = ({onToast=()=>{}}) => {
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
             <div style={{display:"flex",gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,padding:3}}>
               {[
-                {k:"table",l:"Table Suites",n:suites.filter(s=>s.type==="table").length},
-                {k:"bundle",l:"Bundle Suites",n:suites.filter(s=>s.type==="bundle").length},
+                {k:"table",l:"Default Suites",n:suites.filter(s=>s.type==="table").length},
+                {k:"custom",l:"Custom Suites",n:suites.filter(s=>s.type!=="table").length},
               ].map(({k,l,n})=>(
                 <button
                   key={k}
@@ -6249,18 +6250,14 @@ const QualityView = ({onToast=()=>{}}) => {
                 <option value="all">All Owners</option>
                 {TEAMS.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
+              <button onClick={openNewSuite}
+                style={{padding:"6px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>New Test Suite</button>
             </div>
           </div>
 
-          {/* ── Table Suites sub-tab ── */}
+          {/* ── Default Suites sub-tab ── */}
           {suitesSubTab==="table"&&(
             <>
-              <div style={{padding:"11px 14px",background:`${T.blue}08`,border:`1px solid ${T.blue}22`,borderRadius:9,marginBottom:14,display:"flex",alignItems:"flex-start",gap:9}}>
-                <div style={{width:16,height:16,borderRadius:4,background:`${T.blue}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="3.5" stroke={T.blue} strokeWidth="1.3"/><path d="M5 3v2l1.2 1.2" stroke={T.blue} strokeWidth="1.3" strokeLinecap="round"/></svg>
-                </div>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>Table Test Suites are automatically created for each table. They run on a schedule and own all test cases for that table.</div>
-              </div>
               <Card2 style={{padding:0,overflow:"hidden"}}>
                 <table style={{width:"100%",borderCollapse:"collapse"}}>
                   <thead>
@@ -6330,7 +6327,7 @@ const QualityView = ({onToast=()=>{}}) => {
                                       disabled={isRunning}
                                       style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
                                     >{isRunning?"Running…":"Run now"}</button>
-                                    <button onClick={()=>setSuiteCfg({id:s.id,batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})}
+                                    <button onClick={()=>setSuiteCfg({id:s.id,kind:"table",caseIds:[],batch:{mode:"table",column:"",...(s.batch||{})},actions:(s.actions||[]).map(a=>({...a}))})}
                                       style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>Settings</button>
                                   </div>}
                             </td>
@@ -6385,79 +6382,116 @@ const QualityView = ({onToast=()=>{}}) => {
             </>
           )}
 
-          {/* ── Bundle Suites sub-tab ── */}
-          {suitesSubTab==="bundle"&&(
-            <>
-              <div style={{padding:"11px 14px",background:`${T.violet}08`,border:`1px solid ${T.violet}22`,borderRadius:9,marginBottom:14,display:"flex",alignItems:"flex-start",gap:9}}>
-                <div style={{width:16,height:16,borderRadius:4,background:`${T.violet}18`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="3.5" stroke={T.violet} strokeWidth="1.3"/><path d="M5 3v2l1.2 1.2" stroke={T.violet} strokeWidth="1.3" strokeLinecap="round"/></svg>
-                </div>
-                <div style={{fontSize:12,color:T.textSub,lineHeight:1.6}}>Bundle Suites group test cases from multiple tables. They don't run directly — the Table Suites run them. Use bundles to monitor cross-cutting concerns.</div>
+          {/* ── Custom Suites sub-tab ── */}
+          {suitesSubTab==="custom"&&(()=>{
+            const list=suites.filter(s=>s.type!=="table"&&(suiteOwner==="all"||s.owner===suiteOwner));
+            if(list.length===0) return (
+              <div style={{textAlign:"center",padding:"56px 0"}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:10}}>No custom test suites</div>
+                <button onClick={openNewSuite} style={{padding:"7px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>New Test Suite</button>
               </div>
-              {suites.filter(s=>s.type==="bundle"&&(suiteOwner==="all"||s.owner===suiteOwner)).length===0
-                ? (
-                  <div style={{textAlign:"center",padding:"56px 0"}}>
-                    <div style={{fontSize:36,marginBottom:12,opacity:.15}}>⬡</div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No bundle suites yet</div>
-                    <div style={{fontSize:12,color:T.textMuted}}>Bundle suites you create will appear here.</div>
-                  </div>
-                ) : (
-                  <Card2 style={{padding:0,overflow:"hidden"}}>
-                    <table style={{width:"100%",borderCollapse:"collapse"}}>
-                      <thead>
-                        <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                          {["Name","Tests","Success %","Owner","Last Run","Actions"].map(l=>(
-                            <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {suites.filter(s=>s.type==="bundle"&&(suiteOwner==="all"||s.owner===suiteOwner)).map((s,i,arr)=>{
-                          const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
-                          const isRunning=runningSuites.has(s.id);
-                          return (
-                            <tr
-                              key={s.id}
-                              style={{borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"default",transition:"background .1s"}}
-                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover}
-                              onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                            >
-                              <td style={{padding:"10px 14px"}}>
-                                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:2}}>{s.name}</div>
-                                <div style={{fontSize:11,color:T.textMuted}}>Multi-table</div>
-                              </td>
-                              <td style={{padding:"10px 14px"}}>
-                                <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
-                                <div style={{fontSize:11,display:"flex",gap:6}}>
-                                  <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
-                                  <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
-                                  <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
+            );
+            return (
+              <Card2 style={{padding:0,overflow:"hidden"}}>
+                <table style={{width:"100%",borderCollapse:"collapse"}}>
+                  <thead>
+                    <tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                      {["Name","Tables","Tests","Success %","Owner","Last Run","Schedule","Next Run","Actions"].map(l=>(
+                        <th key={l} style={{padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.5,textTransform:"uppercase",whiteSpace:"nowrap"}}>{l}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {list.map((s,i,arr)=>{
+                      const st=suiteStats(s); const sRate=st.testCount>0?Math.round(st.success/st.testCount*100):0;
+                      const cases=suiteCases(s);
+                      const tables=[...new Set(cases.map(t=>t.table))];
+                      const isExp=expandedSuite===s.id;
+                      const isRunning=runningSuites.has(s.id);
+                      const has=!!s.schedule&&s.schedule!=="", paused=has&&s.schedEnabled===false;
+                      return (
+                        <React.Fragment key={s.id}>
+                          <tr onClick={()=>setExpandedSuite(isExp?null:s.id)}
+                            style={{borderBottom:(!isExp&&i<arr.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:isExp?`${T.accent}06`:"transparent"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover}
+                            onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}>
+                            <td style={{padding:"10px 14px"}}>
+                              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:2}}>{s.name}</div>
+                              {s.desc&&<div style={{fontSize:11,color:T.textMuted,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.desc}</div>}
+                            </td>
+                            <td style={{padding:"10px 14px",fontSize:11.5,color:T.textSub}} title={tables.join(", ")}>
+                              {tables.length===1?<span style={{fontFamily:"'Geist Mono',monospace"}}>{tables[0]}</span>:`${tables.length} tables`}
+                            </td>
+                            <td style={{padding:"10px 14px"}}>
+                              <div style={{fontSize:12.5,color:T.textSub,marginBottom:2}}>{st.testCount} tests</div>
+                              <div style={{fontSize:11,display:"flex",gap:6}}>
+                                <span style={{color:"#16a34a",fontWeight:600}}>{st.success}S</span>
+                                <span style={{color:T.rose,fontWeight:600}}>{st.failed}F</span>
+                                <span style={{color:T.amber,fontWeight:600}}>{st.aborted}A</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"10px 14px"}}>
+                              <span style={{fontSize:14,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:sRate>=90?"#16a34a":sRate>=70?T.amber:T.rose}}>{isRunning?"…":sRate+"%"}</span>
+                            </td>
+                            <td style={{padding:"10px 14px"}}>
+                              <span style={{fontSize:12,padding:"3px 9px",borderRadius:20,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{s.owner}</span>
+                            </td>
+                            <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":s.lastRun}</td>
+                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                {has
+                                  ? <code style={{fontSize:11,color:paused?T.amber:T.violet,background:paused?T.amberDim:`${T.violet}08`,padding:"2px 7px",borderRadius:5,border:`1px solid ${paused?T.amber+"40":T.violet+"18"}`,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{paused?"paused":s.schedule}</code>
+                                  : <span style={{fontSize:11,color:T.textMuted}}>—</span>}
+                                <button onClick={()=>setDqSchedModal(s.id)} title={has?"Edit schedule":"Set schedule"}
+                                  style={{width:22,height:22,borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M8.5 1.5l2 2L3 11H1V9L8.5 1.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                                </button>
+                              </div>
+                            </td>
+                            <td style={{padding:"10px 14px",fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{isRunning?"Running…":(s.nextRun||"—")}</td>
+                            <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
+                              <div style={{display:"flex",gap:6}}>
+                                <button onClick={e=>runSuite(s.id,e)} disabled={isRunning||st.testCount===0}
+                                  style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",whiteSpace:"nowrap"}}
+                                >{isRunning?"Running…":"Run now"}</button>
+                                <button onClick={()=>openEditSuite(s)}
+                                  style={{padding:"5px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer",whiteSpace:"nowrap"}}>Edit</button>
+                              </div>
+                            </td>
+                          </tr>
+                          {isExp&&(
+                            <tr style={{borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+                              <td colSpan={9} style={{padding:0}}>
+                                <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:"6px 22px",padding:"10px 20px",fontSize:11.5,color:T.textMuted}}>
+                                    <span>Batch · <span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{dqBatchLabel(s.batch||{mode:"inherit"})}</span></span>
+                                    <span>Actions · <span style={{color:T.text}}>{(s.actions||[]).filter(a=>a.target).length?(s.actions||[]).filter(a=>a.target).map(a=>`${a.type} ${a.target} (${a.trigger==="always"?"always":"on failure"})`).join(", "):"Inbox only"}</span></span>
+                                    {s.runs&&s.runs[0]&&<span>Last run · <span style={{color:s.runs[0].failed?T.rose:"#16a34a",fontWeight:600}}>{s.runs[0].passed} passed · {s.runs[0].failed} failed</span>{s.runs[0].sent.length?<> · sent to {s.runs[0].sent.join(", ")}</>:null}</span>}
+                                  </div>
+                                  {cases.map(t=>(
+                                    <div key={t.id} onClick={e=>{e.stopPropagation();setTcDetail(t);}}
+                                      style={{display:"flex",alignItems:"center",gap:12,padding:"9px 20px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}
+                                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                      <DQStatusDot status={t.status}/>
+                                      <span style={{flex:1,fontSize:13,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                                      <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted,flexShrink:0}}>{t.table}{t.col?`.${t.col}`:""}</span>
+                                      <span style={{fontSize:10.5,padding:"1px 7px",borderRadius:4,background:`${dimColor(t.dim)}12`,color:dimColor(t.dim),fontWeight:600,flexShrink:0}}>{t.dim}</span>
+                                      <DQSparkline data={t.history} w={52} h={18}/>
+                                      <DQStatusBadge status={t.status}/>
+                                    </div>
+                                  ))}
                                 </div>
                               </td>
-                              <td style={{padding:"10px 14px"}}>
-                                <span style={{fontSize:14,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:sRate>=90?"#16a34a":sRate>=70?T.amber:T.rose}}>{sRate}%</span>
-                              </td>
-                              <td style={{padding:"10px 14px"}}>
-                                <span style={{fontSize:12,padding:"3px 9px",borderRadius:20,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}>{s.owner}</span>
-                              </td>
-                              <td style={{padding:"10px 14px",fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.textMuted,whiteSpace:"nowrap"}}>{s.lastRun}</td>
-                              <td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}>
-                                <button
-                                  onClick={e=>runSuite(s.id,e)}
-                                  disabled={isRunning}
-                                  style={{padding:"5px 12px",borderRadius:7,background:isRunning?T.bgElevated:T.accentDim,border:`1px solid ${isRunning?T.border:T.accent}33`,color:isRunning?T.textMuted:T.accent,fontSize:11.5,fontWeight:600,cursor:isRunning?"default":"pointer",transition:"all .15s",whiteSpace:"nowrap"}}
-                                >{isRunning?"Running…":"Run now"}</button>
-                              </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </Card2>
-                )
-              }
-            </>
-          )}
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </Card2>
+            );
+          })()}
         </>}
 
         {/* ════════════════ DATA QUALITY RULES ════════════════ */}
@@ -6791,35 +6825,95 @@ const QualityView = ({onToast=()=>{}}) => {
         );
       })()}
 
-      {/* ════════════════ SUITE SETTINGS DRAWER (batch + actions) ════════════════ */}
+      {/* ════════════════ TEST SUITE DRAWER — new/edit custom suite, or a default suite's settings ════════════════ */}
       {suiteCfg&&(()=>{
-        const s=suites.find(x=>x.id===suiteCfg.id); if(!s) return null;
-        const cols=KNOWN_COLS[s.table]||[];
+        const s=suiteCfg.id?suites.find(x=>x.id===suiteCfg.id):null; if(suiteCfg.id&&!s) return null;
+        const custom=suiteCfg.kind==="custom";
+        const picked=testCases.filter(t=>suiteCfg.caseIds.includes(t.id));
+        const pickedTables=[...new Set(picked.map(t=>t.table))];
+        const cols=custom?[...new Set(pickedTables.flatMap(dqTableCols))]:(KNOWN_COLS[s.table]||[]);
+        const noCol=custom&&suiteCfg.batch.column?pickedTables.filter(t=>!dqTableCols(t).includes(suiteCfg.batch.column)):[];
+        const pool=testCases.filter(t=>(!suiteCfg.tableF||t.table===suiteCfg.tableF)&&(!suiteCfg.q||(t.name+" "+t.table).toLowerCase().includes(suiteCfg.q.toLowerCase())));
+        const togglePick=(id)=>setSuiteCfg(c=>({...c,caseIds:c.caseIds.includes(id)?c.caseIds.filter(x=>x!==id):[...c.caseIds,id]}));
         const lab={display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
         const box={width:"100%",padding:"8px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"};
         const sec={fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:.5,textTransform:"uppercase",marginBottom:10};
         const setBatch=(k,v)=>setSuiteCfg(c=>({...c,batch:{...c.batch,[k]:v}}));
         const setAct=(i,k,v)=>setSuiteCfg(c=>({...c,actions:c.actions.map((a,j)=>j===i?{...a,[k]:v}:a)}));
-        const partitioned=suiteCfg.batch.mode!=="table";
-        const canSave=!partitioned||!!suiteCfg.batch.column;
+        const partitioned=suiteCfg.batch.mode==="daily"||suiteCfg.batch.mode==="monthly";
+        const canSave=(!partitioned||!!suiteCfg.batch.column)&&(!custom||(suiteCfg.name.trim()&&suiteCfg.caseIds.length>0));
         return (
           <div style={{position:"fixed",inset:0,zIndex:1100,display:"flex"}}>
             <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",backdropFilter:"blur(2px)"}} onClick={()=>setSuiteCfg(null)}/>
             <div className="slideInRight" style={{position:"relative",width:480,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)",marginLeft:"auto"}}>
               <div style={{padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div>
-                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>Suite Settings</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{s.name} · {s.table}</div>
+                  <div style={{fontSize:15,fontWeight:700,color:T.text}}>{custom?(s?"Edit Test Suite":"New Test Suite"):"Suite Settings"}</div>
+                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{custom?(s?s.name:"Custom suite"):`${s.name} · ${s.table}`}</div>
                 </div>
                 <button onClick={()=>setSuiteCfg(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:22}}>
+                {custom&&(
+                  <div>
+                    <div style={sec}>Details</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                      <div>
+                        <label style={lab}>Name <span style={{color:T.rose}}>*</span></label>
+                        <input value={suiteCfg.name} onChange={e=>setSuiteCfg(c=>({...c,name:e.target.value}))} placeholder="e.g. orders_critical" style={box}/>
+                      </div>
+                      <div>
+                        <label style={lab}>Description</label>
+                        <input value={suiteCfg.desc} onChange={e=>setSuiteCfg(c=>({...c,desc:e.target.value}))} placeholder="e.g. Checks required for FP&A sign-off" style={box}/>
+                      </div>
+                      <div>
+                        <label style={lab}>Owner</label>
+                        <select value={suiteCfg.owner} onChange={e=>setSuiteCfg(c=>({...c,owner:e.target.value}))} style={{...box,cursor:"pointer"}}>
+                          {TEAMS.map(t=><option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {custom&&(
+                  <div>
+                    <div style={{...sec,display:"flex",justifyContent:"space-between"}}>
+                      <span>Test Cases <span style={{color:T.rose}}>*</span></span>
+                      <span style={{color:suiteCfg.caseIds.length?T.accent:T.textMuted,textTransform:"none",letterSpacing:0}}>{suiteCfg.caseIds.length} selected · {pickedTables.length} table{pickedTables.length===1?"":"s"}</span>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <input value={suiteCfg.q} onChange={e=>setSuiteCfg(c=>({...c,q:e.target.value}))} placeholder="Search test cases…" style={box}/>
+                      <select value={suiteCfg.tableF} onChange={e=>setSuiteCfg(c=>({...c,tableF:e.target.value}))} style={{...box,cursor:"pointer"}}>
+                        <option value="">All tables</option>
+                        {[...new Set(testCases.map(t=>t.table))].map(t=><option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:8,maxHeight:260,overflowY:"auto"}}>
+                      {pool.length===0&&<div style={{padding:"16px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No test cases match</div>}
+                      {pool.map((t,i)=>{
+                        const on=suiteCfg.caseIds.includes(t.id);
+                        return (
+                          <label key={t.id} style={{display:"flex",alignItems:"center",gap:9,padding:"8px 11px",borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer",background:on?T.accentDim:"transparent"}}>
+                            <input type="checkbox" checked={on} onChange={()=>togglePick(t.id)} style={{accentColor:T.accent,cursor:"pointer"}}/>
+                            <DQStatusDot status={t.status} size={8}/>
+                            <span style={{flex:1,minWidth:0}}>
+                              <span style={{display:"block",fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                              <span style={{display:"block",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{t.table}{t.col?`.${t.col}`:""}</span>
+                            </span>
+                            {t.source==="dbt"&&<TestSourceChip source="dbt"/>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <div style={sec}>Batch</div>
                   <div style={{display:"grid",gridTemplateColumns:partitioned?"1fr 1fr":"1fr",gap:10}}>
                     <div>
                       <label style={lab}>Validate</label>
                       <select value={suiteCfg.batch.mode} onChange={e=>setBatch("mode",e.target.value)} style={{...box,cursor:"pointer"}}>
+                        {custom&&<option value="inherit">Table default</option>}
                         <option value="table">Whole table</option>
                         <option value="daily">Latest daily partition</option>
                         <option value="monthly">Latest monthly partition</option>
@@ -6836,6 +6930,7 @@ const QualityView = ({onToast=()=>{}}) => {
                     )}
                   </div>
                   {partitioned&&suiteCfg.batch.column&&<div style={{fontSize:11,color:T.textMuted,marginTop:7}}>Next run · <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{dqBatchLabel(suiteCfg.batch)}</span></div>}
+                  {partitioned&&noCol.length>0&&<div style={{fontSize:11,color:T.amber,marginTop:5}}>Whole table on · <span style={{fontFamily:"'Geist Mono',monospace"}}>{noCol.join(", ")}</span></div>}
                 </div>
                 <div>
                   <div style={sec}>Actions After Run</div>
@@ -6863,7 +6958,7 @@ const QualityView = ({onToast=()=>{}}) => {
                   <button onClick={()=>setSuiteCfg(c=>({...c,actions:[...c.actions,{type:"Slack",target:"",trigger:"failure"}]}))}
                     style={{marginTop:10,fontSize:12,color:T.accent,background:`${T.accent}10`,border:"none",cursor:"pointer",padding:"6px 11px",borderRadius:7,fontWeight:600}}>+ Add Action</button>
                 </div>
-                {s.runs&&s.runs.length>0&&(
+                {s&&s.runs&&s.runs.length>0&&(
                   <div>
                     <div style={sec}>Recent Runs</div>
                     <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
@@ -6879,10 +6974,23 @@ const QualityView = ({onToast=()=>{}}) => {
                 )}
               </div>
               <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",justifyContent:"space-between"}}>
-                <button onClick={()=>setSuiteCfg(null)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setSuiteCfg(null)} style={{padding:"8px 18px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer"}}>Cancel</button>
+                  {custom&&s&&<button onClick={()=>{setSuites(prev=>prev.filter(x=>x.id!==s.id));setSuiteCfg(null);setExpandedSuite(null);showT("Test suite deleted","error");}}
+                    style={{padding:"8px 14px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.rose,fontSize:12.5,cursor:"pointer"}}>Delete</button>}
+                </div>
                 <button disabled={!canSave} onClick={()=>{
-                  setSuites(prev=>prev.map(x=>x.id===s.id?{...x,batch:suiteCfg.batch,actions:suiteCfg.actions.filter(a=>a.target&&a.target.trim())}:x));
-                  setSuiteCfg(null); showT("Suite settings saved — applies on the next run");
+                  const actions=suiteCfg.actions.filter(a=>a.target&&a.target.trim());
+                  if(custom&&!s){
+                    const ns={id:`ts${Date.now()}`,name:suiteCfg.name.trim(),table:"",type:"custom",desc:suiteCfg.desc.trim(),owner:suiteCfg.owner,caseIds:suiteCfg.caseIds,
+                      batch:suiteCfg.batch,actions,lastRun:"Never",nextRun:"",schedule:"",testCount:0,success:0,failed:0,aborted:0};
+                    setSuites(prev=>[...prev,ns]); setSuitesSubTab("custom"); setExpandedSuite(ns.id);
+                    setSuiteCfg(null); showT("Test suite created");
+                    return;
+                  }
+                  setSuites(prev=>prev.map(x=>x.id===s.id?{...x,batch:suiteCfg.batch,actions,
+                    ...(custom?{name:suiteCfg.name.trim(),desc:suiteCfg.desc.trim(),owner:suiteCfg.owner,caseIds:suiteCfg.caseIds}:{})}:x));
+                  setSuiteCfg(null); showT(custom?"Test suite updated":"Suite settings saved — applies on the next run");
                 }} style={{padding:"9px 22px",borderRadius:9,background:canSave?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:canSave?"pointer":"default"}}>Save</button>
               </div>
             </div>
@@ -7389,84 +7497,6 @@ const QualityView = ({onToast=()=>{}}) => {
               <button onClick={confirmResolve} disabled={!incResolveReason.trim()}
                 style={{padding:"9px 22px",borderRadius:9,background:incResolveReason.trim()?"#16a34a":"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:incResolveReason.trim()?"pointer":"default"}}>
                 Close Incident ✓
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════ ADD BUNDLE SUITE MODAL ════════════════ */}
-      {newSuiteModal&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.62)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,backdropFilter:"blur(5px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:16,width:600,maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,.45)"}}>
-            <div style={{padding:"20px 24px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Bundle Suite</div>
-                <div style={{fontSize:12,color:T.textMuted,marginTop:2}}>Group test cases from multiple tables into a cross-cutting monitoring suite.</div>
-              </div>
-              <button onClick={()=>setNewSuiteModal(false)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
-            </div>
-            <div style={{flex:1,overflowY:"auto",padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
-              {/* Info banner */}
-              <div style={{padding:"11px 14px",background:`${T.violet}08`,border:`1px solid ${T.violet}22`,borderRadius:9,fontSize:12,color:T.textSub,lineHeight:1.6}}>
-                <strong style={{color:T.violet}}>Bundle suites</strong> are user-created views across multiple tables. They don't run directly — the underlying Table Suites run them. Use bundles to monitor a cross-cutting concern (e.g. "all PII column tests").
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Suite Name <span style={{color:T.rose}}>*</span></label>
-                <input value={nsName} onChange={e=>setNsName(e.target.value)} placeholder="e.g. pii_columns_suite"
-                  style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${nsName?T.accent:T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=nsName?T.accent:T.border}/>
-              </div>
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                <textarea value={nsDesc} onChange={e=>setNsDesc(e.target.value)} rows={2} placeholder="What does this bundle monitor and why?"
-                  style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",boxSizing:"border-box",lineHeight:1.5}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              </div>
-              {/* Test case selector */}
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Add Test Cases <span style={{color:T.rose}}>*</span> <span style={{color:T.textMuted,fontWeight:400}}>({nsSelectedTCs.length} selected)</span></label>
-                <div style={{position:"relative",marginBottom:8}}>
-                  <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                  <input value={nsSearchTC} onChange={e=>setNsSearchTC(e.target.value)} placeholder="Search test cases…"
-                    style={{width:"100%",padding:"8px 12px 8px 30px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:220,overflowY:"auto",border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-                  {testCases.filter(t=>!nsSearchTC||t.name.toLowerCase().includes(nsSearchTC.toLowerCase())||t.table.toLowerCase().includes(nsSearchTC.toLowerCase())).map((t,i,arr)=>{
-                    const isSel=nsSelectedTCs.includes(t.id);
-                    return (
-                      <div key={t.id} onClick={()=>setNsSelectedTCs(prev=>isSel?prev.filter(id=>id!==t.id):[...prev,t.id])}
-                        style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:isSel?`${T.accent}08`:"transparent",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",transition:"background .1s"}}
-                        onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!isSel)e.currentTarget.style.background="transparent";}}>
-                        <div style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${isSel?T.accent:T.border}`,background:isSel?T.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
-                          {isSel&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 3.5-4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                        </div>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12.5,fontWeight:500,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
-                          <div style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{t.table}{t.col?`.${t.col}`:""}</div>
-                        </div>
-                        <DQStatusDot status={t.status}/>
-                      </div>
-                    );
-                  })}
-                  {testCases.filter(t=>!nsSearchTC||t.name.toLowerCase().includes(nsSearchTC.toLowerCase())||t.table.toLowerCase().includes(nsSearchTC.toLowerCase())).length===0&&(
-                    <div style={{padding:"20px",textAlign:"center",color:T.textMuted,fontSize:12}}>No test cases match your search</div>
-                  )}
-                </div>
-                {nsSelectedTCs.length>0&&(
-                  <div style={{marginTop:6,display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {nsSelectedTCs.slice(0,4).map(id=>{const t=testCases.find(tc=>tc.id===id);return t?<span key={id} style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.accentDim,color:T.accent,fontWeight:500}}>{t.name.length>30?t.name.slice(0,30)+"…":t.name}</span>:null;})}
-                    {nsSelectedTCs.length>4&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:5,background:T.bgElevated,color:T.textMuted}}>+{nsSelectedTCs.length-4} more</span>}
-                  </div>
-                )}
-              </div>
-            </div>
-            <div style={{padding:"14px 24px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgElevated,borderRadius:"0 0 16px 16px"}}>
-              <button onClick={()=>setNewSuiteModal(false)} style={{padding:"9px 20px",borderRadius:9,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
-              <button onClick={handleCreateBundleSuite} disabled={!nsName.trim()||nsSelectedTCs.length===0}
-                style={{padding:"9px 22px",borderRadius:9,background:nsName.trim()&&nsSelectedTCs.length>0?T.accent:"rgba(100,100,120,.3)",border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:nsName.trim()&&nsSelectedTCs.length>0?"pointer":"default"}}>
-                Create Bundle Suite
               </button>
             </div>
           </div>
