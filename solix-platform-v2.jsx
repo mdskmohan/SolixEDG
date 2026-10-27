@@ -1089,6 +1089,18 @@ const INITIAL_REVERSE_SYNC_RUNS = [
 ];
 
 // ─────────────────────────────────────────────
+// COLUMN TAGS — tags that sit on a column, not on the object. AI-accepted ones
+// arrive "pending" and only go live once approved in the Inbox.
+// ─────────────────────────────────────────────
+let _colTags = {};                                  // "assetId::col" → [{tag, status, origin, appliedBy, at}]
+const _colTagSubs = new Set();
+const colTagKey = (assetId, col) => String(assetId)+"::"+col;
+const colTagSet = (fn) => { _colTags = fn(_colTags); _colTagSubs.forEach(f=>f()); };
+const colTagsOf = (assetId, col) => (_colTags[colTagKey(assetId, col)]||[]).filter(t=>t.status!=="rejected");
+const useColTags = () => { const [,force] = useState(0);
+  useEffect(()=>{ const f=()=>force(n=>n+1); _colTagSubs.add(f); return ()=>_colTagSubs.delete(f); },[]); return _colTags; };
+
+// ─────────────────────────────────────────────
 // TAG PROVIDER
 // ─────────────────────────────────────────────
 function TagProvider({ children }) {
@@ -1108,18 +1120,33 @@ function TagProvider({ children }) {
   const getTagDef           = (tagId)   => tagDefs.find(t => t.id===tagId);
 
   const applyTag = (assetId, tagId, options={}) => {
-    const { origin='manual', sourceSystem=null, appliedBy='Current User' } = options;
+    const { origin='manual', sourceSystem=null, appliedBy='Current User', requireApproval=false, assetName=null, note=null } = options;
     const tagDef = tagDefs.find(t=>t.id===tagId);
     if (!tagDef) return;
     const existing = (assignments[assetId]||[]).find(a=>a.tagId===tagId && a.status!=='rejected');
     if (existing) return;
-    const status = tagDef.governanceRequired ? 'pending' : 'active';
+    const status = (tagDef.governanceRequired || requireApproval) ? 'pending' : 'active';
     const newA = { id:'a'+Date.now(), tagId, assetId, origin, sourceSystem, sourceSystems:sourceSystem?[sourceSystem]:[], status, appliedBy, appliedAt:new Date().toISOString(), stewardNote:'', propagationChain:[] };
     setAssignments(prev=>({...prev,[assetId]:[...(prev[assetId]||[]),newA]}));
     if (status==='pending') {
-      setInbox(prev=>[{ id:'i'+Date.now(), type:'pending_approval', tagName:tagDef.name, assetId, assetName:String(assetId), domain:'Unknown', sourceSystem:null, note:`Applied by ${appliedBy}. Awaiting steward approval.`, metadata:{appliedBy, propagationMode:tagDef.propagationMode, downstreamCount:0}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
+      setInbox(prev=>[{ id:'i'+Date.now(), type:'pending_approval', tagName:tagDef.name, assetId, assetName:assetName||String(assetId), domain:'Unknown', sourceSystem:origin==='ai'?'AI Classification':null, note:note||`Applied by ${appliedBy}. Awaiting steward approval.`, metadata:{appliedBy, propagationMode:tagDef.propagationMode, downstreamCount:0}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
     }
     setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,usageCount:t.usageCount+1}:t));
+  };
+
+  // A column tag request: lands pending on the column and as an approval in the Inbox.
+  const requestColumnTag = (assetId, assetName, col, tagName, options={}) => {
+    const { appliedBy='Current User', note=null } = options;
+    const key = colTagKey(assetId, col);
+    if ((_colTags[key]||[]).some(t=>t.tag===tagName && t.status!=='rejected')) return;
+    colTagSet(s=>({...s, [key]:[...(s[key]||[]).filter(t=>t.tag!==tagName), {tag:tagName, status:'pending', origin:'ai', appliedBy, at:new Date().toISOString()}]}));
+    setInbox(prev=>[{ id:'i'+Date.now()+Math.random().toString(36).slice(2,6), type:'pending_approval', tagName, assetId, col, assetName:assetName+'.'+col, domain:'Unknown', sourceSystem:'AI Classification', note:note||('Requested by '+appliedBy+'. Awaiting approval.'), metadata:{appliedBy, propagationMode:'none', downstreamCount:0, col}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
+  };
+  // Undo of an AI decision: the open approval is withdrawn and a column tag is taken off.
+  const withdrawPending = (assetId, tagName, col=null) => {
+    setInbox(prev=>prev.map(i=>(!i.resolvedAt && i.type==='pending_approval' && i.assetId===assetId && i.tagName===tagName && (i.col||null)===(col||null))
+      ? {...i, resolvedAt:new Date().toISOString(), resolvedBy:'Current User', resolution:'withdrawn'} : i));
+    if (col) colTagSet(s=>({...s, [colTagKey(assetId,col)]:(s[colTagKey(assetId,col)]||[]).filter(t=>t.tag!==tagName)}));
   };
 
   const removeTag = (assetId, assignmentId, stewardNote='') => {
@@ -1130,7 +1157,12 @@ function TagProvider({ children }) {
     const item = inbox.find(i=>i.id===itemId);
     if (!item) return;
     setInbox(prev=>prev.map(i=>i.id===itemId?{...i,resolvedAt:new Date().toISOString(),resolvedBy:'Current User',resolution}:i));
-    if (item.type==='pending_approval') {
+    if (item.type==='pending_approval' && item.col) {
+      const key = colTagKey(item.assetId, item.col);
+      colTagSet(s=>({...s, [key]:(s[key]||[]).map(t=>t.tag!==item.tagName ? t
+        : (resolution==='approve'||resolution==='approve_propagate') ? {...t, status:'active'} : resolution==='reject' ? {...t, status:'rejected'} : t)}));
+    }
+    if (item.type==='pending_approval' && !item.col) {
       setAssignments(prev=>({...prev,[item.assetId]:(prev[item.assetId]||[]).map(a=>{
         const def=tagDefs.find(t=>t.id===a.tagId);
         if(!def||def.name!==item.tagName) return a;
@@ -1252,7 +1284,7 @@ function TagProvider({ children }) {
   const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, requestColumnTag, withdrawPending, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -25403,6 +25435,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
   // ── Tag propagation (explicit, tracked background job) ──
   const _tagCtx = useTagCtx();
+  useColTags();                                  // AI-classified column tags (pending or approved)
   const [propTag,   setPropTag]   = useState(null);   // tag name being propagated
   const [propScope, setPropScope] = useState('both'); // hierarchy | lineage | both
   const PROP_SCOPE_META = {
@@ -25893,12 +25926,19 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                     const COL_TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},finance:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},KPI:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"},sensitive:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},events:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},model:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},etl:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},dimension:{bg:"rgba(16,185,129,.08)",color:"#059669",border:"rgba(16,185,129,.2)"},marketing:{bg:"rgba(236,72,153,.08)",color:"#db2777",border:"rgba(236,72,153,.2)"}};
                     const ctc=tag=>COL_TAG_C[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};
                     const colTags=colTagsMap[selCol.name]||[];
+                    const aiColTags=colTagsOf(asset.id, selCol.name).filter(t=>!colTags.includes(t.tag));
                     const visibleTags=showAllColTags?colTags:colTags.slice(0,3);
                     return (
                       <div style={{position:"relative"}}>
                         <MetaLabel onEdit={()=>{setColTagModalOpen(true);setColTagModalSearch("");}}>Tags</MetaLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                          {colTags.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                          {colTags.length===0&&!aiColTags.length&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
+                          {aiColTags.map(t=>{const c=ctc(t.tag); const pend=t.status==="pending"; return(
+                            <span key={"ai_"+t.tag} title={pend?"AI classification · awaiting approval in the Inbox":"AI classification · approved"}
+                              style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,padding:"4px 10px",borderRadius:5,background:pend?"transparent":c.bg,
+                                border:pend?`1px dashed ${c.border}`:`1px solid ${c.border}`,color:c.color,fontWeight:600,opacity:pend?.85:1}}>
+                              {t.tag}{pend&&<span style={{fontSize:10,fontWeight:700,color:T.amber}}>Pending approval</span>}
+                            </span>);})}
                           {visibleTags.map(t=>{const c=ctc(t);return(
                             <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
                           );})}
@@ -48323,6 +48363,21 @@ const InboxView = ({onToast}) => {
   const tagCtx = useTagCtx(); // tags live in TagProvider context — the tags "shared store"
   const contractApprovals = useContractApprovals();
   const [items,      setItems]      = useState([...POLICY_VIOLATION_INBOX, ...TAG_REVIEW_INBOX, ...CERT_REVIEW_INBOX, ...ORPHAN_INBOX, ...TERM_REVIEW_INBOX, ...INBOX_DATA.filter(i=>i.type!=="stewardship_request")]);
+  // AI Classification asks for approval as it goes, so its tag approvals join the
+  // Inbox live — and leave it again if the suggestion is undone.
+  useEffect(()=>{
+    if(!tagCtx) return;
+    const live = (tagCtx.inbox||[]).filter(t=>t.sourceSystem==="AI Classification" && t.type==="pending_approval");
+    setItems(prev=>{
+      let next = prev.filter(i=>!(i.aiTag && live.some(t=>"tg-"+t.id===i.id && t.resolution==="withdrawn")));
+      live.filter(t=>!t.resolvedAt && !next.some(i=>i.id==="tg-"+t.id)).forEach(t=>{
+        next = [{id:"tg-"+t.id, type:"tag_review", severity:"medium", section:"tags", timeAgo:"just now",
+          title:`Tag approval: ${t.tagName} on ${t.assetName}`, asset:{name:t.assetName, path:t.assetName, type:t.col?"Column":"Tag"},
+          body:t.note, tagName:t.tagName, tagType:t.type, tagInboxId:t.id, readAt:null, aiTag:true}, ...next];
+      });
+      return next.length===prev.length && next.every((x,i)=>x===prev[i]) ? prev : next;
+    });
+  },[tagCtx&&tagCtx.inbox]);
   const [filter,     setFilter]     = useState("action"); // action | activity | done
   const [viewMode,   setViewMode]   = useState("list");   // list | kanban
   const [roleScope,  setRoleScope]  = useState("all");    // all | steward | owner
@@ -59443,7 +59498,7 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
               {f.newTag&&<><b style={{color:T.text}}>{f.tag}</b> is created as a <b style={{color:T.text}}>Draft</b> business tag in your taxonomy, then </>}
               {f.newTag?"applied":<><b style={{color:T.text}}>{f.tag}</b> is applied</>} to {f.col?"the column":`the ${(f.asset.type||"object").toLowerCase()}`} {where}.
               {" "}Retention and legal-hold rules that target {f.tag} start to cover it{f.col?", and the column becomes eligible as a match key":""}.
-              {" "}You can undo it later from Review › Accepted.
+              {" "}It goes live once approved in the Inbox. You can undo it later from Review › Accepted.
             </div>
           </div>
         </div>
@@ -60260,13 +60315,14 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
     if(ids.length) setSeen(s=>new Set([...s, ...ids]));
   },[openRun, st.jobs]);
   const tagCtx = useTagCtx();
+  useColTags();
   const [toApply, setToApply] = useState([]);   // new tags waiting for the taxonomy to hand back an id
   useEffect(()=>{
     if(!toApply.length || !tagCtx) return;
     const left = toApply.filter(x=>{
       const t = tagCtx.tagDefs.find(y=>y.name===x.name);
       if(!t) return true;
-      if(x.assetId) tagCtx.applyTag(x.assetId, t.id, {origin:"ai", appliedBy:me});
+      if(x.assetId) tagCtx.applyTag(x.assetId, t.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:x.assetName, note:x.note});
       return false;
     });
     if(left.length!==toApply.length) setToApply(left);
@@ -60282,11 +60338,12 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         managedBy:me, description:`Created from an AI Classification suggestion on ${where}.`});
       aicSet(x=>({...x, createdTags:[...(x.createdTags||[]), f.tag]}));
     }
-    if(!f.col){
-      if(f.newTag) setToApply(q=>[...q, {name:f.tag, assetId:f.assetId}]);
-      else if(tagCtx){ const t = tagCtx.tagDefs.find(y=>y.name===f.tag); if(t) tagCtx.applyTag(f.assetId, t.id, {origin:"ai", appliedBy:me}); }
-    }
-    pushNotif({category:"Classifications", type:"tag", title:`${f.tag} ${f.newTag?"created and ":""}applied · ${where}`,
+    // Every accepted AI tag waits for approval in the Inbox before it goes live.
+    const note = `AI suggestion accepted by ${me} at ${aiPct(f.conf)} confidence. Awaiting approval.`;
+    if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, f.tag, {appliedBy:me, note}); }
+    else if(f.newTag) setToApply(q=>[...q, {name:f.tag, assetId:f.assetId, assetName:f.asset.name, note}]);
+    else if(tagCtx){ const t = tagCtx.tagDefs.find(y=>y.name===f.tag); if(t) tagCtx.applyTag(f.assetId, t.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:f.asset.name, note}); }
+    pushNotif({category:"Classifications", type:"tag", title:`${f.tag} ${f.newTag?"created · ":""}awaiting approval · ${where}`,
       body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
   const decide = (f, verdict) => {
@@ -60302,10 +60359,13 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   const undo = (f) => {
     const d = st.decisions[f.id]; if(!d || !canDecide) return;
     aicUndo(f);
-    if(d.verdict==="accepted" && !f.col && tagCtx){
-      const def = tagCtx.tagDefs.find(t=>t.name===f.tag);
-      const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
-      if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
+    if(d.verdict==="accepted" && tagCtx){
+      tagCtx.withdrawPending(f.assetId, f.tag, f.col||null);
+      if(!f.col){
+        const def = tagCtx.tagDefs.find(t=>t.name===f.tag);
+        const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
+        if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
+      }
     }
     onToast(`${f.tag} on ${whereOf(f)} is back in Pending`,"info");
   };
@@ -60398,6 +60458,13 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   // ── The open scan ──────────────────────────────────────────────────────────
   const run = openRun ? st.profiles.find(p=>p.id===openRun) : null;
   const statusOf = f => st.decisions[f.id] ? st.decisions[f.id].verdict : "pending";
+  // Where an accepted suggestion stands: waiting for approval, live, or turned down.
+  const approvalOf = (f) => {
+    if(f.col){ const t = (_colTags[colTagKey(f.assetId, f.col)]||[]).find(x=>x.tag===f.tag); return t ? t.status : "pending"; }
+    const def = tagCtx && tagCtx.tagDefs.find(t=>t.name===f.tag);
+    const a = def && (tagCtx.assignments[f.assetId]||[]).filter(x=>x.tagId===def.id).pop();
+    return a ? a.status : "pending";
+  };
   // A scan's Review tab: every suggestion it raised, pending and decided — one row each.
   const all = run ? findings.filter(f=>(f.profiles||[]).includes(run.id) && (aicIsProposal(st,f) || st.decisions[f.id])) : [];
   const tagsAll  = [...new Set(all.map(f=>f.tag))].sort();
@@ -60449,6 +60516,8 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
           </>) : (<>
             <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:s==="accepted"?T.green:T.rose}}>
               <Dot c={s==="accepted"?T.green:T.rose}/>{st.decisions[f.id].by}</span>
+            {s==="accepted"&&(()=>{ const a = approvalOf(f); const m = a==="active"?{l:"Approved",c:T.green}:a==="rejected"?{l:"Not approved",c:T.rose}:{l:"Pending approval",c:T.amber};
+              return <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:m.c+"16",color:m.c,whiteSpace:"nowrap"}}>{m.l}</span>; })()}
             {canDecide&&<AICMenu size={24} items={[{label:"Undo decision", onClick:()=>undo(f)}]}/>}
           </>)}
         </div>
