@@ -43866,7 +43866,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
       value:enableTagSync, setter:setEnableTagSync},
     // Structured sources only: classification needs columns.
     (scope.objectTypes||[]).includes("Columns")&&{key:"aic", label:"AI classification",
-      desc:aicSt.settings.enabled ? "Suggest tags for new and changed tables, views and columns" : "Disabled in Settings › AI",
+      desc:aicSt.settings.enabled ? "Suggest tags for new and changed objects" : "Disabled in Settings › AI",
       value:enableAic&&aicSt.settings.enabled, setter:setEnableAic, disabled:!aicSt.settings.enabled},
   ].filter(Boolean);
   const aicOn = enableAic && aicSt.settings.enabled && (scope.objectTypes||[]).includes("Columns");
@@ -44628,7 +44628,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                     </div>
                     {app.key==="aic"&&app.value&&(
                       <div style={{marginTop:-10,padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 9px 9px"}}>
-                        <AICIngestFields cfg={aicCfg} onChange={setAicCfg} profilingOn={enableProfiling}/>
+                        <AICIngestFields cfg={aicCfg} onChange={setAicCfg} typeOptions={scope.objectTypes||[]}/>
                       </div>
                     )}
                   </React.Fragment>))}
@@ -44703,11 +44703,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
                   // A source with nothing separately collectable gets no empty section.
                   ...(ingestionApps.length ? [{title:"What to collect", rows:[["Enabled", apps]]}] : []),
                   ...(aicOn ? [{title:"AI classification", rows:[
-                    ["Classification level", [aicCfg.levels.table&&"Table / view", aicCfg.levels.column&&"Column"].filter(Boolean).join(", ")],
-                    ["Tag source", aicCfg.mode==="new"?"Suggest new tags":"Existing tags"],
+                    ["Object type", (aicCfg.objectTypes||[]).length ? aicCfg.objectTypes.join(", ") : "All object types"],
+                    ["Tag source", aicTagSourcesOf(aicCfg.mode).join(", ")],
                     ...(aicCfg.mode==="new"?[]:[["Tags", aicCfg.tags.join(", ")||"—"]]),
-                    ["Minimum confidence", aicCfg.minConfidence==null?`Default (${Math.round(aicSt.settings.minConfidence*100)}%)`:`${Math.round(aicCfg.minConfidence*100)}%`],
-                    ["Signals", enableProfiling?"Column name, value pattern, linked columns":"Column name, linked columns"],
                   ]}] : []),
                 ];
                 return cards.map(sec=>(
@@ -44971,7 +44969,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 {on&&<div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1fr",gap:8}}>
                   {cell("Last run", lj ? <><AICJobPill j={lj}/><span style={{fontSize:10.5,color:T.textMuted,fontWeight:400}}>{lj.at}</span></> : "—")}
                   {cell("Pending review", <span style={{color:pend?T.amber:T.text,fontFamily:"'Geist Mono',monospace"}}>{pend}</span>)}
-                  {cell("Level", <>{aicIng.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{aicIng.levels.column&&<AICObjChip kind="column"/>}</>)}
+                  {cell("Object type", <span style={{fontWeight:500}}>{aicObjTypesText(aicIng)}</span>)}
                 </div>}
               </div>
             );
@@ -45266,10 +45264,10 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                   }}/>
                 <div style={{flex:1}}>
                   <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Classify on ingestion</div>
-                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{aicSt.settings.enabled?"New and changed tables, views and columns":"Disabled in Settings › AI"}</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{aicSt.settings.enabled?"New and changed objects":"Disabled in Settings › AI"}</div>
                 </div>
               </div>
-              {aicIng&&aicSt.settings.enabled&&<AICIngestFields cfg={aicIngestCfg(aicIng)} onChange={c=>aicSetIngest(svc.displayName, c, aicMe)} profilingOn={true}/>}
+              {aicIng&&aicSt.settings.enabled&&<AICIngestFields cfg={aicIngestCfg(aicIng)} onChange={c=>aicSetIngest(svc.displayName, c, aicMe)} typeOptions={aicConnTypeOptions(svc.displayName)}/>}
             </div>
           </>)}
 
@@ -58838,18 +58836,37 @@ const aicContainer = a => (a.db||"").split(" / ").slice(0,2).join(" / ");
 const aicGlob = (pat) => new RegExp("^"+pat.trim().replace(/[.+?^${}()|[\]\\]/g,"\\$&").replace(/\*/g,".*")+"$","i");
 const aicPatterns = (txt) => (txt||"").split(",").map(x=>x.trim()).filter(Boolean).map(aicGlob);
 const aicClassifiable = () => ASSETS.filter(a=>(SCHEMA[a.name]||[]).length);
-const aicProfileAssets = (p) => aicClassifiable().filter(a=>
-  (!p.connections.length || p.connections.includes(a.connectionLabel)) &&
-  (!p.containers.length  || p.containers.includes(aicContainer(a))) &&
-  (!(p.tables||[]).length || p.tables.includes(a.db)));
+// Any catalog object can be classified. A scan names object types; "Column" is one of
+// them and means "the columns of the objects in scope". Matching is on a normalised key
+// so a connector's "Tables" lines up with an asset's "Table".
+const aicTypeKey = s => String(s||"").toLowerCase().replace(/\s*\(.*\)$/,"").replace(/ies$/,"y").replace(/s$/,"");
+const aicHasCols = a => (SCHEMA[a.name]||[]).length>0;
+const aicObjTypes = (p) => (p.objectTypes||[]).map(aicTypeKey);
+const aicObjLevelOk = (p, a) => { const ot = aicObjTypes(p).filter(t=>t!=="column"); return !aicObjTypes(p).length || ot.includes(aicTypeKey(a.type)); };
+const aicLevelsOf = (p) => {
+  if(!Array.isArray(p.objectTypes)) return p.levels || {table:true, column:true};
+  const ot = aicObjTypes(p);
+  return {table: !ot.length || ot.some(t=>t!=="column"), column: !ot.length || ot.includes("column")};
+};
+const aicProfileAssets = (p) => {
+  const ot = aicObjTypes(p);
+  return ASSETS.filter(a=>
+    (!p.connections.length || p.connections.includes(a.connectionLabel)) &&
+    (!(p.containers||[]).length || p.containers.includes(aicContainer(a))) &&
+    (!(p.tables||[]).length || p.tables.includes(a.db)) &&
+    (!(p.objects||[]).length || p.objects.includes(a.id)) &&
+    (!ot.length || ot.includes(aicTypeKey(a.type)) || (ot.includes("column") && aicHasCols(a))));
+};
+const aicObjTypesText = (p) => (p.objectTypes||[]).length ? p.objectTypes.join(", ") : "All object types";
+const aicTagSourcesOf = (mode) => mode==="both" ? ["Existing tags","New tags"] : mode==="new" ? ["New tags"] : ["Existing tags"];
+const aicModeOf = (srcs) => srcs.includes("Existing tags") && srcs.includes("New tags") ? "both" : srcs.includes("New tags") ? "new" : srcs.includes("Existing tags") ? "existing" : null;
 const AIC_TAGS = [...new Set(AIC_DETECTORS.map(d=>d.tag))];
 const aicNewProfile = () => ({
   id:"prof_"+Date.now(), name:"", enabled:true,
-  connections:[], containers:[], tables:[],
-  levels:{table:true, column:true},
-  mode:"existing", tags:["PII","PCI-DSS"],          // existing: recommend these · new: propose tags the taxonomy lacks
+  connections:[], containers:[], tables:[], objectTypes:[], objects:[],
+  mode:"existing", tags:["PII","PCI-DSS"],
   useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
-  schedule:null,                                     // the standard schedule object, set from the Schedule dialog
+  schedule:null,
 });
 const aicSchedOn = (p) => !!(p.schedule && p.schedule.enabled!==false && p.schedule.freq && p.schedule.freq!=="once");
 const aicSchedText = (p) => aicSchedOn(p) ? `Scheduled · ${contractScheduleShort(p.schedule)}` : "Manual only";
@@ -58933,7 +58950,33 @@ const AIC_NEW_TABLE = [
   {tag:"Product catalog",   re:/product|sku|catalog/i},
 ];
 
+// Objects with no columns of their own — dashboards, reports, BI data sources — are
+// classified from lineage: whatever their upstream objects carry, they show.
+const _aicUpCache = new Map();
+const aicUpstream = (a) => {
+  if(_aicUpCache.has(a.id)) return _aicUpCache.get(a.id);
+  let G = null; try { G = pickLineageGraph(a); } catch(e){ G = null; }
+  const out = [];
+  const start = G && !G.empty && G.topo ? (Object.entries(G.topo).find(([,t])=>t.active)||[])[0] : null;
+  if(start){
+    const seen = new Set();
+    const walk = id => ((G.topo[id]||{}).upstream||[]).forEach(u=>{
+      if(seen.has(u)) return; seen.add(u);
+      const t = G.topo[u]||{}, m = (G.meta||{})[u]||{};
+      const asset = ASSETS.find(x=>x.name===t.label || (m.db && x.db===m.db));
+      out.push({name:t.label||m.label||u, tags:[...new Set([...(m.tags||[]), ...((asset&&asset.tags)||[])])],
+        pii: !!asset && (SCHEMA[asset.name]||[]).some(c=>c.pii)});
+      walk(u);
+    });
+    walk(start);
+  }
+  _aicUpCache.set(a.id, out);
+  return out;
+};
+const aicLineageCarriers = (a, tag) => aicUpstream(a).filter(u=>u.tags.includes(tag) || ((tag==="PII"||AIC_REGULATORY.includes(tag)) && (u.pii || u.tags.includes("PII")))).map(u=>u.name);
 const aicRunScan = (p, st) => {
+  if(p.mode==="both") return [...aicRunScan({...p, mode:"existing"}, st), ...aicRunScan({...p, mode:"new"}, st)];
+  const lv = aicLevelsOf(p);
   const assets = aicProfileAssets(p);
   const tiers = p.useDefaults ? st.settings.tiers : {
     name: st.settings.tiers.name && p.tiers.name, value: st.settings.tiers.value && p.tiers.value, graph: st.settings.tiers.graph && p.tiers.graph};
@@ -58942,17 +58985,17 @@ const aicRunScan = (p, st) => {
   const taken = new Set([...INITIAL_TAG_DEFS.map(t=>t.name.toLowerCase()), ...(st.createdTags||[]).map(x=>x.toLowerCase())]);
   if(p.mode==="new"){
     assets.forEach(a=>{
-      if(p.levels.table){
+      if(lv.table && aicObjLevelOk(p, a)){
         const hay = `${a.name} ${a.description||""}`;
         AIC_NEW_TABLE.filter(c=>!taken.has(c.tag.toLowerCase()) && c.re.test(hay)).slice(0,1).forEach(c=>{
           const byName = c.re.test(a.name);
           out.push({id:`n_${a.id}__${aicSlug(c.tag)}`, level:"table", kind:"proposed", newTag:true, assetId:a.id, asset:a, col:null, type:a.type,
-            tag:c.tag, det:null, detLabel:"New tag for the table", risk:"Low", conf: byName?0.82:0.72,
+            tag:c.tag, det:null, detLabel:"New tag for the object", risk:"Low", conf: byName?0.82:0.72,
             why:`${a.name} reads as ${c.tag.toLowerCase()}${byName?" from its name":" from its description"}, and your taxonomy has no tag for it yet.`,
-            tiers:[{t:"meaning", note: byName?`Table name "${a.name}"`:"Table description"}], valueRead:false});
+            tiers:[{t:"meaning", note: byName?`${a.type||"Object"} name "${a.name}"`:`${a.type||"Object"} description`}], valueRead:false});
         });
       }
-      if(p.levels.column){
+      if(lv.column){
         (SCHEMA[a.name]||[]).forEach(col=>{
           const c = AIC_NEW_COL.find(x=>!taken.has(x.tag.toLowerCase()) && x.re.test(col.name));
           if(!c) return;
@@ -58969,12 +59012,13 @@ const aicRunScan = (p, st) => {
   const tags = p.tags || [];
   const dets = AIC_DETECTORS.filter(d=>tags.includes(d.tag)).map(d=>d.k);
   // Regulatory tags roll up from personal data, so PII is detected for them even when not chosen.
-  const needPII = p.levels.table && tags.some(t=>AIC_REGULATORY.includes(t));
+  const needPII = lv.table && tags.some(t=>AIC_REGULATORY.includes(t));
   const scanDets = [...new Set([...dets, ...(needPII ? AIC_DETECTORS.filter(d=>d.tag==="PII").map(d=>d.k) : [])])];
   const colFind = scanDets.length ? aicScan({tiers, valueAllowed:st.settings.valueAllowed, assets, detectors:scanDets}) : [];
-  if(p.levels.column && dets.length) colFind.filter(f=>f.kind==="clear" || tags.includes(f.tag)).forEach(f=>out.push({...f, level:"column"}));
-  if(p.levels.table){
+  if(lv.column && dets.length) colFind.filter(f=>f.kind==="clear" || tags.includes(f.tag)).forEach(f=>out.push({...f, level:"column"}));
+  if(lv.table){
     assets.forEach(a=>{
+      if(!aicObjLevelOk(p, a)) return;
       const cols = colFind.filter(f=>f.assetId===a.id && f.kind!=="clear");
       const personal = cols.filter(f=>f.tag==="PII");
       tags.forEach(tag=>{
@@ -58989,16 +59033,21 @@ const aicRunScan = (p, st) => {
           conf = 0.72; tier = "rollup";
           why = `Holds personal data (${personal.slice(0,3).map(f=>f.col).join(", ")}). ${tag} applies if these people are in its jurisdiction — confirm before accepting.`;
           note = "Personal data in this table";
+        } else if(!aicHasCols(a) && aicLineageCarriers(a, tag).length){
+          const ups = aicLineageCarriers(a, tag);
+          conf = 0.8; tier = "lineage";
+          why = `Built from ${ups.slice(0,3).join(", ")}, which ${ups.length>1?"carry":"carries"} ${tag}.`;
+          note = `Upstream: ${ups.slice(0,2).join(", ")}${ups.length>2?` +${ups.length-2}`:""}`;
         } else if(!AIC_DETECTORS.some(d=>d.tag===tag)){
           const tw = aicWordsOf(tag);
           const dom = (a.domain||"").toLowerCase();
           const aw = new Set([...aicWordsOf(a.name.replace(/_/g," ")), ...aicWordsOf(a.description)]);
           if(tw.some(w=>w===dom)){ conf = 0.84; why = `${a.name} belongs to the ${a.domain} domain, which is what "${tag}" means.`; note = `Domain: ${a.domain}`; }
-          else { const m = tw.filter(w=>aw.has(w)); if(m.length){ conf = 0.74; why = `The table's name or description mentions "${m.join(", ")}", which matches "${tag}".`; note = `Matches "${m.join(", ")}"`; } }
+          else { const m = tw.filter(w=>aw.has(w)); if(m.length){ conf = 0.74; why = `The name or description mentions "${m.join(", ")}", which matches "${tag}".`; note = `Matches "${m.join(", ")}"`; } }
         }
         if(!conf) return;
         out.push({id:`t_${a.id}_${aicSlug(tag)}`, level:"table", kind:(a.tags||[]).includes(tag)?"confirmed":"proposed",
-          assetId:a.id, asset:a, col:null, type:a.type, tag, tagId:def&&def.id, det:null, detLabel:"Table-level tag",
+          assetId:a.id, asset:a, col:null, type:a.type, tag, tagId:def&&def.id, det:null, detLabel:"Object-level tag",
           risk: def&&def.category==="sensitivity" ? "High" : def&&def.category==="regulatory" ? "Medium" : "Low",
           conf, why, tiers:[{t:tier, note}], valueRead:false});
       });
@@ -59097,21 +59146,21 @@ let _aicState = {
   createdTags:[],          // tags created by accepting a new-tag suggestion
   profiles:[
     {id:"prof_all", name:"Personal & card data — all sources", enabled:true,
-     connections:[], containers:[], tables:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
+     connections:[], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
      schedule:{freq:"daily", time:"02:00", tz:"UTC", enabled:true},
      owner:"priya.nair", created:"2026-08-31"},
     {id:"prof_stage", name:"Snowflake finance — card numbers", enabled:false,
-     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:false, column:true}, mode:"existing", tags:["PCI-DSS"],
+     connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:["Column"], levels:{table:false, column:true}, mode:"existing", tags:["PCI-DSS"],
      useDefaults:false, tiers:{name:true, value:true, graph:false}, minConfidence:0.85,
      schedule:{freq:"weekly", day:"sunday", time:"02:00", tz:"UTC", enabled:true},
      owner:"dev.patel", created:"2026-09-10"},
     {id:"ing_snowflake_dwh", name:"Ingestion · Snowflake DWH", enabled:true, trigger:"ingestion", connId:"Snowflake DWH",
-     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
+     connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
      owner:"dev.patel", created:"2026-09-20"},
     {id:"prof_new", name:"Commerce — find missing business tags", enabled:true,
-     connections:["Snowflake DWH"], containers:[], tables:[], levels:{table:true, column:true}, mode:"new", tags:[],
+     connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"new", tags:[],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
      owner:"maya.chen", created:"2026-09-29"},
   ],
@@ -59166,8 +59215,8 @@ const aicConnLabel = (conn) => {
   const labels = [...new Set(aicClassifiable().map(a=>a.connectionLabel))];
   return labels.find(l=>l===conn) || labels.find(l=>l.split(" ")[0]===String(conn).split(" ")[0]) || conn;
 };
-const aicIngestDefaults = () => ({levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"], minConfidence:null});
-const aicIngestCfg = (p) => p ? {levels:p.levels, mode:p.mode, tags:p.tags, minConfidence:p.useDefaults?null:p.minConfidence} : aicIngestDefaults();
+const aicIngestDefaults = () => ({objectTypes:[], mode:"existing", tags:["PII","PCI-DSS"]});
+const aicIngestCfg = (p) => p ? {objectTypes:Array.isArray(p.objectTypes)?p.objectTypes:[], mode:p.mode, tags:p.tags} : aicIngestDefaults();
 // fresh: a connection created just now owns no assets yet, so it never borrows another's label.
 const aicSetIngest = (conn, cfg, by, fresh) => aicSet(s=>{
   const id = aicIngestId(conn);
@@ -59175,8 +59224,8 @@ const aicSetIngest = (conn, cfg, by, fresh) => aicSet(s=>{
   if(!cfg) return prev ? {...s, findings:null, profiles:s.profiles.map(p=>p.id===id?{...p, enabled:false}:p)} : s;
   const p = {...(prev || {id, name:`Ingestion · ${conn}`, trigger:"ingestion", connId:conn, connections:[fresh ? conn : aicConnLabel(conn)],
       containers:[], tables:[], tiers:{name:true, value:true, graph:true}, schedule:null, owner:by, created:"just now"}),
-    enabled:true, levels:cfg.levels, mode:cfg.mode, tags:cfg.mode==="new"?[]:cfg.tags,
-    useDefaults:cfg.minConfidence==null, minConfidence:cfg.minConfidence==null ? s.settings.minConfidence : cfg.minConfidence};
+    enabled:true, objectTypes:cfg.objectTypes||[], mode:cfg.mode, tags:cfg.mode==="new"?[]:cfg.tags,
+    useDefaults:true, minConfidence:s.settings.minConfidence};
   return {...s, findings:null, profiles: prev ? s.profiles.map(q=>q.id===id?p:q) : [...s.profiles, p]};
 });
 const aicTriggerText = (p) => p.trigger==="ingestion" ? "On ingestion" : aicSchedOn(p) ? contractScheduleShort(p.schedule) : "Manual";
@@ -59242,6 +59291,7 @@ const AIC_TIER_META = {
   name: {label:"Name",  color:"#9090a8", title:"Column name matched a pattern. Reads no data — and proves nothing on its own."},
   value:{label:"Value", color:"#0284c7", title:"Profiled value shapes were inspected. Requires data access."},
   graph:{label:"Graph", color:"#7c3aed", title:"Inherited from a referenced column that is already classified. EDG's own signal."},
+  lineage:{label:"Lineage", color:"#0891b2", title:"Inherited from an upstream object in lineage that carries the tag."},
 };
 const AICTier = ({t, title}) => {
   const m = AIC_TIER_META[t];
@@ -59286,7 +59336,7 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
   const where = f.col ? <code style={mono}>{f.asset.name}.{f.col}</code> : <code style={mono}>{f.asset.name}</code>;
   // Table-level and new-tag suggestions are based on roll-ups and meaning; column
   // detectors on name, value shape and linked columns. Show the signals that apply.
-  const signalKeys = f.tiers.some(t=>t.t==="rollup"||t.t==="meaning") ? f.tiers.map(t=>t.t) : ["name","value","graph"];
+  const signalKeys = f.tiers.some(t=>["rollup","meaning","lineage"].includes(t.t)) ? f.tiers.map(t=>t.t) : ["name","value","graph"];
   const navBtn = (on, onClick, label) => (
     <button onClick={onClick} disabled={!on} title={label}
       style={{width:28,height:28,borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:on?T.textSub:T.textMuted,
@@ -59312,7 +59362,7 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
               <div style={{display:"flex",alignItems:"center",gap:7}}>
                 <ServiceIcon service={f.asset.service} size={14}/>
                 <span style={{fontSize:14,fontWeight:700,color:T.text,...mono,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.asset.name}{f.col?`.${f.col}`:""}</span>
-                <AICObjChip kind={f.col?"column":aicKind(f.asset)}/>
+                <AICObjChip kind={f.col?"column":aicKind(f.asset)} label={f.col?"Column":(f.asset.type||"Object")}/>
               </div>
               <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{f.asset.connectionLabel||f.asset.service} · {f.asset.domain} · {f.type}</div>
             </div>
@@ -59387,9 +59437,9 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
             <div style={{fontSize:11,fontWeight:700,color:T.blue,marginBottom:4}}>If you accept</div>
             <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
               {f.newTag&&<><b style={{color:T.text}}>{f.tag}</b> is created as a <b style={{color:T.text}}>Draft</b> business tag in your taxonomy, then </>}
-              {f.newTag?"applied":<><b style={{color:T.text}}>{f.tag}</b> is applied</>} to {f.col?"the column":"the table"} {where}.
+              {f.newTag?"applied":<><b style={{color:T.text}}>{f.tag}</b> is applied</>} to {f.col?"the column":`the ${(f.asset.type||"object").toLowerCase()}`} {where}.
               {" "}Retention and legal-hold rules that target {f.tag} start to cover it{f.col?", and the column becomes eligible as a match key":""}.
-              {" "}You can undo it later from Decided.
+              {" "}You can undo it later from Review › Accepted.
             </div>
           </div>
         </div>
@@ -60055,10 +60105,11 @@ const aicScopeText = (p) => [p.connections.length?p.connections.join(", "):"All 
   (p.tables||[]).length?`${p.tables.length} table${p.tables.length>1?"s":""}`:null].filter(Boolean).join(" · ");
 const aicLevelText = (p) => p.levels.table && p.levels.column ? "Tables and columns" : p.levels.table ? "Tables only" : "Columns only";
 const aicHasRun = (st, id) => st.jobs.some(j=>j.runId===id && j.status==="complete");
-const AICTagChips = ({p}) => p.mode==="new"
-  ? <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ New tags</span>
-  : <>{p.tags.slice(0,3).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}
-      {p.tags.length>3&&<span style={{fontSize:10,color:T.textMuted,alignSelf:"center"}}>+{p.tags.length-3}</span>}</>;
+const AICTagChips = ({p}) => (<>
+  {p.mode!=="new"&&p.tags.slice(0,2).map(t=><span key={t} style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{t}</span>)}
+  {p.mode!=="new"&&p.tags.length>2&&<span style={{fontSize:10.5,color:T.textMuted,alignSelf:"center"}}>+{p.tags.length-2}</span>}
+  {(p.mode==="new"||p.mode==="both")&&<span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`}}>+ New tags</span>}
+</>);
 const aicViewJob = (onNav, id) => { _bgJobJump = id; onNav && onNav("settings",{section:"bg_jobs"}); };
 // Table, view or column — the level a suggestion applies to, always shown explicitly.
 const aicKind = (a) => /view/i.test((a&&a.type)||"") ? "view" : "table";
@@ -60072,61 +60123,110 @@ const AICTagChip = ({f}) => f.newTag
   ? <span title="Not in your taxonomy yet — accepting creates it as a Draft tag" style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.violetDim,color:T.violet,border:`1px dashed ${T.violet}66`,whiteSpace:"nowrap"}}>+ {f.tag} · new</span>
   : <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`,whiteSpace:"nowrap"}}>{f.tag}</span>;
 
-// The classification settings a connector carries — the same fields a scan has,
-// minus scope (the connector's own filters are the scope).
-const AICIngestFields = ({cfg, onChange, profilingOn, disabled}) => {
+// The classification settings a connector carries — the scan form minus name and
+// source (the connector is the source, its filters are the scope).
+const AICIngestFields = ({cfg, onChange, typeOptions, disabled}) => {
   const tagCtx = useTagCtx();
   const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
   const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
   const set = (patch) => onChange({...cfg, ...patch});
-  const inp = {width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"};
-  const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
-  const check = (on, k, label) => (
-    <label style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 11px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,color:T.text,
-      background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent+"55":T.border}`}}>
-      <input type="checkbox" checked={on} onChange={()=>set({levels:{...cfg.levels,[k]:!on}})} style={{margin:0}}/>{label}
-    </label>
-  );
-  const levelOk = cfg.levels.table || cfg.levels.column;
+  const wantsExisting = cfg.mode==="existing" || cfg.mode==="both";
   return (
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"14px 16px",opacity:disabled?.5:1,pointerEvents:disabled?"none":"auto"}}>
+    <div style={{display:"flex",flexDirection:"column",gap:14,opacity:disabled?.5:1,pointerEvents:disabled?"none":"auto"}}>
+      <RuleMultiSelect label="Object type" flat={typeOptions||[]} selected={(cfg.objectTypes||[]).filter(t=>(typeOptions||[]).includes(t))}
+        onChange={v=>set({objectTypes:v})} placeholder="All object types"/>
       <div>
-        <label style={lbl}>Classification level <span style={{color:T.rose}}>*</span></label>
-        <div style={{display:"flex",gap:8}}>{check(cfg.levels.table,"table","Table / view")}{check(cfg.levels.column,"column","Column")}</div>
-        {!levelOk&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>Select at least one level.</div>}
+        <RuleMultiSelect label="Tag source" required flat={["Existing tags","New tags"]} selected={cfg.mode?aicTagSourcesOf(cfg.mode):[]}
+          onChange={v=>set({mode:aicModeOf(v)})} placeholder="Select tag source"/>
+        {!cfg.mode&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>Select a tag source.</div>}
       </div>
-      <div>
-        <label style={lbl}>Tag source</label>
-        <select value={cfg.mode} onChange={e=>set({mode:e.target.value})} style={inp}>
-          <option value="existing">Existing tags</option><option value="new">Suggest new tags</option>
-        </select>
-      </div>
-      {cfg.mode==="existing"&&(
-        <div style={{gridColumn:"1 / -1"}}>
+      {wantsExisting&&(
+        <div>
           <RuleMultiSelect label="Tags" required groups={tagGroups} selected={cfg.tags} onChange={v=>set({tags:v})} placeholder="Select tags"/>
+          {!cfg.tags.length&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>Select at least one tag.</div>}
         </div>
       )}
-      <div>
-        <label style={lbl}>Minimum confidence</label>
-        <select value={cfg.minConfidence==null?"default":String(cfg.minConfidence)} onChange={e=>set({minConfidence:e.target.value==="default"?null:Number(e.target.value)})} style={inp}>
-          <option value="default">Default ({Math.round(_aicState.settings.minConfidence*100)}%)</option>
-          {[0.75,0.8,0.85,0.9].map(v=><option key={v} value={String(v)}>{Math.round(v*100)}%</option>)}
-        </select>
-      </div>
-      <div>
-        <label style={lbl}>Signals</label>
-        <div style={{display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",minHeight:30}}>
-          <AICTier t="name"/><AICTier t="graph"/>
-          {profilingOn ? <AICTier t="value"/> : <span style={{fontSize:10.5,color:T.textMuted}}>Value · requires Profiling</span>}
-        </div>
-      </div>
     </div>
   );
 };
-const aicIngestValid = (cfg) => (cfg.levels.table || cfg.levels.column) && (cfg.mode==="new" || cfg.tags.length>0);
-
+const aicIngestValid = (cfg) => !!cfg.mode && (cfg.mode==="new" || cfg.tags.length>0);
+// Object types a connection's catalog actually holds, plus Column where it has columns.
+const aicConnTypeOptions = (conn) => {
+  const label = aicConnLabel(conn);
+  const as = ASSETS.filter(a=>a.connectionLabel===label);
+  const t = [...new Set(as.map(a=>a.type).filter(Boolean))].sort();
+  if(as.some(aicHasCols)) t.push("Column");
+  return t;
+};
 const aicViewJobs = (onNav, runId) => { _bgJobScanJump = runId; onNav && onNav("settings",{section:"bg_jobs"}); };
-const AICWorkspace = ({onToast, onNav}) => {
+// ── Shared pieces for the AI Classification screens ──────────────────────────
+// A ⋯ menu: secondary actions live here so rows and headers stay quiet.
+const AICMenu = ({items, size=28}) => {
+  const [pos, setPos] = useState(null);
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!pos) return;
+    const close = (e)=>{ if(ref.current && ref.current.contains(e.target)) return; setPos(null); };
+    const esc = (e)=>{ if(e.key==="Escape") setPos(null); };
+    setTimeout(()=>document.addEventListener("mousedown", close), 0);
+    window.addEventListener("keydown", esc);
+    return ()=>{ document.removeEventListener("mousedown", close); window.removeEventListener("keydown", esc); };
+  },[pos]);
+  const list = items.filter(Boolean);
+  if(!list.length) return null;
+  return (<>
+    <button onClick={e=>{ e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); setPos(pos?null:{top:r.bottom+4, right:window.innerWidth-r.right}); }}
+      title="More actions"
+      style={{width:size,height:size,borderRadius:7,border:`1px solid ${pos?T.borderLight||T.border:"transparent"}`,background:pos?T.bgHover:"transparent",
+        color:T.textSub,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:16,lineHeight:1,fontFamily:"inherit"}}
+      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>{ if(!pos) e.currentTarget.style.background="transparent"; }}>⋯</button>
+    {pos&&createPortal(
+      <div ref={ref} onClick={e=>e.stopPropagation()} className="fadeIn"
+        style={{position:"fixed",top:pos.top,right:pos.right,zIndex:1200,minWidth:180,padding:4,borderRadius:9,background:T.bgSurface,
+          border:`1px solid ${T.border}`,boxShadow:"0 12px 32px rgba(0,0,0,.18)"}}>
+        {list.map((it,i)=> it==="sep"
+          ? <div key={i} style={{height:1,background:T.border,margin:"4px 2px"}}/>
+          : <button key={i} disabled={it.disabled} onClick={()=>{ setPos(null); it.onClick(); }}
+              style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",borderRadius:6,border:"none",background:"transparent",textAlign:"left",
+                fontSize:12,fontFamily:"inherit",cursor:it.disabled?"default":"pointer",color:it.disabled?T.textMuted:it.danger?T.rose:T.text,opacity:it.disabled?.55:1}}
+              onMouseEnter={e=>{ if(!it.disabled) e.currentTarget.style.background=T.bgHover; }} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              {it.label}
+            </button>)}
+      </div>, document.body)}
+  </>);
+};
+// One tab row for Classifications: Taxonomy · Review · Scans, with an action slot.
+const AICTabBar = ({face, onFace, pending, scans, right}) => {
+  const tabs = [{k:"taxonomy",l:"Taxonomy"},{k:"review",l:"Review",n:pending},{k:"scans",l:"Scans",n:scans}];
+  return (
+    <div style={{flexShrink:0,display:"flex",alignItems:"flex-end",gap:12,padding:"0 24px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface}}>
+      <div style={{display:"flex",flex:1,minWidth:0}}>
+        {tabs.map(t=>{ const on = face===t.k; return (
+          <button key={t.k} onClick={()=>onFace(t.k)}
+            style={{display:"inline-flex",alignItems:"center",gap:7,padding:"12px 14px 10px",background:"transparent",border:"none",marginBottom:-1,
+              borderBottom:`2px solid ${on?T.accent:"transparent"}`,color:on?T.text:T.textMuted,fontSize:13,fontWeight:on?600:500,cursor:"pointer",fontFamily:"inherit"}}>
+            {t.l}
+            {t.n!=null&&<span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textMuted}}>{t.n}</span>}
+          </button>); })}
+      </div>
+      {right&&<div style={{paddingBottom:8}}>{right}</div>}
+    </div>
+  );
+};
+// The object a suggestion lands on, as plain text: "Column", "Table", "Dashboard"…
+const aicTypeOf = (f) => f.col ? "Column" : (f.asset.type || "Object");
+// A KPI tile in the same style as Data Quality's overview.
+const AICKpi = ({label, value, sub, color, active, onClick}) => (
+  <button onClick={onClick} disabled={!onClick}
+    style={{textAlign:"left",padding:"14px 16px",borderRadius:12,background:T.bgSurface,fontFamily:"inherit",cursor:onClick?"pointer":"default",minWidth:0,
+      border:`1.5px solid ${active?T.accent+"88":T.border}`,boxShadow:active?`0 0 0 3px ${T.accentDim}`:"none"}}>
+    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".07em",textTransform:"uppercase"}}>{label}</div>
+    <div style={{fontSize:24,fontWeight:700,color:color||T.text,marginTop:6,lineHeight:1}}>{value}</div>
+    {sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{sub}</div>}
+  </button>
+);
+
+const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   const st = useAic();
   const {role, roleCfg} = useRole();
   const me = (roleCfg?.email||"you@jnj").split("@")[0];
@@ -60135,24 +60235,22 @@ const AICWorkspace = ({onToast, onNav}) => {
   const findings = st.findings || [];
   useEffect(()=>{ if(!st.findings) aicSet(s=>({...s, findings: aicScanAll(s)})); },[st.findings]);
   const pending = findings.filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]);
-  const decided = findings.filter(f=>st.decisions[f.id]);
   const live = st.jobs.filter(aicJobLive);
+  const tab = face;
+  const setTab = onFace;
 
-  const [tab, setTab]     = useState(()=>_aicJump&&_aicJump.runId&&!_aicJump.review ? "scans" : "review");
   const [openRun, setOpenRun] = useState(()=>(_aicJump&&!_aicJump.review&&_aicJump.runId)||null);
   useEffect(()=>{ _aicJump=null; },[]);
   const [edit, setEdit]   = useState(null);
   const [evidId, setEvidId] = useState(null);
   const [fRun, setFRun]   = useState(()=>(_aicJump&&_aicJump.review&&_aicJump.runId)||"all");
   const [fTag, setFTag]   = useState("all");
-  const [fLevel, setFLevel] = useState("all");
+  const [fType, setFType] = useState("all");
   const [fConf, setFConf] = useState("all");
   const [fStatus, setFStatus] = useState("pending");
   const [sel, setSel]     = useState(new Set());
   const [schedFor, setSchedFor] = useState(null);
-  // Runs that finished while this page is open get a "ready to review" banner.
   const [seen, setSeen]   = useState(()=>new Set(_aicState.jobs.filter(j=>!aicJobLive(j)).map(j=>j.id)));
-  // Looking at a scan, or reviewing just its suggestions, counts as having seen its finished runs.
   useEffect(()=>{
     const r = openRun || (tab==="review" && fRun!=="all" ? fRun : null);
     if(!r) return;
@@ -60173,9 +60271,8 @@ const AICWorkspace = ({onToast, onNav}) => {
   },[tagCtx&&tagCtx.tagDefs, toApply]);
 
   const whereOf = f => f.col ? `${f.asset.name}.${f.col}` : f.asset.name;
-  // What "accept" does to the taxonomy: a table-level suggestion is applied to the
-  // asset; a new tag is first created as a Draft; a column-level one is recorded
-  // on the column's classification.
+  // Accept: an object-level suggestion is applied to the object; a new tag is first
+  // created as a Draft; a column-level one is recorded on the column's classification.
   const applyAccepted = (f) => {
     const where = whereOf(f);
     if(f.newTag && tagCtx && !tagCtx.tagDefs.some(t=>t.name===f.tag) && !toApply.some(x=>x.name===f.tag)){
@@ -60198,9 +60295,8 @@ const AICWorkspace = ({onToast, onNav}) => {
   const decideMany = (list, verdict) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
     list.forEach(f=>{ aicDecide(f, verdict, me); if(verdict==="accepted") applyAccepted(f); });
-    onToast(`${list.length} suggestion${list.length>1?"s":""} ${verdict} — see Decided to undo`,"success"); setSel(new Set());
+    onToast(`${list.length} suggestion${list.length>1?"s":""} ${verdict}`,"success"); setSel(new Set());
   };
-  // Undo puts the suggestion back in Review and takes back the tag it applied.
   const undo = (f) => {
     const d = st.decisions[f.id]; if(!d || !canDecide) return;
     aicUndo(f);
@@ -60209,20 +60305,20 @@ const AICWorkspace = ({onToast, onNav}) => {
       const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
       if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
     }
-    onToast(`${f.tag} on ${whereOf(f)} is back in Review`,"info");
+    onToast(`${f.tag} on ${whereOf(f)} is back in Pending`,"info");
   };
   const runNow = (p) => {
     if(!p.enabled){ onToast(`"${p.name}" is paused — resume it first`,"error"); return; }
     const id = aicStartJob(p.id, "Manual", me);
-    onToast(id ? `"${p.name}" is running in the background — you can leave this page` : `"${p.name}" is already running`, id?"success":"info");
+    onToast(id ? `"${p.name}" started` : `"${p.name}" is already running`, id?"success":"info");
   };
   const saveRun = (p, how) => {
     const isNew = !st.profiles.some(x=>x.id===p.id);
     aicSet(x=>({...x, findings:null,
       profiles: isNew ? [...x.profiles, {...p, owner:me, created:"just now"}] : x.profiles.map(q=>q.id===p.id?p:q)}));
     setEdit(null); setOpenRun(p.id); setTab("scans");
-    if(how==="run") setTimeout(()=>{ aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Scan created":"Scan saved"} — its first run has started in the background`,"success"); },0);
-    else if(how==="schedule"){ setSchedFor(p.id); onToast(isNew?`Scan "${p.name}" created — now set when it runs`:`Scan "${p.name}" saved`,"success"); }
+    if(how==="run") setTimeout(()=>{ aicStartJob(p.id,"Manual",me); onToast(`${isNew?"Scan created":"Scan saved"} · run started`,"success"); },0);
+    else if(how==="schedule"){ setSchedFor(p.id); onToast(isNew?`Scan "${p.name}" created`:`Scan "${p.name}" saved`,"success"); }
     else onToast(`Scan "${p.name}" saved`,"success");
   };
   const saveSchedule = (runId, sched) => {
@@ -60233,57 +60329,85 @@ const AICWorkspace = ({onToast, onNav}) => {
   const removeRun = (p) => {
     aicSet(x=>({...x, findings:null, profiles:x.profiles.filter(q=>q.id!==p.id)}));
     setEdit(null); setOpenRun(null);
-    onToast(`Scan "${p.name}" deleted — its suggestions leave Review; its run history stays in Background Jobs`,"info");
+    onToast(`Scan "${p.name}" deleted`,"info");
   };
   const togglePause = (p) => {
     aicSet(x=>({...x, findings:null, profiles:x.profiles.map(q=>q.id===p.id?{...q,enabled:!q.enabled}:q)}));
-    onToast(p.enabled?`"${p.name}" paused — it will not run until resumed`:`"${p.name}" resumed`,"success");
+    onToast(p.enabled?`"${p.name}" paused`:`"${p.name}" resumed`,"success");
   };
-  const goReview = (runId) => { setFStatus("pending"); setFRun(runId||"all"); setFTag("all"); setFLevel("all"); setFConf("all"); setSel(new Set()); setOpenRun(null); setTab("review"); };
-  const goTab = (t) => { setTab(t); setOpenRun(null); setSel(new Set()); };
+  const goReview = (runId) => { setFStatus("pending"); setFRun(runId||"all"); setFTag("all"); setFType("all"); setFConf("all"); setSel(new Set()); setOpenRun(null); setTab("review"); };
+  const editInConnection = (p) => { _svcJump={name:p.connId, tab:"configuration"}; onNav&&onNav("settings",{section:"connections"}); };
+  // Every scan action, once — used by the row ⋯ menu and the detail ⋯ menu.
+  const scanMenu = (p, lj) => [
+    canRun && {label: aicJobLive(lj) ? "Running…" : "Run now", disabled: !p.enabled || aicJobLive(lj), onClick:()=>runNow(p)},
+    canRun && aicJobLive(lj) && {label:"Cancel run", onClick:()=>{ aicCancelJob(lj.id, me); onToast("Run cancelled","info"); }},
+    canRun && (p.trigger==="ingestion"
+      ? {label:"Edit in connection", onClick:()=>editInConnection(p)}
+      : {label:"Edit", onClick:()=>setEdit(JSON.parse(JSON.stringify(p)))}),
+    canRun && p.trigger!=="ingestion" && {label: aicSchedOn(p) ? "Edit schedule" : "Schedule", onClick:()=>setSchedFor(p.id)},
+    canRun && {label: p.enabled ? "Pause" : "Resume", onClick:()=>togglePause(p)},
+    role==="admin" && lj && {label:"View jobs", onClick:()=>aicViewJobs(onNav, p.id)},
+    canRun && p.trigger!=="ingestion" && "sep",
+    canRun && p.trigger!=="ingestion" && {label:"Delete", danger:true, onClick:()=>removeRun(p)},
+  ];
 
-  if(!st.settings.enabled) return (
+  const tabBar = (
+    <AICTabBar face={openRun?"scans":tab} onFace={(k)=>{ setOpenRun(null); setSel(new Set()); onFace(k); }}
+      pending={pending.length} scans={st.profiles.length}
+      right={canRun&&st.settings.enabled ? <AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/> : null}/>
+  );
+
+  if(!st.settings.enabled) return (<>
+    {tabBar}
     <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
       <div style={{maxWidth:460,textAlign:"center"}}>
         <div style={{color:T.violet,display:"flex",justifyContent:"center",marginBottom:12}}>{Ic.bot(30)}</div>
         <div style={{fontSize:15,fontWeight:700,color:T.text}}>AI Classification is turned off</div>
-        <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.65,marginTop:6}}>
-          No scan can run and nothing is suggested. An Admin turns it on in Settings › AI.
-        </div>
+        <div style={{fontSize:12.5,color:T.textMuted,marginTop:6}}>Turned on by an Admin in Settings › AI.</div>
         {role==="admin"&&<button onClick={()=>onNav&&onNav("settings",{section:"ai", aiTab:"classification"})}
           style={{marginTop:16,padding:"8px 16px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
           Open Settings › AI</button>}
       </div>
     </div>
-  );
+  </>);
 
-  const box = {border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface};
-  const selStyle = {padding:"5px 9px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:11.5,fontFamily:"inherit"};
-  const H2 = ({children, right}) => (
-    <div style={{display:"flex",alignItems:"center",gap:10,margin:"20px 0 9px"}}>
-      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",flex:1}}>{children}</div>{right}
+  const card = {border:`1px solid ${T.border}`,borderRadius:12,overflow:"hidden",background:T.bgSurface};
+  const cardHead = (title, right) => (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",borderBottom:`1px solid ${T.border}`,minHeight:22}}>
+      <div style={{flex:1,fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".07em",textTransform:"uppercase"}}>{title}</div>{right}
     </div>
   );
+  const th = {fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".06em",textTransform:"uppercase"};
+  const selStyle = {height:32,padding:"0 10px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer",maxWidth:240};
   const mono = {fontFamily:"'Geist Mono',monospace"};
-  const smallBtn = (kind) => ({padding:"4px 10px",borderRadius:6,fontSize:11,fontWeight:kind==="accept"?700:600,fontFamily:"inherit",cursor:canDecide?"pointer":"default",
-    background:kind==="accept"?(canDecide?T.green:T.bgElevated):T.bgElevated, color:kind==="accept"?(canDecide?"#fff":T.textMuted):T.textSub,
-    border:kind==="accept"?"none":`1px solid ${T.border}`, opacity:canDecide||kind==="accept"?1:.5, whiteSpace:"nowrap"});
+  const link = (c) => ({background:"none",border:"none",padding:0,color:c||T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"});
+  const iconBtn = (kind) => ({width:28,height:28,borderRadius:7,display:"inline-flex",alignItems:"center",justifyContent:"center",cursor:canDecide?"pointer":"default",
+    background:"transparent",border:`1px solid ${kind==="ok"?T.green+"66":T.border}`,color:kind==="ok"?T.green:T.textSub,opacity:canDecide?1:.45});
+  const Dot = ({c}) => <span style={{width:7,height:7,borderRadius:"50%",background:c,display:"inline-block",flexShrink:0}}/>;
+  const jobColor = j => !j ? T.textMuted : ({queued:T.textMuted,running:T.blue,complete:T.green,failed:T.rose,cancelled:T.amber})[j.status];
+  const jobText  = j => !j ? "Not run yet" : ({queued:"Queued",running:`Running · ${j.progress}%`,complete:"Complete",failed:"Failed",cancelled:"Cancelled"})[j.status];
+  const ConfBar = ({c}) => { const col = c>=0.9?T.green:c>=0.75?T.amber:T.rose; return (
+    <div style={{display:"flex",alignItems:"center",gap:7}}>
+      <div style={{width:44,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${Math.round(c*100)}%`,height:"100%",background:col}}/></div>
+      <span style={{fontSize:11.5,fontWeight:600,color:T.text,...mono}}>{Math.round(c*100)}%</span>
+    </div>); };
 
-  // ── Review list, grouped by table ─────────────────────────────────────────
-  // Review holds every suggestion — pending and decided — filtered by status.
+  // ── Review data ────────────────────────────────────────────────────────────
   const all = findings.filter(f=>aicIsProposal(st,f) || st.decisions[f.id]);
   const statusOf = f => st.decisions[f.id] ? st.decisions[f.id].verdict : "pending";
-  const byTag = {}; all.forEach(f=>{ (byTag[f.tag]=byTag[f.tag]||[]).push(f); });
-  const shown = all.filter(f=>(fStatus==="all"||statusOf(f)===fStatus) && (fRun==="all"||(f.profiles||[]).includes(fRun)) && (fTag==="all"||f.tag===fTag)
-    && (fLevel==="all"||(fLevel==="object")===!f.col) && (fConf==="all"||aicConfBand(f.conf)===fConf));
+  const tagsAll  = [...new Set(all.map(f=>f.tag))].sort();
+  const typesAll = [...new Set(all.map(aicTypeOf))].sort();
+  const base = all.filter(f=>(fRun==="all"||(f.profiles||[]).includes(fRun)) && (fTag==="all"||f.tag===fTag)
+    && (fType==="all"||aicTypeOf(f)===fType) && (fConf==="all"||aicConfBand(f.conf)===fConf));
+  const shown = base.filter(f=>fStatus==="all"||statusOf(f)===fStatus);
   const groups = [];
   shown.forEach(f=>{ let g = groups.find(x=>x.assetId===f.assetId); if(!g){ g={assetId:f.assetId, asset:f.asset, items:[]}; groups.push(g); } g.items.push(f); });
   groups.forEach(g=>g.items.sort((a,b)=>(a.col?1:0)-(b.col?1:0) || b.conf-a.conf));
   const flatShown = groups.flatMap(g=>g.items);
   const selectable = flatShown.filter(f=>statusOf(f)==="pending");
-  const nStatus = k => all.filter(f=>statusOf(f)===k).length;
+  const nStatus = k => base.filter(f=>statusOf(f)===k).length;
+  const nHigh = base.filter(f=>statusOf(f)==="pending" && f.conf>=0.9).length;
 
-  // The drawer walks the list it was opened from.
   const evid = evidId ? findings.find(f=>f.id===evidId) : null;
   const evidDecision = evid ? st.decisions[evid.id] : null;
   const navList = flatShown;
@@ -60296,35 +60420,31 @@ const AICWorkspace = ({onToast, onNav}) => {
     else { setEvidId(null); onToast(`${verdict==="accepted"?"Accepted":"Rejected"} · no pending suggestions left`,"success"); }
   };
 
-  const th = {fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"};
-  const StatusPill = ({v}) => { const c = v==="accepted"?T.green:T.rose; return (
-    <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:c+"16",color:c,border:`1px solid ${c}40`}}>{v==="accepted"?"Accepted":"Rejected"}</span>); };
+  const COLS = "28px minmax(220px,1.6fr) minmax(140px,1fr) 110px minmax(110px,.8fr) 96px";
   const SuggestionRow = ({f}) => {
     const s = statusOf(f);
     return (
       <div onClick={()=>setEvidId(f.id)} className="row-hover"
-        style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}>
-        <div style={{width:14,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-          {s==="pending"&&<input type="checkbox" checked={sel.has(f.id)}
-            onChange={e=>setSel(x=>{const n=new Set(x); e.target.checked?n.add(f.id):n.delete(f.id); return n;})} style={{cursor:"pointer",margin:0}}/>}
+        style={{display:"grid",gridTemplateColumns:COLS,alignItems:"center",gap:12,padding:"9px 16px",borderTop:`1px solid ${T.border}`,cursor:"pointer"}}>
+        <div onClick={e=>e.stopPropagation()}>
+          {s==="pending"&&<input type="checkbox" checked={sel.has(f.id)} style={{cursor:"pointer",margin:0}}
+            onChange={e=>setSel(x=>{const n=new Set(x); e.target.checked?n.add(f.id):n.delete(f.id); return n;})}/>}
         </div>
-        <div style={{width:74,flexShrink:0}}><AICObjChip kind={f.col?"column":aicKind(f.asset)}/></div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"baseline",gap:7}}>
-            <code style={{...mono,fontSize:11.5,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.col||f.asset.name}</code>
-            {(f.col || !["Table","View"].includes(f.asset.type))&&<span style={{fontSize:10,color:T.textMuted,...mono,flexShrink:0}}>{f.col?f.type:f.asset.type}</span>}
-          </div>
+        <div style={{minWidth:0,paddingLeft:f.col?22:0}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",...mono}}>{f.col||f.asset.name}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{f.col ? `Column · ${f.type}` : aicTypeOf(f)}</div>
         </div>
-        <div style={{width:170,flexShrink:0}}><AICTagChip f={f}/></div>
-        <div style={{width:120,flexShrink:0,display:"flex",gap:3,flexWrap:"wrap"}}>{f.tiers.map(t=><AICTier key={t.t} t={t.t} title={t.note}/>)}</div>
-        <div style={{width:70,flexShrink:0,textAlign:"right"}}><AIConf conf={f.conf} small/></div>
-        <div style={{width:150,flexShrink:0,display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+        <div style={{minWidth:0}}><AICTagChip f={f}/></div>
+        <div><ConfBar c={f.conf}/></div>
+        <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.tiers.map(t=>AIC_TIER_META[t.t].label).join(" · ")}</div>
+        <div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
           {s==="pending" ? (<>
-            <button onClick={()=>decide(f,"accepted")} disabled={!canDecide} style={smallBtn("accept")}>Accept</button>
-            <button onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={smallBtn("reject")}>Reject</button>
+            <button title="Accept" onClick={()=>decide(f,"accepted")} disabled={!canDecide} style={iconBtn("ok")}>{Ic.check(13)}</button>
+            <button title="Reject" onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={iconBtn("no")}>{Ic.x(11)}</button>
           </>) : (<>
-            <StatusPill v={s}/>
-            {canDecide&&<button onClick={()=>undo(f)} title={`${st.decisions[f.id].by} · ${st.decisions[f.id].at}`} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Undo</button>}
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:s==="accepted"?T.green:T.rose}}>
+              <Dot c={s==="accepted"?T.green:T.rose}/>{s==="accepted"?"Accepted":"Rejected"}</span>
+            {canDecide&&<AICMenu size={24} items={[{label:"Undo decision", onClick:()=>undo(f)}]}/>}
           </>)}
         </div>
       </div>
@@ -60340,311 +60460,299 @@ const AICWorkspace = ({onToast, onNav}) => {
     const mine = findings.filter(f=>(f.profiles||[]).includes(run.id));
     const minePending = mine.filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]);
     const assets = aicProfileAssets(run);
-    const kv = (k, v) => (
-      <div style={{display:"flex",gap:10,padding:"8px 14px",borderTop:`1px solid ${T.border}`,fontSize:12}}>
-        <div style={{width:150,flexShrink:0,color:T.textMuted}}>{k}</div><div style={{flex:1,minWidth:0,color:T.text,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>{v}</div>
+    const kv = (k, v, i) => (
+      <div key={k} style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:12,padding:"10px 16px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:12.5,alignItems:"center"}}>
+        <div style={{color:T.textMuted}}>{k}</div><div style={{color:T.text,minWidth:0,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>{v}</div>
       </div>
     );
+    const cfgRows = [
+      ["Source", run.trigger==="ingestion" ? run.connId : (run.connections.length?run.connections.join(", "):"All sources")],
+      ["Object type", aicObjTypesText(run)],
+      ["Objects", (run.objects||[]).length ? `${run.objects.length} selected` : (run.tables||[]).length ? `${run.tables.length} selected` : "All objects"],
+      ["In scope", `${aicCount(assets.length,"object")} · ${aicCount(assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0),"column")}`],
+      ["Tag source", aicTagSourcesOf(run.mode).join(", ")],
+      run.mode!=="new" && ["Tags", <AICTagChips p={{...run, mode:"existing"}}/>],
+      ["Trigger", run.trigger==="ingestion" ? "On ingestion" : aicSchedOn(run) ? contractScheduleShort(run.schedule) : "Manual"],
+      ["Owner", run.owner||"—"],
+    ].filter(Boolean);
+    const runRows = lj ? [
+      ["Status", <span style={{display:"inline-flex",alignItems:"center",gap:6,color:jobColor(lj),fontWeight:600}}><Dot c={jobColor(lj)}/>{jobText(lj)}</span>],
+      ["Started", lj.at],
+      ["Trigger", `${lj.trigger}${lj.by&&lj.by!=="scheduler"&&lj.by!=="ingestion"?` · ${lj.by}`:""}`],
+      ["Duration", lj.ms?`${(lj.ms/1000).toFixed(1)}s`:"—"],
+      ["Suggested", lj.status==="complete" ? String(lj.proposed) : "—"],
+      ["Job", role==="admin" ? <button onClick={()=>aicViewJobs(onNav, run.id)} style={link()}>{lj.id} ↗</button> : <span style={mono}>{lj.id}</span>],
+    ] : [["Status","Not run yet"]];
     body = (<>
-      <button onClick={()=>setOpenRun(null)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>← Scans</button>
-      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-        <div style={{flex:1,minWidth:0,display:"flex",alignItems:"center",gap:9,flexWrap:"wrap"}}>
-          <span style={{fontSize:16,fontWeight:700,color:T.text}}>{run.name}</span>
-          {!run.enabled&&<span style={{fontSize:10,fontWeight:700,padding:"1.5px 8px",borderRadius:99,background:T.bgHover,color:T.textMuted,border:`1px solid ${T.border}`}}>Paused</span>}
-          <AICJobPill j={lj}/>
+      <button onClick={()=>setOpenRun(null)} style={{...link(),marginBottom:12}}>← Scans</button>
+      <div style={{...card,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,marginBottom:14,overflow:"visible"}}>
+        <div style={{width:38,height:38,borderRadius:10,background:T.violetDim,color:T.violet,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.bot(18)}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{fontSize:16,fontWeight:700,color:T.text}}>{run.name}</span>
+            {!run.enabled&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:T.bgHover,color:T.textMuted}}>Paused</span>}
+          </div>
+          <div style={{fontSize:12,color:T.textMuted,marginTop:3}}>
+            {run.trigger==="ingestion"?"On ingestion":aicSchedOn(run)?contractScheduleShort(run.schedule):"Manual"} · {aicObjTypesText(run)} · Owner {run.owner||"—"}
+          </div>
         </div>
-        {canRun&&<div style={{display:"flex",gap:7}}>
-          <Btn small ghost onClick={()=>togglePause(run)}>{run.enabled?"Pause":"Resume"}</Btn>
-          {run.trigger==="ingestion"
-            ? <Btn small ghost onClick={()=>{ _svcJump={name:run.connId, tab:"configuration"}; onNav&&onNav("settings",{section:"connections"}); }}>Edit in connection</Btn>
-            : <><Btn small ghost onClick={()=>setEdit(JSON.parse(JSON.stringify(run)))}>Edit</Btn>
-                <ScheduleButton small schedule={run.schedule} onClick={()=>setSchedFor(run.id)}/></>}
-          <Btn small variant="primary" disabled={!run.enabled||aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>
-        </div>}
+        {canRun&&<Btn variant="primary" disabled={!run.enabled||aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>}
+        <AICMenu size={32} items={scanMenu(run, lj).filter(it=>!(it&&it.label&&/^(Run now|Running…)$/.test(it.label)))}/>
       </div>
 
       {lj&&aicJobLive(lj)&&(
-        <div style={{marginBottom:12,padding:"10px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.blue}40`}}>
-          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7,fontSize:12,color:T.text}}>
-            <b>Running</b><span style={{color:T.textMuted}}>{lj.phase} · {lj.progress}%</span><div style={{flex:1}}/>
-            {canRun&&<Btn small ghost onClick={()=>{aicCancelJob(lj.id,me); onToast("Run cancelled","info");}}>Cancel</Btn>}
+        <div style={{...card,padding:"12px 16px",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8,fontSize:12.5,color:T.text}}>
+            <Dot c={T.blue}/><b>Running</b><span style={{color:T.textMuted}}>{lj.phase} · {lj.progress}%</span>
           </div>
           <div style={{height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${lj.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
         </div>
       )}
       {lj&&lj.status==="failed"&&(
-        <div style={{marginBottom:12,padding:"10px 14px",borderRadius:10,background:T.rose+"12",border:`1px solid ${T.rose}45`,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{flex:1,fontSize:12,color:T.text,lineHeight:1.55}}><b>Last run failed</b> <span style={{color:T.textSub}}>· {lj.error}</span></div>
-          {role==="admin"&&<Btn small ghost onClick={()=>aicViewJob(onNav,lj.id)}>View job</Btn>}
-          {canRun&&run.enabled&&<Btn small variant="primary" onClick={()=>runNow(run)}>Retry</Btn>}
+        <div style={{padding:"11px 16px",borderRadius:12,background:T.rose+"10",border:`1px solid ${T.rose}45`,display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+          <div style={{flex:1,fontSize:12.5,color:T.text}}><b>Last run failed</b> <span style={{color:T.textSub}}>· {lj.error}</span></div>
+          {canRun&&run.enabled&&<Btn small ghost onClick={()=>runNow(run)}>Retry</Btn>}
         </div>
       )}
 
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:4}}>
-        <AICStat label="Pending review" value={minePending.length} color={minePending.length?T.amber:undefined}/>
-        <AICStat label="Table / view suggestions" value={minePending.filter(f=>!f.col).length}/>
-        <AICStat label="Column suggestions" value={minePending.filter(f=>f.col).length}/>
-        <AICStat label="Already tagged" value={mine.filter(f=>f.kind==="confirmed").length}/>
-        {minePending.length>0&&<div style={{display:"flex",alignItems:"center"}}><Btn variant="primary" onClick={()=>goReview(run.id)}>Review {minePending.length}</Btn></div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(170px,1fr))",gap:12,marginBottom:14}}>
+        <AICKpi label="Pending review" value={minePending.length} color={minePending.length?T.amber:undefined}
+          sub={minePending.length?"Open in Review →":"Nothing waiting"} onClick={minePending.length?()=>goReview(run.id):undefined}/>
+        <AICKpi label="Object suggestions" value={minePending.filter(f=>!f.col).length} sub="pending"/>
+        <AICKpi label="Column suggestions" value={minePending.filter(f=>f.col).length} sub="pending"/>
+        <AICKpi label="Already tagged" value={mine.filter(f=>f.kind==="confirmed").length} sub="AI agrees with the catalog"/>
       </div>
 
-      <H2>Configuration</H2>
-      <div style={{...box,borderTop:"none"}}>
-        <div style={{marginTop:-1}}/>
-        {kv("Connections", run.connections.length?run.connections.join(", "):"All")}
-        {kv("Databases / schemas", run.containers.length?<span style={mono}>{run.containers.join(", ")}</span>:"All")}
-        {kv("Tables & views", (run.tables||[]).length?<span style={mono}>{run.tables.length} selected</span>:"All")}
-        {kv("Objects in scope", `${aicCount(assets.filter(a=>aicKind(a)==="table").length,"table")} · ${aicCount(assets.filter(a=>aicKind(a)==="view").length,"view")} · ${aicCount(assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0),"column")}`)}
-        {kv("Classification level", <>{run.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{run.levels.column&&<AICObjChip kind="column"/>}</>)}
-        {kv("Tag source", run.mode==="new"?"Suggest new tags":"Existing tags")}
-        {run.mode!=="new"&&kv("Tags", <AICTagChips p={run}/>)}
-        {kv("Trigger", run.trigger==="ingestion" ? `On ingestion · ${run.connId}` : aicSchedOn(run) ? contractScheduleShort(run.schedule) : "Manual")}
-        {kv("Last run", lj ? <><AICJobPill j={lj}/><span style={{color:T.textMuted,fontSize:11.5}}>{lj.at}</span>
-          {lj.status==="complete"&&<span style={{color:T.textMuted,fontSize:11.5}}>· {lj.proposed} suggested</span>}
-          {role==="admin"&&<button onClick={()=>aicViewJobs(onNav, run.id)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginLeft:4}}>View jobs ↗</button>}</> : "—")}
-        {kv("Owner", run.owner||"—")}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:14,alignItems:"start"}}>
+        <div style={card}>{cardHead("Configuration")}{cfgRows.map(([k,v],i)=>kv(k,v,i))}</div>
+        <div style={card}>{cardHead("Last run", role==="admin"&&lj ? <button onClick={()=>aicViewJobs(onNav, run.id)} style={link()}>All jobs ↗</button> : null)}{runRows.map(([k,v],i)=>kv(k,v,i))}</div>
       </div>
-
     </>);
   } else if(tab==="scans"){
+    const SC = "minmax(170px,1.6fr) minmax(100px,1fr) minmax(110px,1fr) minmax(90px,.8fr) 130px 60px 32px";
     body = !st.profiles.length ? (
-      <div style={{...box,padding:"40px 24px",textAlign:"center"}}>
+      <div style={{...card,padding:"48px 24px",textAlign:"center"}}>
         <div style={{fontSize:14,fontWeight:700,color:T.text}}>No scans</div>
         {canRun&&<div style={{marginTop:14}}><AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/></div>}
       </div>
     ) : (
-      <div style={box}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,...th}}>
-          <div style={{flex:1}}>NAME</div><div style={{width:150}}>LEVEL</div><div style={{width:140}}>TAGS</div><div style={{width:120}}>TRIGGER</div><div style={{width:130}}>LAST RUN</div>
-          <div style={{width:70,textAlign:"right"}}>PENDING</div><div style={{width:84}}/>
+      <div style={card}>
+        {cardHead(`Scans · ${st.profiles.length}`)}
+        <div style={{display:"grid",gridTemplateColumns:SC,gap:12,padding:"9px 16px",background:T.bgElevated,...th}}>
+          <div>Name</div><div>Object type</div><div>Tags</div><div>Trigger</div><div>Last run</div><div style={{textAlign:"right"}}>Pending</div><div/>
         </div>
-        {st.profiles.map((p,i)=>{
+        {st.profiles.map(p=>{
           const lj = st.jobs.find(j=>j.runId===p.id);
           const toReview = pending.filter(f=>(f.profiles||[]).includes(p.id)).length;
-          const pa = aicProfileAssets(p);
           return (
             <div key={p.id} onClick={()=>setOpenRun(p.id)} className="row-hover"
-              style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",borderTop:i?`1px solid ${T.border}`:"none",cursor:"pointer",opacity:p.enabled?1:.6}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}{!p.enabled&&<span style={{fontSize:10,color:T.textMuted,fontWeight:600}}> · Paused</span>}</div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.connections.length?p.connections.join(", "):"All connections"} · {aicCount(pa.filter(a=>aicKind(a)==="table").length,"table")} · {aicCount(pa.filter(a=>aicKind(a)==="view").length,"view")}</div>
+              style={{display:"grid",gridTemplateColumns:SC,gap:12,alignItems:"center",padding:"12px 16px",borderTop:`1px solid ${T.border}`,cursor:"pointer",opacity:p.enabled?1:.55}}>
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {p.enabled?"":"Paused · "}{p.trigger==="ingestion" ? p.connId : (p.connections.length?p.connections.join(", "):"All sources")}</div>
               </div>
-              <div style={{width:150,display:"flex",gap:4,flexWrap:"wrap"}}>{p.levels.table&&<AICObjChip kind="table" label="Table / view"/>}{p.levels.column&&<AICObjChip kind="column"/>}</div>
-              <div style={{width:140,display:"flex",gap:4,flexWrap:"wrap"}}><AICTagChips p={p}/></div>
-              <div style={{width:120,fontSize:11,color:p.trigger==="ingestion"||aicSchedOn(p)?T.textSub:T.textMuted}}>{aicTriggerText(p)}</div>
-              <div style={{width:130}}><AICJobPill j={lj}/>{lj&&<div style={{fontSize:10,color:T.textMuted,marginTop:3}}>{lj.at}</div>}</div>
-              <div style={{width:70,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
-                {toReview
-                  ? <button onClick={()=>goReview(p.id)} style={{background:"none",border:"none",padding:0,color:T.amber,fontSize:12,fontWeight:700,cursor:"pointer",...mono}}>{toReview}</button>
-                  : <span style={{fontSize:12,...mono,color:T.textMuted}}>0</span>}
+              <div style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicObjTypesText(p)}</div>
+              <div style={{display:"flex",gap:4,flexWrap:"wrap",minWidth:0}}><AICTagChips p={p}/></div>
+              <div style={{fontSize:12,color:T.textSub}}>{aicTriggerText(p)}</div>
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:jobColor(lj),fontWeight:600}}><Dot c={jobColor(lj)}/>{jobText(lj)}</div>
+                {lj&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{lj.at}</div>}
               </div>
-              <div style={{width:84,textAlign:"right"}} onClick={e=>e.stopPropagation()}>
-                {canRun&&<Btn small ghost disabled={!p.enabled||aicJobLive(lj)} onClick={()=>runNow(p)}>{aicJobLive(lj)?"Running":"Run now"}</Btn>}
+              <div style={{textAlign:"right"}} onClick={e=>e.stopPropagation()}>
+                {toReview ? <button onClick={()=>goReview(p.id)} style={{...link(T.amber),fontSize:13,fontWeight:700}}>{toReview}</button>
+                          : <span style={{fontSize:13,color:T.textMuted}}>0</span>}
               </div>
+              <div onClick={e=>e.stopPropagation()}><AICMenu items={scanMenu(p, lj)}/></div>
             </div>
           );
         })}
       </div>
     );
   } else {
-    const seg = (k, l, n) => (
-      <button key={k} onClick={()=>{setFStatus(k);setSel(new Set());}}
-        style={{padding:"5px 11px",borderRadius:6,border:"none",fontFamily:"inherit",fontSize:11.5,fontWeight:600,cursor:"pointer",
-          background:fStatus===k?T.bgSurface:"transparent",color:fStatus===k?T.text:T.textMuted,boxShadow:fStatus===k?"0 1px 2px rgba(0,0,0,.12)":"none"}}>
-        {l}<span style={{marginLeft:6,fontSize:10.5,color:fStatus===k?(k==="pending"&&n?T.amber:T.textSub):T.textMuted,...mono}}>{n}</span>
-      </button>
-    );
     body = !all.length ? (
-      <div style={{...box,padding:"48px 20px",textAlign:"center"}}>
+      <div style={{...card,padding:"48px 20px",textAlign:"center"}}>
         <div style={{fontSize:14,fontWeight:700,color:T.text}}>No suggestions</div>
         <div style={{fontSize:12,color:T.textMuted,marginTop:5}}>Run a scan to generate suggestions.</div>
-        <div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>goTab("scans")}>View scans</Btn></div>
+        <div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>setTab("scans")}>View scans</Btn></div>
       </div>
     ) : (<>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
-        <div style={{display:"inline-flex",gap:2,padding:3,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-          {seg("pending","Pending",nStatus("pending"))}{seg("accepted","Accepted",nStatus("accepted"))}{seg("rejected","Rejected",nStatus("rejected"))}{seg("all","All",all.length)}
-        </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:14}}>
+        <AICKpi label="Pending" value={nStatus("pending")} color={nStatus("pending")?T.amber:undefined} sub="waiting for a decision"
+          active={fStatus==="pending"&&fConf==="all"} onClick={()=>{setFStatus("pending");setFConf("all");setSel(new Set());}}/>
+        <AICKpi label="High confidence" value={nHigh} color={nHigh?T.green:undefined} sub="pending · 90% and up"
+          active={fStatus==="pending"&&fConf==="high"} onClick={()=>{setFStatus("pending");setFConf("high");setSel(new Set());}}/>
+        <AICKpi label="Accepted" value={nStatus("accepted")} sub="applied to the catalog"
+          active={fStatus==="accepted"} onClick={()=>{setFStatus("accepted");setFConf("all");setSel(new Set());}}/>
+        <AICKpi label="Rejected" value={nStatus("rejected")} sub="dismissed"
+          active={fStatus==="rejected"} onClick={()=>{setFStatus("rejected");setFConf("all");setSel(new Set());}}/>
+      </div>
+
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <select value={fStatus} onChange={e=>{setFStatus(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="pending">Pending</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="all">All statuses</option>
+        </select>
         <select value={fRun} onChange={e=>{setFRun(e.target.value);setSel(new Set());}} style={selStyle}>
           <option value="all">All sources</option>
           {st.profiles.some(p=>p.trigger==="ingestion")&&<optgroup label="On ingestion">
             {st.profiles.filter(p=>p.trigger==="ingestion").map(p=><option key={p.id} value={p.id}>{p.connId}</option>)}</optgroup>}
           <optgroup label="Scans">{st.profiles.filter(p=>p.trigger!=="ingestion").map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</optgroup>
         </select>
-        <select value={fLevel} onChange={e=>{setFLevel(e.target.value);setSel(new Set());}} style={selStyle}>
-          <option value="all">All levels</option><option value="object">Table / view</option><option value="column">Column</option>
+        <select value={fType} onChange={e=>{setFType(e.target.value);setSel(new Set());}} style={selStyle}>
+          <option value="all">All object types</option>{typesAll.map(k=><option key={k} value={k}>{k}</option>)}
         </select>
         <select value={fTag} onChange={e=>{setFTag(e.target.value);setSel(new Set());}} style={selStyle}>
-          <option value="all">All tags</option>
-          {Object.keys(byTag).sort().map(k=><option key={k} value={k}>{k}</option>)}
+          <option value="all">All tags</option>{tagsAll.map(k=><option key={k} value={k}>{k}</option>)}
         </select>
         <select value={fConf} onChange={e=>{setFConf(e.target.value);setSel(new Set());}} style={selStyle}>
           <option value="all">All confidence</option>
           <option value="high">High (≥ 90%)</option><option value="medium">Medium (75–89%)</option><option value="low">Low (&lt; 75%)</option>
         </select>
-        <div style={{flex:1}}/>
-        <span style={{fontSize:11.5,color:T.textMuted}}>{shown.length} results</span>
       </div>
-      {sel.size>0&&(
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,padding:"8px 12px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}35`}}>
-          <span style={{fontSize:12,color:T.text,fontWeight:600,flex:1}}>{sel.size} selected</span>
-          <button onClick={()=>setSel(new Set())} style={{background:"none",border:"none",color:T.textSub,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Clear</button>
-          <button onClick={()=>decideMany(selectable.filter(f=>sel.has(f.id)),"rejected")} disabled={!canDecide} style={{...smallBtn("reject"),padding:"5px 12px",fontSize:11.5}}>Reject</button>
-          <button onClick={()=>decideMany(selectable.filter(f=>sel.has(f.id)),"accepted")} disabled={!canDecide} style={{...smallBtn("accept"),padding:"5px 12px",fontSize:11.5}}>Accept</button>
-        </div>
-      )}
-      <div style={box}>
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,...th}}>
-          <div style={{width:14,flexShrink:0}}>
-            {selectable.length>0&&<input type="checkbox" checked={selectable.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
-              onChange={e=>setSel(e.target.checked?new Set(selectable.map(f=>f.id)):new Set())}/>}
-          </div>
-          <div style={{width:74}}>LEVEL</div><div style={{flex:1}}>NAME</div><div style={{width:170}}>SUGGESTED TAG</div><div style={{width:120}}>SIGNALS</div>
-          <div style={{width:70,textAlign:"right"}}>CONFIDENCE</div><div style={{width:150,textAlign:"right"}}>{fStatus==="pending"?"ACTION":"STATUS"}</div>
+
+      <div style={card}>
+        {cardHead(`Suggestions · ${shown.length}`, sel.size>0 ? (
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:12,color:T.text,fontWeight:600}}>{sel.size} selected</span>
+            <Btn small ghost onClick={()=>decideMany(selectable.filter(f=>sel.has(f.id)),"rejected")} disabled={!canDecide}>Reject</Btn>
+            <Btn small variant="primary" onClick={()=>decideMany(selectable.filter(f=>sel.has(f.id)),"accepted")} disabled={!canDecide}>Accept</Btn>
+            <button onClick={()=>setSel(new Set())} style={link(T.textMuted)}>Clear</button>
+          </div>) : null)}
+        <div style={{display:"grid",gridTemplateColumns:COLS,gap:12,padding:"9px 16px",background:T.bgElevated,alignItems:"center",...th}}>
+          <div>{selectable.length>0&&<input type="checkbox" checked={selectable.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
+            onChange={e=>setSel(e.target.checked?new Set(selectable.map(f=>f.id)):new Set())}/>}</div>
+          <div>Object</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div style={{textAlign:"right"}}>{fStatus==="pending"?"Decide":"Status"}</div>
         </div>
         {groups.map(g=>{
           const gp = g.items.filter(f=>statusOf(f)==="pending");
-          const kind = aicKind(g.asset);
+          const onlySelf = g.items.length===1 && !g.items[0].col;
+          if(onlySelf) return <SuggestionRow key={g.assetId} f={g.items[0]}/>;
           return (
-            <div key={g.assetId} style={{borderTop:`1px solid ${T.border}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:T.bg}}>
-                <div style={{width:14,flexShrink:0}}>
-                  {gp.length>0&&<input type="checkbox" checked={gp.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
-                    onChange={e=>setSel(s=>{const n=new Set(s); gp.forEach(f=>e.target.checked?n.add(f.id):n.delete(f.id)); return n;})}/>}
+            <div key={g.assetId}>
+              <div style={{display:"grid",gridTemplateColumns:"28px 1fr auto",gap:12,alignItems:"center",padding:"9px 16px",borderTop:`1px solid ${T.border}`,background:T.bg}}>
+                <div>{gp.length>0&&<input type="checkbox" checked={gp.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
+                  onChange={e=>setSel(s=>{const n=new Set(s); gp.forEach(f=>e.target.checked?n.add(f.id):n.delete(f.id)); return n;})}/>}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                  <ServiceIcon service={g.asset.service} size={15}/>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.text,...mono}}>{g.asset.name}</span>
+                  <span style={{fontSize:11.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.asset.type} · {g.asset.connectionLabel||g.asset.service}</span>
                 </div>
-                <ServiceIcon service={g.asset.service} size={14}/>
-                <code style={{...mono,fontSize:12,fontWeight:700,color:T.text}}>{g.asset.name}</code>
-                <span style={{fontSize:10,fontWeight:700,color:kind==="view"?AIC_OBJ.view.c:AIC_OBJ.table.c,textTransform:"uppercase",letterSpacing:".05em"}}>{g.asset.type}</span>
-                <span style={{fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.asset.connectionLabel||g.asset.service} · {g.asset.domain}</span>
-                <div style={{flex:1}}/>
-                {canDecide&&gp.length>1&&<button onClick={()=>decideMany(gp,"accepted")}
-                  style={{padding:"3px 9px",borderRadius:6,background:"transparent",border:`1px solid ${T.green}55`,color:T.green,fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>Accept all ({gp.length})</button>}
+                {canDecide&&gp.length>1 ? <button onClick={()=>decideMany(gp,"accepted")} style={link(T.green)}>Accept all ({gp.length})</button> : <span/>}
               </div>
               {g.items.map(f=><SuggestionRow key={f.id} f={f}/>)}
             </div>
           );
         })}
-        {!shown.length&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
+        {!shown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
           {fStatus==="pending"&&!nStatus("pending") ? "No pending suggestions" : "No results"}</div>}
       </div>
-      {!canDecide&&<div style={{marginTop:10,fontSize:11,color:T.amber}}>Read-only · Steward or Admin role required to accept or reject.</div>}
+      {!canDecide&&<div style={{marginTop:10,fontSize:11,color:T.amber}}>Read-only</div>}
     </>);
   }
 
   const finished = st.jobs.filter(j=>j.status==="complete" && !seen.has(j.id) && j.runId!==openRun);
 
-  return (
-    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-      <div style={{flex:1,overflowY:"auto",padding:"10px 24px 40px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
-          <div style={{flex:1}}>
-            <Tabs2 tabs={[{key:"review",label:`Review${pending.length?` (${pending.length})`:""}`},{key:"scans",label:`Scans (${st.profiles.length})`}]}
-              active={run?"scans":tab} onChange={goTab}/>
-          </div>
-          {canRun&&<AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/>}
+  return (<>
+    {tabBar}
+    <div style={{flex:1,overflowY:"auto",padding:"18px 24px 40px",background:T.bg}}>
+      {live.filter(j=>j.runId!==openRun).map(j=>(
+        <div key={j.id} style={{...card,marginBottom:12,padding:"10px 16px",display:"flex",alignItems:"center",gap:12}}>
+          <Dot c={T.blue}/>
+          <div style={{fontSize:12.5,color:T.text,minWidth:0,flex:"0 1 auto"}}><b>{aicRunName(j.runId)}</b> <span style={{color:T.textMuted}}>· {j.phase}</span></div>
+          <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden",minWidth:60}}><div style={{height:"100%",width:`${j.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
+          <span style={{fontSize:11.5,color:T.textMuted,...mono}}>{j.progress}%</span>
+          <button onClick={()=>setOpenRun(j.runId)} style={link()}>View</button>
         </div>
-
-        {live.filter(j=>j.runId!==openRun).map(j=>(
-          <div key={j.id} style={{marginBottom:10,padding:"10px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.blue}40`}}>
-            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7,fontSize:12,color:T.text}}>
-              <b>{aicRunName(j.runId)}</b><span style={{color:T.textMuted}}>Running · {j.phase} · {j.progress}%</span><div style={{flex:1}}/>
-              <button onClick={()=>setOpenRun(j.runId)} style={{background:"none",border:"none",color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>View</button>
-            </div>
-            <div style={{height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${j.progress}%`,background:T.blue,transition:"width .3s"}}/></div>
-          </div>
-        ))}
-        {finished.map(j=>{ const waiting = pending.filter(f=>(f.profiles||[]).includes(j.runId)).length; return (
-          <div key={j.id} style={{marginBottom:10,padding:"9px 14px",borderRadius:10,background:T.green+"14",border:`1px solid ${T.green}45`,display:"flex",alignItems:"center",gap:10}}>
-            <span style={{color:T.green,display:"flex"}}>{Ic.check(14)}</span>
-            <div style={{flex:1,fontSize:12,color:T.text}}><b>{aicRunName(j.runId)}</b> <span style={{color:T.textSub}}>· Run completed · {waiting} pending review</span></div>
-            {waiting>0&&<Btn small variant="primary" onClick={()=>{ setSeen(s=>new Set([...s,j.id])); goReview(j.runId); }}>Review</Btn>}
-            <button onClick={()=>setSeen(s=>new Set([...s,j.id]))} title="Dismiss" style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
-          </div>
-        ); })}
-
-        {body}
-      </div>
-      <AICEvidence f={evid} pos={evidIdx+1} total={navList.length} decision={evidDecision} canDecide={canDecide}
-        onPrev={evidIdx>0 ? ()=>setEvidId(navList[evidIdx-1].id) : null}
-        onNext={evidIdx>=0 && evidIdx<navList.length-1 ? ()=>setEvidId(navList[evidIdx+1].id) : null}
-        onDecide={decideInDrawer} onUndo={(f)=>{ undo(f); setEvidId(null); }}
-        onClose={()=>setEvidId(null)} onNav={onNav}/>
-      <AICRunDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
-        onClose={()=>setEdit(null)} onSave={saveRun} onDelete={removeRun} platform={st.settings}/>
-      {schedFor&&(()=>{ const r = st.profiles.find(x=>x.id===schedFor); if(!r) return null; return (
-        <ScheduleControl schedule={r.schedule} title={`Schedule · ${r.name}`} subtitle="Runs execute as background jobs."
-          onClose={()=>setSchedFor(null)} onSave={sc=>saveSchedule(r.id, sc)} onRemove={()=>saveSchedule(r.id, null)}
-          onRunNow={()=>{ setSchedFor(null); runNow(r); }} running={st.jobs.some(j=>j.runId===r.id&&aicJobLive(j))}/>); })()}
+      ))}
+      {finished.map(j=>{ const waiting = pending.filter(f=>(f.profiles||[]).includes(j.runId)).length; return (
+        <div key={j.id} style={{marginBottom:12,padding:"10px 16px",borderRadius:12,background:T.green+"10",border:`1px solid ${T.green}40`,display:"flex",alignItems:"center",gap:10}}>
+          <Dot c={T.green}/>
+          <div style={{flex:1,fontSize:12.5,color:T.text}}><b>{aicRunName(j.runId)}</b> <span style={{color:T.textSub}}>· Run completed · {waiting} pending review</span></div>
+          {waiting>0&&<Btn small variant="primary" onClick={()=>{ setSeen(s=>new Set([...s,j.id])); goReview(j.runId); }}>Review</Btn>}
+          <button onClick={()=>setSeen(s=>new Set([...s,j.id]))} title="Dismiss" style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+        </div>
+      ); })}
+      {body}
     </div>
-  );
+    <AICEvidence f={evid} pos={evidIdx+1} total={navList.length} decision={evidDecision} canDecide={canDecide}
+      onPrev={evidIdx>0 ? ()=>setEvidId(navList[evidIdx-1].id) : null}
+      onNext={evidIdx>=0 && evidIdx<navList.length-1 ? ()=>setEvidId(navList[evidIdx+1].id) : null}
+      onDecide={decideInDrawer} onUndo={(f)=>{ undo(f); setEvidId(null); }}
+      onClose={()=>setEvidId(null)} onNav={onNav}/>
+    <AICRunDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
+      onClose={()=>setEdit(null)} onSave={saveRun} onDelete={removeRun} platform={st.settings}/>
+    {schedFor&&(()=>{ const r = st.profiles.find(x=>x.id===schedFor); if(!r) return null; return (
+      <ScheduleControl schedule={r.schedule} title={`Schedule · ${r.name}`} subtitle="Runs execute as background jobs."
+        onClose={()=>setSchedFor(null)} onSave={sc=>saveSchedule(r.id, sc)} onRemove={()=>saveSchedule(r.id, null)}
+        onRunNow={()=>{ setSchedFor(null); runNow(r); }} running={st.jobs.some(j=>j.runId===r.id&&aicJobLive(j))}/>); })()}
+  </>);
 };
 
-// The scan editor, in the order a person thinks about it: what to look at
-// (connection → database/schema → tables & views), what to look for (tags the
-// taxonomy has, or new ones), where to put them (tables, columns). The name comes
-// last and is suggested from those choices. Launch with the standard Schedule / Run now.
+// The scan form: name, then scope (Source → Object type → Objects), then tags.
+// Every list is a search-enabled multi-select. Any object type can be classified;
+// "Column" means the columns of the objects in scope.
 const AIC_CAT_LABEL = {sensitivity:"Sensitivity", regulatory:"Regulatory", business:"Business", custom:"Custom"};
+const aicObjOptLabel = a => `${a.name} · ${a.connectionLabel||a.service||"—"}`;
 const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) => {
   const tagCtx = useTagCtx();
-  const [d, setD] = useState(draft);
-  const [more, setMore] = useState(false);
-  useEffect(()=>{ setD(draft); setMore(false); },[draft]);
+  const norm = (x) => x ? {...x,
+    objectTypes: Array.isArray(x.objectTypes) ? x.objectTypes : (x.levels && x.levels.column && !x.levels.table ? ["Column"] : []),
+    objects: x.objects || []} : x;
+  const [d, setD] = useState(norm(draft));
+  const [touched, setTouched] = useState(false);
+  useEffect(()=>{ setD(norm(draft)); setTouched(false); },[draft]);
   if(!draft || !d) return null;
-
-  const all = aicClassifiable();
-  const connections = [...new Set(all.map(a=>a.connectionLabel))].sort();
-  const inConn = all.filter(a=>!d.connections.length || d.connections.includes(a.connectionLabel));
-  const schemaGroups = [...new Set(inConn.map(a=>a.connectionLabel))].sort().map(c=>({group:c,
-    ops:[...new Set(inConn.filter(a=>a.connectionLabel===c).map(aicContainer))].sort()}));
-  const inSchema = inConn.filter(a=>!d.containers.length || d.containers.includes(aicContainer(a)));
-  const tableGroups = [...new Set(inSchema.map(aicContainer))].sort().map(c=>({group:c,
-    ops:[...new Set(inSchema.filter(a=>aicContainer(a)===c).map(a=>a.db))].sort()}));
-  const assets = aicProfileAssets(d);
-  const cols = assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0);
   const set = (patch) => setD(x=>({...x,...patch}));
+
+  const catalog = ASSETS.filter(a=>a.connectionLabel);
+  const sources = [...new Set(catalog.map(a=>a.connectionLabel))].sort();
+  const inSource = catalog.filter(a=>!d.connections.length || d.connections.includes(a.connectionLabel));
+  const typeOpts = [...new Set(inSource.map(a=>a.type).filter(Boolean))].sort();
+  if(inSource.some(aicHasCols)) typeOpts.push("Column");
+  const ot = d.objectTypes.map(aicTypeKey);
+  const inType = inSource.filter(a=>!ot.length || ot.includes(aicTypeKey(a.type)) || (ot.includes("column") && aicHasCols(a)));
+  const objGroups = [...new Set(inType.map(a=>a.type))].sort().map(t=>({group:t, ops:inType.filter(a=>a.type===t).map(aicObjOptLabel).sort()}));
+  const objLabelToId = Object.fromEntries(inType.map(a=>[aicObjOptLabel(a), a.id]));
+  const selectedObjLabels = inType.filter(a=>d.objects.includes(a.id)).map(aicObjOptLabel);
+  const assets = aicProfileAssets({...d, containers:[], tables:[]});
+  const cols = assets.reduce((n,a)=>n+(SCHEMA[a.name]||[]).length,0);
+
   const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
   const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
-  const tableOnly = d.mode==="existing" ? d.tags.filter(t=>!AIC_DETECTORS.some(x=>x.tag===t)) : [];
-  const blocked = [...new Set(assets.map(a=>a.domain))].filter(dm=>!platform.valueAllowed.includes(dm));
-  const levelOk = d.levels.table || d.levels.column;
-  const tagsOk = d.mode==="new" || d.tags.length;
-  const colOnlyNoDet = d.mode==="existing" && !d.levels.table && d.tags.length && !d.tags.some(t=>AIC_DETECTORS.some(x=>x.tag===t));
-  const suggestedName = (d.mode==="new" ? "Missing business tags" : d.tags.length ? d.tags.slice(0,2).join(" & ")+(d.tags.length>2?` +${d.tags.length-2}`:"") : "Tags")
-    + " — " + ((d.tables||[]).length ? `${d.tables.length} table${d.tables.length>1?"s":""}` : d.containers.length ? d.containers[0]+(d.containers.length>1?` +${d.containers.length-1}`:"")
-      : d.connections.length ? d.connections.join(", ") : "all sources");
-  const valid = assets.length && levelOk && tagsOk && !colOnlyNoDet;
-  const inp = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+  const srcs = aicTagSourcesOf(d.mode).filter(()=>d.mode!=null);
+  const wantsExisting = d.mode==="existing" || d.mode==="both";
+  const colOnly = ot.length>0 && ot.every(t=>t==="column");
+  const colOnlyNoDet = wantsExisting && colOnly && d.tags.length && !d.tags.some(t=>AIC_DETECTORS.some(x=>x.tag===t));
+
+  const errs = {
+    name: !d.name.trim() ? "Enter a scan name." : null,
+    scope: !assets.length ? "No objects match this scope." : null,
+    source: !d.mode ? "Select a tag source." : null,
+    tags: wantsExisting && !d.tags.length ? "Select at least one tag." : colOnlyNoDet ? "These tags can't be detected on columns — add an object type, or PII / PCI-DSS." : null,
+  };
+  const valid = !Object.values(errs).some(Boolean);
+
+  const inp = {width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
   const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
-  const sec = (t, right) => (
+  const err = (m) => m&&touched ? <div style={{fontSize:11,color:T.rose,marginTop:5}}>{m}</div> : null;
+  const sec = (t) => (
     <div style={{display:"flex",alignItems:"center",gap:10,margin:"22px 0 12px"}}>
       <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".07em"}}>{t}</span>
-      <div style={{flex:1,height:1,background:T.border}}/>{right}
+      <div style={{flex:1,height:1,background:T.border}}/>
     </div>
   );
-  const field = (label, children, {req, hint, err}={}) => (
-    <div style={{marginBottom:14}}>
-      <label style={lbl}>{label}{req&&<span style={{color:T.rose}}> *</span>}</label>
-      {children}
-      {err ? <div style={{fontSize:11,color:T.rose,marginTop:5}}>{err}</div> : hint ? <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>{hint}</div> : null}
-    </div>
-  );
-  const check = (on, onChange, label, disabled) => (
-    <label style={{display:"inline-flex",alignItems:"center",gap:7,padding:"7px 12px",borderRadius:8,cursor:disabled?"default":"pointer",fontSize:12,fontWeight:600,
-      color:disabled?T.textMuted:T.text,background:on?T.accentDim:T.bgElevated,border:`1.5px solid ${on?T.accent+"55":T.border}`,opacity:disabled?.6:1}}>
-      <input type="checkbox" checked={on} disabled={disabled} onChange={onChange} style={{margin:0}}/>{label}
-    </label>
-  );
-  const btn = (primary, dis) => ({display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:700,fontFamily:"inherit",
-    cursor:dis?"default":"pointer",background:primary?(dis?T.bgHover:T.accent):T.bgSurface,border:primary?"none":`1px solid ${dis?T.border:T.borderLight||T.border}`,
-    color:primary?(dis?T.textMuted:"#fff"):(dis?T.textMuted:T.textSub)});
+  const btn = (primary) => ({display:"inline-flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius:8,fontSize:12,fontWeight:700,fontFamily:"inherit",cursor:"pointer",
+    background:primary?T.accent:T.bgSurface,border:primary?"none":`1px solid ${T.borderLight||T.border}`,color:primary?"#fff":T.textSub});
   const clock = <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>;
   const play = <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>;
-  const out = (how) => valid && onSave({...d, name:d.name.trim()||suggestedName, enabled:how==="save"?d.enabled:true}, how);
+  const out = (how) => { setTouched(true); if(!valid) return;
+    const {levels, ...rest} = d;
+    onSave({...rest, name:d.name.trim(), containers:[], tables:[], tags: wantsExisting ? d.tags : [], enabled:how==="save"?d.enabled:true}, how); };
 
   return createPortal(
     <div onClick={onClose} className="fadeIn" style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.5)",backdropFilter:"blur(2px)"}}>
       <div onClick={e=>e.stopPropagation()} className="slideInRight"
-        style={{position:"absolute",top:0,right:0,bottom:0,width:560,maxWidth:"96vw",background:T.bgSurface,
+        style={{position:"absolute",top:0,right:0,bottom:0,width:540,maxWidth:"96vw",background:T.bgSurface,
           borderLeft:`1px solid ${T.border}`,boxShadow:"-12px 0 48px rgba(0,0,0,.32)",display:"flex",flexDirection:"column"}}>
         <div style={{padding:"14px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexShrink:0,background:T.bgElevated}}>
           <div style={{minWidth:0}}>
@@ -60656,86 +60764,45 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
 
         <div style={{flex:1,overflowY:"auto",padding:"0 22px 24px"}}>
           {sec("General")}
-          {field("Scan name", <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder={suggestedName} style={inp}/>)}
+          <label style={lbl}>Scan name <span style={{color:T.rose}}>*</span></label>
+          <input value={d.name} onChange={e=>set({name:e.target.value})} placeholder="e.g. Finance warehouse — personal data" style={inp}/>
+          {err(errs.name)}
 
           {sec("Scope")}
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
-            <RuleMultiSelect label="Connections" flat={connections} selected={d.connections}
-              onChange={v=>set({connections:v, containers:[], tables:[]})} placeholder="All connections"/>
-            <RuleMultiSelect label="Databases / schemas" groups={schemaGroups} selected={d.containers}
-              onChange={v=>set({containers:v, tables:[]})} placeholder="All databases and schemas" mono/>
-            <RuleMultiSelect label="Tables & views" groups={tableGroups} selected={d.tables}
-              onChange={v=>set({tables:v})} placeholder="All tables and views" mono/>
+            <RuleMultiSelect label="Source" flat={sources} selected={d.connections}
+              onChange={v=>set({connections:v, objects:[]})} placeholder="All sources"/>
+            <RuleMultiSelect label="Object type" flat={typeOpts} selected={d.objectTypes.filter(t=>typeOpts.includes(t))}
+              onChange={v=>set({objectTypes:v, objects:[]})} placeholder="All object types"/>
+            <RuleMultiSelect label="Objects" groups={objGroups} selected={selectedObjLabels}
+              onChange={v=>set({objects:v.map(l=>objLabelToId[l]).filter(x=>x!=null)})} placeholder="All objects" mono/>
           </div>
-          <div style={{marginTop:12,display:"flex",border:`1px solid ${assets.length?T.border:T.rose+"55"}`,borderRadius:8,overflow:"hidden"}}>
-            {[["Tables",assets.filter(a=>aicKind(a)==="table").length],["Views",assets.filter(a=>aicKind(a)==="view").length],["Columns",cols]].map(([k,v],i)=>(
-              <div key={k} style={{flex:1,padding:"8px 12px",borderLeft:i?`1px solid ${T.border}`:"none",background:T.bgElevated}}>
-                <div style={{fontSize:10.5,color:T.textMuted}}>{k} in scope</div>
-                <div style={{fontSize:15,fontWeight:700,color:assets.length?T.text:T.rose,fontFamily:"'Geist Mono',monospace"}}>{v}</div>
-              </div>
-            ))}
+          <div style={{marginTop:12,display:"flex",gap:16,padding:"9px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${assets.length?T.border:T.rose+"55"}`,fontSize:12}}>
+            <span style={{color:T.textMuted}}>In scope</span>
+            <b style={{color:assets.length?T.text:T.rose}}>{aicCount(assets.length,"object")}</b>
+            <b style={{color:T.text}}>{aicCount(cols,"column")}</b>
           </div>
-          {!assets.length&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>No objects match this scope.</div>}
+          {err(errs.scope)}
 
-          {sec("Classification")}
-          {field("Classification level", (
-            <div style={{display:"flex",gap:8}}>
-              {check(d.levels.table, ()=>set({levels:{...d.levels,table:!d.levels.table}}), "Table / view")}
-              {check(d.levels.column, ()=>set({levels:{...d.levels,column:!d.levels.column}}), "Column")}
-            </div>
-          ), {req:true, err: !levelOk ? "Select at least one level." : null})}
-          {field("Tag source", (
-            <select value={d.mode} onChange={e=>set({mode:e.target.value})} style={{...inp,cursor:"pointer"}}>
-              <option value="existing">Existing tags</option>
-              <option value="new">Suggest new tags</option>
-            </select>
-          ), {hint: d.mode==="new" ? "Accepted tags are created as Draft business tags." : null})}
-          {d.mode==="existing"&&(
-            <div style={{marginBottom:14}}>
-              <RuleMultiSelect label="Tags" required groups={tagGroups} selected={d.tags}
-                onChange={v=>set({tags:v})} placeholder="Select tags"/>
-              {colOnlyNoDet
-                ? <div style={{fontSize:11,color:T.rose,marginTop:5}}>Selected tags support table / view level only.</div>
-                : tableOnly.length>0&&d.levels.column
-                  ? <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Table / view level only: {tableOnly.join(", ")}</div>
-                  : null}
+          {sec("Tags")}
+          <RuleMultiSelect label="Tag source" required flat={["Existing tags","New tags"]} selected={d.mode?srcs:[]}
+            onChange={v=>set({mode:aicModeOf(v)})} placeholder="Select tag source"/>
+          {err(errs.source)}
+          {wantsExisting&&(
+            <div style={{marginTop:14}}>
+              <RuleMultiSelect label="Tags" required groups={tagGroups} selected={d.tags} onChange={v=>set({tags:v})} placeholder="Select tags"/>
+              {err(errs.tags)}
             </div>
           )}
-
-          {sec("Advanced settings", <button onClick={()=>setMore(v=>!v)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{more?"Hide":"Show"}</button>)}
-          {more&&(<>
-            {field("Detection settings", (
-              <select value={d.useDefaults?"default":"custom"} onChange={e=>set({useDefaults:e.target.value==="default"})} style={{...inp,cursor:"pointer"}}>
-                <option value="default">Default</option>
-                <option value="custom">Custom</option>
-              </select>
-            ), {hint: d.useDefaults ? `Signals: column name, value pattern, linked columns · Minimum confidence ${Math.round(platform.minConfidence*100)}%` : null})}
-            {!d.useDefaults&&(<>
-              {field("Signals", (
-                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {[["name","Column name"],["value","Value pattern"],["graph","Linked columns"]].map(([t,l])=>
-                    <React.Fragment key={t}>{check(d.tiers[t]&&platform.tiers[t], ()=>set({tiers:{...d.tiers,[t]:!d.tiers[t]}}), l, !platform.tiers[t])}</React.Fragment>)}
-                </div>
-              ))}
-              {field("Minimum confidence", (
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <input type="range" min={Math.round(platform.minConfidence*100)} max="95" step="5" value={Math.round(d.minConfidence*100)}
-                    onChange={e=>set({minConfidence:Number(e.target.value)/100})} style={{flex:1,accentColor:T.accent}}/>
-                  <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:44,textAlign:"right"}}>{Math.round(d.minConfidence*100)}%</span>
-                </div>
-              ))}
-            </>)}
-            {blocked.length>0&&field("Value sampling disabled", <div style={{fontSize:12,color:T.text}}>{blocked.join(", ")}</div>, {hint:"Set by an Admin in Settings › AI."})}
-          </>)}
         </div>
 
         <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
           {existing&&<button onClick={()=>onDelete(draft)} style={{padding:"8px 12px",borderRadius:8,background:"transparent",border:`1px solid ${T.rose}55`,color:T.rose,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Delete</button>}
           <div style={{flex:1}}/>
           <button onClick={onClose} style={{padding:"8px 14px",borderRadius:8,background:"transparent",border:"none",color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-          {existing&&<button onClick={()=>out("save")} disabled={!valid} style={btn(false,!valid)}>Save</button>}
-          <button onClick={()=>out("schedule")} disabled={!valid} style={btn(false,!valid)}>{clock}Schedule</button>
-          <button onClick={()=>out("run")} disabled={!valid} style={btn(true,!valid)}>{play}Run now</button>
+          {existing&&<button onClick={()=>out("save")} style={btn(false)}>Save</button>}
+          <button onClick={()=>out("schedule")} style={btn(false)}>{clock}Schedule</button>
+          <button onClick={()=>out("run")} style={btn(true)}>{play}Run now</button>
         </div>
       </div>
     </div>,
@@ -60894,7 +60961,7 @@ const AICJobsCard = ({onToast}) => {
 // The only global AI surface is the Copilot, and it is a dock precisely because
 // it belongs to no single module.
 const ClassificationsView = ({onToast, onNav, deepLinkTagId}) => {
-  const [face, setFace] = useState(()=>_aicJump ? "ai" : "taxonomy");
+  const [face, setFace] = useState(()=>_aicJump ? (_aicJump.runId && !_aicJump.review ? "scans" : "review") : "taxonomy");
   const st = useAic();
   // Seed the scan here, not only inside the panel: the badge has to be right
   // before anyone opens the tab, or it is not a badge.
@@ -60903,31 +60970,17 @@ const ClassificationsView = ({onToast, onNav, deepLinkTagId}) => {
     aicSet(x=>({...x, findings: aicScanAll(x)}));
   },[st.findings]);
   useEffect(()=>{ if(deepLinkTagId) setFace("taxonomy"); },[deepLinkTagId]);
+  const pending = (st.findings||[]).filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]).length;
 
-  const pending = (st.findings||[])
-    .filter(f=>aicIsProposal(st,f) && !st.decisions[f.id]).length;
-
-  const bar = (
-    <div style={{flexShrink:0,padding:"10px 24px 0",borderBottom:`1px solid ${T.border}`,background:T.bgSurface}}>
-      <div style={{marginBottom:10}}>
-        <SegTabs active={face} onChange={setFace} tabs={[
-          {key:"taxonomy", label:"Taxonomy"},
-          {key:"ai",       label:"AI Classification", count:pending||undefined},
-        ]}/>
-      </div>
-    </div>
-  );
-
-  if(face==="ai") return (
+  if(face!=="taxonomy") return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Classifications"},{label:"AI Classification"}]}/>
-      {bar}
-      <AICWorkspace onToast={onToast} onNav={onNav}/>
+      <Topbar breadcrumb={[{label:"Classifications"},{label:face==="scans"?"AI Scans":"AI Review"}]}/>
+      <AICWorkspace onToast={onToast} onNav={onNav} face={face} onFace={setFace}/>
     </div>
   );
-  return <TagManagementView onToast={onToast} deepLinkTagId={deepLinkTagId} tabBar={bar}/>;
+  return <TagManagementView onToast={onToast} deepLinkTagId={deepLinkTagId}
+    tabBar={<AICTabBar face="taxonomy" onFace={setFace} pending={st.settings.enabled?pending:null} scans={st.settings.enabled?st.profiles.length:null}/>}/>;
 };
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AI LAYER · 3 — AI DATA ENGINEER
