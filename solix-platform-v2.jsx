@@ -60448,7 +60448,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
             <button title="Reject" onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={iconBtn("no")}>{Ic.x(11)}</button>
           </>) : (<>
             <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:s==="accepted"?T.green:T.rose}}>
-              <Dot c={s==="accepted"?T.green:T.rose}/>{s==="accepted"?"Accepted":"Rejected"}</span>
+              <Dot c={s==="accepted"?T.green:T.rose}/>{st.decisions[f.id].by}</span>
             {canDecide&&<AICMenu size={24} items={[{label:"Undo decision", onClick:()=>undo(f)}]}/>}
           </>)}
         </div>
@@ -60522,20 +60522,17 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         {canRun&&run.enabled&&!aicJobLive(lj)&&<div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>runNow(run)}>Run now</Btn></div>}
       </div>
     ) : (<>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12,marginBottom:14}}>
-        <AICKpi label="Pending" value={nStatus("pending")} color={nStatus("pending")?T.amber:undefined} sub="waiting for a decision"
-          active={fStatus==="pending"&&fConf==="all"} onClick={()=>{setFStatus("pending");setFConf("all");setSel(new Set());}}/>
-        <AICKpi label="High confidence" value={nHigh} color={nHigh?T.green:undefined} sub="pending · 90% and up"
-          active={fStatus==="pending"&&fConf==="high"} onClick={()=>{setFStatus("pending");setFConf("high");setSel(new Set());}}/>
-        <AICKpi label="Accepted" value={nStatus("accepted")} sub="applied to the catalog"
-          active={fStatus==="accepted"} onClick={()=>{setFStatus("accepted");setFConf("all");setSel(new Set());}}/>
-        <AICKpi label="Rejected" value={nStatus("rejected")} sub="dismissed"
-          active={fStatus==="rejected"} onClick={()=>{setFStatus("rejected");setFConf("all");setSel(new Set());}}/>
+      <div style={{display:"inline-flex",gap:2,padding:3,borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:12}}>
+        {[["pending","Pending"],["accepted","Accepted"],["rejected","Rejected"]].map(([k,l])=>{ const on = fStatus===k; return (
+          <button key={k} onClick={()=>{ setFStatus(k); setSel(new Set()); }}
+            style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 14px",borderRadius:7,border:"none",fontFamily:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",
+              background:on?T.bgSurface:"transparent",color:on?T.text:T.textMuted,boxShadow:on?"0 1px 3px rgba(0,0,0,.12)":"none"}}>
+            {l}<span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:99,
+              background:on?(k==="pending"?T.amberDim:k==="accepted"?T.green+"18":T.rose+"16"):T.bgSurface,
+              color:on?(k==="pending"?T.amber:k==="accepted"?T.green:T.rose):T.textMuted}}>{nStatus(k)}</span>
+          </button>); })}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-        <select value={fStatus} onChange={e=>{setFStatus(e.target.value);setSel(new Set());}} style={selStyle}>
-          <option value="pending">Pending</option><option value="accepted">Accepted</option><option value="rejected">Rejected</option><option value="all">All statuses</option>
-        </select>
         <select value={fType} onChange={e=>{setFType(e.target.value);setSel(new Set());}} style={selStyle}>
           <option value="all">All object types</option>{typesAll.map(k=><option key={k} value={k}>{k}</option>)}
         </select>
@@ -60558,11 +60555,11 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         <div style={{display:"grid",gridTemplateColumns:COLS,gap:12,padding:"9px 16px",background:T.bgElevated,alignItems:"center",...th}}>
           <div>{selectable.length>0&&<input type="checkbox" checked={selectable.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
             onChange={e=>setSel(e.target.checked?new Set(selectable.map(f=>f.id)):new Set())}/>}</div>
-          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div style={{textAlign:"right"}}>{fStatus==="pending"?"Decide":"Status"}</div>
+          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div style={{textAlign:"right"}}>{fStatus==="pending"?"Decide":fStatus==="accepted"?"Accepted by":"Rejected by"}</div>
         </div>
         {shown.map(f=><SuggestionRow key={f.id} f={f}/>)}
         {!shown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
-          {fStatus==="pending"&&!nStatus("pending") ? "No pending suggestions" : "No results"}</div>}
+          {base.filter(f=>statusOf(f)===fStatus).length ? "No results" : fStatus==="pending" ? "No pending suggestions" : fStatus==="accepted" ? "Nothing accepted yet" : "Nothing rejected yet"}</div>}
       </div>
       {!canDecide&&<div style={{marginTop:10,fontSize:11,color:T.amber}}>Read-only</div>}
     </>);
