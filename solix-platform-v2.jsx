@@ -57654,25 +57654,29 @@ const AID_DEFAULT_PROMPTS = {
 };
 // What the model may read. `name` is required at both levels and cannot be turned off.
 const AID_TABLE_INPUTS = [
-  {k:"name",     l:"Table name",                   ex:"campaign_spend", required:true},
-  {k:"typeConn", l:"Object type and connection",   ex:"Table · BigQuery Analytics"},
-  {k:"domain",   l:"Domain",                       ex:"Marketing"},
-  {k:"columns",  l:"Column names and data types",  ex:"spend_id BIGINT, cost DECIMAL(12,2), …"},
-  {k:"keys",     l:"Primary key",                  ex:"spend_id"},
-  {k:"tags",     l:"Classifications and tags",     ex:"PII on email, full_name"},
-  {k:"glossary", l:"Matching glossary term",       ex:"Order"},
-  {k:"lineage",  l:"Downstream lineage",           ex:"Feeds 21 assets, e.g. revenue_dashboard"},
-  {k:"owner",    l:"Owner",                        ex:"lisa.ray"},
-  {k:"existing", l:"Current description",          ex:"Sent when rewriting an existing description"},
+  {k:"name",       l:"Table name",          ex:"campaign_spend", required:true},
+  {k:"type",       l:"Object type",         ex:"Table"},
+  {k:"connection", l:"Connection",          ex:"BigQuery Analytics"},
+  {k:"domain",     l:"Domain",              ex:"Marketing"},
+  {k:"colNames",   l:"Column names",        ex:"spend_id, campaign_id, cost, …"},
+  {k:"colTypes",   l:"Column data types",   ex:"BIGINT, BIGINT, DECIMAL(12,2), …"},
+  {k:"pk",         l:"Primary key",         ex:"spend_id"},
+  {k:"tags",       l:"Tags",                ex:"PII on email, full_name"},
+  {k:"glossary",   l:"Glossary terms",      ex:"Order"},
+  {k:"lineage",    l:"Downstream lineage",  ex:"21 assets, e.g. revenue_dashboard"},
+  {k:"owner",      l:"Owner",               ex:"lisa.ray"},
+  {k:"existing",   l:"Current description", ex:"Only when rewriting"},
 ];
 const AID_COLUMN_INPUTS = [
-  {k:"name",     l:"Column name",                  ex:"cust_ref", required:true},
-  {k:"dataType", l:"Data type",                    ex:"BIGINT"},
-  {k:"keys",     l:"Key and reference",            ex:"References customers.customer_id"},
-  {k:"parent",   l:"Table name and domain",        ex:"orders · Commerce"},
-  {k:"tags",     l:"Classifications and tags",     ex:"PII"},
-  {k:"glossary", l:"Matching glossary term",       ex:"Order Status"},
-  {k:"existing", l:"Current description",          ex:"Sent when rewriting an existing description"},
+  {k:"name",     l:"Column name",           ex:"cust_ref", required:true},
+  {k:"dataType", l:"Data type",             ex:"BIGINT"},
+  {k:"pk",       l:"Primary key",           ex:"Yes / No"},
+  {k:"fk",       l:"Foreign key reference", ex:"customers.customer_id"},
+  {k:"table",    l:"Table name",            ex:"orders"},
+  {k:"domain",   l:"Domain",                ex:"Commerce"},
+  {k:"tags",     l:"Tags",                  ex:"PII"},
+  {k:"glossary", l:"Glossary terms",        ex:"Order Status"},
+  {k:"existing", l:"Current description",   ex:"Only when rewriting"},
 ];
 const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, true]));
 // Asking for a suggestion follows the existing "edit description" permission —
@@ -57791,19 +57795,21 @@ const aidDraftColumn = ({assetName, colName, role, variant=0, trace=[]}) => {
   const raw = cols.find(c=>c.name===colName);
   if(!a || !raw) return null;
   // Inputs that are off are removed before anything is "sent".
-  const col = {...raw, type: I.dataType ? raw.type : "", pk: I.keys ? raw.pk : false,
-               desc: I.keys && /Reference to/.test(raw.desc||"") ? raw.desc : ""};
-  const entity = I.parent ? aidEntity(a.name) : "record";
+  const col = {...raw, type: I.dataType ? raw.type : "", pk: I.pk ? raw.pk : false,
+               desc: I.fk && /Reference to/.test(raw.desc||"") ? raw.desc : ""};
+  const entity = I.table ? aidEntity(a.name) : "record";
   const glossary = I.glossary ? aidGlossaryFor(trace, aidWords(col.name).map(x=>AID_ABBR[x]||x).join(" ")) : null;
   const r = aidColumnText({col, asset:a.name, entity, glossary, sensitive:I.tags && raw.sensitive, variant});
   const ref = /Reference to ([a-zA-Z_0-9.]+)/.exec(raw.desc||"");
   const sent = [
     `Column name: ${raw.name}`,
     I.dataType && `Data type: ${raw.type}`,
-    I.keys && `Key and reference: ${raw.pk?"primary key":ref?`references ${ref[1]}`:"none"}`,
-    I.parent && `Table and domain: ${a.name} · ${a.domain||"—"}`,
-    I.tags && `Classifications: ${raw.sensitive?"personal data":"none"}`,
-    I.glossary && `Glossary term: ${glossary?glossary.term:"no match"}`,
+    I.pk && `Primary key: ${raw.pk?"yes":"no"}`,
+    I.fk && `Foreign key reference: ${ref?ref[1]:"none"}`,
+    I.table && `Table name: ${a.name}`,
+    I.domain && `Domain: ${a.domain||"—"}`,
+    I.tags && `Tags: ${raw.sensitive?"PII":"none"}`,
+    I.glossary && `Glossary terms: ${glossary?glossary.term:"no match"}`,
     I.existing && `Current description: ${(aidApplied(a.name, raw.name)||{}).text || raw.desc || "(empty)"}`,
   ].filter(Boolean);
   return {...r, trace, sent, prompt:S.prompts.column, promptLabel:"Column prompt"};
@@ -57813,36 +57819,38 @@ const aidDraftAsset = ({assetName, role, variant=0, trace=[]}) => {
   const S = _aidState.settings, I = S.inputs.table;
   const a = aiCall(trace, "asset.get", {name:assetName})[0];
   if(!a) return null;
-  const cols = (I.columns || I.keys || I.tags) ? aiCall(trace, "asset.columns", {name:assetName, role}) : [];
+  const cols = (I.colNames || I.colTypes || I.pk || I.tags) ? aiCall(trace, "asset.columns", {name:assetName, role}) : [];
   const entity = aidEntity(a.name);
-  const pks = I.keys ? cols.filter(c=>c.pk).map(c=>c.name) : [];
+  const pks = I.pk ? cols.filter(c=>c.pk).map(c=>c.name) : [];
   const sens = I.tags ? cols.filter(c=>c.sensitive) : [];
-  const biz = I.columns ? cols.filter(c=>!c.pk && !/(_id|_at|_ts|_key)$/.test(c.name) && !c.sensitive).slice(0,3).map(c=>c.name) : [];
+  const biz = I.colNames ? cols.filter(c=>!c.pk && !/(_id|_at|_ts|_key)$/.test(c.name) && !c.sensitive).slice(0,3).map(c=>c.name) : [];
   const down = I.lineage ? aiCall(trace, "lineage.impact", {asset:a}) : [];
   const glossary = I.glossary ? aidGlossaryFor(trace, entity) : null;
-  const kind = I.typeConn ? (a.type||"table").toLowerCase() : "table";
-  const where = I.typeConn ? ` in ${a.connectionLabel||a.service}` : "";
+  const kind = I.type ? (a.type||"table").toLowerCase() : "table";
+  const where = I.connection ? ` in ${a.connectionLabel||a.service}` : "";
   const dom = I.domain && a.domain ? `${a.domain.toLowerCase()} ` : "";
   const out = [];
   out.push(variant%2
     ? `${aidTitle(dom+kind)}${where} with one row per ${entity}.`
     : `One row per ${entity}${glossary && glossary.term.toLowerCase()!==entity ?` (${glossary.term})`:""} — the ${dom}${kind} for ${entity} records${where}.`);
-  if(pks.length || (I.columns && cols.length))
-    out.push(`${pks.length?`Keyed on ${pks.join(", ")}`:""}${pks.length&&I.columns?"; ":""}${I.columns?`${cols.length} columns${biz.length?`, including ${biz.join(", ")}`:""}`:""}.`);
+  if(pks.length || (I.colNames && cols.length))
+    out.push(`${pks.length?`Keyed on ${pks.join(", ")}`:""}${pks.length&&I.colNames?"; ":""}${I.colNames?`${cols.length} columns${biz.length?`, including ${biz.join(", ")}`:""}`:""}.`);
   if(sens.length) out.push(`${sens.length} column${sens.length>1?"s carry":" carries"} personal data (${sens.slice(0,4).map(c=>c.name).join(", ")}) and ${sens.length>1?"are":"is"} masked for roles below Steward.`);
   if(down.length) out.push(`Feeds ${down.length} downstream asset${down.length>1?"s":""}, including ${down.slice(0,2).map(d=>d.label).join(" and ")}.`);
   if(I.owner && a.owner) out.push(`Owned by ${a.owner}.`);
   const text = (S.length==="short" ? out.slice(0,2) : out).join(" ");
-  const used = ["name", I.columns&&"columns", pks.length&&"keys", sens.length&&"classifications", down.length&&"lineage", glossary&&"glossary"].filter(Boolean);
-  const conf = Math.min(0.94, 0.66 + (I.columns&&cols.length?0.1:0) + (pks.length?0.04:0) + (down.length?0.04:0) + (glossary?0.04:0) + (I.domain?0.02:0));
+  const used = ["name", I.colNames&&"columns", pks.length&&"keys", sens.length&&"classifications", down.length&&"lineage", glossary&&"glossary"].filter(Boolean);
+  const conf = Math.min(0.94, 0.66 + (I.colNames&&cols.length?0.1:0) + (pks.length?0.04:0) + (down.length?0.04:0) + (glossary?0.04:0) + (I.domain?0.02:0));
   const sent = [
     `Table name: ${a.name}`,
-    I.typeConn && `Type and connection: ${a.type} · ${a.connectionLabel||a.service}`,
+    I.type && `Object type: ${a.type}`,
+    I.connection && `Connection: ${a.connectionLabel||a.service}`,
     I.domain && `Domain: ${a.domain||"—"}`,
-    I.columns && `Columns and types (${cols.length}): ${cols.slice(0,4).map(c=>`${c.name} ${c.type}`).join(", ")}${cols.length>4?", …":""}`,
-    I.keys && `Primary key: ${pks.join(", ")||"none"}`,
-    I.tags && `Classifications: ${sens.length?`personal data on ${sens.map(c=>c.name).join(", ")}`:"none"}`,
-    I.glossary && `Glossary term: ${glossary?glossary.term:"no match"}`,
+    I.colNames && `Column names (${cols.length}): ${cols.slice(0,4).map(c=>c.name).join(", ")}${cols.length>4?", …":""}`,
+    I.colTypes && `Column data types: ${cols.slice(0,4).map(c=>c.type).join(", ")}${cols.length>4?", …":""}`,
+    I.pk && `Primary key: ${pks.join(", ")||"none"}`,
+    I.tags && `Tags: ${sens.length?`PII on ${sens.map(c=>c.name).join(", ")}`:"none"}`,
+    I.glossary && `Glossary terms: ${glossary?glossary.term:"no match"}`,
     I.lineage && `Downstream lineage: ${down.length} asset${down.length===1?"":"s"}`,
     I.owner && `Owner: ${a.owner||"—"}`,
     I.existing && `Current description: ${(aidApplied(a.name)||{}).text || a.description || "(empty)"}`,
@@ -59137,7 +59145,7 @@ const aicUpstream = (a) => {
 };
 // Only objects that present data inherit from lineage — not tests, projects, folders or containers.
 const aicInherits = (a) => !/test|project|site|workspace|folder|database|schema|catalog|(^| )app$|bucket|container|prefix|directory|pipeline|(^| )flow$|dag|task/i.test(a.type||"");
-const aicLineageCarriers = (a, tag) => aicUpstream(a).filter(u=>u.tags.includes(tag) || ((tag==="PII"||AIC_REGULATORY.includes(tag)) && (u.pii || u.tags.includes("PII")))).map(u=>u.name);
+const aicLineageCarriers = (a, tag) => (_aicState.settings.inputs||{}).lineage===false ? [] : aicUpstream(a).filter(u=>u.tags.includes(tag) || ((tag==="PII"||AIC_REGULATORY.includes(tag)) && (u.pii || u.tags.includes("PII")))).map(u=>u.name);
 const aicRunScan = (p, st) => {
   if(p.mode==="both") return [...aicRunScan({...p, mode:"existing"}, st), ...aicRunScan({...p, mode:"new"}, st)];
   const lv = aicLevelsOf(p);
@@ -59266,6 +59274,19 @@ const AIC_SEED_STATS = {
 };
 
 const AIC_AUTO_MIN_PRECISION = 0.95;
+const AIC_INPUTS = [
+  {k:"name",     l:"Object name",            ex:"customers", required:true},
+  {k:"type",     l:"Object type",            ex:"Table / View / Report"},
+  {k:"domain",   l:"Domain",                 ex:"Commerce"},
+  {k:"desc",     l:"Object description",     ex:"One row per customer account"},
+  {k:"tags",     l:"Existing tags",          ex:"Customer Data"},
+  {k:"colNames", l:"Column names",           ex:"cust_email, ssn, card_no", tier:"name"},
+  {k:"colTypes", l:"Column data types",      ex:"VARCHAR(255), DATE"},
+  {k:"colDesc",  l:"Column descriptions",    ex:"Customer's primary email"},
+  {k:"fk",       l:"Foreign key references", ex:"orders.customer_id → customers.id", tier:"graph"},
+  {k:"lineage",  l:"Upstream lineage",       ex:"Tags on upstream objects"},
+  {k:"values",   l:"Sample values",          ex:"Profiled values · allowed domains only", tier:"value"},
+];
 const AIC_DEFAULT_PROMPT = "You classify data assets for a governed catalog. From the object's name, type, columns, existing tags, glossary terms and lineage, suggest tags from the taxonomy. When no tag fits a clear business concept, propose a new tag with a short name and a one-line description. Never infer from data values you were not given. Give a confidence for every suggestion.";
 const AIC_AUTO_MIN_DECISIONS = 50;
 const aicPrecision = (s) => { const n=s.accepted+s.rejected; return n ? s.accepted/n : 0; };
@@ -59277,6 +59298,7 @@ let _aicState = {
     // demo tenant has been running for a month, so it is on with two.
     enabled:true,
     prompt: AIC_DEFAULT_PROMPT,
+    inputs:{type:true, domain:true, desc:true, tags:true, colTypes:true, colDesc:true, lineage:true},
     tiers:{name:true, value:true, graph:true},
     // Value inspection reads sample data, and some domains cannot permit that.
     // Platform holds the HR tables, where sampling salary and name columns is
@@ -59722,12 +59744,10 @@ const AICControlPanel = ({onToast}) => {
   const onNav = useNav();
   const on = st.settings.enabled;
   const put = (patch) => aicSet(x=>({...x, settings:{...x.settings, ...patch}, findings:null}));
-  const TIERS = [
-    {k:"name",  l:"Column-name patterns",  ex:"cust_email, ssn, card_no"},
-    {k:"value", l:"Profiled value shapes", ex:"Sampled values · allowed domains only"},
-    {k:"graph", l:"Reference inheritance", ex:"orders.customer_id → customers.id"},
-  ];
-  const tiersOn = TIERS.filter(t=>st.settings.tiers[t.k]).length;
+  const inputs = st.settings.inputs || {};
+  const inOn = x => x.required || (x.tier ? !!st.settings.tiers[x.tier] : inputs[x.k]!==false);
+  const flip = x => x.tier ? put({tiers:{...st.settings.tiers, [x.tier]:!st.settings.tiers[x.tier]}})
+                           : put({inputs:{...inputs, [x.k]:!inOn(x)}});
   const valueOn = st.settings.tiers.value;
   return (
     <div style={{maxWidth:900}}>
@@ -59749,38 +59769,40 @@ const AICControlPanel = ({onToast}) => {
       </div>
 
       <div style={{opacity:on?1:.55,pointerEvents:on?"auto":"none"}}>
-        {/* 2 · What the model reads */}
-        <AIDCard title="What the model reads" desc="A signal switched off here is off in every scan.">
+        {/* 2 · Model inputs */}
+        <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
             <div>
               <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                Signals · {tiersOn} of {TIERS.length} on</div>
-              {TIERS.map((t,i)=><AIDInputRow key={t.k} item={t} first={i===0} on={st.settings.tiers[t.k]}
-                set={()=>put({tiers:{...st.settings.tiers,[t.k]:!st.settings.tiers[t.k]}})}/>)}
+                Object · {AIC_INPUTS.slice(0,5).filter(inOn).length} of 5 on</div>
+              {AIC_INPUTS.slice(0,5).map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={inOn(x)} set={()=>flip(x)}/>)}
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:8}}>
-                Value sampling allowed in · {st.settings.valueAllowed.length} of {AIC_ALL_DOMAINS.length} domains</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                {AIC_ALL_DOMAINS.map(d=>{
-                  const ok = st.settings.valueAllowed.includes(d);
-                  return (
-                    <button key={d} disabled={!valueOn} onClick={()=>put({
-                        valueAllowed: ok ? st.settings.valueAllowed.filter(x=>x!==d) : [...st.settings.valueAllowed, d]})}
-                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:valueOn?"pointer":"not-allowed",fontFamily:"inherit",
-                              opacity:valueOn?1:.5,
-                              background:ok?T.blueDim:T.bgElevated,border:`1px solid ${ok?T.blue+"45":T.border}`,color:ok?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
-                      <span style={{width:6,height:6,borderRadius:"50%",background:ok?T.blue:T.textMuted}}/>{d}
-                    </button>
-                  );
-                })}
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
+                Columns & relationships · {AIC_INPUTS.slice(5).filter(inOn).length} of {AIC_INPUTS.length-5} on</div>
+              {AIC_INPUTS.slice(5).map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={inOn(x)} set={()=>flip(x)}/>)}
+              <div style={{marginTop:10,opacity:valueOn?1:.5}}>
+                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Sample values allowed in</div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                  {AIC_ALL_DOMAINS.map(d=>{
+                    const ok = st.settings.valueAllowed.includes(d);
+                    return (
+                      <button key={d} disabled={!valueOn} onClick={()=>put({
+                          valueAllowed: ok ? st.settings.valueAllowed.filter(x=>x!==d) : [...st.settings.valueAllowed, d]})}
+                        style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:valueOn?"pointer":"not-allowed",fontFamily:"inherit",
+                                background:ok?T.blueDim:T.bgElevated,border:`1px solid ${ok?T.blue+"45":T.border}`,color:ok?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
+                        <span style={{width:6,height:6,borderRadius:"50%",background:ok?T.blue:T.textMuted}}/>{d}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
         </AIDCard>
 
         {/* 3 · Prompt */}
-        <AIDCard title="Prompt" desc="Used for meaning-based matches and new-tag suggestions. Each prompt starts from a Solix default; Reset to default puts it back.">
+        <AIDCard title="Prompt" desc="Used for meaning-based matches and new-tag suggestions.">
           <div style={{marginTop:-14}}>
             <AIDPromptBox label="Classification prompt" hint="Detector and pattern matches do not use the prompt."
               value={st.settings.prompt||AIC_DEFAULT_PROMPT} def={AIC_DEFAULT_PROMPT}
@@ -59788,58 +59810,16 @@ const AICControlPanel = ({onToast}) => {
           </div>
         </AIDCard>
 
-        {/* 4 · Confidence */}
+        {/* 4 · Model */}
+        <AIModelCard k="classify" onToast={onToast}/>
+
+        {/* 5 · Confidence */}
         <AIDCard title="Minimum confidence" desc="Suggestions below this are kept on the run but not shown for review.">
           <div style={{display:"flex",alignItems:"center",gap:14,maxWidth:520}}>
             <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
               onChange={e=>aicSet(x=>({...x, settings:{...x.settings, minConfidence:Number(e.target.value)/100}}))}
               style={{flex:1,accentColor:T.accent}}/>
             <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
-          </div>
-        </AIDCard>
-
-        {/* 5 · Model */}
-        <AIModelCard k="classify" onToast={onToast}/>
-
-        {/* 6 · Accuracy & auto-apply */}
-        <AIDCard title="Accuracy & auto-apply"
-          desc={`Measured on steward decisions. Auto-apply unlocks at ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over ${AIC_AUTO_MIN_DECISIONS}+ decisions.`}>
-          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-              <div style={{flex:1}}>DETECTOR</div>
-              <div style={{width:90}}>TAG</div>
-              <div style={{width:150}}>PRECISION</div>
-              <div style={{width:90,textAlign:"right"}}>DECISIONS</div>
-              <div style={{width:150,textAlign:"right"}}>AUTO-APPLY</div>
-            </div>
-            {AIC_DETECTORS.map((d,i)=>{
-              const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
-              const earned = aicAutoEarned(s); const auto = !!st.settings.autoApply[d.k];
-              return (
-                <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                  <div title={d.why} style={{flex:1,minWidth:0,fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</div>
-                  <div style={{width:90,flexShrink:0}}>
-                    <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
-                  </div>
-                  <div style={{width:150,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
-                    <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
-                    </div>
-                    <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
-                  </div>
-                  <div style={{width:90,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{s.accepted}✓ / {s.rejected}✗</div>
-                  <div style={{width:150,flexShrink:0,display:"flex",justifyContent:"flex-end"}}>
-                    {earned
-                      ? <Toggle on={auto} onChange={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!auto}}}));
-                          onToast(auto?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label}`,"success"); }}/>
-                      : <span title={n<AIC_AUTO_MIN_DECISIONS?`Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions`:`Below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
-                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
-                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "Below the gate"}
-                        </span>}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </AIDCard>
       </div>
@@ -60146,6 +60126,19 @@ const AIModelCard = ({k, onToast}) => {
     daPatch({settings:{..._da.settings, models:{..._da.settings.models, [k]:{...m, ...patch}}}});
     if(toast) onToast("Model settings saved","success");
   };
+  // Numbers are typed freely and clamped to their range when the field is left.
+  const LIM = {temp:{min:0, max:1, step:0.1}, maxTok:{min:256, max:4096, step:256}};
+  const [draft, setDraft] = useState({});
+  const numVal = f => draft[f]!==undefined ? draft[f] : m[f];
+  const commit = f => {
+    if(draft[f]===undefined) return;
+    const {min,max} = LIM[f]; const n = Number(draft[f]);
+    const v = isNaN(n) ? m[f] : Math.round(Math.min(max, Math.max(min, n))*(f==="temp"?10:1))/(f==="temp"?10:1);
+    setDraft(d=>{ const x={...d}; delete x[f]; return x; });
+    if(v!==m[f]) set({[f]:v}, false);
+    onToast(v!==n ? `${f==="temp"?"Temperature":"Max output tokens"} set to ${v} (allowed ${min}–${max})` : "Model settings saved", v!==n?"info":"success");
+  };
+  const hint = {fontSize:10.5,color:T.textMuted,marginTop:4};
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer",boxSizing:"border-box"};
   const num = {...sel,cursor:"text",outline:"none",fontFamily:"'Geist Mono',monospace"};
   const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
@@ -60178,16 +60171,18 @@ const AIModelCard = ({k, onToast}) => {
       <div style={grid}>
         <div>
           <label style={lab}>Temperature</label>
-          <input type="number" step="0.1" min="0" max="1" value={m.temp} onChange={e=>set({temp:Number(e.target.value)},false)}
-            onBlur={()=>onToast("Model settings saved","success")} style={num}/>
+          <input type="number" {...LIM.temp} value={numVal("temp")} onChange={e=>setDraft(d=>({...d, temp:e.target.value}))}
+            onBlur={()=>commit("temp")} style={num}/>
+          <div style={hint}>0.0 – 1.0</div>
         </div>
         <div>
-          <label style={lab}>Max tokens</label>
-          <input type="number" min="64" step="64" value={m.maxTok} onChange={e=>set({maxTok:Number(e.target.value)},false)}
-            onBlur={()=>onToast("Model settings saved","success")} style={num}/>
+          <label style={lab}>Max output tokens</label>
+          <input type="number" {...LIM.maxTok} value={numVal("maxTok")} onChange={e=>setDraft(d=>({...d, maxTok:e.target.value}))}
+            onBlur={()=>commit("maxTok")} style={num}/>
+          <div style={hint}>256 – 4096</div>
         </div>
         <div>
-          <label style={lab}>Fallback on failure</label>
+          <label style={lab}>Fallback model</label>
           <select value={m.fallback||"none"} onChange={e=>set({fallback:e.target.value})} style={{...sel,fontFamily:"'Geist Mono',monospace"}}>
             <option value="none">None — fail the request</option>
             {Object.values(DA_PROVIDERS).flatMap(v=>v.models).filter(x=>x!==m.model).map(x=><option key={x} value={x}>{x}</option>)}
@@ -60212,11 +60207,9 @@ const AIDescSettings = ({onToast}) => {
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
   const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
   const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
-  const st = aid.stats;
-  const pct = n => st.suggested ? Math.round(n/st.suggested*100) : 0;
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
   const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
-  const onCount = lv => Object.values(S.inputs[lv]).filter(Boolean).length;
+  const onCount = lv => (lv==="table"?AID_TABLE_INPUTS:AID_COLUMN_INPUTS).filter(x=>x.required||S.inputs[lv][x.k]).length;
 
   return (
     <div style={{maxWidth:900}}>
@@ -60235,17 +60228,17 @@ const AIDescSettings = ({onToast}) => {
       </div>
 
       <div style={{opacity:S.enabled?1:.55,pointerEvents:S.enabled?"auto":"none"}}>
-        {/* 2 · What the model reads */}
-        <AIDCard title="What the model reads" desc="Choose exactly which metadata is sent with each request. Turning an input off removes it from the request — the draft is written without it.">
+        {/* 2 · Model inputs */}
+        <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
             <div>
               <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                For table descriptions · {onCount("table")} of {AID_TABLE_INPUTS.length} on</div>
+                Table descriptions · {onCount("table")} of {AID_TABLE_INPUTS.length} on</div>
               {AID_TABLE_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.table[x.k]} set={()=>setInput("table",x.k)}/>)}
             </div>
             <div>
               <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                For column descriptions · {onCount("column")} of {AID_COLUMN_INPUTS.length} on</div>
+                Column descriptions · {onCount("column")} of {AID_COLUMN_INPUTS.length} on</div>
               {AID_COLUMN_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.column[x.k]} set={()=>setInput("column",x.k)}/>)}
             </div>
           </div>
@@ -60270,15 +60263,6 @@ const AIDescSettings = ({onToast}) => {
         {/* 4 · Model */}
         <AIModelCard k="describe" onToast={onToast}/>
 
-        {/* 5 · How it is going */}
-        <AIDCard title="How the drafts are landing" desc="Last 30 days. A high edit rate means the prompt or the inputs need work, not the reviewers.">
-          <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-            <AICStat label="Drafts produced" value={st.suggested} sub="tables and columns"/>
-            <AICStat label="Accepted as-is" value={`${pct(st.accepted)}%`} sub={`${st.accepted} drafts`} color={T.green}/>
-            <AICStat label="Edited, then saved" value={`${pct(st.edited)}%`} sub={`${st.edited} drafts`}/>
-            <AICStat label="Discarded" value={`${pct(st.discarded)}%`} sub={`${st.discarded} drafts`} color={T.textMuted}/>
-          </div>
-        </AIDCard>
       </div>
     </div>
   );
