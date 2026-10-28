@@ -50196,6 +50196,7 @@ const DA_SETTINGS_SEED = {
     synonym:  {provider:"anthropic", model:"claude-sonnet-5",        temp:0.3, maxTok:2048, fallback:"none",            key:"shared"},
     index:    {provider:"openai",    model:"text-embedding-3-large", temp:0,   maxTok:8191, fallback:"none",            key:"shared"},
     describe: {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:1024, fallback:"gpt-4o-mini",     key:"shared"},
+    classify: {provider:"anthropic", model:"claude-sonnet-5",        temp:0,   maxTok:1024, fallback:"gpt-4o-mini",     key:"shared"},
     sql:      {provider:"anthropic", model:"claude-opus-5",          temp:0,   maxTok:4096, fallback:"gpt-4o",          key:"shared"},
     search:   {provider:"anthropic", model:"claude-sonnet-5",        temp:0.2, maxTok:2048, fallback:"gpt-4o-mini",     key:"shared"},
     router:   {provider:"anthropic", model:"claude-haiku-4-5",       temp:0,   maxTok:1024, fallback:"none",            key:"shared"},
@@ -52945,6 +52946,9 @@ const DA_ACTIVITIES = [
   {k:"describe", area:"Catalog",       l:"Description suggestions",
    d:"Drafts a description for a table or column when someone asks for one. It reads names, types, tags, glossary terms and lineage — never a data value — and nothing is saved until a person accepts it.",
    rec:"claude-sonnet-5", acc:90, cost:"$", sends:"metadata"},
+  {k:"classify", area:"Classification", l:"Classification suggestions",
+   d:"Matches objects and columns to tags on what their names mean and proposes new tags the taxonomy lacks.",
+   rec:"claude-sonnet-5", acc:91, cost:"$", sends:"metadata"},
   {k:"sql",      area:"Copilot",       l:"Prompt → SQL",
    d:"Turns a question into a query plan over the governed schema. The most accuracy-sensitive call in the product — use your strongest model. Only schema is sent, never values.",
    rec:"claude-opus-5", acc:95, cost:"$$$", sends:"metadata"},
@@ -52999,14 +53003,16 @@ const CopilotSettingsSection = ({onToast, embedded}) => {
         ]} active={top} onChange={setTop}/>
       </div>
       {top==="config"
-        ? <DASettingsSection onToast={onToast} embedded hide={["models"]}/>
+        ? <DASettingsSection onToast={onToast} embedded/>
         : <DataAskView tab={top} setTab={setTop} onToast={onToast} onNav={onNav}/>}
     </>
   );
 };
 
-// `only` / `hide` let Settings › AI show the Models sub-tab on its own (it governs
-// every AI activity, not just the Copilot) and drop it from the Copilot's config.
+// Copilot's own configuration. Its Models sub-tab covers the Copilot, Answer Spaces
+// and document classification; Descriptions and Classification set their models
+// in their own Settings › AI tabs (AIModelCard).
+const DA_COPILOT_AREAS = ["Copilot","Answer Spaces","Document classification"];
 const DA_SUB_TABS = [
   {key:"models",   label:"Models"},
   {key:"retrieval",label:"Retrieval"},
@@ -53071,8 +53077,7 @@ const DASettingsSection = ({onToast, embedded, only, hide=[]}) => {
       {!embedded&&<SettSH icon={Ic.bot(16)} title="Copilot"
         desc="Models, retrieval, guardrails, privacy and cost for governed conversational access. Every value here is a ceiling — an Answer Space can tighten it but never loosen it."/>}
       {embedded&&!only&&<div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-        Retrieval, guardrails, privacy and cost for every data question the Copilot answers. Each value is a ceiling — an Answer Space can tighten it but never loosen it.
-        The models behind these calls are set in the Models tab of Settings › AI.
+        Models, retrieval, guardrails, privacy and cost for every question the Copilot answers. Each value is a ceiling — an Answer Space can tighten it but never loosen it.
       </div>}
 
       {subTabs.length>1&&<div style={{marginBottom:18}}>
@@ -53081,24 +53086,17 @@ const DASettingsSection = ({onToast, embedded, only, hide=[]}) => {
 
       {/* ── MODELS ── */}
       {sub==="models"&&(<>
-        <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.65,marginBottom:14}}>
-          Every AI activity in the platform routes to its own model, so a cheap model can route a question while the strongest one
-          plans a query. By default every activity runs on a model Solix manages, on the shared platform key — nobody has to
-          bring a key for AI to work. Solix publishes a recommendation per activity, measured on mixed real documents rather than
-          benchmarks; you can accept it, pick another model, or point an activity at your own key or inference endpoint.
-          Column classification is not listed: its detectors, value shapes and reference inheritance run without a model.
-        </div>
 
         <Card title="Apply every Solix recommendation"
-          desc={`Sets all ${DA_ACTIVITIES.length} activities to the recommended model. Accuracy and cost were measured together — the recommendation is the best accuracy inside a sensible cost, not the best accuracy at any price.`}>
+          desc={`Sets all ${DA_ACTIVITIES.filter(a=>DA_COPILOT_AREAS.includes(a.area)).length} Copilot activities to the recommended model.`}>
           <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            <Btn small variant="primary" onClick={()=>setD(x=>({...x,models:Object.fromEntries(
-              DA_ACTIVITIES.map(a=>{
+            <Btn small variant="primary" onClick={()=>setD(x=>({...x,models:{...x.models,...Object.fromEntries(
+              DA_ACTIVITIES.filter(a=>DA_COPILOT_AREAS.includes(a.area)).map(a=>{
                 const prov = Object.keys(DA_PROVIDERS).find(p=>DA_PROVIDERS[p].models.includes(a.rec)) || x.models[a.k].provider;
                 return [a.k,{...x.models[a.k], provider:prov, model:a.rec}];
-              }))}))}>Apply all recommendations</Btn>
+              }))}}))}>Apply all recommendations</Btn>
             <span style={{fontSize:11,color:T.textMuted}}>
-              {DA_ACTIVITIES.filter(a=>d.models[a.k].model===a.rec).length} of {DA_ACTIVITIES.length} activities are on the recommended model
+              {DA_ACTIVITIES.filter(a=>DA_COPILOT_AREAS.includes(a.area)&&d.models[a.k].model===a.rec).length} of {DA_ACTIVITIES.filter(a=>DA_COPILOT_AREAS.includes(a.area)).length} activities are on the recommended model
             </span>
           </div>
         </Card>
@@ -53126,7 +53124,7 @@ const DASettingsSection = ({onToast, embedded, only, hide=[]}) => {
           )}
         </Card>
 
-        {["Catalog","Copilot","Answer Spaces","Document classification"].map(area=>(
+        {DA_COPILOT_AREAS.map(area=>(
           <div key={area}>
             <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",
               margin:"20px 0 10px"}}>{area}</div>
@@ -59268,6 +59266,7 @@ const AIC_SEED_STATS = {
 };
 
 const AIC_AUTO_MIN_PRECISION = 0.95;
+const AIC_DEFAULT_PROMPT = "You classify data assets for a governed catalog. From the object's name, type, columns, existing tags, glossary terms and lineage, suggest tags from the taxonomy. When no tag fits a clear business concept, propose a new tag with a short name and a one-line description. Never infer from data values you were not given. Give a confidence for every suggestion.";
 const AIC_AUTO_MIN_DECISIONS = 50;
 const aicPrecision = (s) => { const n=s.accepted+s.rejected; return n ? s.accepted/n : 0; };
 const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS && aicPrecision(s) >= AIC_AUTO_MIN_PRECISION;
@@ -59277,6 +59276,7 @@ let _aicState = {
     // The master switch. A new tenant starts with this OFF and no profile; this
     // demo tenant has been running for a month, so it is on with two.
     enabled:true,
+    prompt: AIC_DEFAULT_PROMPT,
     tiers:{name:true, value:true, graph:true},
     // Value inspection reads sample data, and some domains cannot permit that.
     // Platform holds the HR tables, where sampling salary and name columns is
@@ -59719,24 +59719,27 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
 // different frequency, different question.
 const AICControlPanel = ({onToast}) => {
   const st = useAic();
-  const [tab, setTab] = useState("settings");
   const onNav = useNav();
   const on = st.settings.enabled;
+  const put = (patch) => aicSet(x=>({...x, settings:{...x.settings, ...patch}, findings:null}));
+  const TIERS = [
+    {k:"name",  l:"Column-name patterns",  ex:"cust_email, ssn, card_no"},
+    {k:"value", l:"Profiled value shapes", ex:"Sampled values · allowed domains only"},
+    {k:"graph", l:"Reference inheritance", ex:"orders.customer_id → customers.id"},
+  ];
+  const tiersOn = TIERS.filter(t=>st.settings.tiers[t.k]).length;
+  const valueOn = st.settings.tiers.value;
   return (
-    <div>
-      {/* Master switch — off means nothing is read and nothing is proposed */}
+    <div style={{maxWidth:900}}>
+      {/* 1 · On / off */}
       <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
                    background:on?T.bgSurface:T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:8}}>
-            AI Classification
-            <span style={{fontSize:10,fontWeight:700,padding:"1.5px 7px",borderRadius:99,
-              background:on?T.green+"18":T.bgHover,color:on?T.green:T.textMuted,border:`1px solid ${on?T.green+"40":T.border}`}}>{on?"On":"Off"}</span>
-          </div>
+          <div style={{fontSize:13,fontWeight:700,color:T.text}}>AI Classification</div>
           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
             {on
-              ? <>Scans are created, run and reviewed in <button onClick={()=>onNav&&onNav("tags")} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Classifications › AI Classification</button>. The limits below apply to every scan.</>
-              : "Off — no run can start and nothing is suggested. Existing runs are kept and resume when it is turned back on."}
+              ? <>Scans run from <button onClick={()=>onNav&&onNav("tags")} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Classifications › AI Classification</button>. These settings apply to every scan.</>
+              : "Off — no scan can start and nothing is suggested. Existing scans are kept."}
           </div>
         </div>
         <Toggle on={on} onChange={()=>{
@@ -59745,142 +59748,100 @@ const AICControlPanel = ({onToast}) => {
         }}/>
       </div>
 
-      <div style={{marginBottom:14}}>
-        <Tabs2 tabs={[{key:"settings",label:"Limits for every scan"},{key:"accuracy",label:"Accuracy & auto-apply"}]}
-          active={tab} onChange={setTab}/>
-      </div>
-      <div style={{opacity:on?1:.55,transition:"opacity .15s"}}>
-        {tab==="accuracy"&&(
-          <div>
-            <div style={{fontSize:12,color:T.textSub,lineHeight:1.65,marginBottom:14,maxWidth:760}}>
-              Auto-apply is a privilege a detector earns, not a switch someone flips. It unlocks at
-              <b style={{color:T.text}}> {Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over at least {AIC_AUTO_MIN_DECISIONS} decisions</b>,
-              measured against what stewards actually did with its proposals. Every accept and every override in the queue moves these numbers.
+      <div style={{opacity:on?1:.55,pointerEvents:on?"auto":"none"}}>
+        {/* 2 · What the model reads */}
+        <AIDCard title="What the model reads" desc="A signal switched off here is off in every scan.">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
+                Signals · {tiersOn} of {TIERS.length} on</div>
+              {TIERS.map((t,i)=><AIDInputRow key={t.k} item={t} first={i===0} on={st.settings.tiers[t.k]}
+                set={()=>put({tiers:{...st.settings.tiers,[t.k]:!st.settings.tiers[t.k]}})}/>)}
             </div>
-            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
-                <div style={{flex:1}}>DETECTOR</div>
-                <div style={{width:90}}>CLASSIFIES</div>
-                <div style={{width:160}}>PRECISION</div>
-                <div style={{width:110,textAlign:"right"}}>DECISIONS</div>
-                <div style={{width:170,textAlign:"right"}}>AUTO-APPLY</div>
-              </div>
-              {AIC_DETECTORS.map((d,i)=>{
-                const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
-                const earned = aicAutoEarned(s); const on = !!st.settings.autoApply[d.k];
-                return (
-                  <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{d.label}</div>
-                      <div style={{fontSize:10,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.why}</div>
-                    </div>
-                    <div style={{width:90,flexShrink:0}}>
-                      <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
-                    </div>
-                    <div style={{width:160,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
-                      </div>
-                      <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
-                    </div>
-                    <div style={{width:110,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>
-                      {s.accepted}✓ / {s.rejected}✗
-                    </div>
-                    <div style={{width:170,flexShrink:0,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:7}}>
-                      {earned ? (
-                        <button onClick={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!on}}}));
-                                               onToast(on?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label} — above 95% over ${n} decisions`,"success"); }}
-                          style={{display:"flex",alignItems:"center",gap:6,padding:"3px 10px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
-                                  background:on?T.green+"18":T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`,color:on?T.green:T.textSub,fontSize:11,fontWeight:700}}>
-                          <span style={{width:6,height:6,borderRadius:"50%",background:on?T.green:T.textMuted}}/>
-                          {on?"On":"Earned — off"}
-                        </button>
-                      ) : (
-                        <span title={n<AIC_AUTO_MIN_DECISIONS
-                          ? `Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions before it can qualify`
-                          : `Precision is ${Math.round(p*100)}%, below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
-                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
-                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "below the gate"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-        {tab==="settings"&&(
-          <div style={{maxWidth:820}}>
-            <div style={{fontSize:11.5,color:T.textMuted,lineHeight:1.6,marginBottom:14}}>
-              These apply to every run. A run can use fewer checks or ask for more certainty than this, never less.
-              A check switched off here is off in every run.
-            </div>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",marginBottom:9}}>SIGNAL TIERS</div>
-            {["name","value","graph"].map(t=>{
-              const m = AIC_TIER_META[t]; const on = st.settings.tiers[t];
-              return (
-                <div key={t} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 14px",marginBottom:8,borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-                  <div style={{paddingTop:1}}><AICTier t={t}/></div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.text,marginBottom:3}}>
-                      {t==="name"&&"Column-name patterns"}
-                      {t==="value"&&"Profiled value shapes"}
-                      {t==="graph"&&"Reference inheritance"}
-                    </div>
-                    <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{m.title}</div>
-                    {t==="value"&&(
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>
-                        Permitted in: {st.settings.valueAllowed.join(", ")} ·
-                        <b style={{color:T.amber}}> blocked in {AIC_ALL_DOMAINS.filter(d=>!st.settings.valueAllowed.includes(d)).join(", ")||"nowhere"}</b>
-                      </div>
-                    )}
-                  </div>
-                  <button onClick={()=>aicSet(s=>({...s, settings:{...s.settings, tiers:{...s.settings.tiers,[t]:!on}}, findings:null}))}
-                    style={{flexShrink:0,width:38,height:21,borderRadius:99,border:"none",cursor:"pointer",padding:2,
-                            background:on?T.green:T.bgActive,display:"flex",justifyContent:on?"flex-end":"flex-start"}}>
-                    <span style={{width:17,height:17,borderRadius:"50%",background:"#fff",display:"block"}}/>
-                  </button>
-                </div>
-              );
-            })}
-
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>DATA BOUNDARY</div>
-            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:10}}>
-                Value inspection reads sampled data. Some domains cannot permit that for legal reasons, and that is a
-                boundary rather than a preference — a domain turned off here is off for every scan, scheduled or manual.
-              </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:8}}>
+                Value sampling allowed in · {st.settings.valueAllowed.length} of {AIC_ALL_DOMAINS.length} domains</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                 {AIC_ALL_DOMAINS.map(d=>{
-                  const on = st.settings.valueAllowed.includes(d);
+                  const ok = st.settings.valueAllowed.includes(d);
                   return (
-                    <button key={d} onClick={()=>aicSet(s=>({...s, settings:{...s.settings,
-                        valueAllowed: on ? s.settings.valueAllowed.filter(x=>x!==d) : [...s.settings.valueAllowed, d]}, findings:null}))}
-                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:"pointer",fontFamily:"inherit",
-                              background:on?T.blueDim:T.bgElevated,border:`1px solid ${on?T.blue+"45":T.border}`,color:on?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
-                      <span style={{width:6,height:6,borderRadius:"50%",background:on?T.blue:T.textMuted}}/>{d}
+                    <button key={d} disabled={!valueOn} onClick={()=>put({
+                        valueAllowed: ok ? st.settings.valueAllowed.filter(x=>x!==d) : [...st.settings.valueAllowed, d]})}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:valueOn?"pointer":"not-allowed",fontFamily:"inherit",
+                              opacity:valueOn?1:.5,
+                              background:ok?T.blueDim:T.bgElevated,border:`1px solid ${ok?T.blue+"45":T.border}`,color:ok?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:ok?T.blue:T.textMuted}}/>{d}
                     </button>
                   );
                 })}
               </div>
             </div>
-
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",margin:"20px 0 9px"}}>CONFIDENCE FLOOR</div>
-            <div style={{padding:"12px 14px",borderRadius:10,background:T.bgSurface,border:`1px solid ${T.border}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
-                  onChange={e=>aicSet(s=>({...s, settings:{...s.settings, minConfidence:Number(e.target.value)/100}}))}
-                  style={{flex:1,accentColor:T.accent}}/>
-                <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
-              </div>
-              <div style={{fontSize:11.5,color:T.textMuted,marginTop:8,lineHeight:1.55}}>
-                Proposals below the floor are not shown to a steward. They are still recorded on the run, so lowering the
-                floor later surfaces them without a rescan. A name-only match tops out at 72% by design.
-              </div>
-            </div>
           </div>
-        )}
+        </AIDCard>
+
+        {/* 3 · Prompt */}
+        <AIDCard title="Prompt" desc="Used for meaning-based matches and new-tag suggestions. Each prompt starts from a Solix default; Reset to default puts it back.">
+          <div style={{marginTop:-14}}>
+            <AIDPromptBox label="Classification prompt" hint="Detector and pattern matches do not use the prompt."
+              value={st.settings.prompt||AIC_DEFAULT_PROMPT} def={AIC_DEFAULT_PROMPT}
+              onSave={v=>{ put({prompt:v}); onToast(v===AIC_DEFAULT_PROMPT?"Prompt reset to default":"Prompt saved","success"); }}/>
+          </div>
+        </AIDCard>
+
+        {/* 4 · Confidence */}
+        <AIDCard title="Minimum confidence" desc="Suggestions below this are kept on the run but not shown for review.">
+          <div style={{display:"flex",alignItems:"center",gap:14,maxWidth:520}}>
+            <input type="range" min="50" max="95" step="5" value={Math.round(st.settings.minConfidence*100)}
+              onChange={e=>aicSet(x=>({...x, settings:{...x.settings, minConfidence:Number(e.target.value)/100}}))}
+              style={{flex:1,accentColor:T.accent}}/>
+            <span style={{fontSize:14,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,width:48,textAlign:"right"}}>{Math.round(st.settings.minConfidence*100)}%</span>
+          </div>
+        </AIDCard>
+
+        {/* 5 · Model */}
+        <AIModelCard k="classify" onToast={onToast}/>
+
+        {/* 6 · Accuracy & auto-apply */}
+        <AIDCard title="Accuracy & auto-apply"
+          desc={`Measured on steward decisions. Auto-apply unlocks at ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% precision over ${AIC_AUTO_MIN_DECISIONS}+ decisions.`}>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".04em"}}>
+              <div style={{flex:1}}>DETECTOR</div>
+              <div style={{width:90}}>TAG</div>
+              <div style={{width:150}}>PRECISION</div>
+              <div style={{width:90,textAlign:"right"}}>DECISIONS</div>
+              <div style={{width:150,textAlign:"right"}}>AUTO-APPLY</div>
+            </div>
+            {AIC_DETECTORS.map((d,i)=>{
+              const s = st.stats[d.k]; const p = aicPrecision(s); const n = s.accepted+s.rejected;
+              const earned = aicAutoEarned(s); const auto = !!st.settings.autoApply[d.k];
+              return (
+                <div key={d.k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                  <div title={d.why} style={{flex:1,minWidth:0,fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</div>
+                  <div style={{width:90,flexShrink:0}}>
+                    <span style={{fontSize:10.5,fontWeight:700,padding:"1.5px 7px",borderRadius:5,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}35`}}>{d.tag}</span>
+                  </div>
+                  <div style={{width:150,flexShrink:0,display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{flex:1,height:5,borderRadius:99,background:T.bgElevated,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${p*100}%`,background:p>=AIC_AUTO_MIN_PRECISION?T.green:p>=0.85?T.amber:T.red}}/>
+                    </div>
+                    <span style={{fontSize:11,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:p>=AIC_AUTO_MIN_PRECISION?T.green:T.amber,width:34,textAlign:"right"}}>{Math.round(p*100)}%</span>
+                  </div>
+                  <div style={{width:90,flexShrink:0,textAlign:"right",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{s.accepted}✓ / {s.rejected}✗</div>
+                  <div style={{width:150,flexShrink:0,display:"flex",justifyContent:"flex-end"}}>
+                    {earned
+                      ? <Toggle on={auto} onChange={()=>{ aicSet(x=>({...x, settings:{...x.settings, autoApply:{...x.settings.autoApply,[d.k]:!auto}}}));
+                          onToast(auto?`Auto-apply off for ${d.label}`:`Auto-apply on for ${d.label}`,"success"); }}/>
+                      : <span title={n<AIC_AUTO_MIN_DECISIONS?`Needs ${AIC_AUTO_MIN_DECISIONS-n} more decisions`:`Below the ${Math.round(AIC_AUTO_MIN_PRECISION*100)}% gate`}
+                          style={{fontSize:10.5,color:T.textMuted,display:"flex",alignItems:"center",gap:5}}>
+                          {Ic.shield(11)} {n<AIC_AUTO_MIN_DECISIONS ? `${AIC_AUTO_MIN_DECISIONS-n} more decisions` : "Below the gate"}
+                        </span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </AIDCard>
       </div>
     </div>
   );
@@ -60174,25 +60135,88 @@ const AIDPromptBox = ({label, hint, value, def, onSave}) => {
   );
 };
 
+// The model behind one AI activity, set inside the section that uses it — there
+// is no separate Models tab. Writes straight to the shared store (DA settings · models[k]).
+const AIModelCard = ({k, onToast}) => {
+  const da = useDA();
+  const act = DA_ACTIVITIES.find(a=>a.k===k);
+  const m = (da.settings.models||{})[k] || DA_SETTINGS_SEED.models[k];
+  const prov = DA_PROVIDERS[m.provider] || DA_PROVIDERS.anthropic;
+  const set = (patch, toast=true) => {
+    daPatch({settings:{..._da.settings, models:{..._da.settings.models, [k]:{...m, ...patch}}}});
+    if(toast) onToast("Model settings saved","success");
+  };
+  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer",boxSizing:"border-box"};
+  const num = {...sel,cursor:"text",outline:"none",fontFamily:"'Geist Mono',monospace"};
+  const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+  const onRec = act && m.model===act.rec;
+  const grid = {display:"grid",gridTemplateColumns:"1fr 1.2fr 1.3fr",gap:12};
+  return (
+    <AIDCard title="Model">
+      <div style={{...grid,marginBottom:12}}>
+        <div>
+          <label style={lab}>Provider</label>
+          <select value={m.provider} onChange={e=>{ const p=e.target.value; set({provider:p, model:DA_PROVIDERS[p].models[0]}); }} style={sel}>
+            {Object.entries(DA_PROVIDERS).map(([pk,v])=><option key={pk} value={pk}>{v.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lab}>Model</label>
+          <select value={m.model} onChange={e=>set({model:e.target.value})} style={{...sel,fontFamily:"'Geist Mono',monospace"}}>
+            {prov.models.map(x=><option key={x} value={x}>{x}{act&&x===act.rec?"  — recommended":""}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lab}>Credentials</label>
+          <select value={m.key||"shared"} onChange={e=>set({key:e.target.value})} style={sel}>
+            <option value="shared">Solix-managed — no key needed</option>
+            <option value="own">Our own API key</option>
+            <option value="byo">Our own inference endpoint</option>
+          </select>
+        </div>
+      </div>
+      <div style={grid}>
+        <div>
+          <label style={lab}>Temperature</label>
+          <input type="number" step="0.1" min="0" max="1" value={m.temp} onChange={e=>set({temp:Number(e.target.value)},false)}
+            onBlur={()=>onToast("Model settings saved","success")} style={num}/>
+        </div>
+        <div>
+          <label style={lab}>Max tokens</label>
+          <input type="number" min="64" step="64" value={m.maxTok} onChange={e=>set({maxTok:Number(e.target.value)},false)}
+            onBlur={()=>onToast("Model settings saved","success")} style={num}/>
+        </div>
+        <div>
+          <label style={lab}>Fallback on failure</label>
+          <select value={m.fallback||"none"} onChange={e=>set({fallback:e.target.value})} style={{...sel,fontFamily:"'Geist Mono',monospace"}}>
+            <option value="none">None — fail the request</option>
+            {Object.values(DA_PROVIDERS).flatMap(v=>v.models).filter(x=>x!==m.model).map(x=><option key={x} value={x}>{x}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginTop:12,fontSize:11,color:T.textMuted}}>
+        {act&&(onRec
+          ? <span>On the recommended model · {act.acc}% measured accuracy</span>
+          : <><span>Recommended: <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{act.rec}</b> · {act.acc}% measured accuracy</span>
+              <button onClick={()=>{ const p=Object.keys(DA_PROVIDERS).find(x=>DA_PROVIDERS[x].models.includes(act.rec)); set({provider:p, model:act.rec}); }}
+                style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Use recommended</button></>)}
+        {m.key&&m.key!=="shared"&&<span style={{color:T.amber}}>· Register the {m.key==="own"?"key":"endpoint"} in Settings › API Keys first.</span>}
+      </div>
+    </AIDCard>
+  );
+};
+
 const AIDescSettings = ({onToast}) => {
   const aid = useAid();
-  const da = useDA();
   const S = aid.settings;
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
   const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
-  const m = (da.settings.models||{}).describe || {};
-  const act = DA_ACTIVITIES.find(a=>a.k==="describe");
-  const setModel = (patch) => {
-    daPatch({settings:{..._da.settings, models:{..._da.settings.models, describe:{...(_da.settings.models||{}).describe, ...patch}}}});
-    onToast("Description model updated","success");
-  };
   const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
   const st = aid.stats;
   const pct = n => st.suggested ? Math.round(n/st.suggested*100) : 0;
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
   const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
   const onCount = lv => Object.values(S.inputs[lv]).filter(Boolean).length;
-  const prov = DA_PROVIDERS[m.provider] || DA_PROVIDERS.anthropic;
 
   return (
     <div style={{maxWidth:900}}>
@@ -60243,39 +60267,8 @@ const AIDescSettings = ({onToast}) => {
             value={S.prompts.column} def={AID_DEFAULT_PROMPTS.column} onSave={v=>savePrompt("column", v)}/>
         </AIDCard>
 
-        {/* 4 · Model — chosen here, not in another tab */}
-        <AIDCard title="Model" desc="The model that writes description drafts.">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr",gap:12}}>
-            <div>
-              <label style={lab}>Provider</label>
-              <select value={m.provider} onChange={e=>{ const p=e.target.value; setModel({provider:p, model:DA_PROVIDERS[p].models[0]}); }} style={sel}>
-                {Object.entries(DA_PROVIDERS).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lab}>Model</label>
-              <select value={m.model} onChange={e=>setModel({model:e.target.value})} style={{...sel,fontFamily:"'Geist Mono',monospace"}}>
-                {prov.models.map(x=><option key={x} value={x}>{x}{act&&x===act.rec?"  — recommended":""}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lab}>Credentials</label>
-              <select value={m.key||"shared"} onChange={e=>setModel({key:e.target.value})} style={sel}>
-                <option value="shared">Solix-managed — no key needed</option>
-                <option value="own">Our own API key</option>
-                <option value="byo">Our own inference endpoint</option>
-              </select>
-            </div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,fontSize:11,color:T.textMuted}}>
-            {act&&m.model!==act.rec
-              ? <><span>Solix recommends <b style={{color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{act.rec}</b> ({act.acc}% measured accuracy).</span>
-                  <button onClick={()=>{ const p=Object.keys(DA_PROVIDERS).find(k=>DA_PROVIDERS[k].models.includes(act.rec)); setModel({provider:p, model:act.rec}); }}
-                    style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Use recommended</button></>
-              : <span>On the recommended model{act?` · ${act.acc}% measured accuracy`:""}.</span>}
-            {m.key&&m.key!=="shared"&&<span style={{color:T.amber}}>· Register the {m.key==="own"?"key":"endpoint"} in Settings › API Keys first.</span>}
-          </div>
-        </AIDCard>
+        {/* 4 · Model */}
+        <AIModelCard k="describe" onToast={onToast}/>
 
         {/* 5 · How it is going */}
         <AIDCard title="How the drafts are landing" desc="Last 30 days. A high edit rate means the prompt or the inputs need work, not the reviewers.">
@@ -60298,25 +60291,23 @@ const AIDescSettings = ({onToast}) => {
 const AISettingsSection = ({onToast}) => {
   const aic = useAic();
   const aid = useAid();
-  const [tab, setTab] = useState(()=>_aiTabJump||"copilot");
+  const [tab, setTab] = useState(()=>(_aiTabJump&&_aiTabJump!=="models")?_aiTabJump:"copilot");
   useEffect(()=>{ _aiTabJump=null; },[]);
   const dot = (on) => on ? " · On" : " · Off";
   return (
     <>
       <SettSH icon={Ic.bot(16)} title="AI"
-        desc="Everything the platform's AI does — the Copilot, classification proposals and description suggestions — and the models behind them. AI proposes; a person decides."/>
+        desc="The Copilot, AI Classification and AI Descriptions — each with its own model. AI proposes; a person decides."/>
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
           {key:"classification", label:`Classification${dot(aic.settings.enabled)}`},
           {key:"descriptions",   label:"Descriptions"},
-          {key:"models",         label:"Models"},
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
       {tab==="classification" && <AICControlPanel onToast={onToast}/>}
       {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
-      {tab==="models"         && <DASettingsSection onToast={onToast} embedded only={["models"]}/>}
     </>
   );
 };
