@@ -60132,13 +60132,13 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
         </div>
         <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.bgElevated}}>
           <span style={{fontSize:11.5,color:T.textMuted}}>
-            {stillWriting&&!busy?`Writing ${written} of ${rows.length}… · `:""}{selected.length} selected{!canSave&&` · you don't own ${asset.name}, so ${owners[0]||"the owner"} approves these in their Inbox`}
+            {stillWriting&&!busy?`Writing ${written} of ${rows.length}… · `:""}{selected.length} selected · goes to {approver} for approval
           </span>
           <div style={{flex:1}}/>
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
           <button onClick={commit} disabled={!selected.length||busy||stillWriting}
             style={{padding:"8px 18px",borderRadius:8,background:selected.length?T.violet:T.bgHover,border:"none",color:selected.length?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:selected.length?"pointer":"default",fontFamily:"inherit"}}>
-            {canSave?`Accept ${selected.length}`:`Send ${selected.length} to owner`}</button>
+            {`Accept ${selected.length}`}</button>
         </div>
       </div>
     </div>,
