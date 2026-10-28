@@ -57648,9 +57648,53 @@ const aiCall = (trace, name, args) => {
 
 // The default prompts. Admins can edit each one; "Reset to default" restores these.
 const AID_DEFAULT_PROMPTS = {
-  short: "You write data catalog descriptions for business users. Using only the metadata provided, write one or two sentences that say what one row of this table represents and what the table is used for. Use plain language, expand abbreviations, and do not repeat the table name as the description. If the metadata is not enough to be sure, say what the table appears to hold instead of inventing details.",
-  detailed: "You write data catalog descriptions for business users. Using only the metadata provided, write one paragraph of three to five sentences covering, in this order: what one row represents; the key that identifies a row; the most important columns; any sensitive data and that it is masked; what the table feeds downstream and who owns it. Use plain language, expand abbreviations, and skip any point the metadata does not support. Never invent values, sources or business rules.",
-  column: "You write data catalog descriptions for business users. Using only the metadata provided, write one sentence that says what this column holds for each row of its table. Expand abbreviations, say if it is a key or refers to another table, and note if it is classified as sensitive. Do not repeat the column name as the description and do not invent values.",
+  short: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the table or view in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent sources, business rules, owners, refresh schedules or values.
+- Sentence 1: what one row represents (the grain).
+- Sentence 2, only if the metadata supports it: what the table is used for, based on its columns, glossary terms or downstream lineage.
+- Expand abbreviations (cust → customer, amt → amount). Use the glossary term for the business concept when one is given.
+- Do not restate the table name as the description and do not list columns.
+- If the grain is not clear, say what the table appears to hold and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: one or two sentences, at most 60 words. Return the description text only.`,
+  detailed: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the table or view in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent sources, business rules, owners, refresh schedules or values.
+- Cover, in this order, and skip any point the metadata does not support:
+  1. What one row represents (the grain).
+  2. The primary key that identifies a row.
+  3. The most important business columns — at most four, by meaning, not by type.
+  4. Columns tagged as personal or sensitive, and that access to them is restricted.
+  5. What the table feeds downstream, and its owner.
+- Expand abbreviations (cust → customer, amt → amount). Use the glossary term for the business concept when one is given.
+- Do not restate the table name as the description.
+- If the grain is not clear, say what the table appears to hold and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  column: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe one column of the table in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent allowed values, units, formats or business rules.
+- Say what the column holds for each row of its table.
+- If it is the primary key, say it uniquely identifies the row. If it has a foreign key reference, name the table and column it points to.
+- Use the data type to describe the kind of value (date, amount, flag, code, identifier); do not repeat the type name.
+- Expand abbreviations (cust → customer, amt → amount). Use the glossary term when one is given.
+- If its tags mark it as personal or sensitive, say so.
+- Do not repeat the column name as the description.
+- If the name is ambiguous, say what it most likely holds and that it needs confirmation.
+
+Output: one sentence, at most 25 words. Return the description text only.`,
 };
 // What the model may read. `name` is required at both levels and cannot be turned off.
 const AID_TABLE_INPUTS = [
@@ -59285,9 +59329,22 @@ const AIC_INPUTS = [
   {k:"colDesc",  l:"Column descriptions",    ex:"Customer's primary email"},
   {k:"fk",       l:"Foreign key references", ex:"orders.customer_id → customers.id", tier:"graph"},
   {k:"lineage",  l:"Upstream lineage",       ex:"Tags on upstream objects"},
-  {k:"values",   l:"Sample values",          ex:"Profiled values · allowed domains only", tier:"value"},
 ];
-const AIC_DEFAULT_PROMPT = "You classify data assets for a governed catalog. From the object's name, type, columns, existing tags, glossary terms and lineage, suggest tags from the taxonomy. When no tag fits a clear business concept, propose a new tag with a short name and a one-line description. Never infer from data values you were not given. Give a confidence for every suggestion.";
+const AIC_DEFAULT_PROMPT = `You classify data assets for a governed data catalog.
+
+Task: suggest tags for the object and for each of its columns in the metadata below. The tag taxonomy is always provided.
+
+Rules:
+- Use only the metadata provided. You never see data values; do not assume what they contain.
+- Prefer tags from the taxonomy and use each tag's exact name.
+- Suggest a new tag only when a clear business or sensitivity concept is present and no taxonomy tag fits. Give it a short Title Case name, the classification it belongs in, and a one-line description.
+- Columns: judge each one from its name, data type, description and foreign key reference. A column that references an already-tagged column inherits that tag.
+- Object: tag the object when its description, domain, columns or upstream lineage support it. Personal data in any column means the object carries the personal-data tag.
+- Do not suggest a tag the object or column already has.
+- Ambiguous names (id, code, value, flag) are weak evidence: lower the confidence rather than guess.
+- Return nothing for a target with no supported tag.
+
+Output: one entry per suggestion with target (object, or column name), tag, isNew (true/false), classification (new tags only), confidence (0.00–1.00), and reason — one line naming the metadata it relied on.`;
 const AIC_AUTO_MIN_DECISIONS = 50;
 const aicPrecision = (s) => { const n=s.accepted+s.rejected; return n ? s.accepted/n : 0; };
 const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS && aicPrecision(s) >= AIC_AUTO_MIN_PRECISION;
@@ -59741,34 +59798,14 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
 // different frequency, different question.
 const AICControlPanel = ({onToast}) => {
   const st = useAic();
-  const onNav = useNav();
-  const on = st.settings.enabled;
   const put = (patch) => aicSet(x=>({...x, settings:{...x.settings, ...patch}, findings:null}));
   const inputs = st.settings.inputs || {};
   const inOn = x => x.required || (x.tier ? !!st.settings.tiers[x.tier] : inputs[x.k]!==false);
   const flip = x => x.tier ? put({tiers:{...st.settings.tiers, [x.tier]:!st.settings.tiers[x.tier]}})
                            : put({inputs:{...inputs, [x.k]:!inOn(x)}});
-  const valueOn = st.settings.tiers.value;
   return (
     <div style={{maxWidth:900}}>
-      {/* 1 · On / off */}
-      <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
-                   background:on?T.bgSurface:T.bgElevated,border:`1px solid ${on?T.green+"45":T.border}`}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>AI Classification</div>
-          <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
-            {on
-              ? <>Scans run from <button onClick={()=>onNav&&onNav("tags")} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Classifications › AI Classification</button>. These settings apply to every scan.</>
-              : "Off — no scan can start and nothing is suggested. Existing scans are kept."}
-          </div>
-        </div>
-        <Toggle on={on} onChange={()=>{
-          aicSet(x=>({...x, settings:{...x.settings, enabled:!on}, findings:null}));
-          onToast(on?"AI Classification turned off — nothing will be scanned":"AI Classification turned on",on?"info":"success");
-        }}/>
-      </div>
-
-      <div style={{opacity:on?1:.55,pointerEvents:on?"auto":"none"}}>
+      <div>
         {/* 2 · Model inputs */}
         <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
@@ -59781,22 +59818,6 @@ const AICControlPanel = ({onToast}) => {
               <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
                 Columns & relationships · {AIC_INPUTS.slice(5).filter(inOn).length} of {AIC_INPUTS.length-5} on</div>
               {AIC_INPUTS.slice(5).map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={inOn(x)} set={()=>flip(x)}/>)}
-              <div style={{marginTop:10,opacity:valueOn?1:.5}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:7}}>Sample values allowed in</div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                  {AIC_ALL_DOMAINS.map(d=>{
-                    const ok = st.settings.valueAllowed.includes(d);
-                    return (
-                      <button key={d} disabled={!valueOn} onClick={()=>put({
-                          valueAllowed: ok ? st.settings.valueAllowed.filter(x=>x!==d) : [...st.settings.valueAllowed, d]})}
-                        style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",borderRadius:99,cursor:valueOn?"pointer":"not-allowed",fontFamily:"inherit",
-                                background:ok?T.blueDim:T.bgElevated,border:`1px solid ${ok?T.blue+"45":T.border}`,color:ok?T.blue:T.textMuted,fontSize:11.5,fontWeight:600}}>
-                        <span style={{width:6,height:6,borderRadius:"50%",background:ok?T.blue:T.textMuted}}/>{d}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             </div>
           </div>
         </AIDCard>
@@ -60099,6 +60120,9 @@ const AIDInputRow = ({item, on, set, first}) => (
 const AIDPromptBox = ({label, hint, value, def, onSave}) => {
   const [v, setV] = useState(value);
   useEffect(()=>{ setV(value); },[value]);
+  // The box grows to show the whole prompt.
+  const box = useRef(null);
+  useEffect(()=>{ const el=box.current; if(el){ el.style.height="auto"; el.style.height=(el.scrollHeight+4)+"px"; } },[v]);
   const edited = value !== def;
   return (
     <div style={{marginTop:14}}>
@@ -60108,8 +60132,8 @@ const AIDPromptBox = ({label, hint, value, def, onSave}) => {
         <div style={{flex:1}}/>
         {edited&&<button onClick={()=>onSave(def)} style={{background:"none",border:"none",padding:0,color:T.accent,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Reset to default</button>}
       </div>
-      <textarea value={v} rows={4} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v.trim() && v!==value) onSave(v.trim()); else if(!v.trim()) setV(value); }}
-        style={{width:"100%",padding:"9px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"inherit",boxSizing:"border-box"}}/>
+      <textarea ref={box} value={v} rows={6} onChange={e=>setV(e.target.value)} onBlur={()=>{ if(v.trim() && v!==value) onSave(v.trim()); else if(!v.trim()) setV(value); }}
+        style={{width:"100%",padding:"9px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,outline:"none",resize:"vertical",lineHeight:1.6,fontFamily:"'Geist Mono',monospace",fontSize:11.5,boxSizing:"border-box"}}/>
       <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{hint}</div>
     </div>
   );
@@ -60213,21 +60237,7 @@ const AIDescSettings = ({onToast}) => {
 
   return (
     <div style={{maxWidth:900}}>
-      {/* 1 · On / off */}
-      <div style={{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",marginBottom:16,borderRadius:10,
-                   background:S.enabled?T.bgSurface:T.bgElevated,border:`1px solid ${S.enabled?T.green+"45":T.border}`}}>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>AI Descriptions</div>
-          <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginTop:3}}>
-            {S.enabled
-              ? "Shows ✦ Suggest description on tables and views, and ✦ Describe columns on their Columns tab, for anyone who can edit a description. Nothing is saved until a person accepts it."
-              : "Off — the Suggest and Describe columns buttons are hidden everywhere. Existing descriptions are not changed."}
-          </div>
-        </div>
-        <Toggle on={S.enabled} onChange={()=>{ put({enabled:!S.enabled}); onToast(S.enabled?"AI Descriptions turned off":"AI Descriptions turned on","success"); }}/>
-      </div>
-
-      <div style={{opacity:S.enabled?1:.55,pointerEvents:S.enabled?"auto":"none"}}>
+      <div>
         {/* 2 · Model inputs */}
         <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
@@ -60277,7 +60287,6 @@ const AISettingsSection = ({onToast}) => {
   const aid = useAid();
   const [tab, setTab] = useState(()=>(_aiTabJump&&_aiTabJump!=="models")?_aiTabJump:"copilot");
   useEffect(()=>{ _aiTabJump=null; },[]);
-  const dot = (on) => on ? " · On" : " · Off";
   return (
     <>
       <SettSH icon={Ic.bot(16)} title="AI"
@@ -60285,7 +60294,7 @@ const AISettingsSection = ({onToast}) => {
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
-          {key:"classification", label:`Classification${dot(aic.settings.enabled)}`},
+          {key:"classification", label:"Classification"},
           {key:"descriptions",   label:"Descriptions"},
         ]} active={tab} onChange={setTab}/>
       </div>
