@@ -60617,7 +60617,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
         }
       }
     }
-    onToast(`${name} on ${whereOf(f)} is back in Pending`,"info");
+    onToast(`${name} on ${whereOf(f)} is back in To review`,"info");
   };
   const runNow = (p) => {
     if(!p.enabled){ onToast(`"${p.name}" is paused — resume it first`,"error"); return; }
