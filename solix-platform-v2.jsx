@@ -1128,12 +1128,12 @@ function TagProvider({ children }) {
   const getTagDef           = (tagId)   => tagDefs.find(t => t.id===tagId);
 
   const applyTag = (assetId, tagId, options={}) => {
-    const { origin='manual', sourceSystem=null, appliedBy='Current User', requireApproval=false, assetName=null, note=null } = options;
+    const { origin='manual', sourceSystem=null, appliedBy='Current User', requireApproval=false, direct=false, assetName=null, note=null } = options;
     const tagDef = tagDefs.find(t=>t.id===tagId);
     if (!tagDef) return;
     const existing = (assignments[assetId]||[]).find(a=>a.tagId===tagId && a.status!=='rejected');
     if (existing) return;
-    const status = (tagDef.governanceRequired || requireApproval) ? 'pending' : 'active';
+    const status = !direct && (tagDef.governanceRequired || requireApproval) ? 'pending' : 'active';
     const newA = { id:'a'+Date.now(), tagId, assetId, origin, sourceSystem, sourceSystems:sourceSystem?[sourceSystem]:[], status, appliedBy, appliedAt:new Date().toISOString(), stewardNote:'', propagationChain:[] };
     setAssignments(prev=>({...prev,[assetId]:[...(prev[assetId]||[]),newA]}));
     if (status==='pending') {
@@ -1144,10 +1144,11 @@ function TagProvider({ children }) {
 
   // A column tag request: lands pending on the column and as an approval in the Inbox.
   const requestColumnTag = (assetId, assetName, col, tagName, options={}) => {
-    const { appliedBy='Current User', note=null } = options;
+    const { appliedBy='Current User', note=null, direct=false } = options;
     const key = colTagKey(assetId, col);
     if ((_colTags[key]||[]).some(t=>t.tag===tagName && t.status!=='rejected')) return;
-    colTagSet(s=>({...s, [key]:[...(s[key]||[]).filter(t=>t.tag!==tagName), {tag:tagName, status:'pending', origin:'ai', appliedBy, at:new Date().toISOString()}]}));
+    colTagSet(s=>({...s, [key]:[...(s[key]||[]).filter(t=>t.tag!==tagName), {tag:tagName, status:direct?'active':'pending', origin:'ai', appliedBy, at:new Date().toISOString()}]}));
+    if (direct) return;   // attached straight away — nothing to approve
     setInbox(prev=>[{ id:'i'+Date.now()+Math.random().toString(36).slice(2,6), type:'pending_approval', tagName, assetId, col, assetName:assetName+'.'+col, domain:'Unknown', sourceSystem:'AI Classification', note:note||('Requested by '+appliedBy+'. Awaiting approval.'), metadata:{appliedBy, propagationMode:'none', downstreamCount:0, col}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
   };
   // Undo of an AI decision: the open approval is withdrawn and a column tag is taken off.
@@ -17627,8 +17628,15 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
         }
         {!editingDesc&&ai.applied&&ai.applied.text===descVal&&<AIDescProvenance rec={ai.applied}/>}
         {ai.pending&&(
-          <div style={{marginTop:9,fontSize:11.5,color:T.textSub,display:"flex",alignItems:"center",gap:6}}>
-            <AIBadge>AI DRAFT</AIBadge> A suggested description from {ai.pending.requestedBy} is waiting on {ai.pending.owner||"the owner"}'s approval.
+          <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:T.amberDim,border:`1px solid ${T.amber}40`}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.amber+"22",color:T.amber}}>Pending approval</span>
+              <span style={{fontSize:11,color:T.textMuted}}>AI description · approver {ai.pending.owner||"—"}</span>
+              <div style={{flex:1}}/>
+              <button onClick={()=>{ aidWithdraw(ai.pending.id); onToast("Suggestion withdrawn","info"); }}
+                style={{background:"none",border:"none",padding:0,color:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Withdraw</button>
+            </div>
+            <div style={{fontSize:12.5,color:T.text,lineHeight:1.6}}>{ai.pending.text}</div>
           </div>
         )}
         {!editingDesc&&ai.box}
@@ -17802,7 +17810,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
                 <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>
                   {colDesc(c)}
                   {aid.applied[aidKey(asset.name,c.name)]&&<span title={`AI-drafted · accepted by ${aid.applied[aidKey(asset.name,c.name)].by}`} style={{marginLeft:5,color:T.violet,fontSize:10}}>✦</span>}
-                  {aidPendingFor(asset.name,c.name)&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>✦ Suggestion awaiting the owner</div>}
+                  {aidPendingFor(asset.name,c.name)&&<span style={{display:"inline-block",marginTop:3,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.amberDim,color:T.amber}} title={(aidPendingFor(asset.name,c.name)||{}).text}>Pending approval</span>}
                 </td>
               </tr>
             );
@@ -58923,9 +58931,9 @@ const aicNewProfile = () => ({
   connections:[], containers:[], tables:[], objectTypes:[], objects:[],
   mode:"existing", tags:["PII","PCI-DSS"],
   useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
-  schedule:null, owners:[], stewards:[], labels:[],
+  schedule:null, owners:[], stewards:[],
 });
-// A scan's own people and tags (labels describe the scan; `tags` are what it suggests).
+// A scan's own people.
 const aicOwnersOf   = p => (p.owners && p.owners.length) ? p.owners : [p.owner].filter(Boolean);
 const aicStewardsOf = p => p.stewards || [];
 // Same idea as a connection's status: few states, each one actionable.
@@ -59248,20 +59256,20 @@ let _aicState = {
      connections:[], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70,
      schedule:{freq:"daily", time:"02:00", tz:"UTC", enabled:true},
-     owner:"priya.nair", owners:["priya.nair"], stewards:["sarah.kim"], labels:["PII"], created:"2026-08-31"},
+     owner:"priya.nair", owners:["priya.nair"], stewards:["sarah.kim"], created:"2026-08-31"},
     {id:"prof_stage", name:"Snowflake finance — card numbers", enabled:false,
      connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:["Column"], levels:{table:false, column:true}, mode:"existing", tags:["PCI-DSS"],
      useDefaults:false, tiers:{name:true, value:true, graph:false}, minConfidence:0.85,
      schedule:{freq:"weekly", day:"sunday", time:"02:00", tz:"UTC", enabled:true},
-     owner:"dev.patel", owners:["dev.patel"], stewards:["maya.chen"], labels:["PCI-DSS"], created:"2026-09-10"},
+     owner:"dev.patel", owners:["dev.patel"], stewards:["maya.chen"], created:"2026-09-10"},
     {id:"ing_snowflake_dwh", name:"Ingestion · Snowflake DWH", enabled:true, trigger:"ingestion", connId:"Snowflake DWH",
      connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"existing", tags:["PII","PCI-DSS"],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
-     owner:"dev.patel", owners:["dev.patel"], stewards:["sarah.kim","alex.wu"], labels:[], created:"2026-09-20"},
+     owner:"dev.patel", owners:["dev.patel"], stewards:["sarah.kim","alex.wu"], created:"2026-09-20"},
     {id:"prof_new", name:"Commerce — find missing business tags", enabled:true,
      connections:["Snowflake DWH"], containers:[], tables:[], objectTypes:[], levels:{table:true, column:true}, mode:"new", tags:[],
      useDefaults:true, tiers:{name:true, value:true, graph:true}, minConfidence:0.70, schedule:null,
-     owner:"maya.chen", owners:["maya.chen"], stewards:["lisa.ray"], labels:[], created:"2026-09-29"},
+     owner:"maya.chen", owners:["maya.chen"], stewards:["lisa.ray"], created:"2026-09-29"},
   ],
 };
 const _aicSubs = new Set();
@@ -59723,8 +59731,8 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
                 </>}/>
               <div style={{display:"grid",gridTemplateColumns:"110px 1fr",rowGap:5,marginTop:16,paddingTop:12,borderTop:`1px solid ${T.border}`,fontSize:11.5}}>
                 <span style={{color:T.textMuted}}>Status</span><span style={{color:T.text}}>Draft until approved</span>
-                <span style={{color:T.textMuted}}>Applied to</span><span style={{color:T.text}}>{f.col?`${f.asset.name}.${f.col}`:f.asset.name} · pending</span>
-                <span style={{color:T.textMuted}}>Approver</span><span style={{color:T.text}}>{approverFor ? approverFor(formCat) : "Admins"}</span>
+                <span style={{color:T.textMuted}}>Attached to</span><span style={{color:T.text}}>{f.col?`${f.asset.name}.${f.col}`:f.asset.name} · when approved</span>
+                <span style={{color:T.textMuted}}>Approver</span><span style={{color:T.text}}>{(form.owners&&form.owners[0]) || (approverFor ? approverFor(formCat) : "Admins")}</span>
               </div>
             </div>
           )}
@@ -59906,6 +59914,15 @@ const aicSentFor = (run) => run ? {
 // receives the text when it is saved directly, so the host field updates at once.
 const aidMe = (roleCfg) => ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
 const aidIsOwner = (role, me, owners=[]) => role==="admin" || owners.includes(me);
+// Who approves an accepted AI description: the object's steward — or its owner when the
+// steward is the one who accepted it (nobody approves their own change).
+const aidApproverFor = (asset, me) => {
+  const owners = asset.owners || [asset.owner].filter(Boolean);
+  const stewards = (asset.stewards && asset.stewards.length) ? asset.stewards : [asset.steward].filter(Boolean);
+  const s = stewards.find(x=>x!==me);
+  return stewards.includes(me) ? (owners.find(o=>o!==me) || "Admins") : (s || owners.find(o=>o!==me) || "Admins");
+};
+const aidWithdraw = (id) => aidSet(s=>({...s, reqs:s.reqs.map(r=>r.id===id?{...r, status:"withdrawn"}:r)}));
 
 const AIDescSuggestBtn = ({hasText, onClick, busy}) => (
   <button onClick={onClick} disabled={busy} title="Draft a description from this asset's metadata — nothing is saved until you accept it"
@@ -59966,11 +59983,11 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
       )}
       <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,flexWrap:"wrap"}}>
         <button onClick={()=>onAccept(text.trim(), edited)} disabled={!text.trim()||writing} style={{...btn(true),opacity:writing?.5:1}}>
-          {canSave ? (edited?"Save edited":"Accept") : `Send to ${owner||"the owner"}`}</button>
+          {edited?"Accept edited":"Accept"}</button>
         {!editing&&!writing&&<button onClick={()=>setEditing(true)} style={btn(false)}>Edit</button>}
         <button onClick={onRegenerate} disabled={busy} style={btn(false)}>{busy?"Drafting…":"Regenerate"}</button>
         <button onClick={onDiscard} style={{...btn(false),border:"none",background:"transparent"}}>Discard</button>
-        {!canSave&&<span style={{fontSize:10.5,color:T.textMuted}}>You don't own this asset, so {owner||"the owner"} approves it in their Inbox.</span>}
+        <span style={{fontSize:10.5,color:T.textMuted}}>Goes to {owner||"the steward"} for approval.</span>
       </div>
     </div>
   );
@@ -59995,15 +60012,11 @@ const useAidAssetDraft = ({asset, onToast, onSaved}) => {
       if(!d) onToast("Nothing to draft from — this asset has no metadata in the catalog","error");
     }, 650);
   };
+  const approver = aidApproverFor(asset, me);
   const accept = (text, edited) => {
-    if(canSave){
-      aidApply(asset.name, null, text, me, {edited, conf:draft.conf});
-      onSaved(text); onToast("Description saved","success");
-      pushNotif({category:"Catalog", type:"field_updated", title:`Description updated · ${asset.name}`, body:`${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"catalog", asset:asset.name});
-    } else {
-      aidRequest(asset.name, null, text, me, owners[0], {edited, conf:draft.conf});
-      onToast(`Sent to ${owners[0]||"the owner"} for approval`,"success");
-    }
+    aidRequest(asset.name, null, text, me, approver, {edited, conf:draft.conf});
+    onToast(`Sent to ${approver} for approval`,"success");
+    pushNotif({category:"Catalog", type:"field_updated", title:`Description awaiting approval · ${asset.name}`, body:`${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"catalog", asset:asset.name});
     setDraft(null);
   };
   return {
@@ -60011,7 +60024,7 @@ const useAidAssetDraft = ({asset, onToast, onSaved}) => {
     pending: aidPendingFor(asset.name, null),
     applied: aid.applied[aidKey(asset.name,null)] || null,
     button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
-    box: draft ? <AIDescDraftBox draft={draft} canSave={canSave} owner={owners[0]} busy={busy}
+    box: draft ? <AIDescDraftBox draft={draft} canSave={false} owner={approver} busy={busy}
       onAccept={accept}
       onRegenerate={()=>{ const v=variant+1; setVariant(v); ask(v); }}
       onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null,
@@ -60050,13 +60063,10 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
   if(!open) return null;
   const shown = rows.filter(r=>!onlyEmpty || !r.cur);
   const selected = rows.filter(r=>r.sel && r.text.trim() && !r.pending);
+  const approver = aidApproverFor(asset, me);
   const commit = () => {
-    selected.forEach(r=>{
-      if(canSave) aidApply(asset.name, r.col, r.text.trim(), me, {conf:r.conf});
-      else aidRequest(asset.name, r.col, r.text.trim(), me, owners[0], {conf:r.conf});
-    });
-    onToast(canSave ? `${selected.length} column description${selected.length>1?"s":""} saved`
-                    : `${selected.length} column description${selected.length>1?"s":""} sent to ${owners[0]||"the owner"}`,"success");
+    selected.forEach(r=>aidRequest(asset.name, r.col, r.text.trim(), me, approver, {conf:r.conf}));
+    onToast(`${selected.length} column description${selected.length>1?"s":""} sent to ${approver} for approval`,"success");
     onClose();
   };
   const setRow = (col, patch) => setRows(rs=>rs.map(r=>r.col===col?{...r,...patch}:r));
@@ -60110,7 +60120,7 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
                             style={{width:"100%",padding:"6px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
                         : <div style={{padding:"6px 8px",fontSize:11.5,color:T.violet}}>{ri===written?"✦ Writing…":"Waiting…"}</div>}
                       {r.unknown.length>0&&<div style={{fontSize:10,color:T.amber,marginTop:2}}>Could not read {r.unknown.map(u=>`“${u}”`).join(", ")}</div>}
-                      {r.pending&&<div style={{fontSize:10,color:T.textMuted,marginTop:2}}>A suggestion for this column is already waiting on the owner.</div>}
+                      {r.pending&&<span style={{display:"inline-block",marginTop:3,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.amberDim,color:T.amber}}>Pending approval</span>}
                     </td>
                     <td style={{padding:"9px 14px 9px 0",verticalAlign:"top",width:52,textAlign:"right"}}>{done&&<AIConf conf={r.conf} small/>}</td>
                   </tr>
@@ -60405,7 +60415,8 @@ const AICTagChip = ({f}) => f.newTag
 // source (the connector is the source, its filters are the scope).
 const AICIngestFields = ({cfg, onChange, typeOptions, disabled}) => {
   const tagCtx = useTagCtx();
-  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
+  // Only Approved tags can be attached, so only Approved tags can be suggested.
+  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>(t.cert||"Approved")==="Approved");
   const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
   const set = (patch) => onChange({...cfg, ...patch});
   const wantsExisting = cfg.mode==="existing" || cfg.mode==="both";
@@ -60554,26 +60565,25 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
     const top = Object.entries(n).sort((x,y)=>y[1]-x[1])[0];
     return top ? top[0] : "Admins";
   };
-  // Accept. Every accepted AI tag waits for approval in the Workspace before it goes live.
-  // An existing tag is applied pending to the table or column. A new tag (created with the
-  // name and classification the user chose) becomes a Draft tag attached pending, and
-  // goes for approval as one item together with every object it was put on.
+  // Accept. An existing tag is attached straight away — the same as attaching it by hand
+  // (scans only offer Approved tags). A new tag is created as a Draft; the object waits
+  // for it, and the tag's one approval attaches it to every waiting object.
   const applyAccepted = (f, opts={}) => {
     const where = whereOf(f);
-    const note = `AI suggestion accepted by ${me} at ${aiPct(f.conf)} confidence. Awaiting approval.`;
+    const note = `AI suggestion accepted by ${me} at ${aiPct(f.conf)} confidence.`;
     const name = (opts.name || f.tag).trim();
     const def = tagCtx && tagCtx.tagDefs.find(t=>t.name.toLowerCase()===name.toLowerCase());
     const asNew = f.newTag && (!def || def.aiProposed);
     if(asNew && tagCtx){
       const category = opts.category || (def && def.category) || "business";
       tagCtx.requestNewTag({name, category, description:opts.description||"", owners:opts.owners||[], stewards:opts.stewards||[], color:opts.color, assetId:f.assetId, assetName:f.asset.name,
-        col:f.col||null, appliedBy:me, approver:approverFor(category)});
+        col:f.col||null, appliedBy:me, approver:(opts.owners&&opts.owners[0])||approverFor(category)});
       aicSet(x=>({...x, createdTags:[...new Set([...(x.createdTags||[]), name])]}));
-    } else if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, def?def.name:name, {appliedBy:me, note}); }
-    else if(def){ tagCtx.applyTag(f.assetId, def.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:f.asset.name, note}); }
+    } else if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, def?def.name:name, {appliedBy:me, note, direct:true}); }
+    else if(def){ tagCtx.applyTag(f.assetId, def.id, {origin:"ai", appliedBy:me, direct:true, assetName:f.asset.name, note}); }
     const applied = def ? def.name : name;
     if(applied!==f.tag) aicSet(x=>({...x, decisions:{...x.decisions, [f.id]:{...x.decisions[f.id], tagName:applied}}}));
-    pushNotif({category:"Classifications", type:"tag", title:`${applied} ${asNew?"(new) ":""}awaiting approval · ${where}`,
+    pushNotif({category:"Classifications", type:"tag", title:asNew ? `${applied} (new, Draft) awaiting approval · ${where}` : `${applied} attached · ${where}`,
       body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
   const decide = (f, verdict, opts) => {
@@ -60734,7 +60744,15 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
   // The object's people — for a column, its table's.
   const ownersOf   = f => (f.asset.owners && f.asset.owners.length) ? f.asset.owners : [f.asset.owner].filter(Boolean);
   const stewardsOf = f => (f.asset.stewards && f.asset.stewards.length) ? f.asset.stewards : [f.asset.steward].filter(Boolean);
-  const rowStatus = f => ({pending:{l:"Pending approval", c:T.amber}, accepted:{l:"Accepted", c:T.green}, rejected:{l:"Rejected", c:T.rose}})[statusOf(f)];
+  // To review → Accepted (Approved, or Draft while a new tag waits for approval) / Rejected.
+  const rowStatus = f => {
+    const s = statusOf(f);
+    if(s==="pending")  return {l:"To review", c:T.amber};
+    if(s==="rejected") return {l:"Rejected", c:T.rose};
+    if(!f.newTag) return {l:"Approved", c:T.green};
+    const a = approvalOf(f);
+    return a==="active" ? {l:"Approved", c:T.green} : a==="rejected" ? {l:"Rejected", c:T.rose} : {l:"Draft", c:T.textMuted};
+  };
   const SuggestionRow = ({f}) => {
     const s = statusOf(f);
     return (
@@ -60841,7 +60859,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
     ) : (<>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
       <div style={{display:"inline-flex",gap:2,padding:3,borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-        {[["pending","Pending approval"],["accepted","Accepted"],["rejected","Rejected"]].map(([k,l])=>{ const on = fStatus===k; return (
+        {[["pending","To review"],["accepted","Accepted"],["rejected","Rejected"]].map(([k,l])=>{ const on = fStatus===k; return (
           <button key={k} onClick={()=>{ setFStatus(k); setSel(new Set()); }}
             style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 14px",borderRadius:7,border:"none",fontFamily:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",
               background:on?T.bgSurface:"transparent",color:on?T.text:T.textMuted,boxShadow:on?"0 1px 3px rgba(0,0,0,.12)":"none"}}>
@@ -60877,7 +60895,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
         </div>
         {shown.map(f=><SuggestionRow key={f.id} f={f}/>)}
         {!shown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
-          {base.filter(f=>statusOf(f)===fStatus).length ? "No results" : fStatus==="pending" ? "Nothing pending approval" : fStatus==="accepted" ? "Nothing accepted yet" : "Nothing rejected yet"}</div>}
+          {base.filter(f=>statusOf(f)===fStatus).length ? "No results" : fStatus==="pending" ? "Nothing to review" : fStatus==="accepted" ? "Nothing accepted yet" : "Nothing rejected yet"}</div>}
       </div>
       {!canDecide&&<div style={{marginTop:10,fontSize:11,color:T.amber}}>Read-only</div>}
     </>);
@@ -60896,7 +60914,6 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
             <span style={{fontSize:16,fontWeight:700,color:T.text}}>{run.name}</span>
             <AICScanStatus p={run} lj={lj}/>
-            {(run.labels||[]).map(t=><span key={t} style={{fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}
           </div>
           <div style={{fontSize:12,color:T.textMuted,marginTop:3}}>
             {run.trigger==="ingestion"?"On ingestion":aicSchedOn(run)?contractScheduleShort(run.schedule):"Manual"} · {aicObjTypesText(run)}
@@ -60968,8 +60985,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
                 <div style={{fontSize:12.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
                 <div style={{fontSize:11,color:T.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                   {p.trigger==="ingestion" ? p.connId : (p.connections.length?p.connections.join(", "):"All sources")}</div>
-                {(p.labels||[]).length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{p.labels.map(t=>
-                  <span key={t} style={{fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>)}</div>}
+
               </div>
               <div><PeopleCircles people={aicOwnersOf(p)}/></div>
               <div><PeopleCircles people={aicStewardsOf(p)} tone={T.amber}/></div>
@@ -61040,7 +61056,7 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
   const tagCtx = useTagCtx();
   const norm = (x) => x ? {...x,
     objectTypes: Array.isArray(x.objectTypes) ? x.objectTypes : (x.levels && x.levels.column && !x.levels.table ? ["Columns"] : []),
-    objects: x.objects || [], owners: aicOwnersOf(x), stewards: aicStewardsOf(x), labels: x.labels || []} : x;
+    objects: x.objects || [], owners: aicOwnersOf(x), stewards: aicStewardsOf(x)} : x;
   const [d, setD] = useState(norm(draft));
   const [touched, setTouched] = useState(false);
   useEffect(()=>{ setD(norm(draft)); setTouched(false); },[draft]);
@@ -61060,7 +61076,8 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
   const selObjNames = [...new Set(objs.filter(a=>d.objects.includes(a.id)).map(a=>a.name))];
   const scoped = aicProfileAssets({...d, connections:selSources, objectTypes:selTypes, containers:[], tables:[]});
 
-  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>t.cert!=="Deprecated");
+  // Only Approved tags can be attached, so only Approved tags can be suggested.
+  const defs = ((tagCtx&&tagCtx.tagDefs)||INITIAL_TAG_DEFS).filter(t=>(t.cert||"Approved")==="Approved");
   const tagGroups = Object.keys(AIC_CAT_LABEL).map(c=>({group:AIC_CAT_LABEL[c], ops:defs.filter(t=>t.category===c).map(t=>t.name)})).filter(g=>g.ops.length);
   const wantsExisting = d.mode==="existing" || d.mode==="both";
   const colOnly = selTypes.length>0 && selTypes.every(t=>aicTypeKey(t)==="column");
@@ -61127,16 +61144,13 @@ const AICRunDrawer = ({draft, existing, onClose, onSave, onDelete, platform}) =>
           </div>
           {wantsExisting&&(
             <div>
-              <RuleMultiSelect label="Tags to suggest" required groups={tagGroups} selected={d.tags} onChange={v=>set({tags:v})} placeholder="Select tags"/>
+              <RuleMultiSelect label="Tags" required groups={tagGroups} selected={d.tags} onChange={v=>set({tags:v})} placeholder="Select tags"/>
               {err(errs.tags)}
             </div>
           )}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <RuleMultiSelect label="Owners" flat={TAG_FORM_USERS} selected={d.owners} onChange={v=>set({owners:v})} placeholder="Add owners"/>
             <RuleMultiSelect label="Stewards" flat={TAG_FORM_USERS} selected={d.stewards} onChange={v=>set({stewards:v})} placeholder="Add stewards"/>
-          </div>
-          <div>
-            <RuleMultiSelect label="Tags" groups={tagGroups} selected={d.labels} onChange={v=>set({labels:v})} placeholder="Add tags"/>
           </div>
         </div>
 
