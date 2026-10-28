@@ -1161,13 +1161,13 @@ function TagProvider({ children }) {
   // the classification the user picked, attached (pending) to the table or column, and
   // sent for approval as ONE item covering the tag and every object it was put on.
   // Accepting the same new tag on another object adds that object to the same item.
-  const requestNewTag = ({name, category, description='', assetId, assetName, col=null, appliedBy='Current User', approver='Admins'}) => {
+  const requestNewTag = ({name, category, description='', owners=[], stewards=[], color, assetId, assetName, col=null, appliedBy='Current User', approver='Admins'}) => {
     const existing = tagDefs.find(t=>t.name.toLowerCase()===name.toLowerCase());
     const id = existing ? existing.id : 't-ai-'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-');
     const d = AI_NEW_TAG_CAT_DEFAULTS[category] || {color:'#a1a1aa', propagationMode:'none'};
     const now = new Date().toISOString();
-    if (!existing) setTagDefs(prev=>prev.some(t=>t.id===id) ? prev : [...prev, {id, cert:'Draft', name, category, color:d.color,
-      propagationMode:d.propagationMode, propagationLocked:false, governanceRequired:false, managedBy:appliedBy, owner:appliedBy,
+    if (!existing) setTagDefs(prev=>prev.some(t=>t.id===id) ? prev : [...prev, {id, cert:'Draft', name, category, color:color||d.color,
+      propagationMode:d.propagationMode, propagationLocked:false, governanceRequired:false, managedBy:stewards[0]||appliedBy, owner:owners[0]||appliedBy, owners, stewards,
       usageCount:0, description, sourceAliases:[], createdAt:now, createdBy:appliedBy, aiProposed:true}]);
     if (col) {
       const key = colTagKey(assetId, col);
@@ -56232,7 +56232,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   const addNewTag = () => {
     if(!newDraft.name.trim()) return;
     const finalCat = newDraft.category || newCatInput.trim() || '';
-    createTagDef({...newDraft, category: finalCat, owner: newOwners[0]||'', managedBy: newStewards[0]||''});
+    createTagDef({...newDraft, category: finalCat, owner: newOwners[0]||'', managedBy: newStewards[0]||'', owners: newOwners, stewards: newStewards});
     setNewPanelOpen(false);
     setNewDraft({ name:'', category:'', description:'', propagationMode:'none', governanceRequired:false, owner:'', managedBy:'', color:'#6366f1', sourceAliases:[] });
     setNewAlias(''); setNewCatInput('');
@@ -57056,167 +57056,10 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
             <div style={{flex:1,overflowY:'auto',padding:'20px'}}>
               <div style={{display:'flex',flexDirection:'column',gap:16}}>
 
-                {/* Tag Name */}
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
-                  <Input2 placeholder="e.g. Internal Use Only" value={newDraft.name} onChange={e=>setNewDraft(d=>({...d,name:e.target.value}))}/>
-                </div>
-
-                {/* Category */}
-                {(()=>{
-                  const activeCategory = newDraft.category || newCatInput.trim();
-                  const filteredCats = allCategories.filter(c=>!newCatInput||c.toLowerCase().includes(newCatInput.toLowerCase()));
-                  return (
-                    <div ref={catRef} style={{position:'relative'}}>
-                      <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Classification <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
-                      <div onClick={()=>setCatOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.bgElevated,border:`1px solid ${catOpen?T.accent:T.border}`,borderRadius:8,cursor:'pointer',transition:'border .12s',minHeight:38}}>
-                        {activeCategory
-                          ? <><span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:500,textTransform:'capitalize'}}>{activeCategory}</span>
-                              <button onMouseDown={e=>{e.stopPropagation();setNewDraft(d=>({...d,category:''}));setNewCatInput('');}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:'0 2px',fontSize:14,lineHeight:1}}>×</button></>
-                          : <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Select or create classification…</span>
-                        }
-                        <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                      </div>
-                      {catOpen&&(
-                        <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                          <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
-                            <input autoFocus value={newCatInput} onChange={e=>{setNewCatInput(e.target.value);setNewDraft(d=>({...d,category:''}));}} placeholder="Search or type new classification…"
-                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
-                          </div>
-                          <div style={{maxHeight:180,overflowY:'auto'}}>
-                            {filteredCats.map(cat=>{
-                              const cc=getCatStyle(cat);
-                              return (
-                                <button key={cat} onMouseDown={()=>{setNewDraft(d=>({...d,category:cat}));setNewCatInput('');setCatOpen(false);}}
-                                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:newDraft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                  onMouseEnter={e=>{if(newDraft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(newDraft.category!==cat)e.currentTarget.style.background='transparent';}}>
-                                  <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
-                                  <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
-                                  {newDraft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
-                                </button>
-                              );
-                            })}
-                            {newCatInput.trim()&&!allCategories.map(c=>c.toLowerCase()).includes(newCatInput.trim().toLowerCase())&&(
-                              <button onMouseDown={()=>{setNewCatInput(newCatInput.trim());setNewDraft(d=>({...d,category:''}));setCatOpen(false);}}
-                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none'}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{width:8,height:8,borderRadius:2,background:T.accent,display:'block',flexShrink:0}}/>
-                                <span style={{flex:1,fontSize:12.5,color:T.accent}}>Create "<strong>{newCatInput.trim()}</strong>"</span>
-                                <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:T.accentDim,color:T.accent,fontWeight:600}}>new</span>
-                              </button>
-                            )}
-                            {filteredCats.length===0&&!newCatInput.trim()&&<div style={{padding:'16px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No classifications yet — type to create one</div>}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Description */}
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
-                  <textarea value={newDraft.description} onChange={e=>setNewDraft(d=>({...d,description:e.target.value}))} rows={3}
-                    style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit'}}
-                    placeholder="Describe when this tag should be applied…"/>
-                </div>
-
-                {/* Ownership */}
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                    {/* Owner chips */}
-                    <div style={{position:'relative'}}>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Owner</div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
-                        {newOwners.map((o,i)=>(
-                          <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
-                            <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
-                            <span style={{fontWeight:500}}>{o}</span>
-                            <button onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
-                          </div>
-                        ))}
-                        <button onMouseDown={e=>{e.stopPropagation();setNewOwnerInput(p=>!p);setNewOwnerSearch('');}}
-                          style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                          {Ic.plus(9)} Add owner
-                        </button>
-                      </div>
-                      {newOwnerInput&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                          <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
-                            <input autoFocus value={newOwnerSearch} onChange={e=>setNewOwnerSearch(e.target.value)} placeholder="Search users…"
-                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
-                          </div>
-                          <div style={{maxHeight:150,overflowY:'auto'}}>
-                            {TAG_USERS.filter(u=>!newOwnerSearch||u.includes(newOwnerSearch.toLowerCase())).map(u=>(
-                              <button key={u} onMouseDown={e=>{e.stopPropagation();setNewOwners(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
-                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newOwners.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                onMouseEnter={e=>{if(!newOwners.includes(u))e.currentTarget.style.background=T.bgHover;}}
-                                onMouseLeave={e=>{if(!newOwners.includes(u))e.currentTarget.style.background='transparent';}}>
-                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
-                                <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
-                                {newOwners.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    {/* Steward chips */}
-                    <div style={{position:'relative'}}>
-                      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>Steward</div>
-                      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
-                        {newStewards.map((o,i)=>(
-                          <div key={i} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
-                            <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(o)}</div>
-                            <span style={{fontWeight:500}}>{o}</span>
-                            <button onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
-                          </div>
-                        ))}
-                        <button onMouseDown={e=>{e.stopPropagation();setNewStewardInput(p=>!p);setNewStewardSearch('');}}
-                          style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s'}}
-                          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
-                          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
-                          {Ic.plus(9)} Add steward
-                        </button>
-                      </div>
-                      {newStewardInput&&(
-                        <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
-                          <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
-                            <input autoFocus value={newStewardSearch} onChange={e=>setNewStewardSearch(e.target.value)} placeholder="Search users…"
-                              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
-                          </div>
-                          <div style={{maxHeight:150,overflowY:'auto'}}>
-                            {TAG_USERS.filter(u=>!newStewardSearch||u.includes(newStewardSearch.toLowerCase())).map(u=>(
-                              <button key={u} onMouseDown={e=>{e.stopPropagation();setNewStewards(p=>p.includes(u)?p.filter(x=>x!==u):[...p,u]);}}
-                                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:newStewards.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
-                                onMouseEnter={e=>{if(!newStewards.includes(u))e.currentTarget.style.background=T.bgHover;}}
-                                onMouseLeave={e=>{if(!newStewards.includes(u))e.currentTarget.style.background='transparent';}}>
-                                <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tava(u)}</div>
-                                <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
-                                {newStewards.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Color — last field */}
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                    {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                      <button key={c} onClick={()=>setNewDraft(d=>({...d,color:c}))}
-                        style={{width:26,height:26,borderRadius:'50%',background:c,border:newDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
-                    ))}
-                    <span style={{marginLeft:4,width:26,height:26,borderRadius:'50%',background:newDraft.color,border:`2px solid ${T.border}`,display:'inline-block',flexShrink:0}}/>
-                  </div>
-                </div>
+                <TagFormFields categories={allCategories} catInput={newCatInput} setCatInput={setNewCatInput}
+                  draft={{...newDraft, owners:newOwners, stewards:newStewards}}
+                  setDraft={fn=>{ const {owners, stewards, ...rest} = fn({...newDraft, owners:newOwners, stewards:newStewards});
+                                  setNewDraft(rest); setNewOwners(owners); setNewStewards(stewards); }}/>
 
               </div>
             </div>
@@ -59559,6 +59402,181 @@ const AICStat = ({label, value, sub, color}) => (
 // where evidence is read. Accept / Reject sit in the footer and move straight on
 // to the next suggestion, so a steward can work the queue without going back to
 // the list. ← → step through it; A and R decide.
+// ── The New Tag form ─────────────────────────────────────────────────────────
+// One form for every place a tag is created: Classifications › Taxonomy (New Tag) and
+// AI Classification (Create tag on a new-tag suggestion). Tag Name, Classification,
+// Description, Owner, Steward, Color. `nameNote` renders under the name field.
+const TAG_FORM_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+const tagFormAva = (name) => (name||"?").split(".").map(s=>s[0]?.toUpperCase()||"").join("");
+const tagFormCatStyle = (cat) => ({ sensitivity:{color:T.rose,bg:T.roseDim}, regulatory:{color:T.amber,bg:T.amberDim}, business:{color:T.blue,bg:T.blueDim} }[cat] || {color:T.textSub, bg:T.bgElevated});
+
+const TagPeoplePicker = ({label, addLabel, people, setPeople}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!open) return;
+    const h = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h); return ()=>document.removeEventListener('mousedown', h);
+  },[open]);
+  return (
+    <div ref={ref} style={{position:'relative'}}>
+      <div style={{fontSize:10.5,color:T.textMuted,marginBottom:5,textTransform:'uppercase',letterSpacing:'0.05em',fontWeight:600}}>{label}</div>
+      <div style={{display:'flex',flexWrap:'wrap',gap:5,marginBottom:4}}>
+        {people.map((o,i)=>(
+          <div key={o} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'3px 8px 3px 5px',borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,fontSize:11.5,color:T.text}}>
+            <div style={{width:18,height:18,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tagFormAva(o)}</div>
+            <span style={{fontWeight:500}}>{o}</span>
+            <button onMouseDown={e=>{e.stopPropagation();setPeople(people.filter((_,j)=>j!==i));}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:0,fontSize:13,lineHeight:1,display:'flex',alignItems:'center'}}>{Ic.x(8)}</button>
+          </div>
+        ))}
+        <button onMouseDown={e=>{e.stopPropagation();setOpen(p=>!p);setQ('');}}
+          style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:99,fontSize:11,color:T.textMuted,background:'transparent',border:`1.5px dashed ${T.border}`,cursor:'pointer',transition:'all .12s',fontFamily:'inherit'}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>
+          {Ic.plus(9)} {addLabel}
+        </button>
+      </div>
+      {open&&(
+        <div onMouseDown={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,right:0,zIndex:300,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+          <div style={{padding:'6px 8px',borderBottom:`1px solid ${T.border}`}}>
+            <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Search users…"
+              style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11,outline:'none',boxSizing:'border-box'}}/>
+          </div>
+          <div style={{maxHeight:150,overflowY:'auto'}}>
+            {TAG_FORM_USERS.filter(u=>!q||u.includes(q.toLowerCase())).map(u=>(
+              <button key={u} onMouseDown={e=>{e.stopPropagation();setPeople(people.includes(u)?people.filter(x=>x!==u):[...people,u]);}}
+                style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:people.includes(u)?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}
+                onMouseEnter={e=>{if(!people.includes(u))e.currentTarget.style.background=T.bgHover;}}
+                onMouseLeave={e=>{if(!people.includes(u))e.currentTarget.style.background='transparent';}}>
+                <div style={{width:20,height:20,borderRadius:'50%',background:T.accent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:700,color:'#fff',flexShrink:0}}>{tagFormAva(u)}</div>
+                <span style={{fontSize:11.5,color:T.text,flex:1}}>{u}</span>
+                {people.includes(u)&&<span style={{fontSize:10,color:T.accent}}>✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// draft = {name, category, description, color, owners:[], stewards:[]}; catInput is a
+// typed classification that does not exist yet (created with the tag).
+const TagFormFields = ({draft, setDraft, catInput, setCatInput, categories, nameNote, lockCategory}) => {
+  const [catOpen, setCatOpen] = useState(false);
+  const catRef = useRef(null);
+  useEffect(()=>{
+    if(!catOpen) return;
+    const h = e => { if(catRef.current && !catRef.current.contains(e.target)) setCatOpen(false); };
+    document.addEventListener('mousedown', h); return ()=>document.removeEventListener('mousedown', h);
+  },[catOpen]);
+  const set = patch => setDraft(d=>({...d, ...patch}));
+  const activeCategory = draft.category || catInput.trim();
+  const filteredCats = categories.filter(c=>!catInput||c.toLowerCase().includes(catInput.toLowerCase()));
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      {/* Tag Name */}
+      <div>
+        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag Name <span style={{color:T.rose}}>*</span></label>
+        <Input2 placeholder="e.g. Internal Use Only" value={draft.name} onChange={e=>set({name:e.target.value})}/>
+        {nameNote}
+      </div>
+
+      {/* Classification */}
+      <div ref={catRef} style={{position:'relative'}}>
+        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>Classification <span style={{fontSize:10,fontWeight:400,color:T.textMuted}}>— optional</span></label>
+        <div onClick={()=>!lockCategory&&setCatOpen(o=>!o)} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:T.bgElevated,border:`1px solid ${catOpen?T.accent:T.border}`,borderRadius:8,cursor:lockCategory?'default':'pointer',transition:'border .12s',minHeight:38,boxSizing:'border-box'}}>
+          {activeCategory
+            ? <><span style={{flex:1,fontSize:12.5,color:T.text,fontWeight:500,textTransform:'capitalize'}}>{activeCategory}</span>
+                {!lockCategory&&<button onMouseDown={e=>{e.stopPropagation();set({category:''});setCatInput('');}} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',padding:'0 2px',fontSize:14,lineHeight:1}}>×</button>}</>
+            : <span style={{flex:1,fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Select or create classification…</span>
+          }
+          {!lockCategory&&<svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{flexShrink:0,color:T.textMuted,transform:catOpen?'rotate(180deg)':'none',transition:'transform .15s'}}><path d="M1.5 3.5l3.5 3.5 3.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </div>
+        {catOpen&&(
+          <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,right:0,zIndex:400,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',overflow:'hidden'}}>
+            <div style={{padding:'7px 9px',borderBottom:`1px solid ${T.border}`}}>
+              <input autoFocus value={catInput} onChange={e=>{setCatInput(e.target.value);set({category:''});}} placeholder="Search or type new classification…"
+                style={{width:'100%',padding:'5px 8px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:'none',boxSizing:'border-box'}}/>
+            </div>
+            <div style={{maxHeight:180,overflowY:'auto'}}>
+              {filteredCats.map(cat=>{
+                const cc=tagFormCatStyle(cat);
+                return (
+                  <button key={cat} onMouseDown={()=>{set({category:cat});setCatInput('');setCatOpen(false);}}
+                    style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:draft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}
+                    onMouseEnter={e=>{if(draft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(draft.category!==cat)e.currentTarget.style.background='transparent';}}>
+                    <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
+                    <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                    {draft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
+                  </button>
+                );
+              })}
+              {catInput.trim()&&!categories.map(c=>c.toLowerCase()).includes(catInput.trim().toLowerCase())&&(
+                <button onMouseDown={()=>{setCatInput(catInput.trim());set({category:''});setCatOpen(false);}}
+                  style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:'transparent',border:'none',cursor:'pointer',textAlign:'left',borderTop:filteredCats.length>0?`1px solid ${T.border}`:'none',fontFamily:'inherit'}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                  <span style={{width:8,height:8,borderRadius:2,background:T.accent,display:'block',flexShrink:0}}/>
+                  <span style={{flex:1,fontSize:12.5,color:T.accent}}>Create "<strong>{catInput.trim()}</strong>"</span>
+                  <span style={{fontSize:10,padding:'1px 6px',borderRadius:4,background:T.accentDim,color:T.accent,fontWeight:600}}>new</span>
+                </button>
+              )}
+              {filteredCats.length===0&&!catInput.trim()&&<div style={{padding:'16px 12px',fontSize:12,color:T.textMuted,textAlign:'center',fontStyle:'italic'}}>No classifications yet — type to create one</div>}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Description */}
+      <div>
+        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
+        <textarea value={draft.description} onChange={e=>set({description:e.target.value})} rows={3}
+          style={{width:'100%',padding:'8px 10px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:'none',resize:'vertical',boxSizing:'border-box',fontFamily:'inherit'}}
+          placeholder="Describe when this tag should be applied…"/>
+      </div>
+
+      {/* Ownership */}
+      <div>
+        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+          <TagPeoplePicker label="Owner" addLabel="Add owner" people={draft.owners||[]} setPeople={v=>set({owners:v})}/>
+          <TagPeoplePicker label="Steward" addLabel="Add steward" people={draft.stewards||[]} setPeople={v=>set({stewards:v})}/>
+        </div>
+      </div>
+
+      {/* Color — last field */}
+      <div>
+        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
+            <button key={c} onClick={()=>set({color:c})}
+              style={{width:26,height:26,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
+          ))}
+          <span style={{marginLeft:4,width:26,height:26,borderRadius:'50%',background:draft.color,border:`2px solid ${T.border}`,display:'inline-block',flexShrink:0}}/>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Owner / steward initials, overlapped — the Data Products row style.
+const PeopleCircles = ({people, max=3, tone}) => {
+  const list = (people||[]).filter(Boolean);
+  if(!list.length) return <span style={{fontSize:11.5,color:T.textMuted}}>—</span>;
+  const c = tone || T.accent;
+  return (
+    <div style={{display:'flex',alignItems:'center'}} title={list.join(', ')}>
+      {list.slice(0,max).map((o,i)=>(
+        <div key={o} style={{width:22,height:22,borderRadius:'50%',background:c+'1f',display:'flex',alignItems:'center',justifyContent:'center',fontSize:7.5,fontWeight:700,color:c,marginLeft:i>0?-6:0,position:'relative',zIndex:max-i,border:`2px solid ${T.bgSurface}`,boxSizing:'border-box',flexShrink:0}}>
+          {tagFormAva(o)}
+        </div>
+      ))}
+      {list.length>max&&<span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,marginLeft:4}}>+{list.length-max}</span>}
+    </div>
+  );
+};
+
 // A new-tag suggestion starts the Create tag form with the AI's best guess.
 const AIC_NEW_TAG_GUESS = {
   "Contact details":  {category:"sensitivity", description:"Email addresses, phone numbers and other ways to reach a person or company."},
@@ -59577,10 +59595,11 @@ const aicWordsOfTag = x => (x||"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w
 
 const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision, canDecide, onClose, onNav, approverFor}) => {
   const tagCtx = useTagCtx();
-  const [form, setForm] = useState(null);       // the Create tag form for a new-tag suggestion
-  useEffect(()=>{ setForm(null); },[f && f.id]);
+  const [form, setForm] = useState(null);       // the Create tag form (Taxonomy's New Tag form) for a new-tag suggestion
+  const [catInput, setCatInput] = useState("");
+  useEffect(()=>{ setForm(null); setCatInput(""); },[f && f.id]);
   const openForm = () => { if(!f) return; const g = AIC_NEW_TAG_GUESS[f.tag] || {category:"business", description:""};
-    setForm({name:f.tag, category:g.category, description:g.description}); };
+    setForm({name:f.tag, category:g.category, description:g.description, color:(AI_NEW_TAG_CAT_DEFAULTS[g.category]||{}).color||"#6366f1", owners:[], stewards:[]}); };
   useEffect(()=>{
     if(!f) return;
     const h = (e) => {
@@ -59605,7 +59624,7 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
   const similar = form && !hit ? defs.filter(t=>!t.aiProposed && (
       aicWordsOfTag(nm).some(w=>aicWordsOfTag(t.name+" "+(t.description||"")).includes(w)) ||
       (nm.length>2 && t.name.toLowerCase().includes(nm.toLowerCase())))).slice(0,3) : [];
-  const formCat = draftHit ? hit.category : form && form.category;
+  const formCat = draftHit ? hit.category : form && (form.category || catInput.trim());
   const createOk = form && nm && !existsHit;
   const st = _aicState;
   const stats = f.det ? (st.stats[f.det] || {accepted:0,rejected:0}) : null;
@@ -59712,33 +59731,26 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
           </>)}
 
           {form&&(
-            <div style={{marginTop:16,padding:"14px",borderRadius:9,background:T.bgElevated,border:`1.5px solid ${T.accent}55`}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:10}}>Create tag</div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Tag name <span style={{color:T.rose}}>*</span></label>
-              <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} autoFocus
-                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${existsHit?T.amber:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
-              {existsHit&&<div style={{fontSize:11,color:T.amber,marginTop:5}}>Tag exists · {aicCatLabel(hit.category)}</div>}
-              {draftHit&&<div style={{fontSize:11,color:T.textSub,marginTop:5}}>Draft tag awaiting approval · this object is added to it</div>}
-              {similar.length>0&&(
-                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:7}}>
-                  <span style={{fontSize:11,color:T.textMuted}}>Similar</span>
-                  {similar.map(t=>(
-                    <span key={t.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 4px 2px 8px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}35`,color:T.accent,fontWeight:600}}>
-                      {t.name}
-                      <button onClick={()=>onDecide(f,"accepted",{name:t.name})} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,color:T.textSub,fontSize:10,fontWeight:700,cursor:"pointer",padding:"1px 6px",fontFamily:"inherit"}}>Use</button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,margin:"12px 0 5px"}}>Classification <span style={{color:T.rose}}>*</span></label>
-              <select value={formCat} disabled={!!draftHit} onChange={e=>setForm({...form, category:e.target.value})}
-                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,fontFamily:"inherit",cursor:draftHit?"default":"pointer"}}>
-                {cats.map(c=><option key={c} value={c}>{aicCatLabel(c)}</option>)}
-              </select>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,margin:"12px 0 5px"}}>Description</label>
-              <textarea value={form.description} rows={2} disabled={!!draftHit} onChange={e=>setForm({...form, description:e.target.value})}
-                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
-              <div style={{display:"grid",gridTemplateColumns:"110px 1fr",rowGap:5,marginTop:12,fontSize:11.5}}>
+            <div style={{marginTop:16,padding:"16px",borderRadius:9,background:T.bgSurface,border:`1.5px solid ${T.accent}55`}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:14}}>Create tag</div>
+              <TagFormFields categories={cats} catInput={catInput} setCatInput={setCatInput} lockCategory={!!draftHit}
+                draft={draftHit ? {...form, category:hit.category} : form} setDraft={fn=>setForm(fn(form))}
+                nameNote={<>
+                  {existsHit&&<div style={{fontSize:11,color:T.amber,marginTop:5}}>Tag exists · {aicCatLabel(hit.category)}</div>}
+                  {draftHit&&<div style={{fontSize:11,color:T.textSub,marginTop:5}}>Draft tag awaiting approval · this object is added to it</div>}
+                  {similar.length>0&&(
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:7}}>
+                      <span style={{fontSize:11,color:T.textMuted}}>Similar</span>
+                      {similar.map(t=>(
+                        <span key={t.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 4px 2px 8px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}35`,color:T.accent,fontWeight:600}}>
+                          {t.name}
+                          <button onClick={()=>onDecide(f,"accepted",{name:t.name})} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,color:T.textSub,fontSize:10,fontWeight:700,cursor:"pointer",padding:"1px 6px",fontFamily:"inherit"}}>Use</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>}/>
+              <div style={{display:"grid",gridTemplateColumns:"110px 1fr",rowGap:5,marginTop:16,paddingTop:12,borderTop:`1px solid ${T.border}`,fontSize:11.5}}>
                 <span style={{color:T.textMuted}}>Status</span><span style={{color:T.text}}>Draft until approved</span>
                 <span style={{color:T.textMuted}}>Applied to</span><span style={{color:T.text}}>{f.col?`${f.asset.name}.${f.col}`:f.asset.name} · pending</span>
                 <span style={{color:T.textMuted}}>Approver</span><span style={{color:T.text}}>{approverFor ? approverFor(formCat) : "Admins"}</span>
@@ -59772,7 +59784,7 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
             {existsHit
               ? <button onClick={()=>onDecide(f,"accepted",{name:hit.name})}
                   style={{padding:"8px 16px",borderRadius:8,background:T.green,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Use {hit.name}</button>
-              : <button onClick={()=>createOk&&onDecide(f,"accepted",{name:nm, category:formCat, description:form.description.trim()})} disabled={!createOk}
+              : <button onClick={()=>createOk&&onDecide(f,"accepted",{name:nm, category:formCat||"business", description:form.description.trim(), owners:form.owners, stewards:form.stewards, color:form.color})} disabled={!createOk}
                   style={{padding:"8px 16px",borderRadius:8,background:createOk?T.green:T.bgHover,border:"none",color:createOk?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:createOk?"pointer":"default",fontFamily:"inherit"}}>
                   {draftHit?"Add & send for approval":"Create & send for approval"}</button>}
           </>) : canDecide ? (<>
@@ -60472,6 +60484,11 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   const [evidId, setEvidId] = useState(null);
   const [fTag, setFTag]   = useState("all");
   const [fType, setFType] = useState("all");
+  const [scanQ, setScanQ] = useState("");
+  const [scanSrc, setScanSrc] = useState("all");
+  const [scanTrig, setScanTrig] = useState("all");
+  const [scanStat, setScanStat] = useState("all");
+  const [scanLast, setScanLast] = useState("all");
   const [fConf, setFConf] = useState("all");
   const [fStatus, setFStatus] = useState("pending");
   const [sel, setSel]     = useState(new Set());
@@ -60508,7 +60525,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
     const asNew = f.newTag && (!def || def.aiProposed);
     if(asNew && tagCtx){
       const category = opts.category || (def && def.category) || "business";
-      tagCtx.requestNewTag({name, category, description:opts.description||"", assetId:f.assetId, assetName:f.asset.name,
+      tagCtx.requestNewTag({name, category, description:opts.description||"", owners:opts.owners||[], stewards:opts.stewards||[], color:opts.color, assetId:f.assetId, assetName:f.asset.name,
         col:f.col||null, appliedBy:me, approver:approverFor(category)});
       aicSet(x=>({...x, createdTags:[...new Set([...(x.createdTags||[]), name])]}));
     } else if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, def?def.name:name, {appliedBy:me, note}); }
@@ -60672,7 +60689,17 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
     else { setEvidId(null); onToast(`${verdict==="accepted"?"Accepted":"Rejected"} · no pending suggestions left`,"success"); }
   };
 
-  const COLS = "28px minmax(200px,1.7fr) minmax(100px,.8fr) minmax(120px,1fr) 110px minmax(90px,.8fr) 96px";
+  const COLS = "28px minmax(190px,1.6fr) minmax(90px,.7fr) minmax(120px,1fr) 100px minmax(80px,.7fr) 76px 76px 128px 72px";
+  // The object's people — for a column, its table's.
+  const ownersOf   = f => (f.asset.owners && f.asset.owners.length) ? f.asset.owners : [f.asset.owner].filter(Boolean);
+  const stewardsOf = f => (f.asset.stewards && f.asset.stewards.length) ? f.asset.stewards : [f.asset.steward].filter(Boolean);
+  const rowStatus = f => {
+    const s = statusOf(f);
+    if(s==="pending")  return {l:"Pending approval", c:T.amber};
+    if(s==="rejected") return {l:"Rejected", c:T.rose};
+    const a = approvalOf(f);
+    return a==="active" ? {l:"Approved", c:T.green} : a==="rejected" ? {l:"Not approved", c:T.rose} : {l:"Awaiting approval", c:T.amber};
+  };
   const SuggestionRow = ({f}) => {
     const s = statusOf(f);
     return (
@@ -60693,17 +60720,19 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         <div style={{minWidth:0}}><AICTagChip f={tagOf(f)!==f.tag ? {...f, tag:tagOf(f)} : f}/></div>
         <div><ConfBar c={f.conf}/></div>
         <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.tiers.map(t=>AIC_TIER_META[t.t].label).join(" · ")}</div>
+        <div><PeopleCircles people={ownersOf(f)}/></div>
+        <div><PeopleCircles people={stewardsOf(f)} tone={T.amber}/></div>
+        <div>{(()=>{ const m = rowStatus(f); return (
+          <span title={s!=="pending"&&st.decisions[f.id]?`${s==="accepted"?"Accepted":"Rejected"} by ${st.decisions[f.id].by}`:undefined}
+            style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:m.c+"16",color:m.c,whiteSpace:"nowrap"}}>
+            <Dot c={m.c}/>{m.l}</span>); })()}</div>
         <div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
           {s==="pending" ? (<>
             <button title={f.newTag?"Create tag":"Accept"} onClick={()=>f.newTag ? setEvidId(f.id) : decide(f,"accepted")} disabled={!canDecide} style={iconBtn("ok")}>{Ic.check(13)}</button>
             <button title="Reject" onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={iconBtn("no")}>{Ic.x(11)}</button>
-          </>) : (<>
-            <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:s==="accepted"?T.green:T.rose}}>
-              <Dot c={s==="accepted"?T.green:T.rose}/>{st.decisions[f.id].by}</span>
-            {s==="accepted"&&(()=>{ const a = approvalOf(f); const m = a==="active"?{l:"Approved",c:T.green}:a==="rejected"?{l:"Not approved",c:T.rose}:{l:"Pending approval",c:T.amber};
-              return <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:m.c+"16",color:m.c,whiteSpace:"nowrap"}}>{m.l}</span>; })()}
-            {canDecide&&<AICMenu size={24} items={[{label:"Undo decision", onClick:()=>undo(f)}]}/>}
-          </>)}
+          </>) : (
+            canDecide&&<AICMenu size={24} items={[{label:"Undo decision", onClick:()=>undo(f)}]}/>
+          )}
         </div>
       </div>
     );
@@ -60775,8 +60804,9 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         {canRun&&run.enabled&&!aicJobLive(lj)&&<div style={{marginTop:12}}><Btn small variant="primary" onClick={()=>runNow(run)}>Run now</Btn></div>}
       </div>
     ) : (<>
-      <div style={{display:"inline-flex",gap:2,padding:3,borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,marginBottom:12}}>
-        {[["pending","Pending"],["accepted","Accepted"],["rejected","Rejected"]].map(([k,l])=>{ const on = fStatus===k; return (
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+      <div style={{display:"inline-flex",gap:2,padding:3,borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+        {[["pending","Pending approval"],["accepted","Accepted"],["rejected","Rejected"]].map(([k,l])=>{ const on = fStatus===k; return (
           <button key={k} onClick={()=>{ setFStatus(k); setSel(new Set()); }}
             style={{display:"inline-flex",alignItems:"center",gap:7,padding:"6px 14px",borderRadius:7,border:"none",fontFamily:"inherit",fontSize:12.5,fontWeight:600,cursor:"pointer",
               background:on?T.bgSurface:"transparent",color:on?T.text:T.textMuted,boxShadow:on?"0 1px 3px rgba(0,0,0,.12)":"none"}}>
@@ -60785,7 +60815,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
               color:on?(k==="pending"?T.amber:k==="accepted"?T.green:T.rose):T.textMuted}}>{nStatus(k)}</span>
           </button>); })}
       </div>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{flex:1}}/>
         <select value={fType} onChange={e=>{setFType(e.target.value);setSel(new Set());}} style={selStyle}>
           <option value="all">All object types</option>{typesAll.map(k=><option key={k} value={k}>{k}</option>)}
         </select>
@@ -60808,11 +60838,11 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
         <div style={{display:"grid",gridTemplateColumns:COLS,gap:12,padding:"9px 16px",background:T.bgElevated,alignItems:"center",...th}}>
           <div>{selectable.length>0&&<input type="checkbox" checked={selectable.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
             onChange={e=>setSel(e.target.checked?new Set(selectable.map(f=>f.id)):new Set())}/>}</div>
-          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div style={{textAlign:"right"}}>{fStatus==="pending"?"Decide":fStatus==="accepted"?"Accepted by":"Rejected by"}</div>
+          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div>Owners</div><div>Stewards</div><div>Status</div><div/>
         </div>
         {shown.map(f=><SuggestionRow key={f.id} f={f}/>)}
         {!shown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
-          {base.filter(f=>statusOf(f)===fStatus).length ? "No results" : fStatus==="pending" ? "No pending suggestions" : fStatus==="accepted" ? "Nothing accepted yet" : "Nothing rejected yet"}</div>}
+          {base.filter(f=>statusOf(f)===fStatus).length ? "No results" : fStatus==="pending" ? "Nothing pending approval" : fStatus==="accepted" ? "Nothing accepted yet" : "Nothing rejected yet"}</div>}
       </div>
       {!canDecide&&<div style={{marginTop:10,fontSize:11,color:T.amber}}>Read-only</div>}
     </>);
@@ -60848,18 +60878,54 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
     </>);
   } else {
     const SC = "minmax(170px,1.6fr) minmax(100px,1fr) minmax(110px,1fr) minmax(90px,.8fr) 130px 60px 32px";
+    const srcOf  = p => p.trigger==="ingestion" ? [p.connId].filter(Boolean) : (p.connections||[]);
+    const trigOf = p => p.trigger==="ingestion" ? "ingestion" : aicSchedOn(p) ? "scheduled" : "manual";
+    const lastOf = p => { const j = st.jobs.find(x=>x.runId===p.id); return !j ? "none" : j.status==="queued" ? "running" : j.status; };
+    const srcAll = [...new Set(st.profiles.flatMap(srcOf))].sort();
+    const q = scanQ.trim().toLowerCase();
+    const scansShown = st.profiles.filter(p=>(!q || p.name.toLowerCase().includes(q))
+      && (scanSrc==="all" || (scanSrc==="__all" ? !srcOf(p).length : srcOf(p).includes(scanSrc)))
+      && (scanTrig==="all" || trigOf(p)===scanTrig)
+      && (scanStat==="all" || (scanStat==="active") === !!p.enabled)
+      && (scanLast==="all" || lastOf(p)===scanLast));
+    const scanFilters = st.profiles.length>0 && (
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:"0 1 280px",minWidth:180}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,display:"flex"}}>{Ic.search(13)}</span>
+          <input value={scanQ} onChange={e=>setScanQ(e.target.value)} placeholder="Search scans"
+            style={{width:"100%",height:32,padding:"0 10px 0 30px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+        </div>
+        <div style={{flex:1}}/>
+        <select value={scanSrc} onChange={e=>setScanSrc(e.target.value)} style={selStyle}>
+          <option value="all">All sources</option><option value="__all">Scans of all sources</option>
+          {srcAll.map(k=><option key={k} value={k}>{k}</option>)}
+        </select>
+        <select value={scanTrig} onChange={e=>setScanTrig(e.target.value)} style={selStyle}>
+          <option value="all">All triggers</option><option value="manual">Manual</option><option value="scheduled">Scheduled</option><option value="ingestion">On ingestion</option>
+        </select>
+        <select value={scanStat} onChange={e=>setScanStat(e.target.value)} style={selStyle}>
+          <option value="all">All statuses</option><option value="active">Active</option><option value="paused">Paused</option>
+        </select>
+        <select value={scanLast} onChange={e=>setScanLast(e.target.value)} style={selStyle}>
+          <option value="all">Any last run</option><option value="complete">Complete</option><option value="running">Running</option>
+          <option value="failed">Failed</option><option value="cancelled">Cancelled</option><option value="none">Not run yet</option>
+        </select>
+      </div>
+    );
     body = !st.profiles.length ? (
       <div style={{...card,padding:"48px 24px",textAlign:"center"}}>
         <div style={{fontSize:14,fontWeight:700,color:T.text}}>No scans</div>
         {canRun&&<div style={{marginTop:14}}><AddBtn label="New scan" onClick={()=>setEdit(aicNewProfile())}/></div>}
       </div>
-    ) : (
+    ) : (<>
+      {scanFilters}
       <div style={card}>
-        {cardHead(`Scans · ${st.profiles.length}`)}
+        {cardHead(scansShown.length===st.profiles.length ? `Scans · ${st.profiles.length}` : `Scans · ${scansShown.length} of ${st.profiles.length}`)}
         <div style={{display:"grid",gridTemplateColumns:SC,gap:12,padding:"9px 16px",background:T.bgElevated,...th}}>
           <div>Name</div><div>Object type</div><div>Tags</div><div>Trigger</div><div>Last run</div><div style={{textAlign:"right"}}>Pending</div><div/>
         </div>
-        {st.profiles.map(p=>{
+        {!scansShown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>No results</div>}
+        {scansShown.map(p=>{
           const lj = st.jobs.find(j=>j.runId===p.id);
           const toReview = pending.filter(f=>(f.profiles||[]).includes(p.id)).length;
           return (
@@ -60886,7 +60952,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
           );
         })}
       </div>
-    );
+    </>);
   }
 
   const finished = st.jobs.filter(j=>j.status==="complete" && !seen.has(j.id) && j.runId!==openRun);
