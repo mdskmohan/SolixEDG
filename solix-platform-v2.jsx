@@ -1180,6 +1180,10 @@ function TagProvider({ children }) {
             sourceSystem:null, sourceSystems:[], status:'pending', appliedBy, appliedAt:now, stewardNote:'', propagationChain:[]}]}));
     }
     const target = {assetId, assetName: col ? assetName+'.'+col : assetName, col};
+    // One notification per new tag — when its approval item is first created.
+    if (!inbox.some(i=>!i.resolvedAt && i.type==='new_tag_approval' && i.tagId===id))
+      pushNotif({category:'Classifications', type:'assigned', title:`Approve new tag · ${name}`,
+        body:`For ${approver} · ${appliedBy} created it from an AI suggestion · ${target.assetName} is waiting for it`, nav:'stewardship'});
     setInbox(prev=>{
       const open = prev.find(i=>!i.resolvedAt && i.type==='new_tag_approval' && i.tagId===id);
       if (open) {
@@ -1247,6 +1251,14 @@ function TagProvider({ children }) {
         colTagSet(s=>({...s, [key]: ok ? (s[key]||[]).map(t=>t.tag===item.tagName ? {...t, status:'active'} : t)
                                        : (s[key]||[]).filter(t=>t.tag!==item.tagName)})); });
       if (!ok) aicSet(x=>({...x, createdTags:(x.createdTags||[]).filter(n=>n!==item.tagName)}));
+      const def = tagDefs.find(t=>t.id===item.tagId) || {};
+      const who = [...new Set([(item.metadata||{}).appliedBy, ...(def.owners||[def.owner])].filter(Boolean))].join(', ');
+      const n = targets.length;
+      pushNotif(ok
+        ? {category:'Classifications', type:'cert', title:`${item.tagName} approved · attached to ${n} object${n===1?'':'s'}`,
+           body:`For ${who} · the new tag is Approved and attached to ${targets.map(x=>x.assetName).slice(0,3).join(', ')}${n>3?', …':''}`, nav:'tags'}
+        : {category:'Classifications', type:'alert', title:`${item.tagName} rejected · tag removed`,
+           body:`For ${who} · the Draft tag and its ${n} waiting object${n===1?'':'s'} were removed`, nav:'tags'});
     }
     if (item.type==='sync_conflict') {
       setAssignments(prev=>({...prev,[item.assetId]:(prev[item.assetId]||[]).map(a=>{
@@ -48755,11 +48767,11 @@ const InboxView = ({onToast}) => {
     if(item.type==="description_change"){
       return <>{btn("Approve",()=>{
         if(item.reqId)aidResolve(item.reqId,"approved",meHandle||"owner");
-        pushNotif({category:"Catalog",type:"cert",title:`Description updated · ${item.asset.name}`,body:`AI-drafted description approved by ${meHandle||"owner"}`,nav:"catalog",asset:item.aidAsset});
+        pushNotif({category:"Catalog",type:"cert",title:`Description approved · ${item.asset.name}`,body:`For ${item.requestedBy} · ${meHandle||"the approver"} approved your AI-drafted description; it is now live`,nav:"catalog",asset:item.aidAsset});
         ack(item.id,`Description saved on ${item.asset.name} — ${item.requestedBy} notified`);
       },true)}{btn("Reject",()=>{
         if(item.reqId)aidResolve(item.reqId,"rejected",meHandle||"owner");
-        pushNotif({category:"Catalog",type:"field_updated",title:`Description suggestion declined · ${item.asset.name}`,body:`${item.requestedBy}'s AI-drafted description was not accepted`,nav:"catalog",asset:item.aidAsset});
+        pushNotif({category:"Catalog",type:"alert",title:`Description rejected · ${item.asset.name}`,body:`For ${item.requestedBy} · ${meHandle||"the approver"} rejected your AI-drafted description; the current description is unchanged`,nav:"catalog",asset:item.aidAsset});
         ack(item.id,"Suggestion declined — requester notified");
       },false,true)}{openIn("Open in Catalog","catalog")}</>;
     }
@@ -59381,7 +59393,7 @@ const aicStartJob = (runId, trigger, by) => {
       ms:Date.now()-t0, cols:fresh.length, proposed:prop, confirmed:n("confirmed"), clear:n("clear"),
       log:[...j.log, {lvl:"ok", msg:`Complete · ${fresh.length} columns · ${prop} proposals`}]})}));
     pushNotif({category:"Classifications", type:"tag", title:`Scan finished · ${run.name}`,
-      body:`${prop} proposal${prop===1?"":"s"} to review from ${fresh.length} columns`, nav:"tags"});
+      body:`For ${[...new Set([...aicOwnersOf(run), ...aicStewardsOf(run)])].join(", ")||"the scan owner"} · ${prop} suggestion${prop===1?"":"s"} to review`, nav:"tags"});
   }, 1100 + steps*420 + 400);
   return id;
 };
@@ -59922,7 +59934,12 @@ const aidApproverFor = (asset, me) => {
   const s = stewards.find(x=>x!==me);
   return stewards.includes(me) ? (owners.find(o=>o!==me) || "Admins") : (s || owners.find(o=>o!==me) || "Admins");
 };
-const aidWithdraw = (id) => aidSet(s=>({...s, reqs:s.reqs.map(r=>r.id===id?{...r, status:"withdrawn"}:r)}));
+const aidWithdraw = (id) => {
+  const r = _aidState.reqs.find(x=>x.id===id);
+  aidSet(s=>({...s, reqs:s.reqs.map(x=>x.id===id?{...x, status:"withdrawn"}:x)}));
+  if(r) pushNotif({category:"Catalog", type:"field_updated", title:`Description request withdrawn · ${r.col?`${r.asset}.${r.col}`:r.asset}`,
+    body:`For ${r.owner} · ${r.requestedBy}'s AI-drafted description no longer needs your approval`, nav:"catalog", asset:r.asset});
+};
 
 const AIDescSuggestBtn = ({hasText, onClick, busy}) => (
   <button onClick={onClick} disabled={busy} title="Draft a description from this asset's metadata — nothing is saved until you accept it"
@@ -60016,7 +60033,7 @@ const useAidAssetDraft = ({asset, onToast, onSaved}) => {
   const accept = (text, edited) => {
     aidRequest(asset.name, null, text, me, approver, {edited, conf:draft.conf});
     onToast(`Sent to ${approver} for approval`,"success");
-    pushNotif({category:"Catalog", type:"field_updated", title:`Description awaiting approval · ${asset.name}`, body:`${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"catalog", asset:asset.name});
+    pushNotif({category:"Catalog", type:"assigned", title:`Approve description · ${asset.name}`, body:`For ${approver} · ${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"stewardship", asset:asset.name});
     setDraft(null);
   };
   return {
@@ -60066,6 +60083,8 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
   const approver = aidApproverFor(asset, me);
   const commit = () => {
     selected.forEach(r=>aidRequest(asset.name, r.col, r.text.trim(), me, approver, {conf:r.conf}));
+    if(selected.length) pushNotif({category:"Catalog", type:"assigned", title:`Approve ${selected.length} column description${selected.length>1?"s":""} · ${asset.name}`,
+      body:`For ${approver} · ${me} accepted AI-drafted column descriptions`, nav:"stewardship", asset:asset.name});
     onToast(`${selected.length} column description${selected.length>1?"s":""} sent to ${approver} for approval`,"success");
     onClose();
   };
@@ -60583,8 +60602,8 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
     else if(def){ tagCtx.applyTag(f.assetId, def.id, {origin:"ai", appliedBy:me, direct:true, assetName:f.asset.name, note}); }
     const applied = def ? def.name : name;
     if(applied!==f.tag) aicSet(x=>({...x, decisions:{...x.decisions, [f.id]:{...x.decisions[f.id], tagName:applied}}}));
-    pushNotif({category:"Classifications", type:"tag", title:asNew ? `${applied} (new, Draft) awaiting approval · ${where}` : `${applied} attached · ${where}`,
-      body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
+    if(!asNew) pushNotif({category:"Classifications", type:"tag", title:`${applied} attached · ${where}`,
+      body:`For ${[...new Set([...(f.asset.owners||[f.asset.owner]), ...(f.asset.stewards||[f.asset.steward])].filter(Boolean))].join(", ")||"the owners"} · ${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
   const decide = (f, verdict, opts) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
