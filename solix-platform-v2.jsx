@@ -1100,6 +1100,14 @@ const colTagsOf = (assetId, col) => (_colTags[colTagKey(assetId, col)]||[]).filt
 const useColTags = () => { const [,force] = useState(0);
   useEffect(()=>{ const f=()=>force(n=>n+1); _colTagSubs.add(f); return ()=>_colTagSubs.delete(f); },[]); return _colTags; };
 
+// Defaults a new tag inherits from the classification it is created in.
+const AI_NEW_TAG_CAT_DEFAULTS = {
+  sensitivity:{color:'#ee2424', propagationMode:'both'},
+  regulatory: {color:'#7dd3fc', propagationMode:'lineage'},
+  business:   {color:'#fbbf24', propagationMode:'hierarchy'},
+  custom:     {color:'#a1a1aa', propagationMode:'none'},
+};
+
 // ─────────────────────────────────────────────
 // TAG PROVIDER
 // ─────────────────────────────────────────────
@@ -1149,6 +1157,58 @@ function TagProvider({ children }) {
     if (col) colTagSet(s=>({...s, [colTagKey(assetId,col)]:(s[colTagKey(assetId,col)]||[]).filter(t=>t.tag!==tagName)}));
   };
 
+  // AI Classification · a NEW tag accepted from a scan. The tag is created as a Draft in
+  // the classification the user picked, attached (pending) to the table or column, and
+  // sent for approval as ONE item covering the tag and every object it was put on.
+  // Accepting the same new tag on another object adds that object to the same item.
+  const requestNewTag = ({name, category, description='', assetId, assetName, col=null, appliedBy='Current User', approver='Admins'}) => {
+    const existing = tagDefs.find(t=>t.name.toLowerCase()===name.toLowerCase());
+    const id = existing ? existing.id : 't-ai-'+name.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+    const d = AI_NEW_TAG_CAT_DEFAULTS[category] || {color:'#a1a1aa', propagationMode:'none'};
+    const now = new Date().toISOString();
+    if (!existing) setTagDefs(prev=>prev.some(t=>t.id===id) ? prev : [...prev, {id, cert:'Draft', name, category, color:d.color,
+      propagationMode:d.propagationMode, propagationLocked:false, governanceRequired:false, managedBy:appliedBy, owner:appliedBy,
+      usageCount:0, description, sourceAliases:[], createdAt:now, createdBy:appliedBy, aiProposed:true}]);
+    if (col) {
+      const key = colTagKey(assetId, col);
+      colTagSet(s=>((s[key]||[]).some(t=>t.tag===name && t.status!=='rejected')) ? s
+        : ({...s, [key]:[...(s[key]||[]).filter(t=>t.tag!==name), {tag:name, status:'pending', origin:'ai', appliedBy, at:now}]}));
+    } else {
+      setAssignments(prev=>((prev[assetId]||[]).some(a=>a.tagId===id && a.status!=='rejected')) ? prev
+        : ({...prev, [assetId]:[...(prev[assetId]||[]), {id:'a'+Date.now()+Math.random().toString(36).slice(2,6), tagId:id, assetId, origin:'ai',
+            sourceSystem:null, sourceSystems:[], status:'pending', appliedBy, appliedAt:now, stewardNote:'', propagationChain:[]}]}));
+    }
+    const target = {assetId, assetName: col ? assetName+'.'+col : assetName, col};
+    setInbox(prev=>{
+      const open = prev.find(i=>!i.resolvedAt && i.type==='new_tag_approval' && i.tagId===id);
+      if (open) {
+        if (open.metadata.targets.some(x=>x.assetId===assetId && (x.col||null)===(col||null))) return prev;
+        return prev.map(i=>i===open ? {...i, metadata:{...i.metadata, targets:[...i.metadata.targets, target]}} : i);
+      }
+      return [{id:'i-nt-'+Date.now()+Math.random().toString(36).slice(2,6), type:'new_tag_approval', tagName:name, tagId:id, category,
+        assetId, assetName:target.assetName, domain:'Unknown', sourceSystem:'AI Classification', note:description,
+        metadata:{appliedBy, approver, targets:[target]}, createdAt:now, resolvedAt:null, resolvedBy:null, resolution:null}, ...prev];
+    });
+  };
+  // Undo of one accepted new-tag suggestion: that object leaves the approval; when no
+  // object is left, the approval is withdrawn and the Draft tag is removed.
+  const withdrawNewTag = (assetId, tagName, col=null) => {
+    const def = tagDefs.find(t=>t.name===tagName);
+    if (!def) return;
+    const open = inbox.find(i=>!i.resolvedAt && i.type==='new_tag_approval' && i.tagId===def.id);
+    const same = x=>x.assetId===assetId && (x.col||null)===(col||null);
+    const left = open ? open.metadata.targets.filter(x=>!same(x)) : [];
+    setInbox(prev=>prev.map(i=>(i.resolvedAt || i.type!=='new_tag_approval' || i.tagId!==def.id) ? i
+      : left.length ? {...i, assetName:left[0].assetName, metadata:{...i.metadata, targets:left}}
+      : {...i, resolvedAt:new Date().toISOString(), resolvedBy:'Current User', resolution:'withdrawn', metadata:{...i.metadata, targets:[]}}));
+    if (col) colTagSet(s=>({...s, [colTagKey(assetId,col)]:(s[colTagKey(assetId,col)]||[]).filter(t=>t.tag!==tagName)}));
+    else setAssignments(prev=>({...prev, [assetId]:(prev[assetId]||[]).filter(a=>a.tagId!==def.id)}));
+    if (!left.length && def.aiProposed) {
+      setTagDefs(prev=>prev.filter(t=>t.id!==def.id));
+      aicSet(x=>({...x, createdTags:(x.createdTags||[]).filter(n=>n!==tagName)}));
+    }
+  };
+
   const removeTag = (assetId, assignmentId, stewardNote='') => {
     setAssignments(prev=>({...prev,[assetId]:(prev[assetId]||[]).map(a=>a.id===assignmentId?{...a,status:'rejected',stewardNote}:a)}));
   };
@@ -1170,6 +1230,22 @@ function TagProvider({ children }) {
         if(resolution==='reject') return {...a,status:'rejected',stewardNote:note};
         return a;
       })}));
+    }
+    // One decision for a new AI tag and every object it was put on.
+    if (item.type==='new_tag_approval') {
+      const ok = resolution==='approve';
+      const targets = (item.metadata&&item.metadata.targets)||[];
+      setTagDefs(prev=>ok ? prev.map(t=>t.id===item.tagId ? {...t, cert:'Approved', aiProposed:false, usageCount:targets.length} : t)
+                          : prev.filter(t=>t.id!==item.tagId));
+      setAssignments(prev=>{ const n={...prev};
+        targets.filter(x=>!x.col).forEach(x=>{ n[x.assetId] = ok
+          ? (n[x.assetId]||[]).map(a=>a.tagId===item.tagId ? {...a, status:'active'} : a)
+          : (n[x.assetId]||[]).filter(a=>a.tagId!==item.tagId); });
+        return n; });
+      targets.filter(x=>x.col).forEach(x=>{ const key=colTagKey(x.assetId,x.col);
+        colTagSet(s=>({...s, [key]: ok ? (s[key]||[]).map(t=>t.tag===item.tagName ? {...t, status:'active'} : t)
+                                       : (s[key]||[]).filter(t=>t.tag!==item.tagName)})); });
+      if (!ok) aicSet(x=>({...x, createdTags:(x.createdTags||[]).filter(n=>n!==item.tagName)}));
     }
     if (item.type==='sync_conflict') {
       setAssignments(prev=>({...prev,[item.assetId]:(prev[item.assetId]||[]).map(a=>{
@@ -1284,7 +1360,7 @@ function TagProvider({ children }) {
   const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, requestColumnTag, withdrawPending, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
+    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, requestNewTag, withdrawNewTag, requestColumnTag, withdrawPending, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -48367,14 +48443,27 @@ const InboxView = ({onToast}) => {
   // Inbox live — and leave it again if the suggestion is undone.
   useEffect(()=>{
     if(!tagCtx) return;
-    const live = (tagCtx.inbox||[]).filter(t=>t.sourceSystem==="AI Classification" && t.type==="pending_approval");
+    const live = (tagCtx.inbox||[]).filter(t=>t.sourceSystem==="AI Classification" && (t.type==="pending_approval" || t.type==="new_tag_approval"));
+    // A new AI tag is ONE item: the tag, its classification and every object it was put on.
+    const asItem = (t) => {
+      if(t.type!=="new_tag_approval") return {id:"tg-"+t.id, type:"tag_review", severity:"medium", section:"tags", timeAgo:"just now",
+        title:`Tag approval: ${t.tagName} on ${t.assetName}`, asset:{name:t.assetName, path:t.assetName, type:t.col?"Column":"Tag"},
+        body:t.note, tagName:t.tagName, tagType:t.type, tagInboxId:t.id, readAt:null, aiTag:true};
+      const tg = t.metadata.targets||[];
+      const cat = AIC_CAT_LABEL[t.category] || (t.category ? t.category[0].toUpperCase()+t.category.slice(1) : "—");
+      return {id:"tg-"+t.id, type:"tag_review", severity:"medium", section:"tags", timeAgo:"just now",
+        title:`New tag: ${t.tagName} (${cat}) on ${tg.length} object${tg.length===1?"":"s"}`,
+        asset:{name:t.tagName, path:`${cat} · Draft tag`, type:"Tag"}, assignee:t.metadata.approver,
+        body:`Classification: ${cat} · Objects: ${tg.map(x=>x.assetName).join(", ")} · Sent by ${t.metadata.appliedBy}${t.note?` · ${t.note}`:""}`,
+        tagName:t.tagName, tagType:t.type, tagInboxId:t.id, readAt:null, aiTag:true};
+    };
     setItems(prev=>{
       let next = prev.filter(i=>!(i.aiTag && live.some(t=>"tg-"+t.id===i.id && t.resolution==="withdrawn")));
-      live.filter(t=>!t.resolvedAt && !next.some(i=>i.id==="tg-"+t.id)).forEach(t=>{
-        next = [{id:"tg-"+t.id, type:"tag_review", severity:"medium", section:"tags", timeAgo:"just now",
-          title:`Tag approval: ${t.tagName} on ${t.assetName}`, asset:{name:t.assetName, path:t.assetName, type:t.col?"Column":"Tag"},
-          body:t.note, tagName:t.tagName, tagType:t.type, tagInboxId:t.id, readAt:null, aiTag:true}, ...next];
-      });
+      // keep open new-tag items in step with objects added or undone
+      next = next.map(i=>{ if(!i.aiTag || i.tagType!=="new_tag_approval") return i;
+        const t = live.find(x=>"tg-"+x.id===i.id); if(!t || t.resolvedAt) return i;
+        const u = asItem(t); return (u.title===i.title && u.body===i.body) ? i : {...i, title:u.title, body:u.body}; });
+      live.filter(t=>!t.resolvedAt && !next.some(i=>i.id==="tg-"+t.id)).forEach(t=>{ next = [asItem(t), ...next]; });
       return next.length===prev.length && next.every((x,i)=>x===prev[i]) ? prev : next;
     });
   },[tagCtx&&tagCtx.inbox]);
@@ -48587,8 +48676,8 @@ const InboxView = ({onToast}) => {
       return <>{btn("Approve",()=>{
         if(item.tagType==="new_source_tag"){ tagCtx?.createTagDef({name:item.tagName,category:'business',description:'Promoted from source tag via Inbox.',propagationMode:'hierarchy',governanceRequired:false,managedBy:'Current User',color:'#fbbf24',sourceAliases:[item.tagName]}); tagCtx?.resolveInboxItem(item.tagInboxId,'promoted'); }
         else { tagCtx?.resolveInboxItem(item.tagInboxId,'approve'); }
-        ack(item.id,`${item.tagName} approved`);
-      },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id,"Tag rejected");},false,true)}{openIn("Open in Classifications","tags")}</>;
+        ack(item.id, item.tagType==="new_tag_approval" ? `${item.tagName} approved — tag and objects are live` : `${item.tagName} approved`);
+      },true)}{btn("Reject",()=>{tagCtx?.resolveInboxItem(item.tagInboxId,'reject');ack(item.id, item.tagType==="new_tag_approval" ? `${item.tagName} rejected — tag removed` : "Tag rejected");},false,true)}{openIn("Open in Classifications","tags")}</>;
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review"){
@@ -55984,6 +56073,7 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
 
 const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig, logReverseSync, pushSummaryForTag } = useTagCtx();
+  const colTagsLive = useColTags();   // column-level tags (e.g. accepted from AI Classification) count as linked assets too
   const relTime = (iso)=>{ if(!iso) return null; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const navigate = useNav();
   const { role: tmvRole, roleCfg: tmvRoleCfg } = useRole();
@@ -56431,6 +56521,12 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
             const cc  = getCatStyle(selTag.category);
             const draft = editing ? editDraft : selTag;
             const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
+            // Columns carrying this tag, listed beside the tables and counted with them.
+            const colLinks = Object.entries(colTagsLive).flatMap(([k,list])=>(list||[]).filter(t=>t.tag===selTag.name&&t.status!=='rejected').map(t=>{
+              const [aid, ...rest] = k.split('::'); const a = ASSETS.find(x=>String(x.id)===aid);
+              return {key:k, name:`${a?a.name:aid}.${rest.join('::')}`, status:t.status};
+            }));
+            const linkedCount = affectedAssets.length + colLinks.length;
             const tagSyncRows = Object.entries(connectorConfigs).flatMap(([connId,cfg])=>(cfg.nameMappings||[]).filter(m=>m.edgTagId===selTag.id).map(m=>({connId,cfg,m})));
             const tagConnIds  = [...new Set(tagSyncRows.map(r=>r.connId))];
             const tagActivity = [
@@ -56477,7 +56573,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                   <div style={{display:'flex',gap:0}}>
                     {[
                       {key:'overview',   label:'Overview'},
-                      {key:'assets',     label:'Linked Assets', count:affectedAssets.length},
+                      {key:'assets',     label:'Linked Assets', count:linkedCount},
                       {key:'sources',    label:'Sources & Sync', count:tagConnIds.length},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
@@ -56656,7 +56752,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                         <SideLabel ch="Linked Assets"/>
                         <button onClick={()=>setDetailTab('assets')} style={{fontSize:13,fontWeight:700,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}}
                           onMouseEnter={e=>e.currentTarget.style.opacity='0.7'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
-                          {affectedAssets.length} asset{affectedAssets.length!==1?'s':''} →
+                          {linkedCount} asset{linkedCount!==1?'s':''} →
                         </button>
                       </div>
 
@@ -56676,12 +56772,12 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       {/* Summary bar */}
                       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,padding:'10px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
                         <span style={{color:T.accent,display:'flex'}}>{Ic.catalog(14)}</span>
-                        <span style={{fontSize:13,fontWeight:600,color:T.text}}>{affectedAssets.length} asset{affectedAssets.length!==1?'s':''} tagged with</span>
+                        <span style={{fontSize:13,fontWeight:600,color:T.text}}>{linkedCount} asset{linkedCount!==1?'s':''} tagged with</span>
                         <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 10px',borderRadius:99,background:(selTag.color||T.accent)+'18',border:`1px solid ${(selTag.color||T.accent)}33`,fontSize:12,fontWeight:600,color:selTag.color||T.accent}}>
                           {selTag.name}
                         </span>
                       </div>
-                      {affectedAssets.length===0
+                      {linkedCount===0
                         ? <div style={{padding:'56px 0',textAlign:'center'}}>
                             <div style={{fontSize:28,marginBottom:12,opacity:.2}}>🏷</div>
                             <div style={{fontSize:13,fontWeight:600,color:T.textSub,marginBottom:4}}>No assets tagged yet</div>
@@ -56710,6 +56806,17 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                                 </div>
                               );
                             })}
+                            {colLinks.map((c,i)=>(
+                              <div key={c.key} className="row-hover" style={{display:'grid',gridTemplateColumns:'1fr auto auto',padding:'11px 14px',borderTop:(affectedAssets.length||i)?`1px solid ${T.border}`:'none',alignItems:'center',gap:12}}>
+                                <div style={{display:'flex',alignItems:'center',gap:10,minWidth:0}}>
+                                  <span style={{color:T.violet,display:'flex',flexShrink:0}}>{Ic.catalog(13)}</span>
+                                  <div style={{fontSize:12.5,fontWeight:500,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontFamily:"'Geist Mono',monospace"}}>{c.name}</div>
+                                </div>
+                                <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:4,background:`${T.violet}15`,color:T.violet,whiteSpace:'nowrap'}}>column</span>
+                                <span style={{fontSize:10.5,fontWeight:600,padding:'2px 8px',borderRadius:4,whiteSpace:'nowrap',
+                                  background:c.status==='pending'?T.amberDim:'rgba(16,185,129,.12)',color:c.status==='pending'?T.amber:'#10b981'}}>{c.status==='pending'?'Pending':'Tagged'}</span>
+                              </div>
+                            ))}
                           </div>
                       }
                     </div>
@@ -59373,21 +59480,54 @@ const AICStat = ({label, value, sub, color}) => (
 // where evidence is read. Accept / Reject sit in the footer and move straight on
 // to the next suggestion, so a steward can work the queue without going back to
 // the list. ← → step through it; A and R decide.
-const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision, canDecide, onClose, onNav}) => {
+// A new-tag suggestion starts the Create tag form with the AI's best guess.
+const AIC_NEW_TAG_GUESS = {
+  "Contact details":  {category:"sensitivity", description:"Email addresses, phone numbers and other ways to reach a person or company."},
+  "Location":         {category:"sensitivity", description:"Addresses, postcodes, coordinates and other place data."},
+  "People data":      {category:"sensitivity", description:"Employee, payroll and HR records."},
+  "Monetary amount":  {category:"business",    description:"Money values such as prices, costs, revenue and balances."},
+  "Status code":      {category:"business",    description:"Coded lifecycle or state values from a fixed list."},
+  "Customer data":    {category:"business",    description:"Customer, user and account records."},
+  "Orders & sales":   {category:"business",    description:"Orders, sales, transactions and invoices."},
+  "Product analytics":{category:"business",    description:"Events, sessions and clickstream about product use."},
+  "Marketing":        {category:"business",    description:"Campaigns, spend and attribution."},
+  "Product catalog":  {category:"business",    description:"Products, SKUs and catalog attributes."},
+};
+const aicCatLabel = c => AIC_CAT_LABEL[c] || (c ? c[0].toUpperCase()+c.slice(1) : "—");
+const aicWordsOfTag = x => (x||"").toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>3);
+
+const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision, canDecide, onClose, onNav, approverFor}) => {
+  const tagCtx = useTagCtx();
+  const [form, setForm] = useState(null);       // the Create tag form for a new-tag suggestion
+  useEffect(()=>{ setForm(null); },[f && f.id]);
+  const openForm = () => { if(!f) return; const g = AIC_NEW_TAG_GUESS[f.tag] || {category:"business", description:""};
+    setForm({name:f.tag, category:g.category, description:g.description}); };
   useEffect(()=>{
     if(!f) return;
     const h = (e) => {
       if(e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-      if(e.key==="Escape") onClose();
-      else if(e.key==="ArrowRight" && onNext) onNext();
-      else if(e.key==="ArrowLeft" && onPrev) onPrev();
-      else if(canDecide && !decision && (e.key==="a"||e.key==="A")) onDecide(f,"accepted");
-      else if(canDecide && !decision && (e.key==="r"||e.key==="R")) onDecide(f,"rejected");
+      if(e.key==="Escape") { if(form) setForm(null); else onClose(); }
+      else if(e.key==="ArrowRight" && onNext && !form) onNext();
+      else if(e.key==="ArrowLeft" && onPrev && !form) onPrev();
+      else if(canDecide && !decision && !form && (e.key==="a"||e.key==="A")) { if(f.newTag) openForm(); else onDecide(f,"accepted"); }
+      else if(canDecide && !decision && !form && (e.key==="r"||e.key==="R")) onDecide(f,"rejected");
     };
     window.addEventListener("keydown", h);
     return ()=>window.removeEventListener("keydown", h);
-  },[f, onPrev, onNext, onDecide, decision, canDecide]);
+  },[f, onPrev, onNext, onDecide, decision, canDecide, form]);
   if(!f) return null;
+  // Create tag form state: what the typed name collides with, and similar tags to reuse.
+  const defs = ((tagCtx && tagCtx.tagDefs) || []).filter(t=>t.cert!=="Deprecated");
+  const cats = [...new Set(["sensitivity","regulatory","business","custom", ...defs.map(t=>t.category)])].filter(Boolean);
+  const nm = form ? form.name.trim() : "";
+  const hit = form && defs.find(t=>t.name.toLowerCase()===nm.toLowerCase());
+  const draftHit = hit && hit.aiProposed;                       // a Draft made by an earlier accept: join its approval
+  const existsHit = hit && !hit.aiProposed;                     // a real tag: use it instead
+  const similar = form && !hit ? defs.filter(t=>!t.aiProposed && (
+      aicWordsOfTag(nm).some(w=>aicWordsOfTag(t.name+" "+(t.description||"")).includes(w)) ||
+      (nm.length>2 && t.name.toLowerCase().includes(nm.toLowerCase())))).slice(0,3) : [];
+  const formCat = draftHit ? hit.category : form && form.category;
+  const createOk = form && nm && !existsHit;
   const st = _aicState;
   const stats = f.det ? (st.stats[f.det] || {accepted:0,rejected:0}) : null;
   const prof = f.col ? COL_PROFILES[f.col] : null;
@@ -59492,15 +59632,51 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
             </div>
           </>)}
 
-          <div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.blueDim,border:`1px solid ${T.blue}35`}}>
+          {form&&(
+            <div style={{marginTop:16,padding:"14px",borderRadius:9,background:T.bgElevated,border:`1.5px solid ${T.accent}55`}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:10}}>Create tag</div>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Tag name <span style={{color:T.rose}}>*</span></label>
+              <input value={form.name} onChange={e=>setForm({...form, name:e.target.value})} autoFocus
+                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${existsHit?T.amber:T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              {existsHit&&<div style={{fontSize:11,color:T.amber,marginTop:5}}>Tag exists · {aicCatLabel(hit.category)}</div>}
+              {draftHit&&<div style={{fontSize:11,color:T.textSub,marginTop:5}}>Draft tag awaiting approval · this object is added to it</div>}
+              {similar.length>0&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:7}}>
+                  <span style={{fontSize:11,color:T.textMuted}}>Similar</span>
+                  {similar.map(t=>(
+                    <span key={t.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 4px 2px 8px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}35`,color:T.accent,fontWeight:600}}>
+                      {t.name}
+                      <button onClick={()=>onDecide(f,"accepted",{name:t.name})} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:4,color:T.textSub,fontSize:10,fontWeight:700,cursor:"pointer",padding:"1px 6px",fontFamily:"inherit"}}>Use</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,margin:"12px 0 5px"}}>Classification <span style={{color:T.rose}}>*</span></label>
+              <select value={formCat} disabled={!!draftHit} onChange={e=>setForm({...form, category:e.target.value})}
+                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,fontFamily:"inherit",cursor:draftHit?"default":"pointer"}}>
+                {cats.map(c=><option key={c} value={c}>{aicCatLabel(c)}</option>)}
+              </select>
+              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,margin:"12px 0 5px"}}>Description</label>
+              <textarea value={form.description} rows={2} disabled={!!draftHit} onChange={e=>setForm({...form, description:e.target.value})}
+                style={{width:"100%",padding:"8px 10px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",resize:"vertical",lineHeight:1.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <div style={{display:"grid",gridTemplateColumns:"110px 1fr",rowGap:5,marginTop:12,fontSize:11.5}}>
+                <span style={{color:T.textMuted}}>Status</span><span style={{color:T.text}}>Draft until approved</span>
+                <span style={{color:T.textMuted}}>Applied to</span><span style={{color:T.text}}>{f.col?`${f.asset.name}.${f.col}`:f.asset.name} · pending</span>
+                <span style={{color:T.textMuted}}>Approver</span><span style={{color:T.text}}>{approverFor ? approverFor(formCat) : "Admins"}</span>
+              </div>
+            </div>
+          )}
+
+          {!form&&<div style={{marginTop:16,padding:"11px 13px",borderRadius:9,background:T.blueDim,border:`1px solid ${T.blue}35`}}>
             <div style={{fontSize:11,fontWeight:700,color:T.blue,marginBottom:4}}>If you accept</div>
             <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.6}}>
-              {f.newTag&&<><b style={{color:T.text}}>{f.tag}</b> is created as a <b style={{color:T.text}}>Draft</b> business tag in your taxonomy, then </>}
-              {f.newTag?"applied":<><b style={{color:T.text}}>{f.tag}</b> is applied</>} to {f.col?"the column":`the ${(f.asset.type||"object").toLowerCase()}`} {where}.
-              {" "}Retention and legal-hold rules that target {f.tag} start to cover it{f.col?", and the column becomes eligible as a match key":""}.
-              {" "}It goes live once approved in the Inbox. You can undo it later from Review › Accepted.
+              {f.newTag
+                ? <>You name the tag and pick its classification. It is created as a <b style={{color:T.text}}>Draft</b>, attached to {where}, and sent for approval. Approve makes the tag and this object live; Reject removes both.</>
+                : <><b style={{color:T.text}}>{f.tag}</b> is applied to {f.col?"the column":`the ${(f.asset.type||"object").toLowerCase()}`} {where}.
+                  {" "}Retention and legal-hold rules that target {f.tag} start to cover it{f.col?", and the column becomes eligible as a match key":""}.
+                  {" "}It goes live once approved in the Workspace. You can undo it from Review › Accepted.</>}
             </div>
-          </div>
+          </div>}
         </div>
 
         <div style={{flexShrink:0,padding:"12px 20px",borderTop:`1px solid ${T.border}`,background:T.bgElevated,display:"flex",alignItems:"center",gap:8}}>
@@ -59511,11 +59687,20 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
           {decision ? (<>
             <span style={{fontSize:11.5,color:T.textMuted}}>{decision.verdict==="accepted"?"Accepted":"Rejected"} by {decision.by} · {decision.at}</span>
             {canDecide&&onUndo&&<Btn small ghost onClick={()=>onUndo(f)}>Undo</Btn>}
+          </>) : canDecide && form ? (<>
+            <button onClick={()=>setForm(null)}
+              style={{padding:"8px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+            {existsHit
+              ? <button onClick={()=>onDecide(f,"accepted",{name:hit.name})}
+                  style={{padding:"8px 16px",borderRadius:8,background:T.green,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Use {hit.name}</button>
+              : <button onClick={()=>createOk&&onDecide(f,"accepted",{name:nm, category:formCat, description:form.description.trim()})} disabled={!createOk}
+                  style={{padding:"8px 16px",borderRadius:8,background:createOk?T.green:T.bgHover,border:"none",color:createOk?"#fff":T.textMuted,fontSize:12,fontWeight:700,cursor:createOk?"pointer":"default",fontFamily:"inherit"}}>
+                  {draftHit?"Add & send for approval":"Create & send for approval"}</button>}
           </>) : canDecide ? (<>
             <button onClick={()=>onDecide(f,"rejected")}
               style={{padding:"8px 14px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Reject{kbd("R")}</button>
-            <button onClick={()=>onDecide(f,"accepted")}
-              style={{padding:"8px 16px",borderRadius:8,background:T.green,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{f.newTag?"Create & apply":"Accept"}{kbd("A")}</button>
+            <button onClick={()=>f.newTag ? openForm() : onDecide(f,"accepted")}
+              style={{padding:"8px 16px",borderRadius:8,background:T.green,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>{f.newTag?"Create tag":"Accept"}{kbd("A")}</button>
           </>) : (
             <span style={{fontSize:11.5,color:T.amber}}>Only a Steward or Admin can accept or reject</span>
           )}
@@ -60316,58 +60501,71 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   },[openRun, st.jobs]);
   const tagCtx = useTagCtx();
   useColTags();
-  const [toApply, setToApply] = useState([]);   // new tags waiting for the taxonomy to hand back an id
-  useEffect(()=>{
-    if(!toApply.length || !tagCtx) return;
-    const left = toApply.filter(x=>{
-      const t = tagCtx.tagDefs.find(y=>y.name===x.name);
-      if(!t) return true;
-      if(x.assetId) tagCtx.applyTag(x.assetId, t.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:x.assetName, note:x.note});
-      return false;
-    });
-    if(left.length!==toApply.length) setToApply(left);
-  },[tagCtx&&tagCtx.tagDefs, toApply]);
 
   const whereOf = f => f.col ? `${f.asset.name}.${f.col}` : f.asset.name;
-  // Accept: an object-level suggestion is applied to the object; a new tag is first
-  // created as a Draft; a column-level one is recorded on the column's classification.
-  const applyAccepted = (f) => {
+  // The tag a decision actually applied: a new-tag suggestion may be created under
+  // another name, or swapped for a similar existing tag.
+  const tagOf = (f) => (st.decisions[f.id] && st.decisions[f.id].tagName) || f.tag;
+  // Who approves a new tag: whoever manages most tags in that classification, else Admins.
+  const approverFor = (cat) => {
+    const n = {}; (tagCtx ? tagCtx.tagDefs : []).filter(t=>t.category===cat && t.managedBy && !t.aiProposed).forEach(t=>{ n[t.managedBy]=(n[t.managedBy]||0)+1; });
+    const top = Object.entries(n).sort((x,y)=>y[1]-x[1])[0];
+    return top ? top[0] : "Admins";
+  };
+  // Accept. Every accepted AI tag waits for approval in the Workspace before it goes live.
+  // An existing tag is applied pending to the table or column. A new tag (created with the
+  // name and classification the user chose) becomes a Draft tag attached pending, and
+  // goes for approval as one item together with every object it was put on.
+  const applyAccepted = (f, opts={}) => {
     const where = whereOf(f);
-    if(f.newTag && tagCtx && !tagCtx.tagDefs.some(t=>t.name===f.tag) && !toApply.some(x=>x.name===f.tag)){
-      tagCtx.createTagDef({name:f.tag, category:"business", color:"#fbbf24", propagationMode:"hierarchy", governanceRequired:false,
-        managedBy:me, description:`Created from an AI Classification suggestion on ${where}.`});
-      aicSet(x=>({...x, createdTags:[...(x.createdTags||[]), f.tag]}));
-    }
-    // Every accepted AI tag waits for approval in the Inbox before it goes live.
     const note = `AI suggestion accepted by ${me} at ${aiPct(f.conf)} confidence. Awaiting approval.`;
-    if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, f.tag, {appliedBy:me, note}); }
-    else if(f.newTag) setToApply(q=>[...q, {name:f.tag, assetId:f.assetId, assetName:f.asset.name, note}]);
-    else if(tagCtx){ const t = tagCtx.tagDefs.find(y=>y.name===f.tag); if(t) tagCtx.applyTag(f.assetId, t.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:f.asset.name, note}); }
-    pushNotif({category:"Classifications", type:"tag", title:`${f.tag} ${f.newTag?"created · ":""}awaiting approval · ${where}`,
+    const name = (opts.name || f.tag).trim();
+    const def = tagCtx && tagCtx.tagDefs.find(t=>t.name.toLowerCase()===name.toLowerCase());
+    const asNew = f.newTag && (!def || def.aiProposed);
+    if(asNew && tagCtx){
+      const category = opts.category || (def && def.category) || "business";
+      tagCtx.requestNewTag({name, category, description:opts.description||"", assetId:f.assetId, assetName:f.asset.name,
+        col:f.col||null, appliedBy:me, approver:approverFor(category)});
+      aicSet(x=>({...x, createdTags:[...new Set([...(x.createdTags||[]), name])]}));
+    } else if(f.col){ if(tagCtx) tagCtx.requestColumnTag(f.assetId, f.asset.name, f.col, def?def.name:name, {appliedBy:me, note}); }
+    else if(def){ tagCtx.applyTag(f.assetId, def.id, {origin:"ai", appliedBy:me, requireApproval:true, assetName:f.asset.name, note}); }
+    const applied = def ? def.name : name;
+    if(applied!==f.tag) aicSet(x=>({...x, decisions:{...x.decisions, [f.id]:{...x.decisions[f.id], tagName:applied}}}));
+    pushNotif({category:"Classifications", type:"tag", title:`${applied} ${asNew?"(new) ":""}awaiting approval · ${where}`,
       body:`${me} accepted an AI suggestion at ${aiPct(f.conf)} confidence`, nav:"tags", asset:f.asset.name});
   };
-  const decide = (f, verdict) => {
+  const decide = (f, verdict, opts) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
     aicDecide(f, verdict, me);
-    if(verdict==="accepted") applyAccepted(f);
+    if(verdict==="accepted") applyAccepted(f, opts);
   };
   const decideMany = (list, verdict) => {
     if(!canDecide){ onToast("Only a Steward or Admin can decide a classification","error"); return; }
-    list.forEach(f=>{ aicDecide(f, verdict, me); if(verdict==="accepted") applyAccepted(f); });
-    onToast(`${list.length} suggestion${list.length>1?"s":""} ${verdict}`,"success"); setSel(new Set());
+    // A new tag needs a name and a classification, so bulk Accept leaves it for one-by-one review
+    // (unless that tag was already created as a Draft by an earlier accept).
+    const skip = verdict==="accepted" ? list.filter(f=>f.newTag && !(tagCtx && tagCtx.tagDefs.some(t=>t.name===f.tag && t.aiProposed))) : [];
+    const go = list.filter(f=>!skip.includes(f));
+    go.forEach(f=>{ aicDecide(f, verdict, me); if(verdict==="accepted") applyAccepted(f); });
+    onToast(skip.length ? `${go.length} ${verdict} · ${skip.length} new tag${skip.length>1?"s":""} need a classification — open to create`
+                        : `${go.length} suggestion${go.length>1?"s":""} ${verdict}`, skip.length?"info":"success");
+    setSel(new Set());
   };
   const undo = (f) => {
     const d = st.decisions[f.id]; if(!d || !canDecide) return;
+    const name = tagOf(f);
     aicUndo(f);
     if(d.verdict==="accepted" && tagCtx){
-      tagCtx.withdrawPending(f.assetId, f.tag, f.col||null);
-      if(!f.col){
-        const def = tagCtx.tagDefs.find(t=>t.name===f.tag);
-        const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
-        if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
+      const def = tagCtx.tagDefs.find(t=>t.name===name);
+      if(f.newTag && def && def.aiProposed) tagCtx.withdrawNewTag(f.assetId, name, f.col||null);
+      else {
+        tagCtx.withdrawPending(f.assetId, name, f.col||null);
+        if(!f.col){
+          const a = def && (tagCtx.assignments[f.assetId]||[]).find(x=>x.tagId===def.id && x.origin==="ai" && x.status!=="rejected");
+          if(a) tagCtx.removeTag(f.assetId, a.id, "AI suggestion undone");
+        }
       }
     }
-    onToast(`${f.tag} on ${whereOf(f)} is back in Pending`,"info");
+    onToast(`${name} on ${whereOf(f)} is back in Pending`,"info");
   };
   const runNow = (p) => {
     if(!p.enabled){ onToast(`"${p.name}" is paused — resume it first`,"error"); return; }
@@ -60460,10 +60658,12 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   const statusOf = f => st.decisions[f.id] ? st.decisions[f.id].verdict : "pending";
   // Where an accepted suggestion stands: waiting for approval, live, or turned down.
   const approvalOf = (f) => {
-    if(f.col){ const t = (_colTags[colTagKey(f.assetId, f.col)]||[]).find(x=>x.tag===f.tag); return t ? t.status : "pending"; }
-    const def = tagCtx && tagCtx.tagDefs.find(t=>t.name===f.tag);
+    const name = tagOf(f);
+    // A rejected new tag is removed with its links, so "no link left" means not approved.
+    if(f.col){ const t = (_colTags[colTagKey(f.assetId, f.col)]||[]).find(x=>x.tag===name); return t ? t.status : (f.newTag ? "rejected" : "pending"); }
+    const def = tagCtx && tagCtx.tagDefs.find(t=>t.name===name);
     const a = def && (tagCtx.assignments[f.assetId]||[]).filter(x=>x.tagId===def.id).pop();
-    return a ? a.status : "pending";
+    return a ? a.status : (f.newTag && !def ? "rejected" : "pending");
   };
   // A scan's Review tab: every suggestion it raised, pending and decided — one row each.
   const all = run ? findings.filter(f=>(f.profiles||[]).includes(run.id) && (aicIsProposal(st,f) || st.decisions[f.id])) : [];
@@ -60480,10 +60680,10 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
   const evidDecision = evid ? st.decisions[evid.id] : null;
   const navList = shown;
   const evidIdx = evid ? navList.findIndex(f=>f.id===evid.id) : -1;
-  const decideInDrawer = (f, verdict) => {
+  const decideInDrawer = (f, verdict, opts) => {
     const i = navList.findIndex(x=>x.id===f.id);
     const next = navList.slice(i+1).find(x=>statusOf(x)==="pending") || navList.slice(0,i).reverse().find(x=>statusOf(x)==="pending") || null;
-    decide(f, verdict);
+    decide(f, verdict, opts);
     if(next) setEvidId(next.id);
     else { setEvidId(null); onToast(`${verdict==="accepted"?"Accepted":"Rejected"} · no pending suggestions left`,"success"); }
   };
@@ -60506,12 +60706,12 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
           </div>
         </div>
         <div style={{fontSize:12,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{aicTypeOf(f)}</div>
-        <div style={{minWidth:0}}><AICTagChip f={f}/></div>
+        <div style={{minWidth:0}}><AICTagChip f={tagOf(f)!==f.tag ? {...f, tag:tagOf(f)} : f}/></div>
         <div><ConfBar c={f.conf}/></div>
         <div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.tiers.map(t=>AIC_TIER_META[t.t].label).join(" · ")}</div>
         <div style={{display:"flex",gap:6,justifyContent:"flex-end",alignItems:"center"}} onClick={e=>e.stopPropagation()}>
           {s==="pending" ? (<>
-            <button title="Accept" onClick={()=>decide(f,"accepted")} disabled={!canDecide} style={iconBtn("ok")}>{Ic.check(13)}</button>
+            <button title={f.newTag?"Create tag":"Accept"} onClick={()=>f.newTag ? setEvidId(f.id) : decide(f,"accepted")} disabled={!canDecide} style={iconBtn("ok")}>{Ic.check(13)}</button>
             <button title="Reject" onClick={()=>decide(f,"rejected")} disabled={!canDecide} style={iconBtn("no")}>{Ic.x(11)}</button>
           </>) : (<>
             <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,fontWeight:600,color:s==="accepted"?T.green:T.rose}}>
@@ -60732,7 +60932,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace}) => {
     <AICEvidence f={evid} pos={evidIdx+1} total={navList.length} decision={evidDecision} canDecide={canDecide}
       onPrev={evidIdx>0 ? ()=>setEvidId(navList[evidIdx-1].id) : null}
       onNext={evidIdx>=0 && evidIdx<navList.length-1 ? ()=>setEvidId(navList[evidIdx+1].id) : null}
-      onDecide={decideInDrawer} onUndo={(f)=>{ undo(f); setEvidId(null); }}
+      onDecide={decideInDrawer} approverFor={approverFor} onUndo={(f)=>{ undo(f); setEvidId(null); }}
       onClose={()=>setEvidId(null)} onNav={onNav}/>
     <AICRunDrawer draft={edit} existing={edit && st.profiles.some(x=>x.id===edit.id)}
       onClose={()=>setEdit(null)} onSave={saveRun} onDelete={removeRun} platform={st.settings}/>
