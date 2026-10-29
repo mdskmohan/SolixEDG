@@ -3699,7 +3699,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               <div style={{display:"flex",alignItems:"center",padding:"8px 20px",borderBottom:`1px solid ${T.border}`,background:T.bgSurface,position:"sticky",top:0,zIndex:1}}>
                 <span style={{flex:1,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Term</span>
                 <span style={{width:110,flexShrink:0,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Status</span>
-                <span style={{width:150,flexShrink:0,paddingLeft:12,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Owner</span>
+                <span style={{width:150,flexShrink:0,paddingLeft:12,fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>Owner(s)</span>
               </div>
               {catTerms.map(t=>{
                 const cm=CERT_META[t.cert]||CERT_META.Draft;
@@ -7363,7 +7363,7 @@ const QualityView = ({onToast=()=>{}}) => {
                         <input value={suiteCfg.desc} onChange={e=>setSuiteCfg(c=>({...c,desc:e.target.value}))} placeholder="e.g. Checks required for FP&A sign-off" style={box}/>
                       </div>
                       <div>
-                        <label style={lab}>Owner</label>
+                        <label style={lab}>Owner(s)</label>
                         <select value={suiteCfg.owner} onChange={e=>setSuiteCfg(c=>({...c,owner:e.target.value}))} style={{...box,cursor:"pointer"}}>
                           {TEAMS.map(t=><option key={t} value={t}>{t}</option>)}
                         </select>
@@ -7876,7 +7876,7 @@ const QualityView = ({onToast=()=>{}}) => {
 
               {/* Tags */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tags</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag(s)</label>
                 <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
                   onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
                   {tcTags.map(t=>(
@@ -7891,7 +7891,7 @@ const QualityView = ({onToast=()=>{}}) => {
 
               {/* Glossary Terms */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Terms</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Term(s)</label>
                 <div style={{border:`1.5px solid ${T.border}`,borderRadius:9,padding:"6px 10px",background:T.bgElevated,display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",minHeight:38,cursor:"text"}}
                   onClick={e=>e.currentTarget.querySelector("input")?.focus()}>
                   {tcGlossary.map(t=>(
@@ -10987,13 +10987,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         </div>
                         {/* Owner */}
                         <div>
-                          <label style={lbl3}>Owner</label>
+                          <label style={lbl3}>Owner(s)</label>
                           <input type="text" value={bd.owner||""} onChange={e=>setPolBulkDraft(d=>({...d,owner:e.target.value}))} placeholder="e.g. john.smith" style={inp3}
                             onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                         </div>
                         {/* Stewards */}
                         <div>
-                          <label style={lbl3}>Stewards</label>
+                          <label style={lbl3}>Steward(s)</label>
                           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                             {(bd.stewards||[]).map(s=>(
                               <span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 9px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`}}>
@@ -11050,7 +11050,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                         </div>
                         {/* Tags */}
                         <div>
-                          <label style={lbl3}>Tags</label>
+                          <label style={lbl3}>Tag(s)</label>
                           <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                             {(bd.tags||[]).map(t=>(
                               <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px 2px 9px",borderRadius:5,background:`${T.accent}10`,color:T.accent,border:`1px solid ${T.accent}28`}}>
@@ -16545,7 +16545,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       const lockedFws = new Set(ed.articles.filter(lockedArt).map(a=>a.fw));
       body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:640}}>
         {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to the articles it satisfies.")}
-        {(isAdmin||!ed.id||ed.owner===me) ? <CatFieldDropdown label="Owner" multi={false} options={PM2_USERS} selected={ed.owner} onChange={v=>setE("owner",v||ed.owner)} placeholder="Search and select owners…"/> : <div><label style={lbl}>Owner</label><div style={{fontSize:12.5,color:T.text}}>{ed.owner}</div></div>}
+        {(isAdmin||!ed.id||ed.owner===me) ? <CatFieldDropdown label="Owner" multi={false} options={PM2_USERS} selected={ed.owner} onChange={v=>setE("owner",v||ed.owner)} placeholder="Search and select owners…"/> : <div><label style={lbl}>Owner(s)</label><div style={{fontSize:12.5,color:T.text}}>{ed.owner}</div></div>}
         <CatFieldDropdown label="Stewards" options={PM2_USERS.filter(u=>u!==ed.owner)} selected={ed.stewards} onChange={v=>setE("stewards",v)} placeholder="Search and select stewards…"/>
         <div>
           <CatFieldDropdown label="Regulatory Frameworks" options={fwOpts.map(f=>f.name)} selected={ed.fwSel.map(id=>pm2Fw(id)?.name).filter(Boolean)}
@@ -16619,7 +16619,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
         <div><label style={lbl}>Kind</label><select value={fwEd.type} onChange={e=>setF("type",e.target.value)} style={selStyle}>{["Internal","Contractual","Industry","Regional"].map(o=><option key={o}>{o}</option>)}</select></div>
         <div><label style={lbl}>Applies where</label><input value={fwEd.jurisdiction} onChange={e=>setF("jurisdiction",e.target.value)} placeholder="e.g. Company-wide, EU subsidiaries" style={{...inStyle,width:240}}/></div>
-        <div><label style={lbl}>Owner</label>{userSel(fwEd.owner, v=>setF("owner",v))}</div>
+        <div><label style={lbl}>Owner(s)</label>{userSel(fwEd.owner, v=>setF("owner",v))}</div>
       </div>
       <div><label style={lbl}>Data it covers</label>
         <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>{["ALL",...Object.keys(PM2_CLASS_META)].map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={fwEd.covers.includes(c)} onChange={e=>setF("covers",e.target.checked?(c==="ALL"?["ALL"]:[...fwEd.covers.filter(x=>x!=="ALL"),c]):fwEd.covers.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{c==="ALL"?"All classified data":PM2_CLASS_META[c].label}</label>)}</div></div>
@@ -19393,7 +19393,7 @@ const AssetLineageFull=({asset})=>{
                         {cMeta?.owner&&(
                           <div>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Owner</div>
+                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Owner(s)</div>
                               <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
                             </div>
                             <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(238,36,36,.06)",borderTop:"1px solid rgba(238,36,36,.15)",borderRight:"1px solid rgba(238,36,36,.15)",borderBottom:"1px solid rgba(238,36,36,.15)",borderLeft:"3px solid #ee2424"}}>
@@ -19407,7 +19407,7 @@ const AssetLineageFull=({asset})=>{
                         {cMeta?.steward&&(
                           <div>
                             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Steward</div>
+                              <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em"}}>Steward(s)</div>
                               <span style={{fontSize:9.5,color:"#94a3b8",fontStyle:"italic"}}>Inherited</span>
                             </div>
                             <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
@@ -19420,7 +19420,7 @@ const AssetLineageFull=({asset})=>{
                         {/* Tags */}
                         {cMeta?.tags&&cMeta.tags.length>0&&(
                           <div>
-                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Tags</div>
+                            <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Tag(s)</div>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {cMeta.tags.map(t=>{const c=TAG_C_L[t]||{bg:"#f1f5f9",color:"#64748b",border:"#e2e8f0"};return(
                                 <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
@@ -19577,21 +19577,21 @@ const AssetLineageFull=({asset})=>{
                     </div>
                   </div>}
                   <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                    <SLabel>Owner</SLabel>
+                    <SLabel>Owner(s)</SLabel>
                     <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
                       <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent,flexShrink:0}}>{selMeta.owner.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}</div>
                       <span style={{fontSize:12,color:T.accent,fontWeight:500}}>{selMeta.owner}</span>
                     </div>
                   </div>
                   {selMeta.steward&&<div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
-                    <SLabel>Steward</SLabel>
+                    <SLabel>Steward(s)</SLabel>
                     <div style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",borderTop:"1px solid rgba(217,119,6,.2)",borderRight:"1px solid rgba(217,119,6,.2)",borderBottom:"1px solid rgba(217,119,6,.2)",borderLeft:"3px solid #d97706"}}>
                       <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706",flexShrink:0}}>{selMeta.steward.split(".").map(s=>s[0]?.toUpperCase()||"").join("")}</div>
                       <span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{selMeta.steward}</span>
                     </div>
                   </div>}
                   {selMeta.tags&&selMeta.tags.length>0&&<div style={{padding:"14px 16px"}}>
-                    <SLabel>Tags</SLabel>
+                    <SLabel>Tag(s)</SLabel>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                       {selMeta.tags.map(t=>{const c=tagC(t);return(
                         <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
@@ -20922,7 +20922,7 @@ const AssetContractTab = ({asset,onToast})=>{
       {/* Owners + Stewards */}
       <div style={{display:"flex",gap:32,flexWrap:"wrap",marginTop:16,paddingTop:16,borderTop:`1px solid ${T.border}`}}>
         <div>
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Owners</div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Owner(s)</div>
           <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
             {(contract.owners||[]).length
               ? (contract.owners||[]).map(u=>(
@@ -20933,7 +20933,7 @@ const AssetContractTab = ({asset,onToast})=>{
           </div>
         </div>
         <div>
-          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Stewards</div>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Steward(s)</div>
           <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
             {(contract.stewards||[]).length
               ? (contract.stewards||[]).map(u=>(
@@ -22091,7 +22091,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
 
                 {/* Tags */}
                 <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tags</label>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Tag(s)</label>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:aqTcTags.length>0?8:0}}>
                     {aqTcTags.map((tag,i)=>(
                       <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:99,background:T.accentDim,border:`1px solid ${T.accent}33`,color:T.accent}}>
@@ -22109,7 +22109,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
 
                 {/* Glossary Terms */}
                 <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Terms</label>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Glossary Term(s)</label>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:aqTcGlossary.length>0?8:0}}>
                     {aqTcGlossary.map((term,i)=>(
                       <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"3px 9px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
@@ -23565,6 +23565,37 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
         {/* ── Right metadata sidebar — Overview tab only ── */}
         {tab==="overview"&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
+          {/* DOMAIN */}
+          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+            <MetaLabel onEdit={()=>{setDomainOpen(p=>!p);setDomainSearch("");}}>Domain</MetaLabel>
+            {data.domain?(
+              <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+                <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
+              </div>
+            ):(
+              <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>
+            )}
+            {domainOpen&&(
+              <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+                <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
+                  <input autoFocus placeholder="Search domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
+                    style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div style={{maxHeight:180,overflowY:"auto"}}>
+                  {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
+                    <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                      onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                      {d}
+                      {data.domain===d&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* DETAILS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
             <MetaLabel>Details</MetaLabel>
@@ -23590,40 +23621,9 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             </div>
           </div>
 
-          {/* DOMAIN */}
-          <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{setDomainOpen(p=>!p);setDomainSearch("");}}>Domain</MetaLabel>
-            {data.domain?(
-              <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
-                <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
-              </div>
-            ):(
-              <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domain set</span>
-            )}
-            {domainOpen&&(
-              <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
-                <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
-                  <input autoFocus placeholder="Search domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
-                    style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                </div>
-                <div style={{maxHeight:180,overflowY:"auto"}}>
-                  {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
-                    <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
-                      style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
-                      onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
-                      {d}
-                      {data.domain===d&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* OWNERS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owners</MetaLabel>
+            <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owner(s)</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
               {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
@@ -23663,7 +23663,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* STEWARDS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Stewards</MetaLabel>
+            <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Steward(s)</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
               {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
@@ -23703,7 +23703,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* TAGS */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tags</MetaLabel>
+            <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tag(s)</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
               {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
@@ -23740,7 +23740,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 
           {/* BUSINESS GLOSSARY */}
           <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-            <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Business Glossary</MetaLabel>
+            <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Glossary Term(s)</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
               {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
@@ -24000,7 +24000,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
               <span style={{fontSize:13,fontWeight:600,color:T.text,display:"block",marginBottom:12}}>Ownership</span>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
                 <div>
-                  <SLabel>Owners</SLabel>
+                  <SLabel>Owner(s)</SLabel>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {(asset.owners||[asset.owner]).map(o=>(
                       <div key={o} style={{display:"flex",alignItems:"center",gap:8}}>
@@ -24011,7 +24011,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
                   </div>
                 </div>
                 <div>
-                  <SLabel>Stewards</SLabel>
+                  <SLabel>Steward(s)</SLabel>
                   <div style={{display:"flex",flexDirection:"column",gap:6}}>
                     {(asset.stewards||[asset.steward]).filter(Boolean).map(s=>(
                       <div key={s} style={{display:"flex",alignItems:"center",gap:8}}>
@@ -25850,7 +25850,7 @@ const DbtOnTablePanel = ({asset,onAsset})=>{
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// APPLICATION KNOWLEDGE GRAPH PROFILE — tabs Overview · Tables · Relationships · Lineage ·
+// APPLICATION KNOWLEDGE GRAPH PROFILE — tabs Overview · Assets · Relationships · Lineage ·
 // Versions · Synonyms. Everything EAI owns renders without an edit control.
 // ═══════════════════════════════════════════════════════════════════════════
 const akgTableAsset = (m,tb) => ASSETS.find(a=>a.akgKey===akgKeyOf(m,tb));
@@ -26787,7 +26787,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                     return (
                       <div>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Owners</div>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Owner(s)</div>
                           <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
                         </div>
                         {owners.length===0
@@ -26811,7 +26811,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                     return (
                       <div>
                         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Stewards</div>
+                          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Steward(s)</div>
                           <span style={{fontSize:9.5,color:T.textMuted,fontStyle:"italic"}}>Inherited</span>
                         </div>
                         {stewards.length===0
@@ -26837,7 +26837,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                     const visibleTags=showAllColTags?colTags:colTags.slice(0,3);
                     return (
                       <div style={{position:"relative"}}>
-                        <MetaLabel onEdit={()=>{setColTagModalOpen(true);setColTagModalSearch("");}}>Tags</MetaLabel>
+                        <MetaLabel onEdit={()=>{setColTagModalOpen(true);setColTagModalSearch("");}}>Tag(s)</MetaLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {colTags.length===0&&!aiColTags.length&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
                           {aiColTags.map(t=>{const c=ctc(t.tag); const pend=t.status==="pending"; return(
@@ -26883,7 +26883,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                     const colGlTerms = colGlTermsMap[selCol.name]||[];
                     return (
                       <div>
-                        <MetaLabel onEdit={()=>{setColGlOpen(p=>!p);setColGlSearch("");}}>Business Glossary</MetaLabel>
+                        <MetaLabel onEdit={()=>{setColGlOpen(p=>!p);setColGlSearch("");}}>Glossary Term(s)</MetaLabel>
                         {colGlTerms.length===0
                           ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>
                           : <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -27083,6 +27083,37 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
       {/* ── Right metadata sidebar — Overview tab only ── */}
       {tab==="overview"&&<div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
 
+        {/* DOMAIN */}
+        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+          <MetaLabel onEdit={()=>{setDomainOpen(p=>!p);setDomainSearch("");}}>Domain</MetaLabel>
+          {data.domain?(
+            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+              <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
+            </div>
+          ):(
+            <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>
+          )}
+          {domainOpen&&(
+            <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+              <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
+                <input autoFocus placeholder="Search domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
+                  style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
+              </div>
+              <div style={{maxHeight:180,overflowY:"auto"}}>
+                {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
+                  <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                    style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
+                    onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
+                    {d}
+                    {data.domain===d&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* DETAILS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
           <MetaLabel>Details</MetaLabel>
@@ -27127,40 +27158,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
           </div>
         </div>
 
-        {/* DOMAIN */}
-        <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{setDomainOpen(p=>!p);setDomainSearch("");}}>Domain</MetaLabel>
-          {data.domain?(
-            <div style={{display:"inline-flex",alignItems:"center",padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
-              <span style={{fontSize:12,color:T.accent,fontWeight:600}}>{data.domain}</span>
-            </div>
-          ):(
-            <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No domain set</span>
-          )}
-          {domainOpen&&(
-            <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.accent}40`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
-              <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
-                <input autoFocus placeholder="Search domains…" value={domainSearch} onChange={e=>setDomainSearch(e.target.value)}
-                  style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-              </div>
-              <div style={{maxHeight:180,overflowY:"auto"}}>
-                {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
-                  <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
-                    style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
-                    onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
-                    {d}
-                    {data.domain===d&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.accent} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* OWNERS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owners</MetaLabel>
+          <MetaLabel onEdit={()=>{ if(canAssign){setOwnersOpen(p=>!p);setOwnersSearch("");} else if(!myPending("owner")) requestRole("owner"); }} cta={canAssign?null:(myPending("owner")?"Pending":"Request")}>Owner(s)</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
             {(showAllOwners?owners:owners.slice(0,3)).map((o,i)=>(
@@ -27207,7 +27207,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
         {/* STEWARDS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Stewards</MetaLabel>
+          <MetaLabel onEdit={()=>{ if(canAssign){setStewardsOpen(p=>!p);setStewardsSearch("");} else if(!myPending("steward")) requestRole("steward"); }} cta={canAssign?null:(myPending("steward")?"Pending":"Request")}>Steward(s)</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
             {(showAllStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
@@ -27254,7 +27254,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
         {/* TAGS */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tags</MetaLabel>
+          <MetaLabel onEdit={()=>{setTagsOpen(p=>!p);setTagsSearch("");}}>Tag(s)</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>
             {(()=>{
               // Prefer the governed assignment model (carries source provenance); fall back to plain string tags.
@@ -27387,7 +27387,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
         {/* BUSINESS GLOSSARY */}
         <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-          <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Business Glossary</MetaLabel>
+          <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Glossary Term(s)</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
             {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
@@ -27508,11 +27508,31 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 // ─────────────────────────────────────────────
 // CATALOG VIEW
 // ─────────────────────────────────────────────
+// Usage analytics: 30-day query (warehouse) or view (BI) count. The tier sets the band and the
+// name spreads assets inside it deterministically, so the order is stable between renders.
+// Assets with no usage data score 0 and sort last.
+const USAGE_BAND = {High:5000, Med:1500, Low:300};
+const assetUsage30d = (a)=>{
+  const base = USAGE_BAND[a.usage];
+  if(!base) return 0;
+  let h = 0; for(const ch of a.name) h = (h*31 + ch.charCodeAt(0)) >>> 0;
+  return base + (h % base);
+};
+// "3h ago" / "1w ago" / "just now" -> minutes; unknown values sort last.
+const agoMinutes = (s)=>{
+  if(!s || s==="—") return Number.MAX_SAFE_INTEGER;
+  if(/just now/i.test(s)) return 0;
+  const m = /(\d+)\s*(m|min|h|d|w|mo|y)/i.exec(s);
+  if(!m) return Number.MAX_SAFE_INTEGER;
+  const unit = {m:1,min:1,h:60,d:1440,w:10080,mo:43200,y:525600}[m[2].toLowerCase()];
+  return Number(m[1])*unit;
+};
+
 const CatalogView = ({onAsset})=>{
   const tagCtx = useTagCtx();
   const [q,         setQ]         = useState("");
   const [view,      setView]      = useState("table");
-  const [sortBy,    setSortBy]    = useState("relevance");
+  const [sortBy,    setSortBy]    = useState("name");
   const [panelOpen, setPanelOpen] = useState(true);
   const [selConnTypes,setSelConnTypes]= useState(new Set());
   const [selTypes,   setSelTypes]   = useState(new Set());
@@ -27544,7 +27564,7 @@ const CatalogView = ({onAsset})=>{
   },{});
 
   const toggle = (setter, val) => setter(prev => { const next = new Set(prev); next.has(val)?next.delete(val):next.add(val); return next; });
-  const sorts = [{v:"relevance",l:"Relevance"},{v:"quality",l:"Quality ↓"},{v:"name",l:"Name A–Z"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
+  const sorts = [{v:"name",l:"Name A–Z"},{v:"quality",l:"Quality ↓"},{v:"updated",l:"Recently Updated"},{v:"usage",l:"Popularity"}];
 
   const filtered = ASSETS.filter(a => {
     const mq  = !q || a.name.toLowerCase().includes(q.toLowerCase()) || (a.domain||"").toLowerCase().includes(q.toLowerCase()) || (a.tags||[]).some(t=>t.toLowerCase().includes(q.toLowerCase())) || (a.description||"").toLowerCase().includes(q.toLowerCase()) || (a.db||"").toLowerCase().includes(q.toLowerCase()) || (SCHEMA[a.name]||[]).some(c=>c.name.toLowerCase().includes(q.toLowerCase()));
@@ -27567,7 +27587,10 @@ const CatalogView = ({onAsset})=>{
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
-    if(sortBy==="usage")   return (b.usage==="High"?2:b.usage==="Med"?1:0)-(a.usage==="High"?2:a.usage==="Med"?1:0);
+    // Popularity is the 30-day query/view count from usage analytics, not the coarse tier:
+    // sorting on the tier alone left most rows tied, so the list barely moved.
+    if(sortBy==="usage")   return (assetUsage30d(b)-assetUsage30d(a)) || a.name.localeCompare(b.name);
+    if(sortBy==="updated") return (agoMinutes(a.updated)-agoMinutes(b.updated)) || a.name.localeCompare(b.name);
     return 0;
   });
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -27751,7 +27774,7 @@ const CatalogView = ({onAsset})=>{
               headerNote="Partial = known from an AKG, not yet scanned by EDG."
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Partial"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
             <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
-              items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
+              items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"},{val:"Deprecated",label:"Deprecated"}]}
               sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
               headerNote="Archived = removed from source. Deprecated = AKG unpublished in Data Sense. Both hidden by default."
               renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:item.val==="Deprecated"?"#7c3aed":"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
@@ -29503,7 +29526,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     {/* Owners */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Owners</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Owner(s)</div>
                         <button onClick={()=>{setDmOwnerOpen(p=>!p);setDmOwnerSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -29521,7 +29544,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     {/* Stewards */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Stewards</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Steward(s)</div>
                         <button onClick={()=>{setDmStewOpen(p=>!p);setDmStewSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#d97706";e.currentTarget.style.background="rgba(217,119,6,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -29539,7 +29562,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     {/* Tags */}
                     <div style={{padding:"14px 16px",borderBottom:`1px solid ${T.border}`}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Tags</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Tag(s)</div>
                         <button onClick={()=>{setDmTagOpen(p=>!p);setDmTagSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -29551,7 +29574,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     {/* Business Glossary */}
                     <div style={{padding:"14px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Business Glossary</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Glossary Term(s)</div>
                         <button onClick={()=>{setDmGlOpen(p=>!p);setDmGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -29922,7 +29945,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 
                     {/* Tags */}
                     <div>
-                      <label style={lblStyle}>Tags</label>
+                      <label style={lblStyle}>Tag(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                         {(st.tags||[]).map(t=>(
                           <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
@@ -29938,7 +29961,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 
                     {/* Glossary Terms */}
                     <div>
-                      <label style={lblStyle}>Glossary Terms</label>
+                      <label style={lblStyle}>Glossary Term(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                         {(st.glossaryTerms||[]).map(t=>(
                           <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
@@ -29966,7 +29989,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 
                     {/* Owners */}
                     <div style={{position:"relative"}}>
-                      <label style={lblStyle}>Owners</label>
+                      <label style={lblStyle}>Owner(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                         {(st.owners||[]).map(o=>(
                           <div key={o} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
@@ -29990,7 +30013,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 
                     {/* Stewards */}
                     <div style={{position:"relative"}}>
-                      <label style={lblStyle}>Stewards</label>
+                      <label style={lblStyle}>Steward(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                         {(st.stewards||[]).map(s=>(
                           <div key={s} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>
@@ -30163,7 +30186,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     </div>
                     {/* Tags */}
                     <div>
-                      <label style={lblStyle}>Tags</label>
+                      <label style={lblStyle}>Tag(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
                         {(editDd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
                         {(editDd.tags||[]).map(t=>(
@@ -30178,7 +30201,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     </div>
                     {/* Business Glossary */}
                     <div>
-                      <label style={lblStyle}>Business Glossary</label>
+                      <label style={lblStyle}>Glossary Term(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
                         {(editDd.glossaryTerms||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
                         {(editDd.glossaryTerms||[]).map(t=>(
@@ -30211,7 +30234,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     </div>
                     {/* Owners */}
                     <div>
-                      <label style={lblStyle}>Owners</label>
+                      <label style={lblStyle}>Owner(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
                         {(editDd.owners||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
                         {(editDd.owners||[]).map(o=>(
@@ -30248,7 +30271,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     </div>
                     {/* Stewards */}
                     <div>
-                      <label style={lblStyle}>Stewards</label>
+                      <label style={lblStyle}>Steward(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
                         {(editDd.experts||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
                         {(editDd.experts||[]).map(s=>(
@@ -30643,7 +30666,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
               {/* Owners picker */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owner(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndOwners.map(o=>(
                     <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
@@ -30679,7 +30702,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
               {/* Steward picker */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Steward</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Steward(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndExperts.map(o=>(
                     <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
@@ -30715,7 +30738,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
               {/* Glossary Terms */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Terms</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Term(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndGlossary.map(t=>(
                     <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
@@ -30731,7 +30754,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
               {/* Tags */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tags</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tag(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndTags.map(t=>(
                     <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
@@ -30885,7 +30908,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                 </div>
                 {/* Owners */}
                 <div>
-                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                  <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owner(s)</label>
                   <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                     {(editDd.owners||[]).map(o=>(
                       <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
@@ -31829,7 +31852,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </div>
               {/* Owners picker */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owners</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Owner(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {npOwners.map(o=>(
                     <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:T.accentDim,border:`1px solid ${T.accent}33`,borderLeft:`3px solid ${T.accent}`}}>
@@ -31865,7 +31888,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </div>
               {/* Stewards picker */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Stewards</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Steward(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {npStewards.map(o=>(
                     <div key={o} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 8px 3px 5px",borderRadius:5,background:"rgba(217,119,6,.1)",border:`1px solid rgba(217,119,6,.2)`,borderLeft:`3px solid #d97706`}}>
@@ -31901,7 +31924,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </div>
               {/* Tags */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tags</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Tag(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {npTags.map(t=>(
                     <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
@@ -31917,7 +31940,7 @@ const DataProductsView = ({onAsset, onNav}) => {
               </div>
               {/* Glossary Terms */}
               <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Terms</label>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Term(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {npGlossary.map(t=>(
                     <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
@@ -35053,7 +35076,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Accountable for the master. Approves merges above the trust threshold.</div>
                     </div>
                     <div>
-                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Stewards</label>
+                      <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Steward(s)</label>
                       <CatFieldDropdown label={null} placeholder="Select stewards…" options={KL_PEOPLE} selected={wStewards} onChange={setWStewards}/>
                       <div style={{fontSize:10.5,color:T.textMuted,marginTop:5}}>Clear the exceptions the resolver holds back.</div>
                     </div>
@@ -62176,7 +62199,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
         <div style={{display:"grid",gridTemplateColumns:COLS,gap:12,padding:"9px 16px",background:T.bgElevated,alignItems:"center",...th}}>
           <div>{selectable.length>0&&<input type="checkbox" checked={selectable.every(f=>sel.has(f.id))} style={{cursor:"pointer",margin:0}}
             onChange={e=>setSel(e.target.checked?new Set(selectable.map(f=>f.id)):new Set())}/>}</div>
-          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div>Owners</div><div>Stewards</div><div>Status</div><div/>
+          <div>Object</div><div>Object type</div><div>Suggested tag</div><div>Confidence</div><div>Evidence</div><div>Owner(s)</div><div>Steward(s)</div><div>Status</div><div/>
         </div>
         {shown.map(f=><SuggestionRow key={f.id} f={f}/>)}
         {!shown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>
@@ -62205,8 +62228,8 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
           </div>
         </div>
         <div style={{display:"flex",gap:16,alignItems:"center"}}>
-          <div><div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>Owners</div><PeopleCircles people={aicOwnersOf(run)}/></div>
-          <div><div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>Stewards</div><PeopleCircles people={aicStewardsOf(run)} tone={T.amber}/></div>
+          <div><div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>Owner(s)</div><PeopleCircles people={aicOwnersOf(run)}/></div>
+          <div><div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>Steward(s)</div><PeopleCircles people={aicStewardsOf(run)} tone={T.amber}/></div>
         </div>
         {canRun&&<Btn variant="primary" disabled={!run.enabled||aicJobLive(lj)} onClick={()=>runNow(run)}>{aicJobLive(lj)?"Running…":"Run now"}</Btn>}
         <AICMenu size={32} items={scanMenu(run, lj).filter(it=>!(it&&it.label&&/^(Run now|Running…)$/.test(it.label)))}/>
@@ -62257,7 +62280,7 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
       <div style={card}>
         {cardHead(scansShown.length===st.profiles.length ? `Scans · ${st.profiles.length}` : `Scans · ${scansShown.length} of ${st.profiles.length}`)}
         <div style={{display:"grid",gridTemplateColumns:SC,gap:12,padding:"9px 16px",background:T.bgElevated,...th}}>
-          <div>Name</div><div>Owners</div><div>Stewards</div><div>Status</div><div>Last run</div><div style={{textAlign:"right"}}>Pending</div><div/>
+          <div>Name</div><div>Owner(s)</div><div>Steward(s)</div><div>Status</div><div>Last run</div><div style={{textAlign:"right"}}>Pending</div><div/>
         </div>
         {!scansShown.length&&<div style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted,borderTop:`1px solid ${T.border}`}}>No results</div>}
         {scansShown.map(p=>{
