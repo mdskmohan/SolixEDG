@@ -57732,7 +57732,7 @@ const AID_FAMILIES = [
   {k:"container",  l:"Containers",                     types:["Database","Catalog","Schema","Bucket","Folder","Container","Site","Project","Power BI Workspace","Power BI App","Power BI Datasource","dbt Project"]},
   {k:"file",       l:"Files",                          types:["Object","Blob"]},
   {k:"bi",         l:"Dashboards & reports",           types:["Dashboard","Workbook","Worksheet","Story","Power BI Report","Power BI Dashboard","Power BI Page","Power BI Tile","dbt Exposure"]},
-  {k:"pipeline",   l:"Pipelines & transformations",    types:["Pipeline","Flow","Power BI Dataflow","dbt Model","dbt Snapshot","dbt Test"]},
+  {k:"pipeline",   l:"Pipelines & transformations",    types:["Pipeline","Flow","Power BI Dataflow","dbt Model","dbt Snapshot","dbt Test","Migration Config","Custom Config"]},
   {k:"metric",     l:"Metrics & semantic models",      types:["Metric","dbt Metric","dbt Semantic Model","Semantic View","Metric View"]},
   {k:"governance", l:"Glossary, tags, domains & data products", types:["Glossary term","Tag","Domain","Data product"]},
 ];
@@ -57856,6 +57856,8 @@ const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigque
   tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"EDG"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
+// Sources whose object types are fixed by the connector rather than read off the catalog.
+const AID_SOURCE_TYPES = {cdp:["Database","Schema","Table","Column","Migration Config","Custom Config"]};
 const aidSvc = (svc) => !svc ? "edg" : svc==="postgresql" ? "postgres" : svc;
 let _aidSources = null;
 const aidSources = () => {
@@ -57866,7 +57868,9 @@ const aidSources = () => {
   const famIx = t => RANK.indexOf(aidFamilyOf({type:t}));
   const order = Object.keys(AID_SOURCE_LABEL);
   const srcIx = k => { const i = order.indexOf(k); return i<0 ? 999 : i; };
+  Object.keys(AID_SOURCE_TYPES).forEach(k=>{ m[k] = m[k] || new Set(); });
   _aidSources = Object.keys(m).sort((x,y)=>srcIx(x)-srcIx(y)).map(k=>{
+    if(AID_SOURCE_TYPES[k]) return {k, l:AID_SOURCE_LABEL[k]||k, types:AID_SOURCE_TYPES[k]};
     const types = [...m[k]].sort((x,y)=>famIx(x)-famIx(y));
     if(types.some(t=>aidFamilyOf({type:t})==="table")) types.splice(types.filter(t=>famIx(t)<=1).length, 0, aidColType(k));
     return {k, l:AID_SOURCE_LABEL[k]||k, types};
