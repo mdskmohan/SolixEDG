@@ -18000,6 +18000,109 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
     </Card2>
   </div>
 );}
+// ── Sample data ──
+// One setting per connector: whether table and view profiles may preview rows, and the
+// most rows a preview may ask for. Rows are queried from the source when the tab opens
+// and are never stored in EDG.
+const SD_ROW_OPTS = [10,50,100];
+const sdKey = (v) => { const id = connIdFrom(v) || String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); return id==="postgresql" ? "postgres" : id; };
+const sdSupported = (v) => (scopeFor(v).objectTypes||[]).includes("Tables");
+const SD_TYPES = new Set(["Table","View"]);
+let _sdState = {};   // connector key -> {on, maxRows}
+const _sdSubs = new Set();
+const sdGet = (v) => _sdState[sdKey(v)] || {on:true, maxRows:100};
+const sdSet = (v, patch) => { const k=sdKey(v); _sdState = {..._sdState, [k]:{...sdGet(v), ...patch}}; _sdSubs.forEach(f=>f()); };
+const useSampleData = (v) => {
+  const [,force] = useState(0);
+  useEffect(()=>{ const f=()=>force(n=>n+1); _sdSubs.add(f); return ()=>_sdSubs.delete(f); },[]);
+  return sdGet(v);
+};
+// Stands in for the live query: same asset + row gives the same values, typed by column.
+const sdValue = (col, i, seed) => {
+  let h = seed + i*7919; for(const ch of col.name) h = (h*31 + ch.charCodeAt(0)) >>> 0;
+  const r = (n) => (h = (h*1103515245 + 12345) >>> 0) % n;
+  const n = col.name.toLowerCase(), t = String(col.type||"").toUpperCase();
+  if(col.pk) return String(100000 + i + 1);
+  if(n.includes("email")) return ["maya","dev","sarah","alex","james","priya","lena","omar"][r(8)]+"."+["chen","patel","kim","wu","oh","rao","berg","ali"][r(8)]+r(90)+"@example.com";
+  if(n.includes("phone")) return "+1 "+(200+r(799))+"-"+(100+r(899))+"-"+(1000+r(8999));
+  if(n.includes("first_name")||n==="name") return ["Ana","Ben","Chloe","Dev","Elif","Farah","Gus","Hana"][r(8)];
+  if(n.includes("last_name")) return ["Ortiz","Nakamura","Singh","Brown","Kowalski","Mensah"][r(6)];
+  if(n.includes("country")) return ["US","GB","DE","IN","JP","BR","CA"][r(7)];
+  if(n.includes("city")) return ["Austin","London","Berlin","Pune","Osaka","Toronto"][r(6)];
+  if(n.includes("status")) return ["completed","pending","shipped","cancelled","refunded"][r(5)];
+  if(n.includes("currency")) return ["USD","EUR","GBP","INR"][r(4)];
+  if(n.endsWith("_id")||n==="id") return String(1000 + r(90000));
+  if(t.startsWith("BOOL")) return r(2) ? "true" : "false";
+  if(t.includes("TIMESTAMP")||t.includes("DATETIME")) return `2026-${String(1+r(10)).padStart(2,"0")}-${String(1+r(28)).padStart(2,"0")} ${String(r(24)).padStart(2,"0")}:${String(r(60)).padStart(2,"0")}:${String(r(60)).padStart(2,"0")}`;
+  if(t.includes("DATE")) return `2026-${String(1+r(10)).padStart(2,"0")}-${String(1+r(28)).padStart(2,"0")}`;
+  if(t.includes("DECIMAL")||t.includes("NUMERIC")||t.includes("FLOAT")||t.includes("DOUBLE")) return (r(500000)/100).toFixed(2);
+  if(t.includes("INT")||t.includes("NUMBER")) return String(r(10000));
+  if(col.nullable && r(9)===0) return null;
+  return ["alpha","bravo","charlie","delta","echo","foxtrot"][r(6)]+"_"+r(1000);
+};
+
+const AssetSampleData = ({asset}) => {
+  const cfg = useSampleData(asset.service);
+  const cols = SCHEMA[asset.name]||SCHEMA.orders||[];
+  const opts = SD_ROW_OPTS.filter(n=>n<=cfg.maxRows);
+  const [rows, setRows] = useState(Math.min(10, cfg.maxRows));
+  const [state, setState] = useState("loading");   // loading | ready
+  const [fetchedAt, setFetchedAt] = useState(null);
+  const [run, setRun] = useState(0);
+  useEffect(()=>{ if(rows>cfg.maxRows) setRows(opts[opts.length-1]||10); },[cfg.maxRows]);
+  useEffect(()=>{
+    if(!cfg.on) return;
+    setState("loading");
+    const t = setTimeout(()=>{ setState("ready"); setFetchedAt(new Date()); }, 650);
+    return ()=>clearTimeout(t);
+  },[rows, run, cfg.on, asset.name]);
+  const seed = useMemo(()=>{ let h=7; for(const ch of asset.name) h=(h*33+ch.charCodeAt(0))>>>0; return h + run*104729; },[asset.name, run]);
+  const data = useMemo(()=>Array.from({length:rows},(_,i)=>cols.map(c=>sdValue(c,i,seed))),[rows, seed, asset.name]);
+  const conn = asset.connectionLabel || AID_SOURCE_LABEL[asset.service] || asset.service;
+
+  if(!cfg.on) return (
+    <div className="fadeIn"><Card2 style={{padding:"40px 24px",textAlign:"center"}}>
+      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>Sample data disabled</div>
+      <div style={{fontSize:12.5,color:T.textMuted}}>Disabled for {conn} in Settings › Connections › Advanced.</div>
+    </Card2></div>
+  );
+  const th = {padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap",background:T.bgElevated,position:"sticky",top:0,zIndex:1};
+  return <div className="fadeIn">
+    <Card2 style={{overflow:"hidden",padding:0}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+        <span style={{fontSize:12,color:T.textSub,fontWeight:600}}>Rows</span>
+        <select value={rows} onChange={e=>setRows(Number(e.target.value))}
+          style={{padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+          {opts.map(n=><option key={n} value={n}>{n}</option>)}
+        </select>
+        <span style={{fontSize:12,color:T.textMuted}}>{cols.length} columns</span>
+        <span style={{marginLeft:"auto",fontSize:11.5,color:T.textMuted}}>
+          {state==="loading" ? `Querying ${conn}…` : `${rows} rows · fetched ${fetchedAt?fetchedAt.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"}):""}`}
+        </span>
+        <Btn small onClick={()=>setRun(n=>n+1)} disabled={state==="loading"}>Refresh</Btn>
+      </div>
+      {state==="loading"
+        ? <div style={{padding:"48px 16px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Running SELECT … LIMIT {rows} on {conn}</div>
+        : <div style={{overflow:"auto",maxHeight:560}}>
+            <table style={{borderCollapse:"collapse",minWidth:"100%"}}>
+              <thead><tr>
+                <th style={{...th,width:44,textAlign:"right"}}>#</th>
+                {cols.map(c=><th key={c.name} style={th}>
+                  <div style={{color:T.text,fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{c.name}</div>
+                  <div style={{fontSize:10,fontWeight:500,marginTop:1}}>{c.type}</div>
+                </th>)}
+              </tr></thead>
+              <tbody>{data.map((r,i)=>(
+                <tr key={i} className="row-hover" style={{borderBottom:i<data.length-1?`1px solid ${T.border}`:"none"}}>
+                  <td style={{padding:"7px 14px",fontSize:11,color:T.textMuted,textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>{i+1}</td>
+                  {r.map((v,j)=><td key={j} style={{padding:"7px 14px",fontSize:12,color:v==null?T.textMuted:T.text,whiteSpace:"nowrap",fontFamily:"'Geist Mono',monospace",fontStyle:v==null?"italic":"normal"}}>{v==null?"NULL":v}</td>)}
+                </tr>))}</tbody>
+            </table>
+          </div>}
+    </Card2>
+  </div>;
+};
+
 const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
   const cols=SCHEMA[asset.name]||SCHEMA.orders||[];
   // Iceberg partitioning is HIDDEN: a query never names the partition column, so a steward
@@ -26452,7 +26555,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {key:"activity",label:"Audit Logs"},
       ]
     : [
-        {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
+        {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
+        ...(SD_TYPES.has(asset.type)&&sdSupported(asset.service)?[{key:"sample",label:"Sample Data"}]:[]),
+        {key:"lineage",label:"Lineage"},
         ...(dbtOnTable?[{key:"dbt",label:"dbt"}]:[]),
         ...(glueOnTable?[{key:"glue",label:"Glue"}]:[]),
         ...(bigidOnAsset?[{key:"bigid",label:"BigID"}]:[]),
@@ -26570,6 +26675,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
           : isBI
           ? <TableauFieldsPanel asset={data} onToast={onToast}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
+        {tab==="sample"    && <AssetSampleData asset={data}/>}
         {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data}/>}
         {tab==="dbttests"  && isDbt && <DbtTestsPanel asset={data} onToast={onToast}/>}
@@ -37142,6 +37248,7 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
 
   // Scope of the connector currently open in the config modal.
   const scopeForCfg = scopeFor(configTarget && configTarget.name);
+  const sdCfg = useSampleData(configTarget && configTarget.name);
   const statusColor = {Connected:T.green, Warning:T.amber, Available:T.textMuted};
   const statusBg    = {Connected:`${T.green}15`, Warning:`${T.amber}15`, Available:T.bgElevated};
 
@@ -37486,7 +37593,7 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
                 </div>
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Connection Settings</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:22}}>
-                  {[{l:"Connection Timeout (s)",ph:"30"},{l:"Query Timeout (s)",ph:"300"},{l:"Max Connection Pool",ph:"10"},{l:"Sample Data Rows",ph:"50"}].map(f=>(
+                  {[{l:"Connection Timeout (s)",ph:"30"},{l:"Query Timeout (s)",ph:"300"},{l:"Max Connection Pool",ph:"10"}].map(f=>(
                     <div key={f.l}>
                       <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:4}}>{f.l}</label>
                       <input placeholder={f.ph} style={{width:"100%",padding:"7px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
@@ -37494,6 +37601,22 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
                     </div>
                   ))}
                 </div>
+                {sdSupported(configTarget&&configTarget.name)&&<>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Sample Data</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:22}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
+                      <span style={{fontSize:11.5,color:T.textSub}}>Show sample data</span>
+                      <Toggle on={sdCfg.on} onChange={()=>sdSet(configTarget.name,{on:!sdCfg.on})}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,opacity:sdCfg.on?1:.5}}>
+                      <span style={{fontSize:11.5,color:T.textSub}}>Max rows per preview</span>
+                      <select value={sdCfg.maxRows} disabled={!sdCfg.on} onChange={e=>sdSet(configTarget.name,{maxRows:Number(e.target.value)})}
+                        style={{padding:"3px 8px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:11.5,outline:"none",fontFamily:"inherit"}}>
+                        {SD_ROW_OPTS.map(n=><option key={n} value={n}>{n}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                </>}
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Metadata Options</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   {[{l:"Include Views",v:true},{l:"Include Tags",v:true},{l:"Column Profiling",v:false},{l:"Mark Deleted Tables",v:true},{l:"Include Stored Procedures",v:false},{l:"Override Metadata",v:false}].map(f=>(
@@ -44850,6 +44973,8 @@ const AddServiceWizard = ({onClose, onDone}) => {
   const [iceCatalog,   setIceCatalog]  = useState("");
   const [enableLineage,   setEnableLineage]   = useState(true);
   const [enableProfiling, setEnableProfiling] = useState(false);
+  const [enableSample, setEnableSample] = useState(true);
+  const [sampleMax, setSampleMax] = useState(100);
   const [enableUsage,     setEnableUsage]     = useState(false);
   const [enableTagSync,   setEnableTagSync]   = useState(true);
   const aicSt = useAic();
@@ -44901,6 +45026,9 @@ const AddServiceWizard = ({onClose, onDone}) => {
     caps.endorsements&&{key:"endorsements", label:"Endorsements",
       desc:"Read Promoted and Certified endorsements from the tenant. They stay read-only: EDG certification is separate and lives on the asset.",
       value:enableTagSync, setter:setEnableTagSync},
+    (scope.objectTypes||[]).includes("Tables")&&{key:"sample", label:"Sample data",
+      desc:"Preview rows on table and view profiles. Queried from the source when opened; not stored in EDG.",
+      value:enableSample, setter:setEnableSample},
     // Structured sources only: classification needs columns.
     (scope.objectTypes||[]).includes("Columns")&&{key:"aic", label:"AI classification",
       desc:aicSt.settings.enabled ? "Suggest tags for new and changed objects" : "Disabled in Settings › AI",
@@ -44913,6 +45041,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
       aicSetIngest(svcName, aicCfg, "you", true);
       if(mode==="run") setTimeout(()=>aicStartJob(aicIngestId(svcName), "Ingestion · first sync", "ingestion"), 0);
     }
+    if((scope.objectTypes||[]).includes("Tables")) sdSet(connector, {on:enableSample, maxRows:sampleMax});
     onDone(svcName,connector,category,mode);
   };
 
@@ -45655,7 +45784,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 )}
                 <div style={{display:"flex",flexDirection:"column",gap:9}}>
                   {ingestionApps.map(app=>(<React.Fragment key={app.key}>
-                    <div style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:app.key==="aic"&&app.value?"9px 9px 0 0":9}}>
+                    <div style={{display:"flex",alignItems:"center",gap:14,padding:"11px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:(app.key==="aic"||app.key==="sample")&&app.value?"9px 9px 0 0":9}}>
                       <Toggle on={app.value} onChange={app.disabled?undefined:()=>app.setter(v=>!v)} disabled={app.disabled}/>
                       <div style={{flex:1}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:app.disabled?T.textMuted:T.text}}>{app.label}</div>
@@ -45663,6 +45792,15 @@ const AddServiceWizard = ({onClose, onDone}) => {
                       </div>
                       <div style={{width:7,height:7,borderRadius:"50%",background:app.value?"#10b981":T.border,flexShrink:0,transition:"background .2s"}}/>
                     </div>
+                    {app.key==="sample"&&app.value&&(
+                      <div style={{marginTop:-10,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 9px 9px",display:"flex",alignItems:"center",gap:10}}>
+                        <label style={{fontSize:11,fontWeight:600,color:T.textSub}}>Max rows per preview</label>
+                        <select value={sampleMax} onChange={e=>setSampleMax(Number(e.target.value))}
+                          style={{padding:"5px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"}}>
+                          {SD_ROW_OPTS.map(n=><option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                    )}
                     {app.key==="aic"&&app.value&&(
                       <div style={{marginTop:-10,padding:"14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderTop:"none",borderRadius:"0 0 9px 9px"}}>
                         <AICIngestFields cfg={aicCfg} onChange={setAicCfg} typeOptions={scope.objectTypes||[]}/>
@@ -45700,7 +45838,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
                 const objTypesStr = scope.objectTypes.length===0 ? "None — this source creates no assets"
                   : objTypes.length>0 ? objTypes.join(", ") : "All object types";
                 const fmtList = arr => (arr&&arr.length) ? arr.join(", ") : "—";
-                const apps = ingestionApps.filter(a=>a.value).map(a=>a.label).join(", ") || "None";
+                const apps = ingestionApps.filter(a=>a.value).map(a=>a.key==="sample"?`${a.label} (max ${sampleMax} rows)`:a.label).join(", ") || "None";
                 const cards = [
                   {title:"Source & Connector", rows:[
                     ["Category", category||"—"],
@@ -57250,7 +57388,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     <div style={{display:'flex',alignItems:'center',paddingRight:6,background:isCatSel?T.accentDim:catHov?T.bgHover:'transparent',borderLeft:`2.5px solid ${isCatSel?T.accent:'transparent'}`,transition:'background .1s'}}
                       onMouseEnter={()=>setHovItem(`cat:${cat}`)}
                       onMouseLeave={()=>setHovItem(null)}>
-                      <button onClick={()=>setExpCat(p=>({...p,[cat]:!expanded}))}
+                      <button onClick={()=>{setSelCatId(cat);setSelTagId(null);setEditing(false);setNewPanelOpen(false);setNewCatPanelOpen(false);setExpCat(p=>({...p,[cat]:true}));}}
                         style={{flex:1,display:'flex',alignItems:'center',gap:5,padding:'6px 6px 6px 8px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
                         {/* Chevron */}
                         <span onClick={e=>{e.stopPropagation();setExpCat(p=>({...p,[cat]:!expanded}));}}
@@ -57401,55 +57539,149 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
             </div>
           )}
 
-          {/* ── Category detail panel ── */}
+          {/* ── Classification overview — same layout as a glossary's page ── */}
           {selCatId&&!selTag&&(()=>{
             const catTags = tagDefs.filter(td=>td.category===selCatId);
-            const cc = getCatStyle(selCatId);
+            const meta = catMeta[selCatId]||{};
+            // The classification's own colour if one was saved, else the colour its tags carry.
+            const catColor = meta.color || (catTags.find(td=>td.color)||{}).color;
+            const cc = catColor ? {color:catColor, bg:catColor+'1a'} : getCatStyle(selCatId);
+            const ownersOf = td => Array.isArray(td.owners)&&td.owners.length ? td.owners : (td.owner?[td.owner]:[]);
+            const catOwners = (meta.owners&&meta.owners.length) ? meta.owners : [...new Set(catTags.flatMap(ownersOf))];
+            const statusOf = td => td.cert||'Draft';
+            const total      = catTags.length;
+            const approved   = catTags.filter(td=>statusOf(td)==='Approved').length;
+            const inReview   = catTags.filter(td=>statusOf(td)==='In Review').length;
+            const deprecated = catTags.filter(td=>statusOf(td)==='Deprecated').length;
+            // Applied = share of tags used on at least one asset; an unused tag is the real gap in a taxonomy.
+            const unused     = catTags.filter(td=>assetCount(td.id)===0&&statusOf(td)!=='Deprecated');
+            const noDesc     = catTags.filter(td=>(!td.description||td.description.length<10)&&statusOf(td)!=='Deprecated');
+            const appliedPct = total>0 ? Math.round(((total-catTags.filter(td=>assetCount(td.id)===0).length)/total)*100) : 0;
+            const appliedColor = appliedPct>=80?"#16a34a":appliedPct>=50?"#d97706":"#e11d48";
+            const openTag = id => { setSelTagId(id); setSelCatId(null); setDetailTab('overview'); };
+            const AttentionList = ({items, tone}) => (
+              <>
+                {items.slice(0,5).map(td=>(
+                  <div key={td.id} onClick={()=>openTag(td.id)}
+                    style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:`1px solid ${tone.border}`,cursor:"pointer"}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:tone.color,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{td.name}</span>
+                    <span style={{fontSize:10.5,color:tone.dim,flexShrink:0,textTransform:'capitalize'}}>{selCatId}</span>
+                  </div>
+                ))}
+                {items.length>5&&<div style={{fontSize:11,color:tone.dim,paddingTop:6}}>+{items.length-5} more</div>}
+              </>
+            );
             return (
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                 {/* Header */}
-                <div style={{padding:'16px 24px',borderBottom:`1px solid ${T.border}`,background:T.bgSurface,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <span style={{width:13,height:13,borderRadius:'50%',background:cc.color||T.accent,display:'block',flexShrink:0,boxShadow:`0 0 0 3px ${(cc.color||T.accent)}33`}}/>
-                    <div>
-                      <div style={{fontSize:17,fontWeight:700,color:T.text,textTransform:'capitalize'}}>{selCatId}</div>
-                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{catTags.length} tag{catTags.length!==1?'s':''} in this category</div>
+                <div style={{padding:'24px 28px 20px',background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
+                  <div style={{display:'flex',alignItems:'center',gap:16,minWidth:0}}>
+                    <div style={{width:56,height:56,borderRadius:16,background:cc.bg||T.bgElevated,border:`1px solid ${(cc.color||T.border)}33`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <span style={{width:18,height:18,borderRadius:'50%',background:cc.color||T.accent,display:'block'}}/>
+                    </div>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:'-0.3px',marginBottom:4,textTransform:'capitalize'}}>{selCatId}</div>
+                      {meta.description&&<div style={{fontSize:13,color:T.textSub,lineHeight:1.5,maxWidth:520,marginBottom:8}}>{meta.description}</div>}
+                      <div style={{display:'flex',alignItems:'center',gap:16,fontSize:12,color:T.textMuted}}>
+                        <span><strong style={{color:T.text}}>{total}</strong> tag{total!==1?'s':''}</span>
+                        <span style={{display:'flex',alignItems:'center',gap:6}}>Owner(s) <PeopleCircles people={catOwners}/></span>
+                        {(meta.stewards||[]).length>0&&<span style={{display:'flex',alignItems:'center',gap:6}}>Steward(s) <PeopleCircles people={meta.stewards} tone={T.amber}/></span>}
+                      </div>
                     </div>
                   </div>
-                  <button onClick={()=>openEditCat(selCatId)}
-                    style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}}
-                    onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
-                    Edit
-                  </button>
+                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                    <Btn small ghost onClick={()=>openEditCat(selCatId)}>Edit</Btn>
+                    <Btn small variant="primary" onClick={()=>openAddTagIn(selCatId)}>+ Tag</Btn>
+                  </div>
                 </div>
                 {/* Body */}
-                <div style={{flex:1,overflowY:'auto',padding:'20px 24px'}}>
-                  <div style={{maxWidth:680,display:'flex',flexDirection:'column',gap:16}}>
-                    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
-                      <div style={{padding:'10px 16px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Tags</span>
-                        <button onClick={()=>{setNewPanelOpen(true);setNewDraft(d=>({...d,category:selCatId}));setSelCatId(null);}}
-                          style={{fontSize:11,padding:'3px 10px',borderRadius:6,background:T.accent,border:'none',color:'#fff',cursor:'pointer',fontWeight:600}}>+ New Tag</button>
+                <div style={{flex:1,overflowY:'auto'}}>
+                  {total===0 ? (
+                    <div style={{textAlign:'center',padding:'72px 20px'}}>
+                      <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>No tags yet</div>
+                      <Btn small variant="primary" onClick={()=>openAddTagIn(selCatId)}>+ New Tag</Btn>
+                    </div>
+                  ) : (
+                  <div style={{padding:'24px 28px',display:'flex',flexDirection:'column',gap:24}}>
+                    {/* Stats */}
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+                      {[
+                        {label:"Total Tags", value:total,      sub:"in classification", color:T.text,    dimColor:T.textMuted, bg:T.bgSurface, border:T.border},
+                        {label:"Approved",   value:approved,   sub:"ready to use",      color:"#16a34a", dimColor:"#86efac",   bg:"#f0fdf4",   border:"#bbf7d0"},
+                        {label:"In Review",  value:inReview,   sub:"pending sign-off",  color:"#d97706", dimColor:"#fcd34d",   bg:"#fffbeb",   border:"#fde68a"},
+                        {label:"Deprecated", value:deprecated, sub:"no longer used",    color:"#e11d48", dimColor:"#fca5a5",   bg:"#fff1f2",   border:"#fecdd3"},
+                        {label:"Applied",    value:`${appliedPct}%`, sub:"on at least one asset", color:appliedColor, dimColor:appliedColor, bg:appliedPct>=80?"#f0fdf4":appliedPct>=50?"#fffbeb":"#fff1f2", border:appliedPct>=80?"#bbf7d0":appliedPct>=50?"#fde68a":"#fecdd3"},
+                      ].map(m=>(
+                        <div key={m.label} style={{padding:"14px 16px",background:m.bg,border:`1px solid ${m.border}`,borderRadius:10}}>
+                          <div style={{fontSize:28,fontWeight:800,color:m.color,fontFamily:"'Geist Mono',monospace",lineHeight:1,marginBottom:4}}>{m.value}</div>
+                          <div style={{fontSize:12,fontWeight:600,color:m.color,marginBottom:2}}>{m.label}</div>
+                          <div style={{fontSize:11,color:m.dimColor,opacity:.75}}>{m.sub}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Needs Attention (only when there is something to fix) */}
+                    {(unused.length>0||noDesc.length>0)&&(
+                      <div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Needs Attention</div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                          <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"14px 16px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                              <span style={{fontSize:16,lineHeight:1}}>⚠</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Unused Tags</span>
+                              <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#fef3c7",color:"#d97706",border:"1px solid #fde68a"}}>{unused.length}</span>
+                            </div>
+                            <div style={{fontSize:12,color:"#78350f",marginBottom:10}}>These tags are not applied to any data asset yet.</div>
+                            <AttentionList items={unused} tone={{border:"#fde68a",color:"#d97706",dim:"#92400e"}}/>
+                          </div>
+                          <div style={{background:"#fff1f2",border:"1px solid #fecdd3",borderRadius:10,padding:"14px 16px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                              <span style={{fontSize:16,lineHeight:1}}>✕</span>
+                              <span style={{fontSize:13,fontWeight:700,color:"#881337"}}>Missing Descriptions</span>
+                              <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:"#ffe4e6",color:"#e11d48",border:"1px solid #fecdd3"}}>{noDesc.length}</span>
+                            </div>
+                            <div style={{fontSize:12,color:"#9f1239",marginBottom:10}}>These tags have no description or a very short one.</div>
+                            <AttentionList items={noDesc} tone={{border:"#fecdd3",color:"#e11d48",dim:"#881337"}}/>
+                          </div>
+                        </div>
                       </div>
-                      {catTags.length===0
-                        ? <div style={{padding:'32px 16px',textAlign:'center',fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No tags in this category yet</div>
-                        : catTags.map((td,i)=>{
-                            const cnt=assetCount(td.id);
-                            return (
-                              <div key={td.id} onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');}}
-                                style={{display:'flex',alignItems:'center',gap:10,padding:'11px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
-                                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                <span style={{width:9,height:9,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>
-                                <span style={{flex:1,fontSize:13,color:T.text,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
-                                {td.propagationMode&&td.propagationMode!=='none'&&<span style={{fontSize:10,padding:'1px 7px',borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,fontWeight:500,textTransform:'capitalize',flexShrink:0}}>{PROP_LABELS[td.propagationMode]}</span>}
-                                <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{cnt} asset{cnt!==1?'s':''}</span>
-                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              </div>
-                            );
-                          })
-                      }
+                    )}
+
+                    {/* Tags table */}
+                    <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.text}}>Tag(s)</span>
+                        <span style={{fontSize:11,color:T.textMuted,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:99,padding:'1px 8px'}}>{total}</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',padding:'8px 16px',borderBottom:`1px solid ${T.border}`,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>
+                        <span style={{flex:1}}>Name</span>
+                        <span style={{width:130}}>Status</span>
+                        <span style={{width:110}}>Owner(s)</span>
+                        <span style={{width:80,textAlign:'right'}}>Assets</span>
+                      </div>
+                      {catTags.map((td,i)=>{
+                        const sm = STATUS_META[statusOf(td)]||STATUS_META.Draft;
+                        const cnt = assetCount(td.id);
+                        return (
+                          <div key={td.id} onClick={()=>openTag(td.id)}
+                            style={{display:'flex',alignItems:'center',padding:'10px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                            <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
+                              <span style={{width:9,height:9,borderRadius:'50%',background:td.color||cc.color,flexShrink:0,display:'block'}}/>
+                              <span style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
+                            </div>
+                            <div style={{width:130}}>
+                              <span style={{fontSize:10.5,fontWeight:700,padding:'3px 10px',borderRadius:99,background:sm.bg,color:sm.color,border:`1px solid ${sm.border}`,display:'inline-flex',alignItems:'center',gap:4}}>{sm.icon} {statusOf(td)}</span>
+                            </div>
+                            <div style={{width:110}}><PeopleCircles people={ownersOf(td)}/></div>
+                            <span style={{width:80,textAlign:'right',fontSize:12,color:cnt?T.text:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{cnt}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
+                  )}
                 </div>
               </div>
             );
