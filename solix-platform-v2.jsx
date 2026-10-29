@@ -2951,7 +2951,6 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const [glossModalSearch,setGlossModalSearch] = useState("");
   const [showAllGlossOwners,  setShowAllGlossOwners]   = useState(false);
   const [showAllGlossStewards,setShowAllGlossStewards] = useState(false);
-  const [termMenuOpen,        setTermMenuOpen]         = useState(false);
 
   useEffect(()=>{
     if(!ctxMenu) return;
@@ -3448,8 +3447,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
-              <Btn small ghost onClick={()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}>Edit</Btn>
-              <Btn small variant="primary" onClick={()=>openModal("newTerm",{glossary:selG})}>+ Term</Btn>
+              <KebabMenu items={[{label:"Add Term",onClick:()=>openModal("newTerm",{glossary:selG})},{label:"Edit",onClick:()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}]}/>
             </div>
           </div>
         </div>
@@ -3777,27 +3775,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                   <span style={{fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,fontWeight:600}}>{term.domain}</span>
                 </div>
               </div>
-              <div style={{display:"flex",gap:5,flexShrink:0,position:"relative"}} onClick={e=>e.stopPropagation()}>
-                <button onClick={()=>setTermMenuOpen(p=>!p)}
-                  style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,transition:"all .15s"}}
-                  onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
-                {termMenuOpen&&(
-                  <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:210,overflow:"hidden"}}>
-                    <button onClick={()=>{openModal("editTerm",termForm(term));setTermMenuOpen(false);}}
-                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <span style={{fontSize:14,marginTop:1}}>🖊️</span>
-                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>Edit</div>
-                    </button>
-                    <button onClick={()=>{openModal("deleteTerm",{id:term.id,term:term.term});setTermMenuOpen(false);}}
-                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <span style={{fontSize:14,marginTop:1}}>🗑️</span>
-                      <div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete</div>
-                    </button>
-                  </div>
-                )}
-              </div>
+              <KebabMenu items={[{label:"Edit",onClick:()=>openModal("editTerm",termForm(term))},{label:"Delete",danger:true,onClick:()=>openModal("deleteTerm",{id:term.id,term:term.term})}]}/>
             </div>
             {/* Rejected banner */}
             {term.status==="Rejected"&&term.rejectionReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.25)",borderRadius:8,fontSize:12.5,color:"#e11d48",lineHeight:1.5}}><strong>Rejected: </strong>{term.rejectionReason}</div>)}
