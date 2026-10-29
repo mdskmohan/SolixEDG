@@ -60777,12 +60777,9 @@ const AIDescSettings = ({onToast}) => {
   const list = AID_INPUTS[fam];
   const onCount = list.filter(x=>x.required||S.inputs[fam][x.k]).length;
   const pk = fam==="table" ? S.length : fam;      // which prompt this family uses
-  const key = `${src}|${type}`;
-  const on = !(S.typesOff||{})[key];
   const action = fam==="column" ? "Describe columns" : "Suggest description";
   // every source + type that shares these inputs and this prompt
   const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
-  const offCount = sources.reduce((n,x)=>n+x.types.filter(t=>(S.typesOff||{})[`${x.k}|${t}`]).length,0);
 
   return (
     <div style={{maxWidth:900}}>
@@ -60799,26 +60796,15 @@ const AIDescSettings = ({onToast}) => {
             <div>
               <label style={lab}>Object type</label>
               <select value={type} onChange={e=>setType(e.target.value)} style={sel}>
-                {srcDef.types.map(t=><option key={t} value={t}>{t}{(S.typesOff||{})[`${src}|${t}`]?" · off":""}</option>)}
+                {srcDef.types.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
 
-          <div style={{display:"flex",alignItems:"center",gap:12,marginTop:16,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:600,color:T.text}}>✦ {action}</div>
-              <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{type} · {srcDef.l}</div>
-            </div>
-            <Toggle on={on} onChange={()=>{ put({typesOff:{...(S.typesOff||{}), [key]:on}}); onToast(`✦ ${action} ${on?"off":"on"} for ${type} · ${srcDef.l}`,"success"); }}/>
-          </div>
-
-          <div style={{...cap,margin:"18px 0 2px"}}>{aidFamLabel(fam)} · {onCount} of {list.length} on</div>
+          <div style={{...cap,margin:"16px 0 2px"}}>{aidFamLabel(fam)} · {onCount} of {list.length} on</div>
           <div title={shared.join(", ")} style={{fontSize:10.5,color:T.textMuted,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
             Shared with {shared.length} object types: {shared.slice(0,6).join(", ")}{shared.length>6?", …":""}</div>
-          <div style={{opacity:on?1:.5}}>
-            {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
-          </div>
-          {offCount>0&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:10}}>✦ off for {offCount} object type{offCount===1?"":"s"}</div>}
+          {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
         </AIDCard>
 
         {/* 2 · Prompt — the prompt for the selected object type */}
