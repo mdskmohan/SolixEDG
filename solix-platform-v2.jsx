@@ -1392,6 +1392,245 @@ const SCHEMA = {
   ],
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// APPLICATION KNOWLEDGE GRAPHS (Solix EAI) — EDG x EAI PRD v11, EAI-US-03 / 05 / 06
+// ═══════════════════════════════════════════════════════════════════════════
+// One catalog asset of type "Application Knowledge Graph" per AKG that Data Sense has
+// published (step 10). EAI owns the AKG's content - fingerprint, origin stamp, variant,
+// relationships, scope state, synonyms - so all of it is read-only here. Owner, steward,
+// domain, description, tags and glossary terms are EDG's and are never written to EAI.
+//
+// Every table or view an AKG describes becomes ONE of:
+//   LINKED  - its source is mapped to an EDG connection and the object is already in the
+//             catalog. The AKG attaches to that asset; EDG's scanned values never change.
+//   PARTIAL - anything else. Built from the AKG's own metadata (name, schema, columns,
+//             business name, description, row count), governable like any asset, and
+//             completed by the next EDG scan of that source.
+// Match key = mapped source + schema + object name, case-insensitive (`akgKey`).
+// Lineage runs table -> AKG and carries the table's scope state. Join paths are NOT
+// lineage - a join is not data flowing between tables - so they sit on Relationships.
+const AKG_SCOPE = {
+  active:            {l:"Active",           c:"#16a34a"},
+  dormant:           {l:"Dormant",          c:"#d97706"},
+  excluded:          {l:"Excluded",         c:"#6b7280"},
+  "variant-inactive":{l:"Variant-inactive", c:"#7c3aed"},
+  absent:            {l:"Absent",           c:"#e11d48"},
+};
+// Provenance EAI stamps on every business name and description (AKG step 5).
+const AKG_PROV = {
+  human:   {l:"Human",              c:"#16a34a"},
+  declared:{l:"Declared",           c:"#2563eb"},
+  ai:      {l:"AI-proposed in EAI", c:"#7c3aed"},
+};
+const _c = (n,type,bn,desc,prov,x={}) => ({n,type,bn,desc,prov,...x});
+const AKG_META = {
+  "SAP ECC":{
+    klId:"sg1", eaiId:"akg-sap-ecc-prd", version:7, status:"Published",
+    published:"2026-10-27 18:40", synced:"2026-10-29 06:00",
+    fingerprint:{vendor:"SAP", app:"ECC 6.0", release:"EHP8"}, variant:"New G/L",
+    builder:"akg-builder 1.4.2", declared:{tables:412, cols:3318},
+    descFromEai:true,
+    // Counts across the whole AKG; the Tables tab pages through it 100 at a time.
+    scopeCounts:{active:318, dormant:61, excluded:22, "variant-inactive":9, absent:2},
+    linkCounts:{linked:298, partial:114},
+    source:{key:"sap-prd", app:"SAP ECC 6.0", host:"sapecc-prd.corp.local", database:"PRD", conn:"SAP ECC Prod", service:"sap", mapped:true},
+    tables:[
+      {n:"VENDOR_MASTER", schema:"SAPSR3", t:"Table", scope:"active", cls:"Master", linked:true, rows:"184,220",
+       bn:"Supplier master", desc:"One row per supplier: legal name, tax ID, address and payment terms.", prov:"declared",
+       cols:[_c("LIFNR","CHAR(10)","Supplier number","Primary key of the supplier.","declared",{pk:true}),
+             _c("NAME1","CHAR(35)","Supplier name","Registered legal name.","declared"),
+             _c("STCD1","CHAR(16)","Supplier tax ID","Tax number 1 as registered with the tax authority.","human",{pii:true}),
+             _c("LAND1","CHAR(3)","Country","ISO country of the supplier's registered address.","declared"),
+             _c("SMTP_ADDR","CHAR(241)","Remittance email","Address payment advices are sent to.","ai",{pii:true})]},
+      {n:"KNA1", schema:"SAPSR3", t:"Table", scope:"active", cls:"Master", linked:true, rows:"3,104,880",
+       bn:"Customer master", desc:"General data for every customer account.", prov:"declared",
+       cols:[_c("KUNNR","CHAR(10)","Customer number","Primary key of the customer.","declared",{pk:true}),
+             _c("NAME1","CHAR(35)","Customer name","Registered name of the customer.","declared"),
+             _c("STCD1","CHAR(16)","Customer tax ID","Tax number 1.","human",{pii:true}),
+             _c("LAND1","CHAR(3)","Country","Country of the customer's address.","declared")]},
+      {n:"MARA", schema:"SAPSR3", t:"Table", scope:"active", cls:"Master", linked:true, rows:"82,410",
+       bn:"Material master", desc:"General material data shared across plants.", prov:"declared",
+       cols:[_c("MATNR","CHAR(18)","Material number","Primary key of the material.","declared",{pk:true}),
+             _c("MTART","CHAR(4)","Material type","Controls how the material is valued and procured.","declared"),
+             _c("MATKL","CHAR(9)","Material group","Grouping used for purchasing and reporting.","declared"),
+             _c("MEINS","UNIT(3)","Base unit","Unit stock is kept in.","declared")]},
+      {n:"EKKO", schema:"SAPSR3", t:"Table", scope:"active", cls:"Transaction", linked:true, rows:"2,940,112",
+       bn:"Purchase order header", desc:"One row per purchase order: supplier, date, company code and currency.", prov:"declared",
+       cols:[_c("EBELN","CHAR(10)","Purchase order number","Primary key of the purchase order.","declared",{pk:true}),
+             _c("LIFNR","CHAR(10)","Supplier number","Supplier the order is placed with.","declared"),
+             _c("BEDAT","DATS(8)","Order date","Date the purchase order was created.","declared"),
+             _c("BUKRS","CHAR(4)","Company code","Legal entity that owns the order.","declared"),
+             _c("WAERS","CUKY(5)","Currency","Currency of the order values.","declared")]},
+      {n:"EKPO", schema:"SAPSR3", t:"Table", scope:"active", cls:"Transaction", linked:true, rows:"11,208,553",
+       bn:"Purchase order item", desc:"One row per line on a purchase order.", prov:"declared",
+       cols:[_c("EBELN","CHAR(10)","Purchase order number","Order this line belongs to.","declared",{pk:true}),
+             _c("EBELP","NUMC(5)","Item number","Line number within the order.","declared",{pk:true}),
+             _c("MATNR","CHAR(18)","Material number","Material ordered on this line.","declared"),
+             _c("MENGE","QUAN(13)","Quantity","Quantity ordered.","declared"),
+             _c("NETWR","CURR(13)","Net order value","Net value of the line in order currency - the basis for spend.","ai")]},
+      {n:"RBKP", schema:"SAPSR3", t:"Table", scope:"active", cls:"Transaction", linked:false, rows:"1,402,301",
+       bn:"Supplier invoice header", desc:"Header of each incoming supplier invoice.", prov:"declared",
+       cols:[_c("BELNR","CHAR(10)","Invoice document","Primary key of the invoice.","declared",{pk:true}),
+             _c("LIFNR","CHAR(10)","Supplier number","Supplier who sent the invoice.","declared"),
+             _c("BLDAT","DATS(8)","Invoice date","Date printed on the invoice.","declared"),
+             _c("RMWWR","CURR(13)","Gross invoice amount","Invoice total including tax.","ai")]},
+      {n:"BSIK", schema:"SAPSR3", t:"Table", scope:"dormant", cls:"Transaction", linked:false, rows:"12,904",
+       bn:"Open supplier items", desc:"Supplier line items not yet cleared. No reads in 90 days.", prov:"ai",
+       cols:[_c("BELNR","CHAR(10)","Accounting document","Document the item belongs to.","declared",{pk:true}),
+             _c("LIFNR","CHAR(10)","Supplier number","Supplier the item is owed to.","declared"),
+             _c("DMBTR","CURR(13)","Amount in local currency","Open amount.","declared")]},
+      {n:"FAGLFLEXT", schema:"SAPSR3", t:"Table", scope:"active", cls:"Transaction", linked:false, rows:"8,410,200",
+       bn:"New G/L totals", desc:"Period totals per G/L account under the New G/L.", prov:"ai",
+       cols:[_c("RACCT","CHAR(10)","G/L account","Account the totals are for.","declared",{pk:true}),
+             _c("RYEAR","NUMC(4)","Fiscal year","Fiscal year of the totals.","declared",{pk:true}),
+             _c("HSL01","CURR(17)","Period 1 amount","Balance movement in period 1.","ai")]},
+      {n:"GLT0", schema:"SAPSR3", t:"Table", scope:"variant-inactive", cls:"Transaction", linked:false, rows:"0",
+       bn:"Classic G/L totals", desc:"Inactive because this system runs the New G/L variant.", prov:"declared", cols:[]},
+      {n:"ASSET_REG", schema:"SAPSR3", t:"Table", scope:"excluded", cls:"Master", linked:false, rows:"41,206",
+       bn:"Fixed asset register", desc:"Excluded from scope by the EAI admin.", prov:"human", cols:[]},
+      {n:"V_VENDOR_SPEND", schema:"SAPSR3", t:"View", scope:"active", cls:null, linked:false, rows:"—",
+       bn:"Supplier spend", desc:"Net order value per supplier and month.", prov:"ai",
+       cols:[_c("LIFNR","CHAR(10)","Supplier number","Supplier.","declared"),
+             _c("SPMON","NUMC(6)","Month","Calendar month.","declared"),
+             _c("NETWR","CURR(15)","Net spend","Sum of net order value.","ai")]},
+      {n:"BSAK", schema:"SAPSR3", t:"Table", scope:"absent", cls:"Transaction", linked:false, rows:"—",
+       bn:"Cleared supplier items", desc:"Expected for SAP ECC 6.0 EHP8 but not found in PRD.", prov:"declared", cols:[]},
+    ],
+    rels:[
+      {from:"EKPO", fk:["EBELN"], to:"EKKO", pk:["EBELN"], card:"N:1", hi:true,  by:"declared"},
+      {from:"EKKO", fk:["LIFNR"], to:"VENDOR_MASTER", pk:["LIFNR"], card:"N:1", by:"declared"},
+      {from:"EKPO", fk:["MATNR"], to:"MARA", pk:["MATNR"], card:"N:1", by:"declared"},
+      {from:"RBKP", fk:["LIFNR"], to:"VENDOR_MASTER", pk:["LIFNR"], card:"N:1", by:"declared"},
+      {from:"BSIK", fk:["LIFNR"], to:"VENDOR_MASTER", pk:["LIFNR"], card:"N:1", by:"declared"},
+      {from:"V_VENDOR_SPEND", fk:["LIFNR"], to:"VENDOR_MASTER", pk:["LIFNR"], card:"N:1", by:"inferred", conf:0.91},
+    ],
+    versions:[
+      {v:7, at:"2026-10-27", sum:"+2 tables (FAGLFLEXT, V_VENDOR_SPEND) · 1 scope change: BSIK active → dormant"},
+      {v:6, at:"2026-10-12", sum:"+1 table (RBKP) · 1 scope change: GLT0 active → variant-inactive (New G/L detected)"},
+      {v:5, at:"2026-09-30", sum:"First import · 409 tables"},
+    ],
+    synonyms:[
+      {w:"Vendor",               to:"VENDOR_MASTER",       auth:true},
+      {w:"Supplier",             to:"VENDOR_MASTER",       auth:true},
+      {w:"Supplier tax ID",      to:"VENDOR_MASTER.STCD1", auth:true},
+      {w:"Customer",             to:"KNA1",                auth:true},
+      {w:"Part",                 to:"MARA"},
+      {w:"PO",                   to:"EKKO",                auth:true},
+      {w:"PO line",              to:"EKPO"},
+      {w:"Spend",                to:"EKPO.NETWR"},
+      {w:"Invoice",              to:"RBKP"},
+    ],
+  },
+  "Oracle EBS":{
+    klId:"sg2", eaiId:"akg-oracle-ebs-prod", version:4, status:"Published",
+    published:"2026-10-28 09:15", synced:"2026-10-29 06:00",
+    fingerprint:{vendor:"Oracle", app:"E-Business Suite", release:"12.2.10"}, variant:null,
+    builder:"akg-builder 1.4.2", declared:{tables:388, cols:2904},
+    scopeCounts:{active:301, dormant:58, excluded:29, "variant-inactive":0, absent:0},
+    linkCounts:{linked:0, partial:388},
+    source:{key:"ebs-prod", app:"Oracle EBS 12.2", host:"ebs-db01.corp.local", database:"EBSPROD", conn:null, service:"oracle", mapped:false},
+    tables:[
+      {n:"AP_SUPPLIERS", schema:"AP", t:"Table", scope:"active", cls:"Master", rows:"41,880",
+       bn:"Supplier", desc:"One row per supplier across all operating units.", prov:"declared",
+       cols:[_c("VENDOR_ID","NUMBER","Supplier ID","Primary key.","declared",{pk:true}),
+             _c("VENDOR_NAME","VARCHAR2(240)","Supplier name","Legal name.","declared"),
+             _c("NUM_1099","VARCHAR2(30)","Supplier tax ID","US taxpayer ID.","human",{pii:true})]},
+      {n:"HZ_PARTIES", schema:"AR", t:"Table", scope:"active", cls:"Master", rows:"2,210,450",
+       bn:"Party", desc:"Trading Community party: customers and other organisations.", prov:"declared",
+       cols:[_c("PARTY_ID","NUMBER","Party ID","Primary key.","declared",{pk:true}),
+             _c("PARTY_NAME","VARCHAR2(360)","Party name","Name of the organisation or person.","declared")]},
+      {n:"PO_HEADERS_ALL", schema:"PO", t:"Table", scope:"active", cls:"Transaction", rows:"1,880,204",
+       bn:"Purchase order header", desc:"One row per purchase order.", prov:"declared",
+       cols:[_c("PO_HEADER_ID","NUMBER","PO ID","Primary key.","declared",{pk:true}),
+             _c("VENDOR_ID","NUMBER","Supplier ID","Supplier the order is placed with.","declared")]},
+      {n:"PO_LINES_ALL", schema:"PO", t:"Table", scope:"active", cls:"Transaction", rows:"7,402,117",
+       bn:"Purchase order line", desc:"One row per line on a purchase order.", prov:"declared",
+       cols:[_c("PO_LINE_ID","NUMBER","PO line ID","Primary key.","declared",{pk:true}),
+             _c("PO_HEADER_ID","NUMBER","PO ID","Order this line belongs to.","declared"),
+             _c("ITEM_ID","NUMBER","Item ID","Item ordered.","declared"),
+             _c("UNIT_PRICE","NUMBER","Unit price","Price per unit in order currency.","ai")]},
+      {n:"AP_INVOICES_ALL", schema:"AP", t:"Table", scope:"active", cls:"Transaction", rows:"960,388",
+       bn:"Supplier invoice", desc:"Supplier invoices across operating units.", prov:"ai",
+       cols:[_c("INVOICE_ID","NUMBER","Invoice ID","Primary key.","declared",{pk:true}),
+             _c("VENDOR_ID","NUMBER","Supplier ID","Supplier who sent the invoice.","declared"),
+             _c("INVOICE_AMOUNT","NUMBER","Invoice amount","Invoice total.","ai")]},
+      {n:"MTL_SYSTEM_ITEMS_B", schema:"INV", t:"Table", scope:"dormant", cls:"Master", rows:"612,040",
+       bn:"Item master", desc:"Items per inventory organisation.", prov:"declared", cols:[]},
+    ],
+    rels:[
+      {from:"PO_LINES_ALL", fk:["PO_HEADER_ID"], to:"PO_HEADERS_ALL", pk:["PO_HEADER_ID"], card:"N:1", hi:true, by:"declared"},
+      {from:"PO_HEADERS_ALL", fk:["VENDOR_ID"], to:"AP_SUPPLIERS", pk:["VENDOR_ID"], card:"N:1", by:"declared"},
+      {from:"AP_INVOICES_ALL", fk:["VENDOR_ID"], to:"AP_SUPPLIERS", pk:["VENDOR_ID"], card:"N:1", by:"declared"},
+      {from:"PO_LINES_ALL", fk:["ITEM_ID"], to:"MTL_SYSTEM_ITEMS_B", pk:["INVENTORY_ITEM_ID"], card:"N:1", by:"inferred", conf:0.88},
+    ],
+    versions:[
+      {v:4, at:"2026-10-28", sum:"1 scope change: MTL_SYSTEM_ITEMS_B active → dormant"},
+      {v:3, at:"2026-10-20", sum:"First import · 388 tables"},
+    ],
+    synonyms:[
+      {w:"Vendor",   to:"AP_SUPPLIERS",       auth:true},
+      {w:"Supplier", to:"AP_SUPPLIERS",       auth:true},
+      {w:"Customer", to:"HZ_PARTIES"},
+      {w:"PO",       to:"PO_HEADERS_ALL",     auth:true},
+      {w:"Item",     to:"MTL_SYSTEM_ITEMS_B"},
+    ],
+  },
+  "JD Edwards E1":{
+    eaiId:"akg-jde-e1", version:2, status:"Deprecated", deprecatedAt:"2026-10-15",
+    published:"2026-08-04 12:00", synced:"2026-10-15 06:00",
+    fingerprint:{vendor:"Oracle", app:"JD Edwards EnterpriseOne", release:"9.2"}, variant:null,
+    builder:"akg-builder 1.3.0", declared:{tables:146, cols:1980},
+    scopeCounts:{active:0, dormant:0, excluded:0, "variant-inactive":0, absent:146},
+    linkCounts:{linked:0, partial:146},
+    source:{key:"jde-e1", app:"JD Edwards E1 9.2", host:"jde-db.corp.local", database:"JDEPROD", conn:null, service:"oracle", mapped:false},
+    tables:[
+      {n:"F0101", schema:"PRODDTA", t:"Table", scope:"absent", cls:"Master", rows:"—", bn:"Address book", desc:"Address book master.", prov:"declared", cols:[]},
+      {n:"F4311", schema:"PRODDTA", t:"Table", scope:"absent", cls:"Transaction", rows:"—", bn:"Purchase order detail", desc:"Purchase order detail lines.", prov:"declared", cols:[]},
+    ],
+    rels:[{from:"F4311", fk:["PDAN8"], to:"F0101", pk:["ABAN8"], card:"N:1", by:"declared"}],
+    versions:[
+      {v:2, at:"2026-10-15", sum:"Unpublished in Data Sense · marked Deprecated"},
+      {v:1, at:"2026-08-04", sum:"First import · 146 tables"},
+    ],
+    synonyms:[],
+  },
+};
+const akgKeyOf = (m,tb) => `${m.source.key}|${tb.schema}|${tb.n}`.toLowerCase();
+
+// The AKG assets themselves.
+const AKG_ASSETS = [
+  {id:7601, name:"SAP ECC", type:"Application Knowledge Graph", domain:"Procurement", owner:"maya.chen", owners:["maya.chen"], steward:"priya.nair", stewards:["priya.nair"], cert:"Approved", quality:0, usage:"", updated:"6h ago", service:"eai", connectionLabel:"Solix EAI", db:"SAP · ECC 6.0 · EHP8", tier:1, rows:"—", size:"—", tags:[], description:"Procurement, finance and master data of the production SAP ECC system, as mapped by Data Sense."},
+  // Imported with no owner: the profile reads Unowned until a steward assigns one.
+  {id:7602, name:"Oracle EBS", type:"Application Knowledge Graph", domain:"Procurement", owner:"", owners:[], steward:"dev.patel", stewards:["dev.patel"], cert:"Draft", quality:0, usage:"", updated:"6h ago", service:"eai", connectionLabel:"Solix EAI", db:"Oracle · E-Business Suite · 12.2.10", tier:2, rows:"—", size:"—", tags:[], description:""},
+  {id:7603, name:"JD Edwards E1", type:"Application Knowledge Graph", domain:"Supply Chain", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"], cert:"Deprecated", quality:0, usage:"", updated:"2w ago", service:"eai", connectionLabel:"Solix EAI", db:"Oracle · JD Edwards EnterpriseOne · 9.2", tier:3, rows:"—", size:"—", tags:[], description:"Retired JDE system. Unpublished in Data Sense on 15 Oct 2026.", akgDeprecated:true},
+];
+// Its tables and views: linked to the asset EDG already holds, or partial.
+const AKG_TABLE_ASSETS = [];
+(()=>{
+  let id = 7700;
+  const QUAL = {VENDOR_MASTER:93, KNA1:90, MARA:96, EKKO:94, EKPO:91};
+  Object.entries(AKG_META).forEach(([akg,m])=>m.tables.forEach(tb=>{
+    const key = akgKeyOf(m,tb);
+    if(AKG_TABLE_ASSETS.some(a=>a.akgKey===key)) return;   // two AKGs, one table -> one asset
+    const s = m.source;
+    const base = {id:id++, name:tb.n, type:tb.t, tier:2, size:"—", rows:tb.rows, usage:"", slaFreshness:"—", akgKey:key,
+      path:[s.database, tb.schema], assetLevel:tb.t==="View"?"view":"table"};
+    AKG_TABLE_ASSETS.push(tb.linked
+      // Linked: an asset EDG's own SAP connection already scanned. Its EDG values stand.
+      ? {...base, domain:"Procurement", owner:"maya.chen", owners:["maya.chen"], steward:"priya.nair", stewards:["priya.nair"],
+         cert:"Approved", quality:QUAL[tb.n]||88, updated:"1d ago", service:s.service, connectionLabel:s.conn,
+         db:`${s.conn} / ${tb.schema} / ${tb.n}`, tags:[], description:`${tb.bn}. Scanned by EDG from ${s.conn}.`}
+      // Partial: only what the AKG supplied, until an EDG connection scans the source.
+      : {...base, domain:"Procurement", owner:"", owners:[], steward:"", stewards:[],
+         cert:"Draft", quality:0, updated:"6h ago", service:s.service,
+         connectionLabel:s.mapped?s.conn:`Unmapped · ${s.host}`,
+         db:`${s.mapped?s.conn:s.host} / ${tb.schema} / ${tb.n}`, tags:tb.cls?[tb.cls]:[], description:tb.desc,
+         partial:true, partialFix:s.mapped?"scan":"map", partialConn:s.conn, partialAkg:akg});
+    SCHEMA[tb.n] = (tb.cols||[]).map(c=>({name:c.n, type:c.type, desc:c.desc, pii:!!c.pii, nullable:!c.pk, quality:"—", pk:!!c.pk}));
+  }));
+})();
+ASSETS.push(...AKG_ASSETS, ...AKG_TABLE_ASSETS);
+
 // Extended schema for new tables
 Object.assign(SCHEMA,{
   transactions:[
@@ -4131,6 +4370,7 @@ const SERVICE_LOGOS = {
   powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  eai:        <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   sap:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0FAAFF"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="Arial">SAP</text></svg>,
   salesforce: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M9 20c-1.7 0-3-1.3-3-3s1.3-3 3-3c.2-1.7 1.7-3 3.4-3 1.2 0 2.2.6 2.8 1.5.6-.9 1.7-1.5 2.9-1.5 1.9 0 3.4 1.5 3.4 3.4 1.4.2 2.5 1.4 2.5 2.9 0 1.7-1.3 3-3 3H9z" fill="white"/></svg>,
 };
@@ -4218,6 +4458,8 @@ const TYPE_META = {
   //    would give a steward 4,000 meaningless rows instead of one governable table with
   //    a schema. In a WAREHOUSE the opposite is true: see FORMAT_META below.
   "Iceberg Table": {c:"#1FA8DE", bg:"rgba(31,168,222,.12)", icon:"◮"},
+  // -- Solix EAI: one Application Knowledge Graph per application Data Sense maps --
+  "Application Knowledge Graph": {c:"#8b5cf6", bg:"rgba(139,92,246,.1)", icon:"⬡"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
@@ -25533,6 +25775,387 @@ const DbtOnTablePanel = ({asset,onAsset})=>{
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// APPLICATION KNOWLEDGE GRAPH PROFILE — tabs Overview · Tables · Relationships · Lineage ·
+// Versions · Synonyms. Everything EAI owns renders without an edit control.
+// ═══════════════════════════════════════════════════════════════════════════
+const akgTableAsset = (m,tb) => ASSETS.find(a=>a.akgKey===akgKeyOf(m,tb));
+// Which AKGs use a catalog table, and the table's scope state in each.
+const akgUsesOf = a => !a||!a.akgKey ? [] : Object.entries(AKG_META).flatMap(([akg,m])=>
+  m.tables.filter(tb=>akgKeyOf(m,tb)===a.akgKey).map(tb=>({akg, scope:tb.scope, status:m.status})));
+
+const AkgScopePill = ({s})=>{
+  const m = AKG_SCOPE[s]||AKG_SCOPE.active;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,fontWeight:600,color:m.c,background:`${m.c}14`,border:`1px solid ${m.c}33`,borderRadius:99,padding:"1px 8px",whiteSpace:"nowrap"}}>
+    <span style={{width:6,height:6,borderRadius:"50%",background:m.c}}/>{m.l}</span>;
+};
+const AkgPartialPill = ()=>(
+  <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>Partial · from AKG</span>
+);
+const AkgLinkedPill = ()=>(
+  <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"rgba(22,163,74,.1)",color:"#16a34a",border:"1px solid rgba(22,163,74,.3)",textTransform:"uppercase",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>Linked</span>
+);
+const AkgProvPill = ({p})=>{
+  const m = AKG_PROV[p]; if(!m) return null;
+  return <span style={{fontSize:10,fontWeight:600,color:m.c,background:`${m.c}12`,border:`1px solid ${m.c}30`,borderRadius:4,padding:"1px 6px",whiteSpace:"nowrap"}}>{p==="ai"?"✦ ":""}{m.l}</span>;
+};
+const AkgReadOnly = ()=>(
+  <span title="Owned by EAI. Change it in Data Sense." style={{fontSize:10,fontWeight:700,color:T.violet,background:T.violetDim,border:`1px solid ${T.violet}33`,borderRadius:4,padding:"2px 7px",whiteSpace:"nowrap",letterSpacing:"0.02em"}}>From EAI · read-only</span>
+);
+const AkgTh = ({cols})=>(
+  <thead><tr style={{background:T.bgElevated}}>
+    {cols.map(h=><th key={h} style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{h}</th>)}
+  </tr></thead>
+);
+// Getters, so a theme switch (Object.assign on T) is picked up at render time.
+const akgTd = {padding:"9px 14px",fontSize:12,get color(){return T.textSub;},verticalAlign:"top"};
+const akgMono = {fontFamily:"'Geist Mono',monospace",get color(){return T.text;}};
+
+const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
+  const m = AKG_META[asset.name];
+  const [editing,setEditing] = useState(false);
+  const [val,setVal] = useState(data.description||"");
+  if(!m) return null;
+  const owners = data.owners||[];
+  const total = Object.values(m.scopeCounts).reduce((s,n)=>s+n,0);
+  const fp = m.fingerprint;
+  return (
+  <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+    {m.status==="Deprecated"&&(
+      <div style={{padding:"10px 14px",borderRadius:8,background:"rgba(124,58,237,.08)",border:"1px solid rgba(124,58,237,.25)",fontSize:12.5,color:T.textSub}}>
+        <b style={{color:"#7c3aed"}}>Deprecated</b> · Unpublished in Data Sense on {m.deprecatedAt}. Kept in EDG with its history; syncing has stopped.
+      </div>
+    )}
+    {owners.length===0&&m.status!=="Deprecated"&&(
+      <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}40`,fontSize:12.5,color:T.textSub}}>
+        <b style={{color:T.amber}}>Unowned</b> · Inbox task “Assign an owner” sent to {(data.stewards||[])[0]||"the Connection Admin of Solix EAI"}.
+      </div>
+    )}
+
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Description" sub={m.descFromEai&&!editing?"From EAI · filled because the EDG description was empty":"Set in EDG · never sent to EAI"}
+          action={editing
+            ? <div style={{display:"flex",gap:6}}>
+                <Btn small ghost onClick={()=>{setData(d=>({...d,description:val}));setEditing(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
+                <Btn small ghost onClick={()=>{setVal(data.description||"");setEditing(false);}}>Cancel</Btn>
+              </div>
+            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditing(true)}>Edit</Btn>}/>
+        {editing
+          ? <textarea value={val} onChange={e=>setVal(e.target.value)} rows={3}
+              style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+          : <div style={{fontSize:12.5,color:data.description?T.textSub:T.textMuted,fontStyle:data.description?"normal":"italic",lineHeight:1.65}}>{data.description||"No description"}</div>}
+      </div>
+    </Card2>
+
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Application Knowledge Graph" action={<AkgReadOnly/>}/>
+        <DbtProps rows={[
+          ["EAI id", m.eaiId],
+          ["Version", `v${m.version}`],
+          ["Status", m.status],
+          ["Source application", m.source.app],
+          ["Fingerprint", `${fp.vendor} · ${fp.app} · ${fp.release}`],
+          ["Configuration variant", m.variant||"—"],
+          ["Builder version", m.builder],
+          ["Declared tables · columns", `${m.declared.tables.toLocaleString()} · ${m.declared.cols.toLocaleString()}`],
+          ["Published in Data Sense", m.published],
+          ["Last synced", m.synced],
+        ]}/>
+      </div>
+    </Card2>
+
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Tables by scope state" sub={`${total.toLocaleString()} tables and views`} action={<AkgReadOnly/>}/>
+        <div style={{display:"flex",height:10,borderRadius:99,overflow:"hidden",background:T.bgElevated,marginBottom:12}}>
+          {Object.entries(m.scopeCounts).filter(([,n])=>n>0).map(([k,n])=>(
+            <div key={k} title={`${AKG_SCOPE[k].l}: ${n}`} style={{width:`${n/total*100}%`,background:AKG_SCOPE[k].c}}/>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+          {Object.entries(m.scopeCounts).map(([k,n])=>(
+            <div key={k} style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated}}>
+              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:T.textMuted,fontWeight:600}}>
+                <span style={{width:7,height:7,borderRadius:"50%",background:AKG_SCOPE[k].c}}/>{AKG_SCOPE[k].l}
+              </div>
+              <div style={{fontSize:18,fontWeight:700,color:T.text,marginTop:3}}>{n.toLocaleString()}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card2>
+
+    <Card2>
+      <div style={{padding:"14px 16px"}}>
+        <SH title="Source" sub="Match key: mapped source + schema + object name"
+          action={!m.source.mapped&&<Btn small ghost onClick={()=>onNav&&onNav("settings",{section:"connections"})}>Map source</Btn>}/>
+        <DbtProps rows={[
+          ["Source system (from EAI)", `${m.source.host} / ${m.source.database}`],
+          ["EDG connection", m.source.mapped?m.source.conn:"Unmapped"],
+          ["Linked assets", m.linkCounts.linked.toLocaleString()],
+          ["Partial assets", m.linkCounts.partial.toLocaleString()],
+        ]}/>
+      </div>
+    </Card2>
+  </div>
+  );
+};
+
+const AkgTablesPanel = ({asset,onAsset})=>{
+  const m = AKG_META[asset.name];
+  const [q,setQ] = useState("");
+  const [scope,setScope] = useState("all");
+  const [link,setLink] = useState("all");
+  const [open,setOpen] = useState(null);
+  if(!m) return null;
+  const rows = m.tables.map(tb=>({tb, a:akgTableAsset(m,tb)})).filter(({tb,a})=>
+    (!q || [tb.n,tb.bn,tb.schema].some(s=>(s||"").toLowerCase().includes(q.toLowerCase())))
+    && (scope==="all"||tb.scope===scope)
+    && (link==="all"||(link==="partial")===!!a?.partial));
+  const sel = {padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit"};
+  return (
+    <Card2 style={{overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:10,alignItems:"center"}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search tables and views…" style={{...sel,flex:1,outline:"none"}}/>
+        <select value={scope} onChange={e=>setScope(e.target.value)} style={sel}>
+          <option value="all">All scope states</option>
+          {Object.entries(AKG_SCOPE).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+        </select>
+        <select value={link} onChange={e=>setLink(e.target.value)} style={sel}>
+          <option value="all">Linked and partial</option>
+          <option value="linked">Linked</option>
+          <option value="partial">Partial</option>
+        </select>
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <AkgTh cols={["Table / view","Business name","Scope","Catalog asset","AKG entity type","Rows"]}/>
+        <tbody>
+          {rows.map(({tb,a})=>(
+            <React.Fragment key={tb.n}>
+              <tr className="row-hover" onClick={()=>setOpen(open===tb.n?null:tb.n)} style={{borderBottom:`1px solid ${T.border}`}}>
+                <td style={akgTd}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    <span style={{color:T.textMuted,fontSize:9,transform:open===tb.n?"rotate(90deg)":"none",display:"inline-block",transition:"transform .12s"}}>▶</span>
+                    <TypeBadge type={tb.t}/>
+                    <span style={{...akgMono,fontWeight:600}}>{tb.n}</span>
+                  </div>
+                  <div style={{fontSize:10.5,color:T.textMuted,marginLeft:16,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{tb.schema}</div>
+                </td>
+                <td style={akgTd}>{tb.bn}</td>
+                <td style={akgTd}><AkgScopePill s={tb.scope}/></td>
+                <td style={akgTd} onClick={e=>{e.stopPropagation(); a&&onAsset&&onAsset(a);}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
+                    {a?.archived ? <span style={{fontSize:11,color:T.amber}}>Archived in EDG</span> : a?.partial ? <AkgPartialPill/> : <AkgLinkedPill/>}
+                    <span style={{fontSize:11,color:T.accent}}>Open</span>
+                  </div>
+                </td>
+                <td style={akgTd}>{tb.cls?<span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{tb.cls}</span>:<span style={{color:T.textMuted}}>—</span>}</td>
+                <td style={{...akgTd,fontFamily:"'Geist Mono',monospace"}}>{tb.rows}</td>
+              </tr>
+              {open===tb.n&&(
+                <tr style={{borderBottom:`1px solid ${T.border}`,background:T.bgElevated}}>
+                  <td colSpan={6} style={{padding:"12px 16px 14px 38px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                      <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>{tb.desc}</span>
+                      <AkgProvPill p={tb.prov}/>
+                    </div>
+                    {tb.cols.length>0
+                      ? <table style={{width:"100%",borderCollapse:"collapse",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8}}>
+                          <AkgTh cols={["Column","Type","Business name","Description","Provenance"]}/>
+                          <tbody>{tb.cols.map(c=>(
+                            <tr key={c.n} style={{borderTop:`1px solid ${T.border}`}}>
+                              <td style={{...akgTd,...akgMono}}>{c.n}{c.pk&&<span style={{fontSize:9,color:T.amber,marginLeft:6,fontWeight:700}}>PK</span>}</td>
+                              <td style={{...akgTd,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{c.type}</td>
+                              <td style={akgTd}>{c.bn}</td>
+                              <td style={akgTd}>{c.desc}</td>
+                              <td style={akgTd}><AkgProvPill p={c.prov}/></td>
+                            </tr>))}
+                          </tbody>
+                        </table>
+                      : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No columns returned for this {tb.t.toLowerCase()}.</div>}
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          ))}
+          {rows.length===0&&<tr><td colSpan={6} style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No tables match</td></tr>}
+        </tbody>
+      </table>
+      <div style={{padding:"10px 16px",borderTop:`1px solid ${T.border}`,fontSize:11,color:T.textMuted,display:"flex",justifyContent:"space-between"}}>
+        <span>Showing {rows.length} of {m.declared.tables.toLocaleString()}</span><span>100 per page</span>
+      </div>
+    </Card2>
+  );
+};
+
+const AkgRelationshipsPanel = ({asset})=>{
+  const m = AKG_META[asset.name]; if(!m) return null;
+  return (
+    <Card2 style={{overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontSize:12,color:T.textMuted}}>{m.rels.length} join paths</span><AkgReadOnly/>
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <AkgTh cols={["From","Join keys","To","Cardinality","Structure","Origin"]}/>
+        <tbody>{m.rels.map((r,i)=>(
+          <tr key={i} style={{borderBottom:i<m.rels.length-1?`1px solid ${T.border}`:"none"}}>
+            <td style={{...akgTd,...akgMono,fontWeight:600}}>{r.from}</td>
+            <td style={{...akgTd,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{r.fk.map((k,j)=>`${r.from}.${k} = ${r.to}.${r.pk[j]}`).join(" AND ")}</td>
+            <td style={{...akgTd,...akgMono,fontWeight:600}}>{r.to}</td>
+            <td style={{...akgTd,fontFamily:"'Geist Mono',monospace"}}>{r.card}</td>
+            <td style={akgTd}>{r.hi?<span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.blueDim||"rgba(37,99,235,.08)",color:T.blue,border:`1px solid ${T.blue}33`}}>Header / item</span>:<span style={{color:T.textMuted}}>—</span>}</td>
+            <td style={akgTd}>{r.by==="declared"
+              ? <span>Declared in application metadata</span>
+              : <span style={{color:"#7c3aed"}}>✦ Inferred · {Math.round(r.conf*100)}%</span>}</td>
+          </tr>))}
+        </tbody>
+      </table>
+    </Card2>
+  );
+};
+
+// Table -> AKG edges, each labelled with the table's scope state. Used both on the AKG
+// (many tables -> one AKG) and on a table (one table -> the AKGs that use it).
+const AkgEdgeGraph = ({left, right, edges, onNode})=>{
+  const ROW=52, W=760, NW=250, RX=W-NW;
+  const H = Math.max(left.length, right.length, 2)*ROW + 16;
+  const yL = i => H/2 + (i-(left.length-1)/2)*ROW;
+  const yR = i => H/2 + (i-(right.length-1)/2)*ROW;
+  const Node = ({n,x,y})=>(
+    <div onClick={()=>n.asset&&onNode&&onNode(n.asset)} style={{position:"absolute",left:x,top:y-19,width:NW,height:38,boxSizing:"border-box",display:"flex",alignItems:"center",gap:8,padding:"0 10px",
+      background:T.bgSurface,border:`1px solid ${n.main?T.violet:T.border}`,borderLeft:`3px solid ${n.main?T.violet:(n.partial?T.amber:"#16a34a")}`,borderRadius:8,cursor:n.asset?"pointer":"default",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+      <ServiceIcon service={n.service} size={16}/>
+      <div style={{minWidth:0,flex:1}}>
+        <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</div>
+        <div style={{fontSize:10,color:T.textMuted}}>{n.sub}</div>
+      </div>
+      {n.partial&&<AkgPartialPill/>}
+    </div>
+  );
+  return (
+    <div style={{position:"relative",width:W,height:H,margin:"0 auto"}}>
+      <svg width={W} height={H} style={{position:"absolute",inset:0}}>
+        {edges.map((e,i)=>{
+          const y1=yL(e.l), y2=yR(e.r), c=AKG_SCOPE[e.scope].c, mx=(NW+RX)/2;
+          return <path key={i} d={`M${NW} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${RX} ${y2}`} fill="none" stroke={c} strokeWidth="1.6" strokeDasharray={e.scope==="active"?"":"5 4"} opacity=".8"/>;
+        })}
+      </svg>
+      {edges.map((e,i)=>{
+        const y = left.length>=right.length ? yL(e.l) : yR(e.r);
+        const x = left.length>=right.length ? NW+12 : RX-120;
+        return <div key={"l"+i} style={{position:"absolute",left:x,top:y-10}}><AkgScopePill s={e.scope}/></div>;
+      })}
+      {left.map((n,i)=><Node key={"L"+i} n={n} x={0} y={yL(i)}/>)}
+      {right.map((n,i)=><Node key={"R"+i} n={n} x={RX} y={yR(i)}/>)}
+    </div>
+  );
+};
+
+const AkgLineageShell = ({count, activeOnly, setActiveOnly, children})=>(
+  <Card2>
+    <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:14}}>
+      <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub,cursor:"pointer"}}>
+        <input type="checkbox" checked={activeOnly} onChange={e=>setActiveOnly(e.target.checked)}/> Active only
+      </label>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{Object.keys(AKG_SCOPE).map(k=><AkgScopePill key={k} s={k}/>)}</div>
+      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{count} edges · join paths are on Relationships</span>
+    </div>
+    <div style={{padding:"20px 16px",overflowX:"auto"}}>{children}</div>
+  </Card2>
+);
+
+const AkgLineagePanel = ({asset,onAsset})=>{
+  const m = AKG_META[asset.name];
+  const [activeOnly,setActiveOnly] = useState(false);
+  if(!m) return null;
+  const tbs = m.tables.filter(tb=>!activeOnly||tb.scope==="active");
+  const left = tbs.map(tb=>{ const a=akgTableAsset(m,tb); return {label:tb.n, sub:`${tb.t} · ${tb.schema}`, service:m.source.service, partial:!!a?.partial, asset:a}; });
+  const right = [{label:asset.name, sub:"Application Knowledge Graph", service:"eai", main:true}];
+  return (
+    <AkgLineageShell count={tbs.length} activeOnly={activeOnly} setActiveOnly={setActiveOnly}>
+      <AkgEdgeGraph left={left} right={right} edges={tbs.map((tb,i)=>({l:i,r:0,scope:tb.scope}))} onNode={onAsset}/>
+    </AkgLineageShell>
+  );
+};
+
+// Lineage of a table an AKG uses: the table, downstream to each AKG that depends on it.
+const AkgTableLineage = ({asset,onAsset})=>{
+  const [activeOnly,setActiveOnly] = useState(false);
+  const uses = akgUsesOf(asset).filter(u=>!activeOnly||u.scope==="active");
+  const left = [{label:asset.name, sub:`${asset.type} · ${asset.connectionLabel}`, service:asset.service, partial:!!asset.partial, main:true}];
+  const right = uses.map(u=>({label:u.akg, sub:`Application Knowledge Graph${u.status==="Deprecated"?" · Deprecated":""}`, service:"eai", asset:ASSETS.find(a=>a.name===u.akg&&a.type==="Application Knowledge Graph")}));
+  return (
+    <AkgLineageShell count={uses.length} activeOnly={activeOnly} setActiveOnly={setActiveOnly}>
+      {uses.length>0
+        ? <AkgEdgeGraph left={left} right={right} edges={uses.map((u,i)=>({l:0,r:i,scope:u.scope}))} onNode={onAsset}/>
+        : <div style={{textAlign:"center",fontSize:12.5,color:T.textMuted,padding:24}}>No active AKG uses this table</div>}
+    </AkgLineageShell>
+  );
+};
+
+const AkgVersionsPanel = ({asset})=>{
+  const m = AKG_META[asset.name]; if(!m) return null;
+  return (
+    <Card2 style={{overflow:"hidden"}}>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <AkgTh cols={["Version","Synced","Changes"]}/>
+        <tbody>{m.versions.map((v,i)=>(
+          <tr key={v.v} style={{borderBottom:i<m.versions.length-1?`1px solid ${T.border}`:"none"}}>
+            <td style={{...akgTd,...akgMono,fontWeight:600,whiteSpace:"nowrap"}}>v{v.v}{i===0&&<span style={{fontSize:9.5,fontWeight:700,marginLeft:8,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,fontFamily:"inherit"}}>CURRENT</span>}</td>
+            <td style={{...akgTd,whiteSpace:"nowrap"}}>{v.at}</td>
+            <td style={akgTd}>{v.sum}</td>
+          </tr>))}
+        </tbody>
+      </table>
+    </Card2>
+  );
+};
+
+const AkgSynonymsPanel = ({asset,onAsset})=>{
+  const m = AKG_META[asset.name];
+  const [q,setQ] = useState("");
+  if(!m) return null;
+  const rows = m.synonyms.filter(s=>!q||s.w.toLowerCase().includes(q.toLowerCase())||s.to.toLowerCase().includes(q.toLowerCase()));
+  const assetOf = to => { const tb=m.tables.find(t=>t.n===to.split(".")[0]); return tb&&akgTableAsset(m,tb); };
+  return (
+    <Card2 style={{overflow:"hidden"}}>
+      <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:10,alignItems:"center"}}>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search synonyms…"
+          style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none"}}/>
+        <AkgReadOnly/>
+      </div>
+      <table style={{width:"100%",borderCollapse:"collapse"}}>
+        <AkgTh cols={["Business word","Maps to",""]}/>
+        <tbody>{rows.map((s,i)=>{ const a=assetOf(s.to); return (
+          <tr key={s.w+s.to} style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none"}}>
+            <td style={{...akgTd,color:T.text,fontWeight:600}}>{s.w}</td>
+            <td style={akgTd}><span onClick={()=>a&&onAsset&&onAsset(a)} style={{...akgMono,color:a?T.accent:T.text,cursor:a?"pointer":"default"}}>{s.to}</span></td>
+            <td style={akgTd}>{s.auth&&<span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"rgba(22,163,74,.1)",color:"#16a34a",border:"1px solid rgba(22,163,74,.3)"}}>Authoritative</span>}</td>
+          </tr>);})}
+          {rows.length===0&&<tr><td colSpan={3} style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No synonyms</td></tr>}
+        </tbody>
+      </table>
+    </Card2>
+  );
+};
+
+// Profiling and data quality need EDG to read the source, which a partial asset never had.
+const AkgNotScanned = ({asset,onNav})=>(
+  <Card2>
+    <div style={{padding:"36px 24px",textAlign:"center"}}>
+      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>Not scanned by EDG</div>
+      <div style={{fontSize:12.5,color:T.textMuted,marginBottom:16}}>
+        {asset.partialFix==="map" ? "Map its source to an EDG connection" : `Scan it with ${asset.partialConn}`}
+      </div>
+      <Btn small variant="primary" onClick={()=>onNav&&onNav("settings",{section:"connections"})}>
+        {asset.partialFix==="map" ? "Map source" : "Open connection"}
+      </Btn>
+    </div>
+  </Card2>
+);
+
 const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) => {
   const [tab,        setTab]       = useState("overview");
   const [selCol,     setSelCol]    = useState(null);
@@ -25652,7 +26275,29 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // BigID scans assets EDG already holds, so its findings are a tab on the asset rather
   // than a connector with a hierarchy of its own.
   const bigidOnAsset= !!BIGID_FINDINGS[asset.name];
-  const tabs = isPBI
+  // An AKG is EAI's map of one application; its tables are linked or partial assets, and
+  // the lineage that matters on them is which AKGs depend on them.
+  const isAKG      = asset.type==="Application Knowledge Graph" && !!AKG_META[asset.name];
+  const akgUses    = akgUsesOf(asset);
+  const isPartial  = !!asset.partial;
+  const tabs = isAKG
+    ? [
+        {key:"overview",label:"Overview"},
+        {key:"akgtables",label:"Tables"},
+        {key:"akgrels",label:"Relationships"},
+        {key:"lineage",label:"Lineage"},
+        {key:"akgversions",label:"Versions"},
+        {key:"akgsynonyms",label:"Synonyms"},
+        {key:"customprops",label:"Custom Properties"},
+        {key:"activity",label:"Audit Logs"},
+      ]
+    : isPartial
+    ? [
+        {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
+        {key:"observability",label:"Data Quality"},
+        {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
+      ]
+    : isPBI
     ? [
         {key:"overview",label:"Overview"},
         ...(pbiHasParts?[{key:"schema",label:asset.type==="Power BI Dataflow"?"Entity columns":"Parts"}]:[]),
@@ -25748,11 +26393,20 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         <TypeBadge type={data.type}/>
         {data.tableFormat&&data.type!=="Iceberg Table"&&<FormatBadge format={data.tableFormat}/>}
         <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{data.db}</span>
+        {isPartial&&<span title={`Built from AKG ${asset.partialAkg}. Becomes a full asset when EDG scans the source.`}><AkgPartialPill/></span>}
+        {isAKG&&AKG_META[asset.name].status==="Deprecated"&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"rgba(124,58,237,.1)",color:"#7c3aed",border:"1px solid rgba(124,58,237,.3)",textTransform:"uppercase",letterSpacing:"0.04em"}}>Deprecated</span>}
+        {isAKG&&owners.length===0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em"}}>Unowned</span>}
       </div>
       {/* name + actions */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
         <h2 style={{fontSize:22,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{data.name}</h2>
         <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0}}>
+          {isAKG&&AKG_META[asset.name].klId&&(
+            <Btn small ghost icon={Ic.knowledge(12)} onClick={()=>onNav&&onNav("knowledgelayer")}>Knowledge Layer</Btn>
+          )}
+          {isAKG&&AKG_META[asset.name].status!=="Deprecated"&&(
+            <Btn small ghost onClick={()=>onToast(`Opens ${asset.name} in Data Sense`,"success")}>Open in Data Sense ↗</Btn>
+          )}
           {data.cert!=="Approved"&&(
             <button onClick={()=>setCertModal(true)}
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
@@ -25784,7 +26438,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
-        {tab==="overview"  && (isPBI
+        {tab==="overview"  && (isAKG
+          ? <AkgOverview asset={asset} data={data} setData={setData} onToast={onToast} onNav={onNav}/>
+          : isPBI
           ? <PowerBiOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
           : isDbt
           ? <DbtAssetOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
@@ -25804,10 +26460,19 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
         {tab==="glue"      && glueOnTable && <GlueOnTablePanel asset={data}/>}
         {tab==="bigid"     && bigidOnAsset && <BigIdOnAssetPanel asset={data} onToast={onToast}/>}
-        {tab==="observability" && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
+        {tab==="akgtables"   && isAKG && <AkgTablesPanel asset={data} onAsset={onAsset}/>}
+        {tab==="akgrels"     && isAKG && <AkgRelationshipsPanel asset={data}/>}
+        {tab==="akgversions" && isAKG && <AkgVersionsPanel asset={data}/>}
+        {tab==="akgsynonyms" && isAKG && <AkgSynonymsPanel asset={data} onAsset={onAsset}/>}
+        {tab==="observability" && isPartial && <AkgNotScanned asset={data} onNav={onNav}/>}
+        {tab==="observability" && !isPartial && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="contract"      && !isBI && !isDbt && !isPBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
-        {tab==="lineage"   && <AssetLineageFull asset={data}/>}
+        {tab==="lineage"   && (isAKG
+          ? <AkgLineagePanel asset={data} onAsset={onAsset}/>
+          : akgUses.length>0
+          ? <AkgTableLineage asset={data} onAsset={onAsset}/>
+          : <AssetLineageFull asset={data}/>)}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
@@ -26331,6 +26996,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
             return [
               ...(data.tableFormat?[{l:"Format",v:<FormatBadge format={data.tableFormat}/>}]:[]),
               ...(ice?[{l:"Catalog",v:<span style={{fontSize:11.5,color:T.textSub,textAlign:"right"}}>{ice.catalog}</span>}]:[]),
+              ...(isAKG?[{l:"Version",v:<span style={{fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>v{AKG_META[asset.name].version}</span>},
+                         {l:"Last synced",v:<span style={{fontSize:12,color:T.textSub}}>{AKG_META[asset.name].synced}</span>}]:[]),
               ...(data.quality>0?[{l:"Quality",v:<QScore score={data.quality}/>}]:[]),
               ...(fresh?[{l:isSourceRefresh?"Last refresh":"Freshness", v:<span style={{fontSize:12,color:T.textSub}}>{fresh}</span>}]:[]),
               {l:"Updated", v:<span style={{fontSize:12,color:T.textMuted}}>{data.updated}</span>},
@@ -26782,7 +27449,9 @@ const CatalogView = ({onAsset})=>{
     const mTag= selTags.size===0    || (a.tags||[]).some(t=>selTags.has(t));
     const mGT = selGlossaryTerms.size===0 || GLOSSARY_TERMS.filter(t=>selGlossaryTerms.has(t.id)).some(t=>(t.linkedAssets||[]).some(la=>la.name===a.name));
     // Source status: archived assets (deleted from source) are hidden unless explicitly requested.
-    const mSt = selStatus.size===0 ? !a.archived : ((selStatus.has("Archived")&&a.archived) || (selStatus.has("Active")&&!a.archived));
+    // A Deprecated AKG (unpublished in Data Sense) is kept, and hidden the same way.
+    const mSt = selStatus.size===0 ? (!a.archived && !a.akgDeprecated)
+      : ((selStatus.has("Archived")&&a.archived) || (selStatus.has("Deprecated")&&a.akgDeprecated) || (selStatus.has("Active")&&!a.archived&&!a.akgDeprecated));
     return mq&&mct&&mt&&mf&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
@@ -26817,7 +27486,7 @@ const CatalogView = ({onAsset})=>{
   const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",
     oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",
     gcs:"Google Cloud Storage",airflow:"Airflow",tableau:"Tableau",powerbi:"Power BI",
-    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery"};
+    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery",eai:"Solix EAI",sap:"SAP"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
@@ -26892,6 +27561,8 @@ const CatalogView = ({onAsset})=>{
             {DRILLABLE_TYPES.has(r.type)&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             {r.fileFormat&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
             {r.archived&&<span title={`${r.archivedReason||"Removed from source"} · ${r.archivedRun||""}`.trim()} style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}
+            {r.partial&&<AkgPartialPill/>}
+            {r.akgDeprecated&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"rgba(124,58,237,.1)",color:"#7c3aed",border:"1px solid rgba(124,58,237,.3)",textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Deprecated</span>}
           </div>
           {r.path&&r.path.length>0&&<div style={{fontSize:10,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{r.path.join(" / ")}</div>}
           {(!r.path||r.path.length===0)&&r.db&&<div style={{fontSize:10,color:T.textMuted,marginTop:1}}>{r.db}</div>}
@@ -26963,8 +27634,8 @@ const CatalogView = ({onAsset})=>{
             <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
               items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
               sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
-              headerNote="Archived = removed from source. Hidden by default."
-              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
+              headerNote="Archived = removed from source. Deprecated = AKG unpublished in Data Sense. Both hidden by default."
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Archived"?T.amber:item.val==="Deprecated"?"#7c3aed":"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
           </div>
         </div>
 
@@ -34588,6 +35259,7 @@ const KnowledgeLayerView = ({onToast, onNav}) => {
         ]} actions={<>
           <Btn ghost small icon={Ic.audit(12)} onClick={()=>setHist({title:sg.name, kicker:`Source Knowledge Graph · ${sg.key}`, entries:sg.history})}>History</Btn>
           <Btn ghost small icon={Ic.lineage(12)} onClick={()=>onNav&&onNav("catalog")}>Open in Lineage</Btn>
+          {AKG_META[sg.name]?.klId===sg.id&&<Btn ghost small icon={Ic.catalog(12)} onClick={()=>onNav&&onNav("catalog",{assetName:sg.name})}>Open in Catalog</Btn>}
           <KLMenu id={sg.id} archived={!!sg.archived}
             onArchive={()=>{patchSrc(sg.id,{archived:true},"Archived"); setSelSrc(null); setTab("sources"); toast(`${sg.name} archived`);}}
             onRestore={()=>{patchSrc(sg.id,{archived:false},"Restored"); toast(`${sg.name} restored`);}}
