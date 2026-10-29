@@ -60789,7 +60789,7 @@ const AIDescSettings = ({onToast}) => {
             <div>
               <label style={lab}>Source</label>
               <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); }} style={sel}>
-                {sources.map(x=><option key={x.k} value={x.k}>{x.l} · {x.types.length} object type{x.types.length===1?"":"s"}</option>)}
+                {sources.map(x=><option key={x.k} value={x.k}>{x.l}</option>)}
               </select>
             </div>
             <div>
