@@ -26151,6 +26151,129 @@ const AkgNotScanned = ({asset,onNav})=>(
   </Card2>
 );
 
+// ⋮ menu on the AKG header. Its one action is Bulk edit: an AKG arrives with hundreds of
+// assets (most of them partial and unowned), and governing them one profile at a time does
+// not scale. Only EDG-owned fields are offered; every field defaults to "No change".
+const AKG_BULK_TAGS = ["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"];
+const AKG_BULK_USERS = ["maya.chen","sarah.kim","alex.wu","dev.patel","lisa.ray","priya.nair","james.oh"];
+const AkgActionsMenu = ({asset, onToast})=>{
+  const [menu,setMenu] = useState(false);
+  const [open,setOpen] = useState(false);
+  const [show,setShow] = useState("all");
+  const [sel,setSel] = useState(new Set());
+  const [ch,setCh] = useState({owner:"",steward:"",domain:"",tag:"",term:""});
+  const m = AKG_META[asset.name];
+  if(!m) return null;
+  const all = m.tables.map(tb=>akgTableAsset(m,tb)).filter(Boolean);
+  const shown = all.filter(a=>show==="all"||(show==="partial"&&a.partial)||(show==="linked"&&!a.partial)||(show==="unowned"&&!(a.owners||[]).length));
+  const allShownSel = shown.length>0 && shown.every(a=>sel.has(a.id));
+  const changed = Object.values(ch).some(Boolean);
+  const domains = [...new Set(ASSETS.map(a=>a.domain).filter(Boolean))].sort();
+  const close = ()=>{ setOpen(false); setSel(new Set()); setCh({owner:"",steward:"",domain:"",tag:"",term:""}); setShow("all"); };
+  const apply = ()=>{
+    const term = ch.term && _gtState.find(t=>t.id===ch.term);
+    all.filter(a=>sel.has(a.id)).forEach(a=>{
+      if(ch.owner){ a.owner=ch.owner; a.owners=[ch.owner]; }
+      if(ch.steward){ a.steward=ch.steward; a.stewards=[ch.steward]; }
+      if(ch.domain) a.domain=ch.domain;
+      if(ch.tag && !(a.tags||[]).includes(ch.tag)) a.tags=[...(a.tags||[]),ch.tag];
+      if(term){
+        [term, GLOSSARY_TERMS.find(t=>t.id===term.id)].filter(Boolean).forEach(t=>{
+          t.linkedAssets = t.linkedAssets||[];
+          if(!t.linkedAssets.some(la=>la.name===a.name)) t.linkedAssets.push({name:a.name,type:a.type});
+        });
+      }
+    });
+    onToast&&onToast(`${sel.size} asset${sel.size!==1?"s":""} updated`,"success");
+    close();
+  };
+  const sl = {width:"100%",padding:"7px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",cursor:"pointer",boxSizing:"border-box"};
+  const lbl = {fontSize:11,fontWeight:600,color:T.textMuted,marginBottom:5,display:"block"};
+  const Field = ({k,label,opts})=>(
+    <div>
+      <label style={lbl}>{label}</label>
+      <select value={ch[k]} onChange={e=>setCh(c=>({...c,[k]:e.target.value}))} style={sl}>
+        <option value="">No change</option>
+        {opts.map(o=>typeof o==="string"?<option key={o} value={o}>{o}</option>:<option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
+  return (
+    <div style={{position:"relative"}}>
+      <button onClick={()=>setMenu(v=>!v)} title="More actions"
+        style={{width:32,height:32,borderRadius:8,background:menu?T.bgHover:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span style={{fontSize:16,lineHeight:1}}>⋮</span>
+      </button>
+      {menu&&(<>
+        <div onClick={()=>setMenu(false)} style={{position:"fixed",inset:0,zIndex:590}}/>
+        <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,minWidth:220,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:11,boxShadow:"0 12px 32px rgba(0,0,0,.22)",padding:5}}>
+          <button onClick={()=>{setMenu(false);setOpen(true);}}
+            style={{width:"100%",display:"flex",gap:9,alignItems:"flex-start",padding:"9px 10px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderRadius:8,fontFamily:"inherit"}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+            <span style={{marginTop:1,color:T.textMuted,display:"flex"}}>{Ic.edit(13)}</span>
+            <span><span style={{display:"block",fontSize:12,fontWeight:600,color:T.text}}>Bulk edit assets</span>
+              <span style={{display:"block",fontSize:10.5,color:T.textMuted,marginTop:1}}>Owner, steward, domain, tags, terms</span></span>
+          </button>
+        </div>
+      </>)}
+      {open&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:900,display:"flex",justifyContent:"flex-end"}}>
+          <div onClick={close} style={{position:"absolute",inset:0,background:"rgba(0,0,0,.28)"}}/>
+          <div className="slideInRight" style={{position:"relative",width:460,height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>Bulk edit assets</div>
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{asset.name} · {sel.size} of {all.length} selected</div>
+              </div>
+              <button onClick={close} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:18,lineHeight:1}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:18}}>
+              <div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Assets</span>
+                  <select value={show} onChange={e=>setShow(e.target.value)} style={{...sl,width:"auto",padding:"4px 8px",fontSize:11.5}}>
+                    <option value="all">All</option><option value="partial">Partial</option><option value="linked">Linked</option><option value="unowned">Unowned</option>
+                  </select>
+                </div>
+                <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`,fontSize:11.5,fontWeight:600,color:T.textSub,cursor:"pointer"}}>
+                    <input type="checkbox" checked={allShownSel} onChange={()=>setSel(s=>{const n=new Set(s); shown.forEach(a=>allShownSel?n.delete(a.id):n.add(a.id)); return n;})}/>
+                    Select all ({shown.length})
+                  </label>
+                  <div style={{maxHeight:260,overflowY:"auto"}}>
+                    {shown.map(a=>(
+                      <label key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+                        <input type="checkbox" checked={sel.has(a.id)} onChange={()=>setSel(s=>{const n=new Set(s); n.has(a.id)?n.delete(a.id):n.add(a.id); return n;})}/>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</span>
+                        {a.partial&&<AkgPartialPill/>}
+                        <span style={{fontSize:11,color:(a.owners||[]).length?T.textMuted:T.amber,width:76,textAlign:"right",flexShrink:0}}>{(a.owners||[])[0]||"Unowned"}</span>
+                      </label>
+                    ))}
+                    {shown.length===0&&<div style={{padding:18,textAlign:"center",fontSize:12,color:T.textMuted}}>No assets</div>}
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Changes</span>
+                <Field k="owner" label="Owner" opts={AKG_BULK_USERS}/>
+                <Field k="steward" label="Steward" opts={AKG_BULK_USERS}/>
+                <Field k="domain" label="Domain" opts={domains}/>
+                <Field k="tag" label="Add tag" opts={AKG_BULK_TAGS}/>
+                <Field k="term" label="Link glossary term" opts={_gtState.map(t=>({v:t.id,l:t.term}))}/>
+              </div>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
+              <Btn onClick={close}>Cancel</Btn>
+              <Btn variant="primary" disabled={sel.size===0||!changed} onClick={apply}>Apply to {sel.size} asset{sel.size!==1?"s":""}</Btn>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}) => {
   const [tab,        setTab]       = useState("overview");
   const [selCol,     setSelCol]    = useState(null);
@@ -26395,13 +26518,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
         <h2 style={{fontSize:22,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,letterSpacing:"-0.04em",margin:0}}>{data.name}</h2>
         <div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0}}>
-          {isAKG&&AKG_META[asset.name].klId&&(
-            <Btn small ghost icon={Ic.knowledge(12)} onClick={()=>onNav&&onNav("knowledgelayer")}>Knowledge Layer</Btn>
-          )}
-          {isAKG&&AKG_META[asset.name].status!=="Deprecated"&&(
-            <Btn small ghost onClick={()=>onToast(`Opens ${asset.name} in Data Sense`,"success")}>Open in Data Sense ↗</Btn>
-          )}
-          {data.cert!=="Approved"&&(
+          {!isAKG&&data.cert!=="Approved"&&(
             <button onClick={()=>setCertModal(true)}
               style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:"#16a34a12",border:"1px solid rgba(22,163,74,.3)",color:"#16a34a",fontSize:12.5,fontWeight:600,cursor:"pointer",transition:"opacity .1s"}}
               onMouseEnter={e=>e.currentTarget.style.opacity=".8"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
@@ -26414,6 +26531,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
             {Ic.edit(11)} Edit
           </button>
+          {isAKG&&<AkgActionsMenu asset={asset} onToast={onToast}/>}
         </div>
       </div>
       {/* tab bar */}
