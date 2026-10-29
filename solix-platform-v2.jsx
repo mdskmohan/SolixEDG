@@ -18072,6 +18072,7 @@ const LINEAGE_TYPE_COLOR={
   // -- dbt node types --
   "dbt Source":"#f97316", "dbt Model":"#ff694b", "dbt Seed":"#eab308",
   "dbt Snapshot":"#8b5cf6", "dbt Metric":"#0ea5e9", "dbt Exposure":"#a78bfa",
+  View:"#818cf8", "Application Knowledge Graph":"#8b5cf6",
 };
 
 // ─── Default lineage: deliberately EMPTY ──────────────────────────────────────
@@ -18252,7 +18253,8 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
       // hides behind a nameless arrow. Everything else keeps the neutral edge.
       const isDbt=e.tk==="dbt ref"||e.tk==="Materializes"||e.tk==="dbt model"
         ||e.tk==="Metric definition"||e.tk==="Exposure"||e.tk==="Declared source"||e.tk==="Declared dependency";
-      const c=isDbt?"#fb8f66":"#94a3b8";
+      // An edge may name its own colour (an AKG edge is coloured by the table's scope state).
+      const c=e.color||(isDbt?"#fb8f66":"#94a3b8");
       // A few edges are unavoidably long: a source read by two models sits next to the
       // nearer one, so the far hop crosses intervening columns and passes behind their
       // cards. Drawing those dashed and faded reads as "this line is only passing
@@ -18266,12 +18268,12 @@ function buildLinEdges(hiddenNodes,edgesDef=LINEAGE_EDGES_DEF){
         id:e.id,source:e.s,target:e.t,type:"smoothstep",
         label:labelled?e.tk:null,
         labelShowBg:!!labelled, labelBgPadding:[5,2], labelBgBorderRadius:4,
-        labelBgStyle:{fill:"#ffffff",fillOpacity:.92,stroke:isDbt?"#fed7c3":"#e2e8f0"},
-        labelStyle:{fill:isDbt?"#c2410c":"#64748b",fontSize:9.5,fontWeight:600,fontFamily:"inherit"},
+        labelBgStyle:{fill:"#ffffff",fillOpacity:.92,stroke:e.color?`${e.color}55`:isDbt?"#fed7c3":"#e2e8f0"},
+        labelStyle:{fill:e.color||(isDbt?"#c2410c":"#64748b"),fontSize:9.5,fontWeight:600,fontFamily:"inherit"},
         markerEnd:{type:MarkerType.ArrowClosed,color:c,width:12,height:12},
         style:longHaul
           ? {stroke:c,strokeWidth:1.3,strokeDasharray:"6 5",opacity:.55}
-          : {stroke:c,strokeWidth:1.6},
+          : {stroke:c,strokeWidth:1.6,...(e.dashed?{strokeDasharray:"5 4"}:null)},
       };
     });
 }
@@ -18776,11 +18778,63 @@ function crossSourceCount(G, service){
     G.meta[id] && G.meta[id].service && G.meta[id].service!==service).length;
 }
 
+// Application Knowledge Graph lineage, in the same graph shape every other connector uses.
+// On an AKG: each of its tables and views -> the AKG. On a table an AKG uses: the table ->
+// each AKG. Every edge is labelled and coloured with the table's scope state in that AKG;
+// join paths are NOT lineage and never appear here (they are on the AKG's Relationships).
+// `activeOnly` drops the dormant, excluded, variant-inactive and absent edges.
+function akgLineageGraph(asset, activeOnly){
+  if(!asset) return null;
+  const isAkg = asset.type==="Application Knowledge Graph" && AKG_META[asset.name];
+  const uses = isAkg ? [] : akgUsesOf(asset);
+  if(!isAkg && uses.length===0) return null;
+  const metaOf = a => ({assetType:a.type, service:a.service, db:a.db, domain:a.domain,
+    owner:a.owner||"Unowned", steward:(a.stewards||[])[0]||a.steward||"", quality:a.quality||0, cert:a.cert,
+    tags:a.tags||[], cols:(SCHEMA[a.name]||[]).map(c=>({n:c.name,t:c.type})),
+    description:a.partial?`Partial · from AKG ${a.partialAkg}. ${a.description}`:a.description});
+  // Tighter than the 185px other graphs use: an AKG fans in a dozen-plus tables, and the
+  // collapsed card is ~60px tall, so 80px keeps the whole fan readable after fitView.
+  const ROW=80;
+  const topo={}, meta={}, edges=[];
+  const place = (ids, x) => ids.forEach((id,k)=>{ topo[id]={...topo[id], x, y:Math.round((k-(ids.length-1)/2)*ROW)}; });
+  if(isAkg){
+    const m = AKG_META[asset.name];
+    const rows = m.tables.map(tb=>({tb, a:akgTableAsset(m,tb)})).filter(r=>r.a&&(!activeOnly||r.tb.scope==="active"));
+    const ids = rows.map(r=>"akgt_"+r.tb.n);   // stable across the Active-only toggle
+    meta.akg = metaOf(asset);
+    topo.akg = {label:asset.name, upstream:ids, downstream:[], active:true};
+    rows.forEach(({tb,a},i)=>{
+      meta[ids[i]] = metaOf(a);
+      topo[ids[i]] = {label:a.name, upstream:[], downstream:["akg"]};
+      // Only the exceptions are labelled: a dozen "Active" labels on one fan-in bus would
+      // stack on top of each other. Colour and the toolbar key carry the rest.
+      edges.push({id:"ae_"+i, s:ids[i], t:"akg", tk:tb.scope==="active"?null:AKG_SCOPE[tb.scope].l, color:AKG_SCOPE[tb.scope].c, dashed:tb.scope!=="active"});
+    });
+    place(ids, 0); place(["akg"], 310);
+  } else {
+    const kept = uses.filter(u=>!activeOnly||u.scope==="active");
+    const ids = kept.map(u=>"akg_"+u.akg);
+    meta.tbl = metaOf(asset);
+    topo.tbl = {label:asset.name, upstream:[], downstream:ids, active:true};
+    kept.forEach((u,i)=>{
+      const a = ASSETS.find(x=>x.name===u.akg&&x.type==="Application Knowledge Graph");
+      meta[ids[i]] = metaOf(a);
+      topo[ids[i]] = {label:u.akg, upstream:["tbl"], downstream:[]};
+      edges.push({id:"ae_"+i, s:"tbl", t:ids[i], tk:AKG_SCOPE[u.scope].l, color:AKG_SCOPE[u.scope].c, dashed:u.scope!=="active"});
+    });
+    place(["tbl"], 0); place(ids, 310);
+  }
+  return {topo, meta, colMaps:[], edges, akg:true};
+}
+
 // Resolve which lineage graph an asset's Lineage tab renders. dbt assets (and the Snowflake
 // table a dbt model materializes) get the full Postgres -> dbt -> Snowflake -> Tableau path;
 // Tableau assets get the BI path; everything else keeps the default graph. The matching node
 // is marked CURRENT.
-function pickLineageGraph(asset){
+function pickLineageGraph(asset, akgActiveOnly){
+  // An AKG, or a table an AKG uses, answers with its AKG lineage.
+  const akgG = akgLineageGraph(asset, akgActiveOnly);
+  if(akgG) return akgG;
   // The unified graph FIRST, wherever the asset appears in it. It spans Snowflake sources ->
   // dbt models -> the table they materialize -> the Tableau and Power BI objects that read
   // it, so a Power BI dataset and the dbt model that feeds it now answer with the same
@@ -18827,13 +18881,16 @@ function pickLineageGraph(asset){
 const AssetLineageFull=({asset})=>{
   // Asset-aware lineage graph (dbt transformation path vs. Tableau BI path vs. default).
   // Stable per asset. On a dbt graph the model layer can be collapsed out - see below.
-  const _Graw=useMemo(()=>pickLineageGraph(asset),[asset]);
+  const [akgActiveOnly,setAkgActiveOnly]=useState(false);
+  const _Graw=useMemo(()=>pickLineageGraph(asset,akgActiveOnly),[asset,akgActiveOnly]);
   const [showDbt,setShowDbt]=useState(true);
   // "all" spans every source that reported a hop; "source" keeps only this connector's own.
   const [lineageScope,setLineageScope]=useState("all");
   const _Gdbt=useMemo(()=>(_Graw.hasDbt&&!showDbt)?collapseDbtNodes(_Graw):_Graw,[_Graw,showDbt]);
   const _activeId=useMemo(()=>Object.entries(_Gdbt.topo||{}).find(([,t])=>t.active)?.[0]||null,[_Gdbt]);
-  const _crossCount=useMemo(()=>crossSourceCount(_Gdbt,asset?.service),[_Gdbt,asset]);
+  // An AKG always spans two products (EAI and the application it maps), so "This source"
+  // would only ever empty the graph - the scope control is not offered there.
+  const _crossCount=useMemo(()=>_Graw.akg?0:crossSourceCount(_Gdbt,asset?.service),[_Gdbt,asset,_Graw]);
   const _G=useMemo(()=>lineageScope==="source"
     ? inSourceOnly(_Gdbt,asset?.service,_activeId)
     : _Gdbt,[_Gdbt,lineageScope,asset,_activeId]);
@@ -18992,6 +19049,13 @@ const AssetLineageFull=({asset})=>{
               {type}
             </span>
           ))}
+          {/* AKG edges are coloured by the table's scope state in the AKG. */}
+          {_Graw.akg&&Object.entries(AKG_SCOPE).map(([k,s])=>(
+            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
+              <span style={{width:14,height:0,borderTop:`2px ${k==="active"?"solid":"dashed"} ${s.c}`,display:"inline-block"}}/>
+              {s.l}
+            </span>
+          ))}
         </div>
         {/* Hint */}
         <span style={{fontSize:10.5,color:"#94a3b8",display:"flex",alignItems:"center",gap:4}}>
@@ -19026,6 +19090,16 @@ const AssetLineageFull=({asset})=>{
               fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
             <span style={{width:8,height:8,borderRadius:2,background:showDbt?"#ff694b":"#cbd5e1",display:"inline-block"}}/>
             Show dbt models
+          </button>
+        )}
+        {/* AKG scope toggle — hide the tables an AKG holds but does not use. */}
+        {_Graw.akg&&(
+          <button onClick={()=>{setAkgActiveOnly(v=>!v);setTimeout(()=>rf?.fitView({padding:0.15,duration:350}),60);}} title={akgActiveOnly?"Show every scope state":"Hide dormant, excluded, variant-inactive and absent tables"}
+            style={{padding:"4px 10px",borderRadius:6,background:akgActiveOnly?"rgba(22,163,74,.1)":"#fff",
+              border:`1px solid ${akgActiveOnly?"#16a34a":"#e2e8f0"}`,color:akgActiveOnly?"#15803d":"#64748b",
+              fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+            <span style={{width:8,height:8,borderRadius:2,background:akgActiveOnly?"#16a34a":"#cbd5e1",display:"inline-block"}}/>
+            Active only
           </button>
         )}
         <button onClick={()=>rf?.fitView({padding:0.15,duration:400})}
@@ -25868,7 +25942,7 @@ const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
 
     <Card2>
       <div style={{padding:"14px 16px"}}>
-        <SH title="Tables by scope state" sub={`${total.toLocaleString()} tables and views`} action={<AkgReadOnly/>}/>
+        <SH title="Assets by scope state" sub={`${total.toLocaleString()} tables and views`} action={<AkgReadOnly/>}/>
         <div style={{display:"flex",height:10,borderRadius:99,overflow:"hidden",background:T.bgElevated,marginBottom:12}}>
           {Object.entries(m.scopeCounts).filter(([,n])=>n>0).map(([k,n])=>(
             <div key={k} title={`${AKG_SCOPE[k].l}: ${n}`} style={{width:`${n/total*100}%`,background:AKG_SCOPE[k].c}}/>
@@ -25918,7 +25992,7 @@ const AkgTablesPanel = ({asset,onAsset})=>{
   return (
     <Card2 style={{overflow:"hidden"}}>
       <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",gap:10,alignItems:"center"}}>
-        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search tables and views…" style={{...sel,flex:1,outline:"none"}}/>
+        <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search assets…" style={{...sel,flex:1,outline:"none"}}/>
         <select value={scope} onChange={e=>setScope(e.target.value)} style={sel}>
           <option value="all">All scope states</option>
           {Object.entries(AKG_SCOPE).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
@@ -25930,7 +26004,7 @@ const AkgTablesPanel = ({asset,onAsset})=>{
         </select>
       </div>
       <table style={{width:"100%",borderCollapse:"collapse"}}>
-        <AkgTh cols={["Table / view","Business name","Scope","Catalog asset","AKG entity type","Rows"]}/>
+        <AkgTh cols={["Asset","Business name","Scope","Linked / partial","AKG entity type","Rows"]}/>
         <tbody>
           {rows.map(({tb,a})=>(
             <React.Fragment key={tb.n}>
@@ -25980,7 +26054,7 @@ const AkgTablesPanel = ({asset,onAsset})=>{
               )}
             </React.Fragment>
           ))}
-          {rows.length===0&&<tr><td colSpan={6} style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No tables match</td></tr>}
+          {rows.length===0&&<tr><td colSpan={6} style={{padding:"32px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No assets match</td></tr>}
         </tbody>
       </table>
       <div style={{padding:"10px 16px",borderTop:`1px solid ${T.border}`,fontSize:11,color:T.textMuted,display:"flex",justifyContent:"space-between"}}>
@@ -26013,85 +26087,6 @@ const AkgRelationshipsPanel = ({asset})=>{
         </tbody>
       </table>
     </Card2>
-  );
-};
-
-// Table -> AKG edges, each labelled with the table's scope state. Used both on the AKG
-// (many tables -> one AKG) and on a table (one table -> the AKGs that use it).
-const AkgEdgeGraph = ({left, right, edges, onNode})=>{
-  const ROW=52, W=760, NW=250, RX=W-NW;
-  const H = Math.max(left.length, right.length, 2)*ROW + 16;
-  const yL = i => H/2 + (i-(left.length-1)/2)*ROW;
-  const yR = i => H/2 + (i-(right.length-1)/2)*ROW;
-  const Node = ({n,x,y})=>(
-    <div onClick={()=>n.asset&&onNode&&onNode(n.asset)} style={{position:"absolute",left:x,top:y-19,width:NW,height:38,boxSizing:"border-box",display:"flex",alignItems:"center",gap:8,padding:"0 10px",
-      background:T.bgSurface,border:`1px solid ${n.main?T.violet:T.border}`,borderLeft:`3px solid ${n.main?T.violet:(n.partial?T.amber:"#16a34a")}`,borderRadius:8,cursor:n.asset?"pointer":"default",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
-      <ServiceIcon service={n.service} size={16}/>
-      <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</div>
-        <div style={{fontSize:10,color:T.textMuted}}>{n.sub}</div>
-      </div>
-      {n.partial&&<AkgPartialPill/>}
-    </div>
-  );
-  return (
-    <div style={{position:"relative",width:W,height:H,margin:"0 auto"}}>
-      <svg width={W} height={H} style={{position:"absolute",inset:0}}>
-        {edges.map((e,i)=>{
-          const y1=yL(e.l), y2=yR(e.r), c=AKG_SCOPE[e.scope].c, mx=(NW+RX)/2;
-          return <path key={i} d={`M${NW} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${RX} ${y2}`} fill="none" stroke={c} strokeWidth="1.6" strokeDasharray={e.scope==="active"?"":"5 4"} opacity=".8"/>;
-        })}
-      </svg>
-      {edges.map((e,i)=>{
-        const y = left.length>=right.length ? yL(e.l) : yR(e.r);
-        const x = left.length>=right.length ? NW+12 : RX-120;
-        return <div key={"l"+i} style={{position:"absolute",left:x,top:y-10}}><AkgScopePill s={e.scope}/></div>;
-      })}
-      {left.map((n,i)=><Node key={"L"+i} n={n} x={0} y={yL(i)}/>)}
-      {right.map((n,i)=><Node key={"R"+i} n={n} x={RX} y={yR(i)}/>)}
-    </div>
-  );
-};
-
-const AkgLineageShell = ({count, activeOnly, setActiveOnly, children})=>(
-  <Card2>
-    <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:14}}>
-      <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub,cursor:"pointer"}}>
-        <input type="checkbox" checked={activeOnly} onChange={e=>setActiveOnly(e.target.checked)}/> Active only
-      </label>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{Object.keys(AKG_SCOPE).map(k=><AkgScopePill key={k} s={k}/>)}</div>
-      <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{count} edges · join paths are on Relationships</span>
-    </div>
-    <div style={{padding:"20px 16px",overflowX:"auto"}}>{children}</div>
-  </Card2>
-);
-
-const AkgLineagePanel = ({asset,onAsset})=>{
-  const m = AKG_META[asset.name];
-  const [activeOnly,setActiveOnly] = useState(false);
-  if(!m) return null;
-  const tbs = m.tables.filter(tb=>!activeOnly||tb.scope==="active");
-  const left = tbs.map(tb=>{ const a=akgTableAsset(m,tb); return {label:tb.n, sub:`${tb.t} · ${tb.schema}`, service:m.source.service, partial:!!a?.partial, asset:a}; });
-  const right = [{label:asset.name, sub:"Application Knowledge Graph", service:"eai", main:true}];
-  return (
-    <AkgLineageShell count={tbs.length} activeOnly={activeOnly} setActiveOnly={setActiveOnly}>
-      <AkgEdgeGraph left={left} right={right} edges={tbs.map((tb,i)=>({l:i,r:0,scope:tb.scope}))} onNode={onAsset}/>
-    </AkgLineageShell>
-  );
-};
-
-// Lineage of a table an AKG uses: the table, downstream to each AKG that depends on it.
-const AkgTableLineage = ({asset,onAsset})=>{
-  const [activeOnly,setActiveOnly] = useState(false);
-  const uses = akgUsesOf(asset).filter(u=>!activeOnly||u.scope==="active");
-  const left = [{label:asset.name, sub:`${asset.type} · ${asset.connectionLabel}`, service:asset.service, partial:!!asset.partial, main:true}];
-  const right = uses.map(u=>({label:u.akg, sub:`Application Knowledge Graph${u.status==="Deprecated"?" · Deprecated":""}`, service:"eai", asset:ASSETS.find(a=>a.name===u.akg&&a.type==="Application Knowledge Graph")}));
-  return (
-    <AkgLineageShell count={uses.length} activeOnly={activeOnly} setActiveOnly={setActiveOnly}>
-      {uses.length>0
-        ? <AkgEdgeGraph left={left} right={right} edges={uses.map((u,i)=>({l:0,r:i,scope:u.scope}))} onNode={onAsset}/>
-        : <div style={{textAlign:"center",fontSize:12.5,color:T.textMuted,padding:24}}>No active AKG uses this table</div>}
-    </AkgLineageShell>
   );
 };
 
@@ -26275,15 +26270,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // BigID scans assets EDG already holds, so its findings are a tab on the asset rather
   // than a connector with a hierarchy of its own.
   const bigidOnAsset= !!BIGID_FINDINGS[asset.name];
-  // An AKG is EAI's map of one application; its tables are linked or partial assets, and
-  // the lineage that matters on them is which AKGs depend on them.
+  // An AKG is EAI's map of one application; its tables are linked or partial assets.
+  // Lineage for both goes through the standard Lineage tab (see akgLineageGraph).
   const isAKG      = asset.type==="Application Knowledge Graph" && !!AKG_META[asset.name];
-  const akgUses    = akgUsesOf(asset);
   const isPartial  = !!asset.partial;
   const tabs = isAKG
     ? [
         {key:"overview",label:"Overview"},
-        {key:"akgtables",label:"Tables"},
+        {key:"akgtables",label:"Assets"},
         {key:"akgrels",label:"Relationships"},
         {key:"lineage",label:"Lineage"},
         {key:"akgversions",label:"Versions"},
@@ -26468,11 +26462,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="observability" && !isPartial && !isBI && !isDbt && !isPBI && <AssetObservabilityTab asset={data} onToast={onToast} onNav={onNav}/>}
         {tab==="contract"      && !isBI && !isDbt && !isPBI && <AssetContractTab asset={data} onToast={onToast}/>}
         {tab==="usage"     && <AssetUsageTab/>}
-        {tab==="lineage"   && (isAKG
-          ? <AkgLineagePanel asset={data} onAsset={onAsset}/>
-          : akgUses.length>0
-          ? <AkgTableLineage asset={data} onAsset={onAsset}/>
-          : <AssetLineageFull asset={data}/>)}
+        {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
@@ -27419,10 +27409,12 @@ const CatalogView = ({onAsset})=>{
   const [selTags,          setSelTags]          = useState(new Set());
   const [selGlossaryTerms, setSelGlossaryTerms] = useState(new Set());
   const [selStatus,  setSelStatus]  = useState(new Set()); // source status: "Active" | "Archived". Empty = active only (archived hidden by default).
-  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,format:false,cert:false,tier:false,owner:false,tags:false,glossary:false,status:false});
+  // "Full" = scanned by an EDG connection; "Partial" = known only from an AKG so far.
+  const [selCompleteness, setSelCompleteness] = useState(new Set());
+  const [openGroup,  setOpenGroup]  = useState({conntype:true,connection:false,domain:true,type:true,format:false,cert:false,tier:false,owner:false,tags:false,glossary:false,completeness:false,status:false});
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
-  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selFormats,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus]);
+  useEffect(()=>{ setPage(1); },[q,selConnTypes,selTypes,selFormats,selDomains,selCerts,selTiers,selConns,selOwners,selTags,selGlossaryTerms,selStatus,selCompleteness]);
   const DRILLABLE_TYPES = new Set(["Database","Catalog","Schema","Bucket","Container","Folder"]);
   // Derived from the catalog rather than hand-listed. The hand-written map had no entry for
   // Power BI, Glue, dbt, GCS, CDP or ECS, so choosing one of those emptied the Asset Type
@@ -27452,7 +27444,8 @@ const CatalogView = ({onAsset})=>{
     // A Deprecated AKG (unpublished in Data Sense) is kept, and hidden the same way.
     const mSt = selStatus.size===0 ? (!a.archived && !a.akgDeprecated)
       : ((selStatus.has("Archived")&&a.archived) || (selStatus.has("Deprecated")&&a.akgDeprecated) || (selStatus.has("Active")&&!a.archived&&!a.akgDeprecated));
-    return mq&&mct&&mt&&mf&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt;
+    const mCp = selCompleteness.size===0 || selCompleteness.has(a.partial?"Partial":"Full");
+    return mq&&mct&&mt&&mf&&md&&mc&&mti&&ms&&mo&&mTag&&mGT&&mSt&&mCp;
   }).sort((a,b)=>{
     if(sortBy==="quality") return b.quality-a.quality;
     if(sortBy==="name")    return a.name.localeCompare(b.name);
@@ -27462,13 +27455,14 @@ const CatalogView = ({onAsset})=>{
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const pagedRows  = filtered.slice((page-1)*PAGE_SIZE, page*PAGE_SIZE);
 
-  const totalActive = selConnTypes.size+selTypes.size+selFormats.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size+selStatus.size;
-  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelFormats(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); setSelStatus(new Set()); };
+  const totalActive = selConnTypes.size+selTypes.size+selFormats.size+selDomains.size+selCerts.size+selTiers.size+selConns.size+selOwners.size+selTags.size+selGlossaryTerms.size+selStatus.size+selCompleteness.size;
+  const clearAll = () => { setSelConnTypes(new Set()); setSelTypes(new Set()); setSelFormats(new Set()); setSelDomains(new Set()); setSelCerts(new Set()); setSelTiers(new Set()); setSelConns(new Set()); setSelOwners(new Set()); setSelTags(new Set()); setSelGlossaryTerms(new Set()); setSelStatus(new Set()); setSelCompleteness(new Set()); };
   const countFor = (field, val) => ASSETS.filter(a => {
     const mq = !q || a.name.toLowerCase().includes(q.toLowerCase());
     if(!mq) return false;
     if(field==="status")     return val==="Archived" ? !!a.archived : !a.archived;
     if(a.archived) return false; // other facet counts reflect the default (active) view
+    if(field==="completeness") return (a.partial?"Partial":"Full")===val && !a.akgDeprecated;
     if(field==="conntype")   return a.service===val;
     if(field==="type")       return a.type===val;
     if(field==="format")     return (a.tableFormat||"Native")===val;
@@ -27537,7 +27531,8 @@ const CatalogView = ({onAsset})=>{
   };
 
   const activeChips = [
-    ...[...selStatus].map(v=>({label:v==="Archived"?"Archived":"Active",clear:()=>toggle(setSelStatus,v)})),
+    ...[...selStatus].map(v=>({label:v,clear:()=>toggle(setSelStatus,v)})),
+    ...[...selCompleteness].map(v=>({label:v,clear:()=>toggle(setSelCompleteness,v)})),
     ...[...selConnTypes].map(v=>({label:CONN_TYPE_LABELS[v]||v,clear:()=>toggle(setSelConnTypes,v)})),
     ...[...selTypes].map(v=>({label:v,clear:()=>toggle(setSelTypes,v)})),
     ...[...selFormats].map(v=>({label:v,clear:()=>toggle(setSelFormats,v)})),
@@ -27561,7 +27556,7 @@ const CatalogView = ({onAsset})=>{
             {DRILLABLE_TYPES.has(r.type)&&<svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,flexShrink:0}}><path d="M3.5 2l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>}
             {r.fileFormat&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:`${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}18`,color:FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted,border:`1px solid ${FILE_FORMAT_COLORS[r.fileFormat]||T.textMuted}33`}}>{r.fileFormat}</span>}
             {r.archived&&<span title={`${r.archivedReason||"Removed from source"} · ${r.archivedRun||""}`.trim()} style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}
-            {r.partial&&<AkgPartialPill/>}
+            {r.partial&&<span title={r.partialFix==="map"?"Map its source to an EDG connection":`Scan it with ${r.partialConn}`}><AkgPartialPill/></span>}
             {r.akgDeprecated&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"rgba(124,58,237,.1)",color:"#7c3aed",border:"1px solid rgba(124,58,237,.3)",textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Deprecated</span>}
           </div>
           {r.path&&r.path.length>0&&<div style={{fontSize:10,color:T.textMuted,marginTop:2,fontFamily:"'Geist Mono',monospace"}}>{r.path.join(" / ")}</div>}
@@ -27573,7 +27568,8 @@ const CatalogView = ({onAsset})=>{
     // warehouse is still a Table, and a steward filtering "Tables" must still see it.
     {key:"type",label:"Type",render:(v,r)=>(<div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}><TypeBadge type={v}/>{r.tableFormat&&r.type!=="Iceberg Table"&&<FormatBadge format={r.tableFormat}/>}</div>)},
     {key:"owner",label:"Owner",render:(v,r)=>{const ol=r.owners||[v];return(<div style={{display:"flex",alignItems:"center"}}>{ol.slice(0,3).map((o,i)=>(<div key={i} title={o} style={{width:24,height:24,borderRadius:"50%",background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,marginLeft:i>0?-7:0,position:"relative",zIndex:3-i,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>{o.split(".").map(s=>s[0].toUpperCase()).join("")}</div>))}{ol.length>3&&<div title={`+${ol.length-3} more`} style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.textMuted,marginLeft:-7,border:`2px solid ${T.bgSurface}`,boxSizing:"border-box",flexShrink:0}}>+{ol.length-3}</div>}</div>);}},
-    {key:"quality",label:"Quality",render:v=><QScore score={v}/>},
+    // A partial asset has never been read by EDG, so it has a state, not a missing score.
+    {key:"quality",label:"Quality",render:(v,r)=>r.partial?<span style={{fontSize:11,color:T.amber,fontWeight:600}}>Not scanned</span>:<QScore score={v}/>},
     {key:"updated",label:"Updated",render:v=><span style={{fontSize:11,color:T.textMuted}}>{v}</span>},
   ];
 
@@ -27631,6 +27627,11 @@ const CatalogView = ({onAsset})=>{
                   {item.abbr&&item.abbr!=='—'&&<span style={{fontSize:9.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{item.abbr}</span>}
                 </div>
               )}/>
+            <FacetGroup id="completeness" label="Completeness" icon={Ic.catalog(11)}
+              items={[{val:"Full",label:"Full"},{val:"Partial",label:"Partial"}]}
+              sel={selCompleteness} onToggle={(v,c)=>c?setSelCompleteness(new Set()):toggle(setSelCompleteness,v)}
+              headerNote="Partial = known from an AKG, not yet scanned by EDG."
+              renderItem={item=><div style={{display:"flex",alignItems:"center",gap:6}}><span style={{width:7,height:7,borderRadius:"50%",background:item.val==="Partial"?T.amber:"#16a34a",display:"block",flexShrink:0}}/><span style={{fontSize:11.5,color:T.textSub}}>{item.label}</span></div>}/>
             <FacetGroup id="status" label="Status" icon={Ic.clock?Ic.clock(11):null}
               items={[{val:"Active",label:"Active"},{val:"Archived",label:"Archived"}]}
               sel={selStatus} onToggle={(v,c)=>c?setSelStatus(new Set()):toggle(setSelStatus,v)}
@@ -27689,19 +27690,19 @@ const CatalogView = ({onAsset})=>{
           )}
           <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
             {filtered.length===0&&<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:200,gap:8}}><div style={{color:T.textMuted,opacity:.25}}>{Ic.catalog(36)}</div><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No assets match your filters</div><button onClick={clearAll} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Clear all filters</button></div>}
-            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={pagedRows} onRowClick={r=>onAsset(r)} rowStyle={r=>r.archived?{opacity:0.55}:null}/>}
+            {view==="table"&&filtered.length>0&&<DataTable cols={cols} rows={pagedRows} onRowClick={r=>onAsset(r)} rowStyle={r=>r.archived?{opacity:0.55}:r.partial?{boxShadow:`inset 3px 0 0 ${T.amber}`,background:`${T.amber}08`}:null}/>}
             {view==="card"&&filtered.length>0&&(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {pagedRows.map(a=>{
                   // Find glossary terms linked to this asset
                   return (
-                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden"}}
+                    <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s",overflow:"hidden",...(a.partial?{boxShadow:`inset 3px 0 0 ${T.amber}`}:null)}}
                       onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent+"55";e.currentTarget.style.background=T.bgHover;}}
                       onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.bgSurface;}}>
                       <div onClick={()=>onAsset(a)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",opacity:a.archived?0.55:1}}>
                         <ServiceIcon service={a.service} size={32}/>
                         <div style={{flex:"0 0 280px",minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>{a.archived&&<span title={`${a.archivedReason||"Removed from source"} · ${a.archivedRun||""}`.trim()} style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}</div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>{a.partial&&<span title={a.partialFix==="map"?"Map its source to an EDG connection":`Scan it with ${a.partialConn}`}><AkgPartialPill/></span>}{a.archived&&<span title={`${a.archivedReason||"Removed from source"} · ${a.archivedRun||""}`.trim()} style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${T.amber}18`,color:T.amber,border:`1px solid ${T.amber}44`,textTransform:"uppercase",letterSpacing:"0.04em",flexShrink:0}}>Archived</span>}</div>
                           <div style={{fontSize:10,color:T.textMuted,marginBottom:4,letterSpacing:"0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.db}</div>
                           <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.45,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical"}}>{a.description}</div>
                         </div>
