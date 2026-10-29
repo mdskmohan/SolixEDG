@@ -61314,7 +61314,8 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
       ["Tag source", aicTagSourcesOf(run.mode).join(", ")],
       run.mode!=="new" && ["Tags", <AICTagChips p={{...run, mode:"existing"}}/>],
       ["Trigger", run.trigger==="ingestion" ? "On ingestion" : aicSchedOn(run) ? contractScheduleShort(run.schedule) : "Manual"],
-      ["Owner", run.owner||"—"],
+      ["Owners", aicOwnersOf(run).length ? <><PeopleCircles people={aicOwnersOf(run)}/><span style={{color:T.textSub}}>{aicOwnersOf(run).join(", ")}</span></> : "—"],
+      ["Stewards", aicStewardsOf(run).length ? <><PeopleCircles people={aicStewardsOf(run)} tone={T.amber}/><span style={{color:T.textSub}}>{aicStewardsOf(run).join(", ")}</span></> : "—"],
     ].filter(Boolean);
     const runRows = lj ? [
       ["Status", <span style={{display:"inline-flex",alignItems:"center",gap:6,color:jobColor(lj),fontWeight:600}}><Dot c={jobColor(lj)}/>{jobText(lj)}</span>],
@@ -61411,11 +61412,11 @@ const AICWorkspace = ({onToast, onNav, face, onFace, onCrumb}) => {
       </button>); };
 
     body = (<>
-      <div style={{...card,padding:"16px 18px",display:"flex",alignItems:"center",gap:14,marginBottom:6,overflow:"visible"}}>
-        <div style={{width:38,height:38,borderRadius:10,background:T.violetDim,color:T.violet,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.bot(18)}</div>
+      <div style={{display:"flex",alignItems:"center",gap:14,padding:"4px 0 14px"}}>
+        <div style={{width:44,height:44,borderRadius:12,background:T.violetDim,border:`1.5px solid ${T.violet}35`,color:T.violet,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.bot(20)}</div>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-            <span style={{fontSize:16,fontWeight:700,color:T.text}}>{run.name}</span>
+            <span style={{fontSize:18,fontWeight:700,color:T.text,lineHeight:1.25}}>{run.name}</span>
             <AICScanStatus p={run} lj={lj}/>
           </div>
           <div style={{fontSize:12,color:T.textMuted,marginTop:3}}>
