@@ -2913,7 +2913,8 @@ const LIFECYCLE_TRANSITIONS = {
 const GlossaryView = ({onToast, deepLinkTermId}) => {
   const {role:gvRole, roleCfg:gvRoleCfg} = useRole();
   const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
-  const [glossaries, setGlossaries] = useState(GLOSSARY_DATA);
+  // Two levels only: Glossary -> Term. Sub-categories are gone, so terms sit straight under their glossary.
+  const [glossaries, setGlossaries] = useState(()=>GLOSSARY_DATA.map(g=>({...g,categories:[]})));
   const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
   const [slStore]                   = useSemanticLayer();  // concepts, entities and metrics live there
   const [selG,       setSelG]       = useState("g1");
@@ -2988,6 +2989,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   };
 
   const openModal = (type,data={}) => { setModal({type,data}); setForm({...data}); };
+  const termForm = t => ({id:t?.id,term:t?.term,definition:t?.definition,domain:t?.domain,glossary:t?.glossary,cert:t?.cert,
+    owners:Array.isArray(t?.owners)?t.owners:(t?.owner?[t.owner]:[]), stewards:Array.isArray(t?.stewards)?t.stewards:(t?.steward?[t.steward]:[])});
   const closeModal = () => { setModal(null); setForm({}); };
 
   const goToTerm = id => {
@@ -3046,14 +3049,14 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const doCreateTerm = () => {
     if(!form.term?.trim()) return;
     const t = {
-      id:`t${Date.now()}`,term:form.term.trim(),abbr:form.abbr||"—",
-      glossary:form.glossary||selG,category:form.category||selCat||"",
-      domain:form.domain||"Commerce",owner:form.owner||"maya.chen",
-      steward:form.owner||"maya.chen",linked:0,
+      id:`t${Date.now()}`,term:form.term.trim(),abbr:"—",
+      glossary:form.glossary||selG,category:"",
+      domain:form.domain||"Commerce",owner:(form.owners||[])[0]||meHandle,owners:form.owners||[],
+      steward:(form.stewards||[])[0]||"",stewards:form.stewards||[],linked:0,
       cert:form.cert||"Draft",
       definition:form.definition||"",relatedTerms:[],tags:[],refs:[],
       linkedAssets:[],readme:"",
-      activity:[{user:form.owner||"maya.chen",avatar:ava(form.owner||"maya.chen"),action:"Created term",time:"Just now"}],
+      activity:[{user:meHandle,avatar:ava(meHandle),action:"Created term",time:"Just now"}],
     };
     setTerms(p=>[...p,t]);
     goToTerm(t.id);
@@ -3061,7 +3064,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   };
   const doUpdateTerm = () => {
     if(!form.term?.trim()) return;
-    setTerms(p=>p.map(t=>t.id===modal.data.id?{...t,term:form.term.trim(),abbr:form.abbr||t.abbr,definition:form.definition??t.definition,domain:form.domain||t.domain,owner:form.owner||t.owner,category:form.category||t.category,cert:form.cert||t.cert}:t));
+    setTerms(p=>p.map(t=>t.id===modal.data.id?{...t,term:form.term.trim(),definition:form.definition??t.definition,domain:form.domain||t.domain,glossary:form.glossary||t.glossary,cert:form.cert||t.cert,
+      ...(form.owners?{owners:form.owners,owner:form.owners[0]||""}:{}),...(form.stewards?{stewards:form.stewards,steward:form.stewards[0]||""}:{})}:t));
     closeModal(); onToast("Term updated","success");
   };
   const canSetTermStatus = t => gvRole==="admin" || (t&&(t.owner===meHandle||t.steward===meHandle));
@@ -3240,11 +3244,12 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     if(!ctxMenu) return null;
     const {type,id,name,x,y} = ctxMenu;
     const close = ()=>setCtxMenu(null);
-    const items = type==="glossary" ? [
-      {l:"Rename",       fn:()=>{close();openModal("editGlossary",{id,name,icon:glossaries.find(g=>g.id===id)?.icon,desc:glossaries.find(g=>g.id===id)?.desc});}},
-      {l:"Add Category", fn:()=>{close();setSelG(id);openModal("newCategory");}},
-      {l:"Add Term",     fn:()=>{close();setSelG(id);openModal("newTerm",{});}},
-      {l:"Copy Link",    fn:()=>{close();onToast("Link copied","success");}},
+    const items = type==="plus" ? [
+      {l:"Add Glossary", fn:()=>{close();openModal("newGlossary");}},
+      {l:"Add Term",     fn:()=>{close();openModal("newTerm",{glossary:selG});}},
+    ] : type==="glossary" ? [
+      {l:"Add Term",     fn:()=>{close();setSelG(id);openModal("newTerm",{glossary:id});}},
+      {l:"Edit",         fn:()=>{close();openModal("editGlossary",{id,name,icon:glossaries.find(g=>g.id===id)?.icon,desc:glossaries.find(g=>g.id===id)?.desc});}},
       {l:"Delete",       fn:()=>{close();openModal("deleteGlossary",{id,name});}, danger:true},
     ] : type==="category" ? [
       {l:"Rename",    fn:()=>{close();openModal("editCategory",{id,name});}},
@@ -3252,8 +3257,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
       {l:"Copy Link", fn:()=>{close();onToast("Link copied","success");}},
       {l:"Delete",    fn:()=>{close();openModal("deleteCategory",{id,name});}, danger:true},
     ] : [
-      {l:"Edit",      fn:()=>{const t=terms.find(x=>x.id===id);close();openModal("editTerm",{id,term:t?.term,abbr:t?.abbr,definition:t?.definition,domain:t?.domain,owner:t?.owner,category:t?.category,cert:t?.cert});}},
-      {l:"Copy Link", fn:()=>{close();onToast("Link copied","success");}},
+      {l:"Edit",      fn:()=>{const t=terms.find(x=>x.id===id);close();openModal("editTerm",termForm(t));}},
       {l:"Delete",    fn:()=>{close();openModal("deleteTerm",{id,term:name});}, danger:true},
     ];
     return createPortal(
@@ -3276,7 +3280,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
       <div style={{padding:"12px 14px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
           <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Glossaries</span>
-          <button onClick={()=>openModal("newGlossary")} title="New Glossary"
+          <button onMouseDown={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxMenu(m=>m&&m.type==="plus"?null:{type:"plus",x:r.left,y:r.bottom+4});}} title="Add"
             style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}
             onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;}}
             onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;}}>
@@ -3377,12 +3381,23 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                       </div>
                     );
                   })}
-                  {selG===g.id&&(
-                    <button onClick={()=>openModal("newCategory")} style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px 5px 26px",background:"transparent",border:"none",cursor:"pointer",color:T.textMuted,fontSize:11,width:"100%"}}
-                      onMouseEnter={e=>e.currentTarget.style.color=T.accent} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}>
-                      <IcPlus/> New Category
-                    </button>
-                  )}
+                  {terms.filter(t=>t.glossary===g.id).map(t=>{
+                    const isSelT=selTerm===t.id;
+                    const hovT=hovered===`t:${t.id}`;
+                    const cm=CERT_META[t.cert]||CERT_META.Draft;
+                    return (
+                      <div key={t.id} onMouseEnter={()=>setHovered(`t:${t.id}`)} onMouseLeave={()=>setHovered(null)}
+                        style={{display:"flex",alignItems:"center",padding:"3px 8px 3px 26px",cursor:"pointer",borderLeft:`2px solid ${isSelT?T.accent:"transparent"}`,background:isSelT?T.accentDim:"transparent"}}>
+                        <button onClick={()=>goToTerm(t.id)} style={{flex:1,display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:"2px 0",minWidth:0}}>
+                          <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:isSelT?T.accent:T.textMuted}}><rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 5.5h5M4.5 8h3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                          <span style={{flex:1,fontSize:12,fontWeight:isSelT?600:400,color:isSelT?T.accent:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"left"}}>{t.term}</span>
+                          <span style={{width:6,height:6,borderRadius:"50%",background:cm.color,flexShrink:0}}/>
+                        </button>
+                        {hovT&&<button onMouseDown={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxMenu({type:"term",id:t.id,name:t.term,x:r.right+4,y:r.top});}}
+                          style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,letterSpacing:1,marginLeft:2}}>···</button>}
+                      </div>
+                    );
+                  })}
                 </>}
               </div>
             );
@@ -3408,7 +3423,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             <span style={{fontSize:13,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
             {t.abbr&&t.abbr!=="—"&&<span style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace",background:T.bgElevated,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}>{t.abbr}</span>}
           </div>
-          <span style={{width:130,flexShrink:0,fontSize:12,color:T.textMuted}}>{glossary.categories.find(c=>c.id===t.category)?.name||"Uncategorized"}</span>
+          <span style={{width:130,flexShrink:0,fontSize:12,color:T.textMuted}}>{glossary.name}</span>
           <span style={{width:110,flexShrink:0,fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:cm.bg,color:cm.color,border:`1px solid ${cm.border}`,display:"inline-flex",alignItems:"center",gap:4}}>{cm.icon} {t.cert}</span>
           <div style={{width:120,flexShrink:0,display:"flex",alignItems:"center",gap:6}}>
             <div style={{width:22,height:22,borderRadius:6,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:T.accent,flexShrink:0}}>{ava(t.owner)}</div>
@@ -3428,15 +3443,13 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 {glossary.desc&&<div style={{fontSize:13,color:T.textSub,lineHeight:1.5,maxWidth:520,marginBottom:8}}>{glossary.desc}</div>}
                 <div style={{display:"flex",alignItems:"center",gap:16}}>
                   <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:T.textMuted}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 5.5h5M4.5 8h3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg><strong style={{color:T.text}}>{allTermsInGlossary.length}</strong> terms</span>
-                  <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:T.textMuted}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg><strong style={{color:T.text}}>{glossary.categories.length}</strong> categories</span>
                   {allOwners.length>0&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:T.textMuted}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M2 12c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg><strong style={{color:T.text}}>{allOwners.length}</strong> owners</span>}
                 </div>
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0}}>
               <Btn small ghost onClick={()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}>Edit</Btn>
-              <Btn small ghost onClick={()=>openModal("newCategory")}>+ Category</Btn>
-              <Btn small variant="primary" onClick={()=>openModal("newTerm",{category:selCat||""})}>+ Term</Btn>
+              <Btn small variant="primary" onClick={()=>openModal("newTerm",{glossary:selG})}>+ Term</Btn>
             </div>
           </div>
         </div>
@@ -3459,11 +3472,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 <div style={{width:52,height:52,borderRadius:14,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px",color:T.textSub}}>
                   <svg width="22" height="22" viewBox="0 0 14 14" fill="none"><path d="M1.5 3h3.8l.9 1.3H12.5a.7.7 0 01.7.7v5.8a.7.7 0 01-.7.7H1.5a.7.7 0 01-.7-.7V3.7a.7.7 0 01.7-.7z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round"/></svg>
                 </div>
-                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:6}}>No categories or terms yet</div>
-                <div style={{fontSize:13,color:T.textMuted,marginBottom:20}}>Create a category to start organizing your business terms.</div>
+                <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>No terms yet</div>
                 <div style={{display:"flex",gap:8,justifyContent:"center"}}>
-                  <Btn small ghost onClick={()=>openModal("newCategory")}>+ New Category</Btn>
-                  <Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn>
+                  <Btn small variant="primary" onClick={()=>openModal("newTerm",{glossary:selG})}>+ New Term</Btn>
                 </div>
               </div>
             );
@@ -3508,7 +3519,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                             style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #fde68a",cursor:"pointer"}}
                             onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                             <span style={{fontSize:12.5,fontWeight:600,color:"#d97706",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
-                            <span style={{fontSize:10.5,color:"#92400e",flexShrink:0}}>{glossary.categories.find(c=>c.id===t.category)?.name||"Uncategorized"}</span>
+                            <span style={{fontSize:10.5,color:"#92400e",flexShrink:0}}>{glossary.name}</span>
                           </div>
                         ))}
                         {unlinked.length>5&&<div style={{fontSize:11,color:"#92400e",paddingTop:6}}>+{unlinked.length-5} more</div>}
@@ -3526,7 +3537,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                             style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",borderTop:"1px solid #fecdd3",cursor:"pointer"}}
                             onMouseEnter={e=>e.currentTarget.style.opacity=".7"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
                             <span style={{fontSize:12.5,fontWeight:600,color:"#e11d48",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
-                            <span style={{fontSize:10.5,color:"#881337",flexShrink:0}}>{glossary.categories.find(c=>c.id===t.category)?.name||"Uncategorized"}</span>
+                            <span style={{fontSize:10.5,color:"#881337",flexShrink:0}}>{glossary.name}</span>
                           </div>
                         ))}
                         {noDefn.length>5&&<div style={{fontSize:11,color:"#9f1239",paddingTop:6}}>+{noDefn.length-5} more</div>}
@@ -3624,7 +3635,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               {(()=>{const unc=allTermsInGlossary.filter(t=>!t.category||!glossary.categories.find(c=>c.id===t.category));return unc.length>0&&(
                 <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.textMuted}}>Uncategorized</span>
+                    <span style={{fontSize:13,fontWeight:700,color:T.text}}>Terms</span>
                     <span style={{fontSize:11,color:T.textMuted,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:99,padding:"1px 7px"}}>{unc.length}</span>
                   </div>
                   {unc.map((t,i)=>{const cm=CERT_META[t.cert]||CERT_META.Draft;return(
@@ -3772,17 +3783,17 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
                 {termMenuOpen&&(
                   <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 12px 36px rgba(0,0,0,.28)",minWidth:210,overflow:"hidden"}}>
-                    <button onClick={()=>{openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition,domain:term.domain,owner:term.owner,category:term.category,cert:term.cert});setTermMenuOpen(false);}}
+                    <button onClick={()=>{openModal("editTerm",termForm(term));setTermMenuOpen(false);}}
                       style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <span style={{fontSize:14,marginTop:1}}>🖊️</span>
-                      <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>Bulk Edit</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Edit all term fields</div></div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>Edit</div>
                     </button>
                     <button onClick={()=>{openModal("deleteTerm",{id:term.id,term:term.term});setTermMenuOpen(false);}}
                       style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
                       onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <span style={{fontSize:14,marginTop:1}}>🗑️</span>
-                      <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Term</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this term</div></div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete</div>
                     </button>
                   </div>
                 )}
@@ -3890,7 +3901,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
 
             {/* OWNERS */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-              <SideLabel ch="Owners" onEdit={()=>{setGlossEditModal("owners");setGlossModalSearch("");}}/>
+              <SideLabel ch="Owner(s)" onEdit={()=>{setGlossEditModal("owners");setGlossModalSearch("");}}/>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                 {owners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners set</span>}
                 {(showAllGlossOwners?owners:owners.slice(0,3)).map((o,i)=>(
@@ -3906,7 +3917,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
 
             {/* STEWARDS */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-              <SideLabel ch="Stewards" onEdit={()=>{setGlossEditModal("stewards");setGlossModalSearch("");}}/>
+              <SideLabel ch="Steward(s)" onEdit={()=>{setGlossEditModal("stewards");setGlossModalSearch("");}}/>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                 {stewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>}
                 {(showAllGlossStewards?stewards:stewards.slice(0,3)).map((s,i)=>(
@@ -3922,7 +3933,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
 
             {/* TAGS */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-              <SideLabel ch="Tags" onEdit={()=>{setGlossEditModal("tags");setGlossModalSearch("");}}/>
+              <SideLabel ch="Tag(s)" onEdit={()=>{setGlossEditModal("tags");setGlossModalSearch("");}}/>
               <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                 {(term.tags||[]).length>0?(term.tags||[]).map(tag=>{
                   const tc=tagColor(tag);
@@ -4123,8 +4134,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     if(type==="newGlossary"||type==="editGlossary"){
       const isEdit = type==="editGlossary";
       return (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:460,maxHeight:"85vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+        <><div onClick={closeModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.18)",zIndex:900}}/>
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:901,overflowY:"auto",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
             <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div style={{fontSize:15,fontWeight:700,color:T.text}}>{isEdit?"Edit Glossary":"New Glossary"}</div>
               <button onClick={closeModal} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}><IcX/></button>
@@ -4146,7 +4157,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
           </div>
-        </div>
+        </>
       );
     }
     if(type==="newCategory"||type==="editCategory"){
@@ -4175,8 +4186,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     if(type==="newTerm"||type==="editTerm"){
       const isEdit = type==="editTerm";
       return (
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:900,backdropFilter:"blur(4px)"}}>
-          <div className="scaleIn" style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,width:540,maxHeight:"88vh",overflow:"auto",boxShadow:"0 24px 60px rgba(0,0,0,.35)"}}>
+        <><div onClick={closeModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.18)",zIndex:900}}/>
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:480,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:901,overflowY:"auto",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
             <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
               <div>
                 <div style={{fontSize:15,fontWeight:700,color:T.text}}>{isEdit?"Edit Term":"New Term"}</div>
@@ -4185,10 +4196,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               <button onClick={closeModal} style={{background:T.bgHover,border:`1px solid ${T.border}`,borderRadius:6,color:T.textMuted,cursor:"pointer",padding:"3px 6px",display:"flex"}}><IcX/></button>
             </div>
             <div style={{padding:"18px 22px",display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 100px",gap:10}}>
-                <div><GlLabel req>Term Name</GlLabel><GlInput value={form.term||""} onChange={e=>setForm(f=>({...f,term:e.target.value}))} placeholder="e.g. Gross Margin"/></div>
-                <div><GlLabel>Abbreviation</GlLabel><GlInput value={form.abbr||""} onChange={e=>setForm(f=>({...f,abbr:e.target.value}))} placeholder="e.g. GM" maxLength={8}/></div>
-              </div>
+              <div><GlLabel req>Term Name</GlLabel><GlInput value={form.term||""} onChange={e=>setForm(f=>({...f,term:e.target.value}))} placeholder="e.g. Gross Margin"/></div>
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
                   <GlLabel>Definition</GlLabel>
@@ -4197,16 +4205,10 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 <GlTA value={form.definition||""} onChange={e=>setForm(f=>({...f,definition:e.target.value}))} placeholder="Clear, precise business definition…" rows={4}/>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                <div>
-                  <GlLabel>Category</GlLabel>
-                  <GlSelect value={form.category||""} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
-                    <option value="">Uncategorized</option>
-                    {glossary?.categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-                  </GlSelect>
-                </div>
                 <div><GlLabel>Glossary</GlLabel><GlSelect value={form.glossary||selG||"g1"} onChange={e=>setForm(f=>({...f,glossary:e.target.value}))}>{glossaries.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</GlSelect></div>
-                <div><GlLabel>Owner</GlLabel><GlSelect value={form.owner||"maya.chen"} onChange={e=>setForm(f=>({...f,owner:e.target.value}))}>{USERS.map(u=><option key={u} value={u}>{u}</option>)}</GlSelect></div>
                 <div><GlLabel>Status</GlLabel><GlSelect value={form.cert||"Draft"} onChange={e=>setForm(f=>({...f,cert:e.target.value}))}>{["Draft","In Review"].map(c=><option key={c}>{c}</option>)}</GlSelect></div>
+                <TagPeoplePicker label="Owner(s)" addLabel="Add owner" people={form.owners||[]} setPeople={v=>setForm(f=>({...f,owners:v}))}/>
+                <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={form.stewards||[]} setPeople={v=>setForm(f=>({...f,stewards:v}))}/>
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:4}}>
                 <button onClick={closeModal} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
@@ -4214,7 +4216,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
           </div>
-        </div>
+        </>
       );
     }
     return null;
@@ -10289,13 +10291,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </div>
                           </SB>
 
-                          <SB ch="Owners" onEdit={()=>setPolEditModal("owner")}>
+                          <SB ch="Owner(s)" onEdit={()=>setPolEditModal("owner")}>
                             {p.owner
                               ? ownerChip(p.owner)
                               : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owner set</span>}
                           </SB>
 
-                          <SB ch="Stewards" onEdit={()=>setPolEditModal("stewards")}>
+                          <SB ch="Steward(s)" onEdit={()=>setPolEditModal("stewards")}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.stewards||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards set</span>
@@ -10304,7 +10306,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             </div>
                           </SB>
 
-                          <SB ch="Tags" onEdit={()=>setPolEditModal("tags")}>
+                          <SB ch="Tag(s)" onEdit={()=>setPolEditModal("tags")}>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.tags||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>
@@ -13883,14 +13885,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     style={{width:26,height:26,borderRadius:"50%",background:c,border:draft.color===c?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",padding:0,flexShrink:0,transition:"border .12s"}}/>
                 ))}
               </div>
-            </div>
-            {/* Preview */}
-            <div style={{padding:"14px 16px",background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
-              <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
-              <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 12px",borderRadius:99,background:`${draft.color}15`,border:`1px solid ${draft.color}40`,fontSize:12,fontWeight:600,color:draft.color,textTransform:"capitalize"}}>
-                <span style={{width:7,height:7,borderRadius:"50%",background:draft.color,display:"block"}}/>
-                {draft.name||"Category Name"}
-              </span>
             </div>
           </div>
         );
@@ -21738,6 +21732,16 @@ const ContractWizard = ({asset,existing,onClose,onSubmit,onToast})=>{
   ,document.body);
 };
 
+// Data Quality keys a table as "schema.table" (commerce.orders). An asset profile must use the
+// same key, or a case created on one screen never shows on the other.
+const dqTableKeyFor = (asset, cases=DQ_TEST_CASES)=>{
+  const hit = cases.find(t=>t.table===asset.name||t.table.endsWith("."+asset.name));
+  if(hit) return hit.table;
+  const parts = (asset.db||"").split("/").map(x=>x.trim()).filter(Boolean);
+  const schema = parts.length>=2 ? parts[parts.length-2].split(".").pop().toLowerCase() : "";
+  return schema ? `${schema}.${asset.name}` : asset.name;
+};
+
 const AssetQualityTab = ({asset,onToast,onNav})=>{
   const [runningIds,setRunningIds]=useState(new Set());
   const [selectedIds,setSelectedIds]=useState(new Set());
@@ -21776,7 +21780,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
   const localCases=(()=>{
     // match DQ test cases to this asset — table field is like "commerce.orders", asset.name is "orders"
     const matched=allCases.filter(t=>t.table.endsWith("."+asset.name)||t.table===asset.name);
-    return (matched.length>0?matched:allCases.slice(0,3)).filter(t=>!hiddenIds.has(t.id));
+    return matched.filter(t=>!hiddenIds.has(t.id));
   })();
   useEffect(()=>{
     if(!tcDetail) return;
@@ -22135,7 +22139,7 @@ const AssetQualityTab = ({asset,onToast,onNav})=>{
                 const params=aqTcSelType?dqWithDefaults(aqTcSelType,aqTcParams):aqTcParams;
                 const seenRows=allCases.find(t=>(t.table.endsWith("."+asset.name)||t.table===asset.name)&&t.data)?.data.rows||10000+dqHash(asset.name)%90000;
                 const suiteId=DQ_SUITES.find(s=>s.type==="table"&&s.table.endsWith("."+asset.name))?.id||"ts1";
-                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId,table:asset.name,col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:aqTcDim||def.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,
+                const newCase={id:`tc_new_${Date.now()}`,name:aqTcName.trim(),suiteId,table:dqTableKeyFor(asset,allCases),col:aqTcLevel==="column"?aqTcSelCol||"column_name":null,defId:def.id,defName:def.name,dim:aqTcDim||def.dim,status:"Success",lastVal:"—",expected:Object.entries(params).map(([k,v])=>`${k}: ${v}`).join(", ")||"—",lastRun:"Never",history:[],params,
                   ...(aqTcCustomSQL?{sql:aqTcSQLQuery,sqlStrategy:aqTcSQLStrategy||"ROWS",sqlOperator:aqTcSQLOperator||"==",sqlThreshold:aqTcSQLThreshold===""?0:+aqTcSQLThreshold,partitionExpr:aqTcSQLPartitionExpr}:{}),
                   ...(def.rowLevel?{mostly:aqTcRun.mostly===""||aqTcRun.mostly==null?100:aqTcRun.mostly,thresholdUnit:aqTcRun.thresholdUnit||"pct",warnMostly:aqTcRun.warnMostly??"",warnIf:aqTcRun.warnIf??"",errorIf:aqTcRun.errorIf===""||aqTcRun.errorIf==null?0:aqTcRun.errorIf,data:{rows:seenRows,unexpected:0}}:{}),
                   ...(def.freshness?{data:{ageHours:+(0.5+(dqHash(asset.name)%40)/10).toFixed(1)}}:{}),
@@ -23584,7 +23588,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                 </div>
                 <div style={{maxHeight:180,overflowY:"auto"}}>
                   {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
-                    <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                    <button key={d} onClick={()=>{asset.domain=d;setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
                       style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
                       onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
                       {d}
@@ -27102,7 +27106,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
               </div>
               <div style={{maxHeight:180,overflowY:"auto"}}>
                 {DOMAINS_LIST.filter(d=>!domainSearch||d.toLowerCase().includes(domainSearch.toLowerCase())).map(d=>(
-                  <button key={d} onClick={()=>{setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
+                  <button key={d} onClick={()=>{asset.domain=d;setData(dd=>({...dd,domain:d}));setDomainOpen(false);onToast(`Domain set to ${d}`,"success");}}
                     style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:data.domain===d?T.accentDim:"transparent",border:"none",cursor:"pointer",fontSize:12.5,color:data.domain===d?T.accent:T.textSub,fontWeight:data.domain===d?600:400,transition:"background .1s"}}
                     onMouseEnter={e=>{if(data.domain!==d)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(data.domain!==d)e.currentTarget.style.background="transparent";}}>
                     {d}
@@ -28262,6 +28266,21 @@ const DATA_PRODUCTS_DATA = [
    inputPortIds:[],outputPortIds:[]},
 ];
 
+// ── Shared reactive store for data products ──
+// Domains and Data Products read the same list, so a product created with a domain
+// shows on that domain's Data Products tab straight away.
+const _dpSubs = new Set();
+let _dpState = DATA_PRODUCTS_DATA.map(p => ({...p}));
+const dpSet = (updater) => {
+  _dpState = typeof updater === "function" ? updater(_dpState) : updater;
+  _dpSubs.forEach(fn => fn());
+};
+const useDataProducts = () => {
+  const [, force] = useState(0);
+  useEffect(() => { const fn = () => force(n => n + 1); _dpSubs.add(fn); return () => { _dpSubs.delete(fn); }; }, []);
+  return [_dpState, dpSet];
+};
+
 // ─────────────────────────────────────────────
 // SHARED: domain/product badge sub-components
 // ─────────────────────────────────────────────
@@ -28397,6 +28416,16 @@ const PortsLineageFlow=({inputPorts,outputPorts,pd})=>{
   );
 };
 
+// Object-type filter for the add-assets pickers: every type in the catalog, not a fixed list.
+const ASSET_PICKER_TYPES = ()=>[...new Set(ASSETS.filter(a=>!a.archived).map(a=>a.type).filter(Boolean))].sort();
+const AssetTypeFilter = ({value,onChange})=>(
+  <select value={value} onChange={e=>onChange(e.target.value)}
+    style={{marginTop:8,width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",cursor:"pointer"}}>
+    <option value="">All object types</option>
+    {ASSET_PICKER_TYPES().map(t=><option key={t} value={t}>{t}</option>)}
+  </select>
+);
+
 // ─────────────────────────────────────────────
 // PORTS TAB (shared between Domains + DataProducts)
 // ─────────────────────────────────────────────
@@ -28417,12 +28446,15 @@ const PortsTab=({pd,allAssets,onPatch})=>{
   const closeAdd=()=>{setAddTarget(null);setAddSearch("");setAddSelected(new Set());};
 
   const alreadyAdded = new Set([...inputPortIds,...outputPortIds]);
+  // A port is one of the product's own assets, never an arbitrary catalog asset.
+  const productAssetIds = new Set(pd.assetIds||[]);
   const pickerAssets = allAssets.filter(a=>{
+    if(!productAssetIds.has(a.id)) return false;
     if(addTarget==="input"  && inputPortIds.includes(a.id))  return false;
     if(addTarget==="output" && outputPortIds.includes(a.id)) return false;
     if(addSearch){
       const q=addSearch.toLowerCase();
-      return a.name.toLowerCase().includes(q)||a.db.toLowerCase().includes(q)||(a.type||"").toLowerCase().includes(q);
+      return a.name.toLowerCase().includes(q)||(a.db||"").toLowerCase().includes(q)||(a.type||"").toLowerCase().includes(q);
     }
     return true;
   });
@@ -28605,7 +28637,7 @@ const PortsTab=({pd,allAssets,onPatch})=>{
             <div style={{padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
               <div style={{flex:1}}>
                 <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add {addTarget==="input"?"Input":"Output"} Port</div>
-                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Select assets from the data catalog</div>
+                <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Select from this data product's assets</div>
               </div>
               <button onClick={closeAdd} style={{width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted}}>
                 {Ic.x(13)}
@@ -28622,7 +28654,7 @@ const PortsTab=({pd,allAssets,onPatch})=>{
             {/* asset list */}
             <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
               {pickerAssets.length===0
-                ? <div style={{padding:"32px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets found</div>
+                ? <div style={{padding:"32px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>{productAssetIds.size===0?"No assets in this data product. Add assets on the Assets tab first.":"No assets found"}</div>
                 : pickerAssets.map(a=>{
                     const sel=addSelected.has(a.id);
                     const parts=a.db?a.db.split(" / "):[];
@@ -28674,7 +28706,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
   const { role: dmvRole, roleCfg: dmvRoleCfg } = useRole();
   const dmMeHandle = ((dmvRoleCfg&&dmvRoleCfg.email)||"you@jnj").split("@")[0];
   const [domains, setDomains]     = useDomains();
-  const [products, setProducts]   = useState(DATA_PRODUCTS_DATA);
+  const [products, setProducts]   = useDataProducts();
   const [selectedDomainId, setSelectedDomainId]     = useState(null);
   const [selectedProductId, setSelectedProductId]   = useState(null);
   useEffect(()=>{ if(deepLinkDomainId){ setSelectedDomainId(deepLinkDomainId); setSelectedProductId(null); setDomainTab("documentation"); } },[deepLinkDomainId]);
@@ -28767,11 +28799,13 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
   // add assets to data product (domain view)
   const [addPdAssetsOpen,   setAddPdAssetsOpen]   = useState(false);
   const [addPdAssetsSearch, setAddPdAssetsSearch] = useState("");
+  const [addPdAssetsType,   setAddPdAssetsType]   = useState("");
   const [addPdAssetsSelected, setAddPdAssetsSelected] = useState(new Set());
   // edit data product panel (domain view)
   const [pdEditOpen,   setPdEditOpen]   = useState(false);
   const [pdEditData,   setPdEditData]   = useState(null);
   const [addAssetsSearch,   setAddAssetsSearch]   = useState("");
+  const [addAssetsType,     setAddAssetsType]     = useState("");
   const [addAssetsSelected, setAddAssetsSelected] = useState(new Set());
   // domain/product list search icon state
   const [domainSearch,      setDomainSearch]      = useState("");
@@ -29752,6 +29786,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
               <div style={{padding:"12px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
                 <Input2 placeholder="Search assets by name or type…" value={addAssetsSearch} onChange={e=>setAddAssetsSearch(e.target.value)} icon={Ic.search(12)}/>
+                <AssetTypeFilter value={addAssetsType} onChange={setAddAssetsType}/>
               </div>
               {addAssetsSelected.size>0&&(
                 <div style={{padding:"8px 22px",borderBottom:`1px solid ${T.border}`,background:T.accentDim,fontSize:12,color:T.accent,fontWeight:500,flexShrink:0}}>
@@ -29763,7 +29798,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                   const existingIds = new Set(
                     (dm.extraAssetIds||[]).concat(ASSETS.filter(a=>a.domain===dm.name).map(a=>a.id))
                   );
-                  const candidates = ASSETS.filter(a=>!existingIds.has(a.id)&&(!addAssetsSearch||a.name.toLowerCase().includes(addAssetsSearch.toLowerCase())||a.type.toLowerCase().includes(addAssetsSearch.toLowerCase())));
+                  const candidates = ASSETS.filter(a=>!existingIds.has(a.id)&&!a.archived&&(!addAssetsType||a.type===addAssetsType)&&(!addAssetsSearch||a.name.toLowerCase().includes(addAssetsSearch.toLowerCase())||a.type.toLowerCase().includes(addAssetsSearch.toLowerCase())));
                   if(candidates.length===0) return <div style={{padding:"60px 20px",textAlign:"center",color:T.textMuted,fontSize:13}}>No matching assets available</div>;
                   return candidates.map(a=>{
                     const sel=addAssetsSelected.has(a.id);
@@ -30094,9 +30129,10 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                   <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,fontSize:13,pointerEvents:"none"}}>🔍</span>
                 </div>
+                <AssetTypeFilter value={addPdAssetsType} onChange={setAddPdAssetsType}/>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:"8px 22px"}}>
-                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&(!addPdAssetsSearch||a.name.toLowerCase().includes(addPdAssetsSearch.toLowerCase())||a.domain.toLowerCase().includes(addPdAssetsSearch.toLowerCase()))).map(a=>{
+                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&!a.archived&&(!addPdAssetsType||a.type===addPdAssetsType)&&(!addPdAssetsSearch||a.name.toLowerCase().includes(addPdAssetsSearch.toLowerCase())||(a.domain||"").toLowerCase().includes(addPdAssetsSearch.toLowerCase())||(a.type||"").toLowerCase().includes(addPdAssetsSearch.toLowerCase()))).map(a=>{
                   const sel=addPdAssetsSelected.has(a.id);
                   return(
                     <div key={a.id} onClick={()=>setAddPdAssetsSelected(prev=>{const n=new Set(prev);sel?n.delete(a.id):n.add(a.id);return n;})}
@@ -30995,7 +31031,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 // DATA PRODUCTS VIEW (standalone top-level page)
 // ─────────────────────────────────────────────
 const DataProductsView = ({onAsset, onNav}) => {
-  const [products, setProducts]         = useState(DATA_PRODUCTS_DATA);
+  const [products, setProducts]         = useDataProducts();
   const [domains]                       = useDomains();
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [productTab, setProductTab]     = useState("overview");
@@ -31024,6 +31060,7 @@ const DataProductsView = ({onAsset, onNav}) => {
   const [dpMenuOpen,       setDpMenuOpen]       = useState(false);
   const [dpAddAssetsOpen,  setDpAddAssetsOpen]  = useState(false);
   const [dpAddSearch,      setDpAddSearch]      = useState("");
+  const [dpAddType,        setDpAddType]        = useState("");
   const [dpAddSelected,    setDpAddSelected]    = useState(new Set());
   const [dpEditOpen,       setDpEditOpen]       = useState(false);
   const [dpEditData,       setDpEditData]       = useState(null);
@@ -31549,9 +31586,10 @@ const DataProductsView = ({onAsset, onNav}) => {
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                   <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:T.textMuted,fontSize:13,pointerEvents:"none"}}>🔍</span>
                 </div>
+                <AssetTypeFilter value={dpAddType} onChange={setDpAddType}/>
               </div>
               <div style={{flex:1,overflowY:"auto",padding:"8px 22px"}}>
-                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&(!dpAddSearch||a.name.toLowerCase().includes(dpAddSearch.toLowerCase())||a.domain.toLowerCase().includes(dpAddSearch.toLowerCase()))).map(a=>{
+                {ASSETS.filter(a=>!selectedProduct.assetIds.includes(a.id)&&!a.archived&&(!dpAddType||a.type===dpAddType)&&(!dpAddSearch||a.name.toLowerCase().includes(dpAddSearch.toLowerCase())||(a.domain||"").toLowerCase().includes(dpAddSearch.toLowerCase())||(a.type||"").toLowerCase().includes(dpAddSearch.toLowerCase()))).map(a=>{
                   const sel=dpAddSelected.has(a.id);
                   return(
                     <div key={a.id} onClick={()=>setDpAddSelected(prev=>{const n=new Set(prev);sel?n.delete(a.id):n.add(a.id);return n;})}
@@ -31815,21 +31853,11 @@ const DataProductsView = ({onAsset, onNav}) => {
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                 <div>
                   <div style={{fontSize:15,fontWeight:700,color:T.text}}>New Data Product</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Bundle related assets into a governed, discoverable unit</div>
                 </div>
                 <button onClick={()=>setCreateOpen(false)} style={{width:28,height:28,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
               </div>
             </div>
             <div style={{padding:"20px 24px",flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:16}}>
-              {/* Domain (required) */}
-              <div>
-                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Domain <span style={{color:T.rose}}>*</span></label>
-                <select value={createDomain} onChange={e=>setCreateDomain(e.target.value)}
-                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${!createDomain?"rgba(225,29,72,.4)":T.border}`,borderRadius:8,color:createDomain?T.text:T.textMuted,fontSize:12,outline:"none",cursor:"pointer"}}>
-                  <option value="">Select a domain…</option>
-                  {domains.map(d=><option key={d.id} value={d.name}>{d.icon} {d.displayName}</option>)}
-                </select>
-              </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>
                   <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Name <span style={{color:T.rose}}>*</span></label>
@@ -31843,6 +31871,15 @@ const DataProductsView = ({onAsset, onNav}) => {
                     style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                 </div>
+              </div>
+              {/* Domain (required) */}
+              <div>
+                <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Domain <span style={{color:T.rose}}>*</span></label>
+                <select value={createDomain} onChange={e=>setCreateDomain(e.target.value)}
+                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${!createDomain?"rgba(225,29,72,.4)":T.border}`,borderRadius:8,color:createDomain?T.text:T.textMuted,fontSize:12,outline:"none",cursor:"pointer"}}>
+                  <option value="">Select a domain…</option>
+                  {domains.map(d=><option key={d.id} value={d.name}>{d.icon} {d.displayName}</option>)}
+                </select>
               </div>
               <div>
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>Description</label>
@@ -56984,6 +57021,8 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   const [newCatInput,      setNewCatInput]      = useState('');
   const [newCatDraft,      setNewCatDraft]      = useState({ name:'', description:'', color:'#6366f1' });
   const [customCategories, setCustomCategories] = useState([]);
+  const [catMeta,          setCatMeta]          = useState({}); // classification -> {description,color,owners,stewards}
+  const [editingCat,       setEditingCat]       = useState(null);
   const [dotMenuOpen,      setDotMenuOpen]      = useState(null); // tagId or 'cat:name'
   const [deleteConfirm,    setDeleteConfirm]    = useState(null); // {type:'tag'|'category', id, name}
   const [catOpen,          setCatOpen]          = useState(false); // new-tag category dropdown
@@ -57055,12 +57094,22 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   },[allCategories.join(',')]);
 
   const addNewCategory = () => {
-    if(!newCatDraft.name.trim()) return;
-    setCustomCategories(p=>[...new Set([...p,newCatDraft.name.trim()])]);
+    const name = newCatDraft.name.trim();
+    if(!name) return;
+    const meta = {description:newCatDraft.description||'', color:newCatDraft.color, owners:newCatDraft.owners||[], stewards:newCatDraft.stewards||[]};
+    if(editingCat && editingCat!==name){
+      tagDefs.filter(td=>td.category===editingCat).forEach(td=>updateTagDef(td.id,{category:name}));
+      setCustomCategories(p=>[...new Set([...p.filter(c=>c!==editingCat),name])]);
+      setCatMeta(m=>{ const {[editingCat]:_old, ...rest}=m; return {...rest,[name]:meta}; });
+    } else {
+      setCustomCategories(p=>[...new Set([...p,name])]);
+      setCatMeta(m=>({...m,[name]:meta}));
+    }
+    onToast(editingCat?'Classification updated':'Classification created','success');
     setNewCatPanelOpen(false);
-    setNewCatDraft({name:'',description:'',color:'#6366f1'});
-    onToast('Classification created','success');
   };
+  // Closing the drawer always leaves it ready for a fresh "New Classification".
+  useEffect(()=>{ if(!newCatPanelOpen){ setEditingCat(null); setNewCatDraft({name:'',description:'',color:'#6366f1'}); } },[newCatPanelOpen]);
 
   const deleteTag = (tagId) => {
     deleteTagDef(tagId);
@@ -57075,9 +57124,13 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
     onToast('Classification deleted','success');
   };
   const getCatStyle = (cat) => {
+    if(catMeta[cat]?.color) return {color:catMeta[cat].color, bg:catMeta[cat].color+'1a'};
     const MAP = { sensitivity:{color:T.rose,bg:T.roseDim}, regulatory:{color:T.amber,bg:T.amberDim}, business:{color:T.blue,bg:T.blueDim} };
     return MAP[cat] || {color:T.textSub, bg:T.bgElevated};
   };
+
+  const openEditCat = (cat) => { const m=catMeta[cat]||{}; setEditingCat(cat); setNewCatDraft({name:cat,description:m.description||'',color:m.color||'#6366f1',owners:m.owners||[],stewards:m.stewards||[]}); setNewPanelOpen(false); setNewCatPanelOpen(true); };
+  const openAddTagIn = (cat) => { setNewDraft(d=>({...d,category:cat})); setNewCatInput(''); setNewCatPanelOpen(false); setSelTagId(null); setNewPanelOpen(true); };
 
   const PROP_LABELS = { both:'Both directions', lineage:'Lineage only', hierarchy:'Hierarchy only', none:'No propagation' };
   const PROP_COLORS = { both:T.violet, lineage:T.blue, hierarchy:T.amber, none:T.textMuted };
@@ -57219,17 +57272,23 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                         </button>
                         {dotMenuOpen===`cat:${cat}`&&(
                           <div style={{position:'absolute',top:'100%',right:0,width:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:300,overflow:'hidden'}}>
-                            <button onClick={e=>{e.stopPropagation();setNewCatPanelOpen(true);setNewCatDraft({name:cat,description:'',color:'#6366f1'});setDotMenuOpen(null);}}
+                            <button onClick={e=>{e.stopPropagation();openAddTagIn(cat);setDotMenuOpen(null);}}
+                              style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                              <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                              Add Tag
+                            </button>
+                            <button onClick={e=>{e.stopPropagation();openEditCat(cat);setDotMenuOpen(null);}}
                               style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.text,display:'flex',alignItems:'center',gap:8,borderBottom:`1px solid ${T.border}`}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              Edit Category
+                              Edit
                             </button>
                             <button onClick={e=>{e.stopPropagation();setDeleteConfirm({type:'category',id:cat,name:cat});setDotMenuOpen(null);}}
                               style={{width:'100%',padding:'9px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',fontSize:12,color:T.rose,display:'flex',alignItems:'center',gap:8}}
                               onMouseEnter={e=>e.currentTarget.style.background=T.roseDim} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                               <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M5 3V2h2v1M4 5l.5 5M8 5l-.5 5M3 3l.5 7h5L9 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              Delete Category
+                              Delete
                             </button>
                           </div>
                         )}
@@ -57357,7 +57416,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{catTags.length} tag{catTags.length!==1?'s':''} in this category</div>
                     </div>
                   </div>
-                  <button onClick={()=>{setNewCatPanelOpen(true);setNewCatDraft({name:selCatId,description:'',color:'#6366f1'});}}
+                  <button onClick={()=>openEditCat(selCatId)}
                     style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}}
                     onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
                     Edit
@@ -57400,7 +57459,8 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
 
           {/* ── Tag detail panel ── */}
           {selTag&&(()=>{
-            const cc  = getCatStyle(selTag.category);
+            // The tag's own colour wins, so the chips match the colour picked when it was created.
+            const cc  = selTag.color ? {color:selTag.color, bg:selTag.color+'1a'} : getCatStyle(selTag.category);
             const draft = editing ? editDraft : selTag;
             const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
             // Columns carrying this tag, listed beside the tables and counted with them.
@@ -57552,7 +57612,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       <div ref={catDropRef} style={{padding:'16px',borderBottom:`1px solid ${T.border}`,position:'relative'}}>
                         <SideLabel ch="Classification" onEdit={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}/>
                         {selTag.category
-                          ? (()=>{const cc=getCatStyle(selTag.category);return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
+                          ? (()=>{const cc=selTag.color?{color:selTag.color,bg:selTag.color+'1a'}:getCatStyle(selTag.category);return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
                           : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Unclassified</span>}
                         {catDropOpen&&(
                           <div style={{position:'absolute',top:'calc(100% - 6px)',left:16,right:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
@@ -57603,7 +57663,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
 
                       {/* OWNERS */}
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
-                        <SideLabel ch="Owners" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
+                        <SideLabel ch="Owner(s)" onEdit={()=>{setTagEditModal('owners');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagOwners.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No owners set</span>}
                           {(showAllTagOwners?tagOwners:tagOwners.slice(0,3)).map((o,i)=>(
@@ -57619,7 +57679,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
 
                       {/* STEWARDS */}
                       <div style={{padding:'16px',borderBottom:`1px solid ${T.border}`}}>
-                        <SideLabel ch="Stewards" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
+                        <SideLabel ch="Steward(s)" onEdit={()=>{setTagEditModal('stewards');setTagModalSearch('');}}/>
                         <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
                           {tagStewards.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>No stewards set</span>}
                           {(showAllTagStewards?tagStewards:tagStewards.slice(0,3)).map((s,i)=>(
@@ -57892,8 +57952,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
           <div style={{position:'absolute',right:0,top:0,bottom:0,width:420,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:201,display:'flex',flexDirection:'column',boxShadow:'-8px 0 32px rgba(0,0,0,.18)'}}>
             <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
               <div>
-                <div style={{fontSize:14,fontWeight:700,color:T.text}}>New Classification</div>
-                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>Classifications group tags for navigation and filtering</div>
+                <div style={{fontSize:14,fontWeight:700,color:T.text}}>{editingCat?'Edit Classification':'New Classification'}</div>
               </div>
               <button onClick={()=>setNewCatPanelOpen(false)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:20,lineHeight:1,padding:'0 4px'}}>×</button>
             </div>
@@ -57911,25 +57970,24 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
                 </div>
                 <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                    <TagPeoplePicker label="Owner(s)" addLabel="Add owner" people={newCatDraft.owners||[]} setPeople={v=>setNewCatDraft(d=>({...d,owners:v}))}/>
+                    <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={newCatDraft.stewards||[]} setPeople={v=>setNewCatDraft(d=>({...d,stewards:v}))}/>
+                  </div>
+                </div>
+                <div>
+                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Color</label>
                   <div style={{display:'flex',gap:7}}>
                     {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
                       <button key={c} onClick={()=>setNewCatDraft(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:newCatDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
                     ))}
                   </div>
                 </div>
-                <div style={{padding:'14px 16px',background:T.bgElevated,borderRadius:10,border:`1px solid ${T.border}`}}>
-                  <div style={{fontSize:11,color:T.textMuted,marginBottom:6}}>Preview</div>
-                  <span style={{display:'inline-flex',alignItems:'center',gap:6,padding:'4px 12px',borderRadius:99,background:`${newCatDraft.color}15`,border:`1px solid ${newCatDraft.color}40`,fontSize:12,fontWeight:600,color:newCatDraft.color,textTransform:'capitalize'}}>
-                    <span style={{width:7,height:7,borderRadius:'50%',background:newCatDraft.color,display:'block'}}/>
-                    {newCatDraft.name||'Classification Name'}
-                  </span>
-                </div>
               </div>
             </div>
             <div style={{padding:'14px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
               <button onClick={()=>setNewCatPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
-              <button onClick={addNewCategory} disabled={!newCatDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newCatDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newCatDraft.name.trim()?'pointer':'default'}}>Create Classification</button>
+              <button onClick={addNewCategory} disabled={!newCatDraft.name.trim()} style={{padding:'8px 20px',borderRadius:8,background:newCatDraft.name.trim()?T.accent:'rgba(100,100,120,.3)',border:'none',color:'#fff',fontSize:12.5,fontWeight:700,cursor:newCatDraft.name.trim()?'pointer':'default'}}>{editingCat?'Save':'Create Classification'}</button>
             </div>
           </div>
         )}
@@ -57968,7 +58026,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
               <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Delete {deleteConfirm.type==='tag'?'Tag':'Category'}</div>
               <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>
                 {deleteConfirm.type==='tag'
-                  ? <>Are you sure you want to delete <b style={{color:T.text}}>"{deleteConfirm.name}"</b>? This will remove all its assignments from assets.</>
+                  ? <>Are you sure you want to delete <b style={{color:T.text}}>"{deleteConfirm.name}"</b>? It is applied to <b style={{color:T.text}}>{assetCount(deleteConfirm.id)} asset{assetCount(deleteConfirm.id)!==1?'s':''}</b> and will be removed from all of them.</>
                   : <>Are you sure you want to delete the <b style={{color:T.text}}>"{deleteConfirm.name}"</b> category? Tags in this category will become uncategorized.</>
                 }
               </div>
@@ -60803,8 +60861,8 @@ const TagFormFields = ({draft, setDraft, catInput, setCatInput, categories, name
       <div>
         <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Ownership</label>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-          <TagPeoplePicker label="Owner" addLabel="Add owner" people={draft.owners||[]} setPeople={v=>set({owners:v})}/>
-          <TagPeoplePicker label="Steward" addLabel="Add steward" people={draft.stewards||[]} setPeople={v=>set({stewards:v})}/>
+          <TagPeoplePicker label="Owner(s)" addLabel="Add owner" people={draft.owners||[]} setPeople={v=>set({owners:v})}/>
+          <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={draft.stewards||[]} setPeople={v=>set({stewards:v})}/>
         </div>
       </div>
 
