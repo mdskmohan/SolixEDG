@@ -17790,7 +17790,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
         <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK{partCols?` · ${partCols.size} partition`:""}</span>
         {ice&&<span title={`Iceberg spec v${ice.specEvolution[0].v} — partitioning can change without rewriting data`} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:FORMAT_META.Iceberg.c,background:FORMAT_META.Iceberg.bg,padding:"2px 8px",borderRadius:99,border:`1px solid ${FORMAT_META.Iceberg.c}33`,whiteSpace:"nowrap"}}><IcebergMark size={10}/>Spec v{ice.specEvolution[0].v} · {ice.partitionSpec.map(p=>`${p.col}(${p.transform})`).join(", ")}</span>}
         {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
-        {aidCanAsk(schRole)&&aidFamOn("column")&&SCHEMA[asset.name]&&(
+        {aidCanAsk(schRole)&&aidObjOn(asset.service, aidColType(aidSvc(asset.service)))&&SCHEMA[asset.name]&&(
           <button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
             style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
                     background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
@@ -24093,7 +24093,7 @@ const TableauFieldsPanel = ({asset, onToast})=>{
               style={{width:"100%",padding:"6px 10px 6px 28px",background:T.bgElevated,border:`1.5px solid ${q?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
           </div>
           <span style={{fontSize:11.5,color:T.textMuted}}>{fields.length} fields · {fields.filter(f=>f.calc).length} calculated</span>
-          {aidCanAsk(role)&&aidFamOn("column")&&fields.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+          {aidCanAsk(role)&&aidObjOn(asset.service, aidColType(aidSvc(asset.service)))&&fields.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
             style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
                     background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
             <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
@@ -24542,7 +24542,7 @@ const PowerBiPartsPanel = ({asset, onToast})=>{
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search parts&hellip;"
             style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{parts.length} parts · {parts.filter(p=>p.kind==="Measure").length} DAX measures</span>
-          {aidCanAsk(role)&&aidFamOn("column")&&parts.some(x=>x.kind!=="Table")&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+          {aidCanAsk(role)&&aidObjOn(asset.service, aidColType(aidSvc(asset.service)))&&parts.some(x=>x.kind!=="Table")&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
             style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
                     background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
             <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
@@ -25381,7 +25381,7 @@ const DbtColumnsPanel = ({asset, onToast})=>{
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search columns…"
             style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{cols.length} columns</span>
-          {aidCanAsk(role)&&aidFamOn("column")&&cols.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+          {aidCanAsk(role)&&aidObjOn(asset.service, aidColType(aidSvc(asset.service)))&&cols.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
             style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
                     background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
             <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
@@ -57728,7 +57728,7 @@ const AID_COLUMN_INPUTS = [
 // actually read about them; each family has its own inputs and prompt.
 const AID_FAMILIES = [
   {k:"table",      l:"Tables & views",                 types:["Table","View","Iceberg Table","Data Source","Power BI Dataset","dbt Source","dbt Seed"]},
-  {k:"column",     l:"Columns & fields",               types:["Table column","Tableau field","Power BI column","dbt model column"]},
+  {k:"column",     l:"Columns & fields",               types:["Column","Field","Column / Measure","Model column"]},
   {k:"container",  l:"Containers",                     types:["Database","Catalog","Schema","Bucket","Folder","Container","Site","Project","Power BI Workspace","Power BI App","Power BI Datasource","dbt Project"]},
   {k:"file",       l:"Files",                          types:["Object","Blob"]},
   {k:"bi",         l:"Dashboards & reports",           types:["Dashboard","Workbook","Worksheet","Story","Power BI Report","Power BI Dashboard","Power BI Page","Power BI Tile","dbt Exposure"]},
@@ -57832,7 +57832,7 @@ let _aidState = {
     length:"short",                               // short | detailed — for table descriptions
     prompts:{...AID_DEFAULT_PROMPTS},
     inputs:Object.fromEntries(Object.entries(AID_INPUTS).map(([k,l])=>[k, aidAllOn(l)])),
-    families:Object.fromEntries(AID_FAMILIES.map(f=>[f.k, true])),   // which families show ✦
+    typesOff:{},                                   // "source|Object type" → true hides ✦ there
   },
   applied:{},     // key -> {text, by, at, edited, conf}
   reqs:[],        // steward drafts awaiting the owner
@@ -57849,7 +57849,33 @@ const aidKey = (asset, col) => col ? `c:${asset}.${col}` : `a:${asset}`;
 const aidApplied = (asset, col) => _aidState.applied[aidKey(asset, col)] || null;
 const aidPendingFor = (asset, col) => _aidState.reqs.find(r=>r.key===aidKey(asset,col) && r.status==="pending") || null;
 const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.includes(role);
-const aidFamOn = (fam) => !!fam && !!(_aidState.settings.families||{})[fam];
+// Sources and the object types each brings into the catalog; EDG's own governance
+// objects are a source of their own. Each source lists its columns under its own name.
+const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
+  glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"EDG"};
+const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
+const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
+const aidSvc = (svc) => !svc ? "edg" : svc==="postgresql" ? "postgres" : svc;
+let _aidSources = null;
+const aidSources = () => {
+  if(_aidSources) return _aidSources;
+  const m = {};
+  ASSETS.forEach(a=>{ if(!aidFamilyOf(a)) return; const k=aidSvc(a.service); (m[k]=m[k]||new Set()).add(a.type); });
+  const RANK = ["container","table","column","file","bi","pipeline","metric"];   // parent → child reading order
+  const famIx = t => RANK.indexOf(aidFamilyOf({type:t}));
+  const order = Object.keys(AID_SOURCE_LABEL);
+  const srcIx = k => { const i = order.indexOf(k); return i<0 ? 999 : i; };
+  _aidSources = Object.keys(m).sort((x,y)=>srcIx(x)-srcIx(y)).map(k=>{
+    const types = [...m[k]].sort((x,y)=>famIx(x)-famIx(y));
+    if(types.some(t=>aidFamilyOf({type:t})==="table")) types.splice(types.filter(t=>famIx(t)<=1).length, 0, aidColType(k));
+    return {k, l:AID_SOURCE_LABEL[k]||k, types};
+  });
+  _aidSources.push({k:"edg", l:AID_SOURCE_LABEL.edg, types:["Glossary term","Tag","Domain","Data product"]});
+  return _aidSources;
+};
+const aidTypeFamily = (svc, t) => t===aidColType(aidSvc(svc)) ? "column" : aidFamilyOf({type:t});
+const aidObjOn = (svc, type) => !(_aidState.settings.typesOff||{})[`${aidSvc(svc)}|${type}`];
 
 const aidApply = (asset, col, text, by, meta={}) => aidSet(s=>({...s,
   applied:{...s.applied, [aidKey(asset,col)]:{text, by, at:"just now", ...meta}},
@@ -60438,7 +60464,7 @@ const useAidAssetDraft = ({asset, onToast, onSaved, family}) => {
       onRegenerate={()=>{ const v=variant+1; setVariant(v); ask(v); }}
       onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null;
   return {
-    enabled: aidCanAsk(role) && aidFamOn(fam),
+    enabled: aidCanAsk(role) && !!fam && aidObjOn(asset.service, asset.kind||asset.type),
     pending, applied, box,
     button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
   };
@@ -60733,63 +60759,81 @@ const AIModelCard = ({k, onToast}) => {
 const AIDescSettings = ({onToast}) => {
   const aid = useAid();
   const S = aid.settings;
-  const [fam, setFam] = useState("table");
+  const sources = aidSources();
+  const [src, setSrc] = useState(sources[0].k);
+  const srcDef = sources.find(x=>x.k===src) || sources[0];
+  const [type, setType] = useState(srcDef.types[0]);
+  const fam = aidTypeFamily(src, type) || "table";
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
   const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
-  const setFamOn = (k) => put({families:{...S.families, [k]:!S.families[k]}});
   const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
   const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
+  const cap = {fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase"};
   const list = AID_INPUTS[fam];
   const onCount = list.filter(x=>x.required||S.inputs[fam][x.k]).length;
   const pk = fam==="table" ? S.length : fam;      // which prompt this family uses
-  const famSel = (
-    <div style={{maxWidth:320}}>
-      <label style={lab}>Object family</label>
-      <select value={fam} onChange={e=>setFam(e.target.value)} style={sel}>
-        {AID_FAMILIES.map(f=><option key={f.k} value={f.k}>{f.l}{S.families[f.k]?"":" · off"}</option>)}
-      </select>
-    </div>
-  );
+  const key = `${src}|${type}`;
+  const on = !(S.typesOff||{})[key];
+  const action = fam==="column" ? "Describe columns" : "Suggest description";
+  // every source + type that shares these inputs and this prompt
+  const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
+  const offCount = sources.reduce((n,x)=>n+x.types.filter(t=>(S.typesOff||{})[`${x.k}|${t}`]).length,0);
 
   return (
     <div style={{maxWidth:900}}>
       <div>
-        {/* 1 · Object types */}
-        <AIDCard title="Object types">
-          {AID_FAMILIES.map((f,i)=>(
-            <AIDInputRow key={f.k} first={i===0} item={{k:f.k, l:f.l, ex:f.types.join(", ")}} on={S.families[f.k]}
-              set={()=>{ setFamOn(f.k); onToast(`${f.l}: ✦ ${S.families[f.k]?"hidden":"shown"}`,"success"); }}/>
-          ))}
-        </AIDCard>
-
-        {/* 2 · Model inputs */}
+        {/* 1 · Model inputs — per source and object type */}
         <AIDCard title="Model inputs">
-          {famSel}
-          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"16px 0 4px"}}>
-            {aidFamLabel(fam)} · {onCount} of {list.length} on</div>
-          {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
+            <div>
+              <label style={lab}>Source</label>
+              <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); }} style={sel}>
+                {sources.map(x=><option key={x.k} value={x.k}>{x.l} · {x.types.length} object type{x.types.length===1?"":"s"}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lab}>Object type</label>
+              <select value={type} onChange={e=>setType(e.target.value)} style={sel}>
+                {srcDef.types.map(t=><option key={t} value={t}>{t}{(S.typesOff||{})[`${src}|${t}`]?" · off":""}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{display:"flex",alignItems:"center",gap:12,marginTop:16,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.text}}>✦ {action}</div>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{type} · {srcDef.l}</div>
+            </div>
+            <Toggle on={on} onChange={()=>{ put({typesOff:{...(S.typesOff||{}), [key]:on}}); onToast(`✦ ${action} ${on?"off":"on"} for ${type} · ${srcDef.l}`,"success"); }}/>
+          </div>
+
+          <div style={{...cap,margin:"18px 0 2px"}}>{aidFamLabel(fam)} · {onCount} of {list.length} on</div>
+          <div title={shared.join(", ")} style={{fontSize:10.5,color:T.textMuted,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            Shared with {shared.length} object types: {shared.slice(0,6).join(", ")}{shared.length>6?", …":""}</div>
+          <div style={{opacity:on?1:.5}}>
+            {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
+          </div>
+          {offCount>0&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:10}}>✦ off for {offCount} object type{offCount===1?"":"s"}</div>}
         </AIDCard>
 
-        {/* 3 · Prompt */}
+        {/* 2 · Prompt — the prompt for the selected object type */}
         <AIDCard title="Prompt">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
-            {famSel}
-            <div>
+          {fam!=="column"&&(
+            <div style={{maxWidth:320}}>
               <label style={lab}>Description length</label>
               <select value={S.length} onChange={e=>{ put({length:e.target.value}); onToast(`Descriptions will be ${e.target.value==="short"?"short":"detailed"}`,"success"); }} style={sel}>
                 <option value="short">Short — one or two sentences</option>
                 <option value="detailed">Detailed — a paragraph of three to five sentences</option>
               </select>
-              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>All families except Columns & fields</div>
             </div>
-          </div>
+          )}
           <AIDPromptBox key={pk} label={fam==="table"?(S.length==="short"?"Short table prompt":"Detailed table prompt"):`${aidFamLabel(fam)} prompt`}
-            hint={fam==="column"?"Used for ✦ Describe columns. Always one sentence.":`Used for ✦ Suggest description on ${aidFamLabel(fam).toLowerCase()}.`}
+            hint={`Used for ✦ ${action} on ${type} and the other ${shared.length-1} object types above.`}
             value={S.prompts[pk]} def={AID_DEFAULT_PROMPTS[pk]} onSave={v=>savePrompt(pk, v)}/>
         </AIDCard>
 
-        {/* 4 · Model */}
+        {/* 3 · Model */}
         <AIModelCard k="describe" onToast={onToast}/>
 
       </div>
