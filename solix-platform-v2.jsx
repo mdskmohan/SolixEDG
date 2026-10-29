@@ -3565,6 +3565,11 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               <div style={{maxWidth:720}}>
                 <SectionLabel label="Definition" action={<button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition||"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Edit</button>}/>
                 {term.definition?<p style={{fontSize:14,color:T.text,lineHeight:1.8,margin:0}}>{term.definition}</p>:<div style={{padding:"16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:8,fontSize:13,color:T.textMuted,fontStyle:"italic",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>No definition yet.</span><button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Add</button></div>}
+                <AIDescAssist key={term.id} hasText={!!term.definition} onToast={onToast} onSaved={t=>patchTerm(term.id,{definition:t})}
+                  obj={{name:"term:"+term.id, label:term.term, kind:"Glossary term", parent:(glossaries.find(g=>g.id===term.glossary)||{}).name,
+                        related:aidUniq([term.abbr, ...(term.synonyms||[])]), linked:(term.linkedAssets||[]).map(x=>x.name||x),
+                        tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
+                        stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
                 <Divider/>
                 <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
                 {addingRelated&&<div style={{marginBottom:12}}><GlSelect onChange={e=>{if(e.target.value)doAddRelated(term.id,e.target.value);}} defaultValue=""><option value="" disabled>Select a term to link…</option>{terms.filter(t=>t.id!==term.id&&!(term.relatedTerms||[]).includes(t.id)).map(t=>(<option key={t.id} value={t.id}>{t.term} ({glossaries.find(g=>g.id===t.glossary)?.name})</option>))}</GlSelect></div>}
@@ -3948,11 +3953,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               <div>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
                   <GlLabel>Definition</GlLabel>
-                  <button onClick={()=>aiSuggestDefinition(form.term)} disabled={!form.term?.trim()||aiLoading}
-                    style={{display:"flex",alignItems:"center",gap:5,padding:"3px 10px",borderRadius:6,background:form.term?.trim()&&!aiLoading?T.accentDim:"transparent",border:`1px solid ${form.term?.trim()&&!aiLoading?T.accent:T.border}`,color:form.term?.trim()&&!aiLoading?T.accent:T.textMuted,fontSize:11,fontWeight:600,cursor:form.term?.trim()&&!aiLoading?"pointer":"default",transition:"all .12s"}}>
-                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M6 1l1.5 3.5L11 6l-3.5 1.5L6 11 4.5 7.5 1 6l3.5-1.5L6 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg>
-                    {aiLoading?"Generating…":"AI Suggest"}
-                  </button>
+
                 </div>
                 <GlTA value={form.definition||""} onChange={e=>setForm(f=>({...f,definition:e.target.value}))} placeholder="Clear, precise business definition…" rows={4}/>
               </div>
@@ -17639,19 +17640,7 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
           : (descVal || !ai.box) && <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,fontStyle:descVal?"normal":"italic",lineHeight:1.8,margin:0}}>{descVal||"No description yet."}</p>
         }
         {!editingDesc&&ai.applied&&ai.applied.text===descVal&&<AIDescProvenance rec={ai.applied}/>}
-        {ai.pending&&(
-          <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:T.amberDim,border:`1px solid ${T.amber}40`}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-              <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.amber+"22",color:T.amber}}>Pending approval</span>
-              <span style={{fontSize:11,color:T.textMuted}}>AI description · approver {ai.pending.owner||"—"}</span>
-              <div style={{flex:1}}/>
-              <button onClick={()=>{ aidWithdraw(ai.pending.id); onToast("Suggestion withdrawn","info"); }}
-                style={{background:"none",border:"none",padding:0,color:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Withdraw</button>
-            </div>
-            <div style={{fontSize:12.5,color:T.text,lineHeight:1.6}}>{ai.pending.text}</div>
-          </div>
-        )}
-        {!editingDesc&&ai.box}
+        {!editingDesc&&<AIDescExtras ai={ai} onToast={onToast}/>}
       </div>
     </Card2>
     {/* Apache Iceberg — only for Iceberg tables; renders nothing otherwise. */}
@@ -17801,7 +17790,7 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
         <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}>{filtered.length} / {cols.length} columns · {cols.filter(c=>c.pk).length} PK{partCols?` · ${partCols.size} partition`:""}</span>
         {ice&&<span title={`Iceberg spec v${ice.specEvolution[0].v} — partitioning can change without rewriting data`} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:FORMAT_META.Iceberg.c,background:FORMAT_META.Iceberg.bg,padding:"2px 8px",borderRadius:99,border:`1px solid ${FORMAT_META.Iceberg.c}33`,whiteSpace:"nowrap"}}><IcebergMark size={10}/>Spec v{ice.specEvolution[0].v} · {ice.partitionSpec.map(p=>`${p.col}(${p.transform})`).join(", ")}</span>}
         {selCol&&<span style={{fontSize:11,color:T.accent,background:T.accentDim,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.accent}33`}}>Viewing: {selCol.name}</span>}
-        {aidCanAsk(schRole)&&SCHEMA[asset.name]&&(
+        {aidCanAsk(schRole)&&aidFamOn("column")&&SCHEMA[asset.name]&&(
           <button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
             style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
                     background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
@@ -22941,6 +22930,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
   const [assetGlSearch,  setAssetGlSearch] = useState("");
   const [editDesc,       setEditDesc]       = useState(false);
   const [descVal,      setDescVal]     = useState(asset.description||"");
+  const ai = useAidAssetDraft({asset:data, onToast:onToast||(()=>{}), onSaved:t=>{ setDescVal(t); setData(d=>({...d,description:t})); }});
   const [editNotes,    setEditNotes]   = useState(false);
   const [notesVal,     setNotesVal]    = useState(`The ${asset.name} ${asset.type.toLowerCase()} is part of the ${asset.domain||"Platform"} domain.\n\nManaged by ${asset.owner||"the data team"} and refreshed on a ${asset.slaFreshness||"regular"} schedule.`);
   const [contSearch,   setContSearch]  = useState("");
@@ -23104,13 +23094,17 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                           <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditDesc(false);onToast("Description saved","success");}}>Save</Btn>
                           <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditDesc(false);}}>Cancel</Btn>
                         </div>
-                      : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditDesc(true)}>Edit</Btn>
+                      : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                          {ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!descVal)}
+                          <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditDesc(true)}>Edit</Btn>
+                        </div>
                   }/>
                   {editDesc
                     ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
                         style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
                     : <p style={{fontSize:13,color:descVal?T.textSub:T.textMuted,lineHeight:1.8,margin:0,fontStyle:descVal?"normal":"italic"}}>{descVal||"No description. Click Edit to add one."}</p>
                   }
+                  {!editDesc&&<AIDescExtras ai={ai} onToast={onToast}/>}
                 </div>
               </Card2>
 
@@ -23549,6 +23543,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
 const FileAssetDetail = ({asset, onBack, onToast}) => {
   const [desc,      setDesc]      = useState(asset.description||"");
   const [editing,   setEditing]   = useState(false);
+  const ai = useAidAssetDraft({asset, onToast:onToast||(()=>{}), onSaved:t=>setDesc(t)});
   const [tab,       setTab]       = useState("overview");
   const FILE_FORMAT_COLORS = {CSV:"#16a34a",Parquet:"#0891b2",JSON:"#d97706",JSON_LINES:"#d97706",ORC:"#7c3aed",Avro:"#0891b2",Delta:"#ff3621"};
   const fc = FILE_FORMAT_COLORS[asset.fileFormat]||"#6b7280";
@@ -23650,16 +23645,20 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
             <Card2 style={{padding:"16px 18px"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Description</span>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                {!editing&&ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!desc)}
                 <button onClick={()=>{ if(editing)onToast("Description saved","success"); setEditing(e=>!e); }}
                   style={{fontSize:11.5,color:editing?T.accent:T.textMuted,background:"none",border:`1px solid ${editing?T.accent:T.border}`,borderRadius:6,cursor:"pointer",padding:"3px 10px",transition:"all .15s"}}>
                   {editing?"Save":"Edit"}
                 </button>
+                </div>
               </div>
               {editing
                 ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
                     style={{width:"100%",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.text,fontSize:13,padding:"9px 11px",resize:"vertical",outline:"none",boxSizing:"border-box",fontFamily:"inherit",lineHeight:1.6}}/>
                 : <p style={{fontSize:13,color:desc?T.textSub:T.textMuted,lineHeight:1.7,margin:0,fontStyle:desc?"normal":"italic"}}>{desc||"No description yet — click Edit to add one."}</p>
               }
+              {!editing&&<AIDescExtras ai={ai} onToast={onToast}/>}
             </Card2>
 
             {/* Tags */}
@@ -23907,6 +23906,7 @@ const TableauAssetOverview = ({asset,data,setData,onToast})=>{
   const [editingDesc,setEditingDesc]=useState(false);
   const [descVal,setDescVal]=useState(data.description||asset.description||"");
   const fields = TABLEAU_FIELDS[asset.name];
+  const ai = useAidAssetDraft({asset:data, onToast:onToast||(()=>{}), onSaved:t=>{ setDescVal(t); setData(d=>({...d,description:t})); }});
 
   return (
   <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
@@ -23920,13 +23920,17 @@ const TableauAssetOverview = ({asset,data,setData,onToast})=>{
                 <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
                 <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
               </div>
-            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+            : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!(data.description||asset.description))}
+              <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+            </div>
         }/>
         {editingDesc
           ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
               style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
           : <p style={{fontSize:13,color:T.textSub,lineHeight:1.8,margin:0}}>{descVal}</p>
         }
+        {!editingDesc&&<AIDescExtras ai={ai} onToast={onToast}/>}
       </div>
     </Card2>
 
@@ -24072,8 +24076,10 @@ const TableauAssetOverview = ({asset,data,setData,onToast})=>{
 };
 
 // Fields tab for a Tableau data source (the schema equivalent).
-const TableauFieldsPanel = ({asset})=>{
+const TableauFieldsPanel = ({asset, onToast})=>{
   const fields = TABLEAU_FIELDS[asset.name]||[];
+  const [descOpen,setDescOpen]=useState(false);
+  const {role}=useRole(); useAid();
   const [q,setQ]=useState("");
   const [open,setOpen]=useState(null);   // a field expands in place - it is not its own page
   const filtered = fields.filter(f=>!q||f.name.toLowerCase().includes(q.toLowerCase()));
@@ -24087,6 +24093,11 @@ const TableauFieldsPanel = ({asset})=>{
               style={{width:"100%",padding:"6px 10px 6px 28px",background:T.bgElevated,border:`1.5px solid ${q?T.accent:T.border}`,borderRadius:7,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}/>
           </div>
           <span style={{fontSize:11.5,color:T.textMuted}}>{fields.length} fields · {fields.filter(f=>f.calc).length} calculated</span>
+          {aidCanAsk(role)&&aidFamOn("column")&&fields.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+            style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+                    background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
+          </button>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1.4fr 0.7fr 0.8fr 1.6fr",padding:"9px 16px",borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>
           <span>Field</span><span>Role</span><span>Data type</span><span>Upstream / formula</span>
@@ -24107,7 +24118,7 @@ const TableauFieldsPanel = ({asset})=>{
           {open===f.name&&(
             <div style={{padding:"12px 16px 14px",background:T.bgElevated,borderBottom:i<filtered.length-1?`1px solid ${T.border}`:"none",
               display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,maxWidth:640}}>{f.desc}</div>
+              <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,maxWidth:640}}>{(aidApplied(asset.name,f.name)||{}).text||f.desc}</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:"10px 18px"}}>
                 {[["Role",f.role],["Data type",f.dataType],["Definition",f.logic],
                   ...(f.upstream?[["Upstream column",f.upstream]]:[]),
@@ -24131,6 +24142,7 @@ const TableauFieldsPanel = ({asset})=>{
         ))}
         {filtered.length===0&&<div style={{padding:"28px",textAlign:"center",fontSize:12,color:T.textMuted}}>No fields match.</div>}
       </Card2>
+      <AIDescColumnsDrawer open={descOpen} asset={asset} onClose={()=>setDescOpen(false)} onToast={onToast||(()=>{})}/>
     </div>
   );
 };
@@ -24509,8 +24521,10 @@ const POWERBI_PROFILE = {
 };
 
 // Parts tab for a Power BI dataset or dataflow. Rows expand in place - a part is not a page.
-const PowerBiPartsPanel = ({asset})=>{
+const PowerBiPartsPanel = ({asset, onToast})=>{
   const parts=POWERBI_PARTS[asset.name]||[];
+  const [descOpen,setDescOpen]=useState(false);
+  const {role}=useRole(); useAid();
   const [open,setOpen]=useState(null);
   const [q,setQ]=useState("");
   const shown=parts.filter(p=>!q||p.name.toLowerCase().includes(q.toLowerCase()));
@@ -24528,6 +24542,11 @@ const PowerBiPartsPanel = ({asset})=>{
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search parts&hellip;"
             style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{parts.length} parts · {parts.filter(p=>p.kind==="Measure").length} DAX measures</span>
+          {aidCanAsk(role)&&aidFamOn("column")&&parts.some(x=>x.kind!=="Table")&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+            style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+                    background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
+          </button>}
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr style={{background:T.bgElevated}}>
@@ -24547,7 +24566,7 @@ const PowerBiPartsPanel = ({asset})=>{
                     <td style={{padding:"9px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${col}16`,color:col,border:`1px solid ${col}33`,whiteSpace:"nowrap"}}>{p.kind}</span></td>
                     <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{p.type}</td>
                     <td style={{padding:"9px 14px",fontSize:11,color:p.logic==="Passthrough"?T.textMuted:"#a855f7",fontWeight:p.logic==="Passthrough"?400:600}}>{p.logic}</td>
-                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{p.desc}</td>
+                    <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{(aidApplied(asset.name,p.name)||{}).text||p.desc}</td>
                   </tr>
                   {isOpen&&(
                     <tr><td colSpan={5} style={{padding:"12px 14px 14px",background:T.bgElevated,borderBottom:i<shown.length-1?`1px solid ${T.border}`:"none"}}>
@@ -24574,6 +24593,7 @@ const PowerBiPartsPanel = ({asset})=>{
           </tbody>
         </table>
       </Card2>
+      <AIDescColumnsDrawer open={descOpen} asset={asset} onClose={()=>setDescOpen(false)} onToast={onToast||(()=>{})}/>
     </div>
   );
 };
@@ -24584,6 +24604,7 @@ const PowerBiOverview = ({asset,data,setData,onToast,onAsset})=>{
   const rel=Pr.rel||{};
   const [editingDesc,setEditingDesc]=useState(false);
   const [descVal,setDescVal]=useState(data.description||asset.description||"");
+  const ai = useAidAssetDraft({asset:data, onToast:onToast||(()=>{}), onSaved:t=>{ setDescVal(t); setData(d=>({...d,description:t})); }});
   return (
   <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:900}}>
     <Card2><div style={{padding:"14px 16px"}}>
@@ -24593,11 +24614,15 @@ const PowerBiOverview = ({asset,data,setData,onToast,onAsset})=>{
               <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
               <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
             </div>
-          : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>}/>
+          : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!(data.description||asset.description))}
+              <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+            </div>}/>
       {editingDesc
         ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
             style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
         : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{data.description||asset.description}</div>}
+      {!editingDesc&&<AIDescExtras ai={ai} onToast={onToast}/>}
     </div></Card2>
 
     <Card2><div style={{padding:"14px 16px"}}>
@@ -25247,6 +25272,7 @@ const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
   const rel=Pr.rel||{};
   const [editingDesc,setEditingDesc]=useState(false);
   const [descVal,setDescVal]=useState(data.description||asset.description||"");
+  const ai = useAidAssetDraft({asset:data, onToast:onToast||(()=>{}), onSaved:t=>{ setDescVal(t); setData(d=>({...d,description:t})); }});
   // Run history belongs to the project now that a job is not an asset of its own.
   const isProject=asset.type==="dbt Project";
   const hasEngine=!!DBT_META[asset.name];
@@ -25263,11 +25289,15 @@ const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
                 <Btn small ghost onClick={()=>{setData(d=>({...d,description:descVal}));setEditingDesc(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
                 <Btn small ghost onClick={()=>{setDescVal(data.description||asset.description||"");setEditingDesc(false);}}>Cancel</Btn>
               </div>
-            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>}/>
+            : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!(data.description||asset.description))}
+              <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditingDesc(true)}>Edit</Btn>
+            </div>}/>
         {editingDesc
           ? <textarea value={descVal} onChange={e=>setDescVal(e.target.value)} rows={3}
               style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
           : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{data.description||asset.description}</div>}
+        {!editingDesc&&<AIDescExtras ai={ai} onToast={onToast}/>}
       </div>
     </Card2>
 
@@ -25338,9 +25368,11 @@ const DbtAssetOverview = ({asset,data,setData,onToast,onAsset})=>{
 };
 
 // Columns tab for dbt models / sources / seeds / snapshots.
-const DbtColumnsPanel = ({asset})=>{
+const DbtColumnsPanel = ({asset, onToast})=>{
   const cols=DBT_MODEL_COLUMNS[asset.name]||[];
   const [q,setQ]=useState("");
+  const [descOpen,setDescOpen]=useState(false);
+  const {role}=useRole(); useAid();
   const filtered=cols.filter(c=>!q||c.name.toLowerCase().includes(q.toLowerCase()));
   return (
     <div className="fadeIn">
@@ -25349,6 +25381,11 @@ const DbtColumnsPanel = ({asset})=>{
           <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search columns…"
             style={{flex:1,padding:"6px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
           <span style={{fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{cols.length} columns</span>
+          {aidCanAsk(role)&&aidFamOn("column")&&cols.length>0&&<button onClick={()=>setDescOpen(true)} title="Draft descriptions for every column from metadata — you pick which to keep"
+            style={{display:"inline-flex",alignItems:"center",gap:5,height:28,padding:"0 11px",borderRadius:7,cursor:"pointer",fontFamily:"inherit",
+                    background:T.violetDim,border:`1px solid ${T.violet}40`,color:T.violet,fontSize:11.5,fontWeight:700,whiteSpace:"nowrap"}}>
+            <span style={{fontSize:12,lineHeight:1}}>✦</span>Describe columns
+          </button>}
         </div>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr style={{background:T.bgElevated}}>
@@ -25370,7 +25407,7 @@ const DbtColumnsPanel = ({asset})=>{
                         return <span key={t} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:`${col}14`,color:col,border:`1px solid ${col}33`,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{t}</span>;
                       })}</div>}
                 </td>
-                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{c.desc}</td>
+                <td style={{padding:"9px 14px",fontSize:11.5,color:T.textSub,maxWidth:260}}>{(aidApplied(asset.name,c.name)||{}).text||c.desc}</td>
                 <td style={{padding:"9px 14px",fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",wordBreak:"break-all",maxWidth:200}}>{c.upstream}</td>
               </tr>
             ))}
@@ -25378,6 +25415,7 @@ const DbtColumnsPanel = ({asset})=>{
           </tbody>
         </table>
       </Card2>
+      <AIDescColumnsDrawer open={descOpen} asset={asset} onClose={()=>setDescOpen(false)} onToast={onToast||(()=>{})}/>
     </div>
   );
 };
@@ -25754,11 +25792,11 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
           ? <TableauAssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
           : <AssetOverview asset={asset} data={data} setData={setData} onToast={onToast}/>)}
         {tab==="schema"    && (isPBI
-          ? <PowerBiPartsPanel asset={data}/>
+          ? <PowerBiPartsPanel asset={data} onToast={onToast}/>
           : isDbt
-          ? <DbtColumnsPanel asset={data}/>
+          ? <DbtColumnsPanel asset={data} onToast={onToast}/>
           : isBI
-          ? <TableauFieldsPanel asset={data}/>
+          ? <TableauFieldsPanel asset={data} onToast={onToast}/>
           : <AssetSchema asset={asset} selCol={selCol} onColClick={c=>{ setSelCol(selCol?.name===c?.name?null:c); }} onToast={onToast}/>)}
         {tab==="dbtsql"    && isDbt && <DbtSqlPanel asset={data}/>}
         {tab==="components"&& isDbt && <DbtSemanticPanel asset={data}/>}
@@ -28131,6 +28169,10 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
+                  {!pdDescEditMode&&<AIDescAssist key={pd.id} hasText={!!pd.description} onToast={onToast} onSaved={t=>patchProduct(pd.id,{description:t})}
+                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
+                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>}
 
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
@@ -28630,8 +28672,12 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                             style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
                         </div>
                       </div>
-                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:24}}>{dm.description}</p>
+                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:12}}>{dm.description}</p>
                   }
+                  {!descEditMode&&<AIDescAssist key={dm.id} hasText={!!dm.description} onToast={onToast} onSaved={t=>patchDomain(dm.id,{description:t})}
+                    obj={{name:"domain:"+dm.id, label:dm.displayName||dm.name, kind:"Domain", tags:dm.tags,
+                          related:products.filter(x=>x.domain===dm.name).map(x=>x.displayName||x.name), linked:ASSETS.filter(x=>x.domain===dm.name).map(x=>x.name),
+                          owners:dm.owners, stewards:dm.experts||[], description:dm.description}}/>}
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${dm.color}`,borderRadius:10,overflow:"hidden"}}>
@@ -30311,6 +30357,10 @@ const DataProductsView = ({onAsset, onNav}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
+                  {!dvDescEditMode&&<AIDescAssist key={pd.id} hasText={!!pd.description} onSaved={t=>patchDP(pd.id,{description:t})}
+                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
+                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>}
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
                 <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -48562,7 +48612,7 @@ const InboxView = ({onToast}) => {
   const aidSt = useAid();
   const AID_REQ_ITEMS = aidSt.reqs.filter(r=>r.status==="pending").map(r=>({
     id:"aidq-"+r.id, type:"description_change", severity:"low", section:"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.col?`${r.asset}.${r.col}`:r.asset, path:r.col?"Column description · AI draft":"Description · AI draft", type:r.col?"Column":"Table"},
+    asset:{name:r.col?`${r.label||r.asset}.${r.col}`:(r.label||r.asset), path:r.col?"Column description · AI draft":"Description · AI draft", type:r.col?"Column":(r.kind||"Table")},
     body:`${r.requestedBy} accepted an AI-drafted description${r.edited?" (edited)":""}: "${r.text}"`,
     requestedBy:r.requestedBy, assignee:r.owner, reqId:r.id, aidAsset:r.asset, readAt:null,
   }));
@@ -56628,6 +56678,10 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                               {draft.description||'No description. Click Edit to add one.'}
                             </p>
                         }
+                        {!editing&&<AIDescAssist key={selTag.id} hasText={!!selTag.description} onToast={onToast} onSaved={t=>updateTagDef(selTag.id,{description:t})}
+                          obj={{name:"tag:"+selTag.id, label:selTag.name, kind:"Tag", parent:selTag.category, domain:selTag.domain, tags:[],
+                                linked:Object.entries(assignments||{}).filter(([,xs])=>(xs||[]).some(x=>x.tagId===selTag.id&&x.status!=='rejected')).map(([id])=>(ASSETS.find(x=>String(x.id)===String(id))||{}).name||id),
+                                owners:selTag.owners||[selTag.owner].filter(Boolean), stewards:selTag.stewards||[], description:selTag.description}}/>}
                       </div>
 
                       <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
@@ -57373,7 +57427,7 @@ const AI_TOOLS = {
 
   // Column read is where policy projection actually bites: a masked column comes
   // back flagged with a reason, not silently dropped.
-  "asset.columns": ({name, role}) => (SCHEMA[name]||[]).map(c=>({
+  "asset.columns": ({name, role}) => aidColumnsOf(name).map(c=>({
     name:c.name, type:c.type, desc:c.desc, pk:c.pk, nullable:c.nullable,
     sensitive: aiColSensitive(c),
     masked:    aiColMasked(c, role),
@@ -57558,6 +57612,91 @@ Rules:
 - If the name is ambiguous, say what it most likely holds and that it needs confirmation.
 
 Output: one sentence, at most 25 words. Return the description text only.`,
+  container: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the container (database, schema, bucket, folder, project or workspace) in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent contents, purposes, owners or retention rules.
+- Sentence 1: what the container holds, based on the types and names of its children.
+- Then, only if the metadata supports it: the business area it serves (domain), what in it is sensitive (tags), and who owns it.
+- Name at most three children, by what they mean, not as a list of names.
+- Do not restate the container name as the description and do not repeat the path.
+- If the children do not show a clear purpose, say what it appears to hold and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  file: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the file in the metadata below.
+
+Rules:
+- You see the file's metadata only, never its contents. Never guess at what the file says.
+- Sentence 1: what kind of file it is and what it most likely holds, based on its name, file type and folder path.
+- Then, only if the metadata supports it: where it is stored, its size, when it last changed, and any sensitivity tag.
+- Expand abbreviations in the file name (inv → invoice, fy → fiscal year).
+- Do not restate the file name as the description.
+- If the name and path do not show what the file holds, say so and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  bi: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the dashboard, report, workbook or sheet in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent numbers, targets, filters or audiences.
+- Sentence 1: what question it answers, based on its title and the fields and measures it uses.
+- Then, only if the metadata supports it: the data sources it is built on, what it contains, and the workspace or project it is published in.
+- Name measures by what they mean (revenue, order count), not by field name.
+- Do not restate the title as the description.
+- If the fields do not show a clear purpose, say what it appears to show and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  pipeline: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the pipeline, flow or transformation in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent schedules, owners or business rules.
+- Sentence 1: what it produces and from what, based on its inputs and outputs.
+- If SQL or code is given, say what it does in business terms (joins, filters, aggregates, renames). Never copy code, column lists or literal values into the description.
+- Then, only if the metadata supports it: how the result is stored (materialization) and when it last ran.
+- Do not restate the name as the description.
+- If the inputs or outputs are missing, say what it appears to do and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  metric: `You write descriptions for a governed data catalog. Readers are business users and analysts.
+
+Task: describe the metric, measure or semantic model in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent targets, thresholds or values.
+- Sentence 1: what it measures, in business words, based on its expression.
+- Then, only if the metadata supports it: the dimensions it can be broken down by, what it is built on, and its glossary term.
+- Explain the calculation in words (total revenue per day); do not copy the expression.
+- Do not restate the name as the description.
+- If the expression is missing, say what it appears to measure and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  governance: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the glossary term, tag, domain or data product in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Glossary term: define the business concept in one plain sentence, then how it is used, based on its synonyms, related terms and linked assets.
+- Tag: say when the tag should be applied, based on its classification and the objects that carry it.
+- Domain: say which business area it covers and what kinds of data and data products sit in it.
+- Data product: say what it delivers and which assets it bundles.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
 };
 // What the model may read. `name` is required at both levels and cannot be turned off.
 const AID_TABLE_INPUTS = [
@@ -57585,7 +57724,104 @@ const AID_COLUMN_INPUTS = [
   {k:"glossary", l:"Glossary terms",        ex:"Order Status"},
   {k:"existing", l:"Current description",   ex:"Only when rewriting"},
 ];
-const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, true]));
+// Every object EDG governs can be described. Objects are grouped by what the model can
+// actually read about them; each family has its own inputs and prompt.
+const AID_FAMILIES = [
+  {k:"table",      l:"Tables & views",                 types:["Table","View","Iceberg Table","Data Source","Power BI Dataset","dbt Source","dbt Seed"]},
+  {k:"column",     l:"Columns & fields",               types:["Table column","Tableau field","Power BI column","dbt model column"]},
+  {k:"container",  l:"Containers",                     types:["Database","Catalog","Schema","Bucket","Folder","Container","Site","Project","Power BI Workspace","Power BI App","Power BI Datasource","dbt Project"]},
+  {k:"file",       l:"Files",                          types:["Object","Blob"]},
+  {k:"bi",         l:"Dashboards & reports",           types:["Dashboard","Workbook","Worksheet","Story","Power BI Report","Power BI Dashboard","Power BI Page","Power BI Tile","dbt Exposure"]},
+  {k:"pipeline",   l:"Pipelines & transformations",    types:["Pipeline","Flow","Power BI Dataflow","dbt Model","dbt Snapshot","dbt Test"]},
+  {k:"metric",     l:"Metrics & semantic models",      types:["Metric","dbt Metric","dbt Semantic Model","Semantic View","Metric View"]},
+  {k:"governance", l:"Glossary, tags, domains & data products", types:["Glossary term","Tag","Domain","Data product"]},
+];
+const aidFamilyOf = (o) => {
+  if(!o) return null;
+  if(o.aidFamily) return o.aidFamily;
+  const t = o.kind || o.type;
+  const f = AID_FAMILIES.find(x=>x.k!=="column" && x.types.includes(t));
+  return f ? f.k : null;
+};
+const aidFamLabel = (k) => (AID_FAMILIES.find(f=>f.k===k)||{}).l || k;
+const AID_CONTAINER_INPUTS = [
+  {k:"name",       l:"Name",                 ex:"COMMERCE", required:true},
+  {k:"type",       l:"Object type",          ex:"Schema"},
+  {k:"connection", l:"Connection",           ex:"Snowflake DWH"},
+  {k:"path",       l:"Path",                 ex:"SNOWFLAKE_PROD / COMMERCE"},
+  {k:"domain",     l:"Domain",               ex:"Commerce"},
+  {k:"childCount", l:"Number of children",   ex:"4"},
+  {k:"children",   l:"Child names",          ex:"orders, customers, products, …"},
+  {k:"childTypes", l:"Child object types",   ex:"Table, View"},
+  {k:"tags",       l:"Tags",                 ex:"PII"},
+  {k:"owner",      l:"Owner",                ex:"maya.chen"},
+  {k:"existing",   l:"Current description",  ex:"Only when rewriting"},
+];
+const AID_FILE_INPUTS = [
+  {k:"name",       l:"File name",            ex:"contracts_2025.pdf", required:true},
+  {k:"format",     l:"File type",            ex:"PDF"},
+  {k:"path",       l:"Path",                 ex:"ecs / legal / contracts_2025.pdf"},
+  {k:"size",       l:"Size",                 ex:"4.2 MB"},
+  {k:"updated",    l:"Last modified",        ex:"2d ago"},
+  {k:"connection", l:"Connection",           ex:"Solix ECS — Content"},
+  {k:"domain",     l:"Domain",               ex:"Finance"},
+  {k:"tags",       l:"Tags",                 ex:"confidential"},
+  {k:"owner",      l:"Owner",                ex:"sarah.kim"},
+  {k:"existing",   l:"Current description",  ex:"Only when rewriting"},
+];
+const AID_BI_INPUTS = [
+  {k:"name",       l:"Title",                     ex:"Revenue_Dashboard", required:true},
+  {k:"type",       l:"Object type",               ex:"Dashboard"},
+  {k:"parent",     l:"Workspace or project",      ex:"Revenue_Analytics"},
+  {k:"contains",   l:"Contents",                  ex:"Revenue_by_Region (Worksheet)"},
+  {k:"upstream",   l:"Upstream data sources",     ex:"Orders_Certified"},
+  {k:"fields",     l:"Fields and measures used",  ex:"revenue, yoy_growth_pct, region, …"},
+  {k:"connection", l:"Connection",                ex:"Tableau Cloud"},
+  {k:"domain",     l:"Domain",                    ex:"Finance"},
+  {k:"tags",       l:"Tags",                      ex:"KPI, Board reporting"},
+  {k:"owner",      l:"Owner",                     ex:"alex.wu"},
+  {k:"existing",   l:"Current description",       ex:"Only when rewriting"},
+];
+const AID_PIPELINE_INPUTS = [
+  {k:"name",       l:"Name",                          ex:"stg_orders", required:true},
+  {k:"type",       l:"Object type",                   ex:"dbt Model"},
+  {k:"connection", l:"Connection",                    ex:"dbt Cloud"},
+  {k:"inputs",     l:"Inputs (upstream lineage)",     ex:"snowflake_raw.orders"},
+  {k:"outputs",    l:"Outputs (downstream lineage)",  ex:"int_orders_enriched"},
+  {k:"materialization", l:"Materialization",          ex:"view"},
+  {k:"lastRun",    l:"Last run",                      ex:"35m ago"},
+  {k:"sql",        l:"SQL / code",                    ex:"Off by default · can contain literal values from filters", def:false},
+  {k:"domain",     l:"Domain",                        ex:"Commerce"},
+  {k:"tags",       l:"Tags",                          ex:"PII, staging"},
+  {k:"owner",      l:"Owner",                         ex:"dev.patel"},
+  {k:"existing",   l:"Current description",           ex:"Only when rewriting"},
+];
+const AID_METRIC_INPUTS = [
+  {k:"name",       l:"Name",                     ex:"daily_revenue", required:true},
+  {k:"type",       l:"Object type",              ex:"dbt Metric"},
+  {k:"expression", l:"Expression",               ex:"simple · measure revenue_total · grain day"},
+  {k:"basedOn",    l:"Built on",                 ex:"revenue"},
+  {k:"parts",      l:"Dimensions and measures",  ex:"order_date, region, order_status"},
+  {k:"glossary",   l:"Glossary terms",           ex:"Revenue"},
+  {k:"domain",     l:"Domain",                   ex:"Finance"},
+  {k:"tags",       l:"Tags",                     ex:"KPI, finance"},
+  {k:"owner",      l:"Owner",                    ex:"sarah.kim"},
+  {k:"existing",   l:"Current description",      ex:"Only when rewriting"},
+];
+const AID_GOV_INPUTS = [
+  {k:"name",       l:"Name",                        ex:"Customer Lifetime Value", required:true},
+  {k:"kind",       l:"Object type",                 ex:"Glossary term"},
+  {k:"parent",     l:"Parent",                      ex:"Business Glossary"},
+  {k:"related",    l:"Synonyms and related terms",  ex:"CLV, LTV"},
+  {k:"linked",     l:"Linked assets",               ex:"4, e.g. orders, customers"},
+  {k:"domain",     l:"Domain",                      ex:"Commerce"},
+  {k:"tags",       l:"Tags",                        ex:"revenue"},
+  {k:"owner",      l:"Owner",                       ex:"maya.chen"},
+  {k:"existing",   l:"Current description",         ex:"Only when rewriting"},
+];
+const AID_INPUTS = {table:AID_TABLE_INPUTS, column:AID_COLUMN_INPUTS, container:AID_CONTAINER_INPUTS, file:AID_FILE_INPUTS,
+                    bi:AID_BI_INPUTS, pipeline:AID_PIPELINE_INPUTS, metric:AID_METRIC_INPUTS, governance:AID_GOV_INPUTS};
+const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, x.def!==false]));
 // Asking for a suggestion follows the existing "edit description" permission —
 // there is no separate AI permission to manage.
 const AID_EDIT_ROLES = ["admin","steward","engineer"];
@@ -57595,7 +57831,8 @@ let _aidState = {
     enabled:true,
     length:"short",                               // short | detailed — for table descriptions
     prompts:{...AID_DEFAULT_PROMPTS},
-    inputs:{table:aidAllOn(AID_TABLE_INPUTS), column:aidAllOn(AID_COLUMN_INPUTS)},
+    inputs:Object.fromEntries(Object.entries(AID_INPUTS).map(([k,l])=>[k, aidAllOn(l)])),
+    families:Object.fromEntries(AID_FAMILIES.map(f=>[f.k, true])),   // which families show ✦
   },
   applied:{},     // key -> {text, by, at, edited, conf}
   reqs:[],        // steward drafts awaiting the owner
@@ -57612,6 +57849,7 @@ const aidKey = (asset, col) => col ? `c:${asset}.${col}` : `a:${asset}`;
 const aidApplied = (asset, col) => _aidState.applied[aidKey(asset, col)] || null;
 const aidPendingFor = (asset, col) => _aidState.reqs.find(r=>r.key===aidKey(asset,col) && r.status==="pending") || null;
 const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.includes(role);
+const aidFamOn = (fam) => !!fam && !!(_aidState.settings.families||{})[fam];
 
 const aidApply = (asset, col, text, by, meta={}) => aidSet(s=>({...s,
   applied:{...s.applied, [aidKey(asset,col)]:{text, by, at:"just now", ...meta}},
@@ -57689,6 +57927,14 @@ const aidColumnText = ({col, asset, entity, glossary, sensitive, variant=0}) => 
   return {text:t, conf:Math.min(0.96, conf), used, unknown};
 };
 
+// Columns of any object that has them, in the warehouse column shape.
+const aidColumnsOf = (name) => {
+  if(SCHEMA[name]) return SCHEMA[name];
+  if(DBT_MODEL_COLUMNS[name]) return DBT_MODEL_COLUMNS[name].map(c=>({name:c.name, type:(c.dataType||"").toUpperCase(), desc:c.desc, pk:(c.tests||[]).includes("unique")}));
+  if(TABLEAU_FIELDS[name])    return TABLEAU_FIELDS[name].map(f=>({name:f.name, type:(f.dataType||"").toUpperCase(), desc:f.desc}));
+  if(POWERBI_PARTS[name])     return POWERBI_PARTS[name].filter(x=>x.kind!=="Table").map(x=>({name:x.name, type:(x.type||"").toUpperCase(), desc:x.desc}));
+  return [];
+};
 const aidGlossaryFor = (trace, phrase) => {
   const p = phrase.toLowerCase();
   return aiCall(trace, "glossary.lookup", {q:p}).find(t=>
@@ -57763,6 +58009,148 @@ const aidDraftAsset = ({assetName, role, variant=0, trace=[]}) => {
     I.existing && `Current description: ${(aidApplied(a.name)||{}).text || a.description || "(empty)"}`,
   ].filter(Boolean);
   return {text, conf, used, unknown:[], trace, sent, model:aiModelSnap("describe"), prompt:S.prompts[S.length], promptLabel:S.length==="short"?"Short table prompt":"Detailed table prompt"};
+};
+
+// ── Every other family ────────────────────────────────────────────────────────
+const aidProfileOf = (a) => TABLEAU_PROFILE[a.name] || POWERBI_PROFILE[a.name] || DBT_PROFILE[a.name] || {};
+const aidProp = (a, ...keys) => { const pr = (aidProfileOf(a).props||[]).find(([k])=>keys.includes(k)); return pr ? pr[1] : null; };
+const aidList = (xs, n=4) => { xs = (xs||[]).filter(x=>x && x!=="—"); return xs.length ? xs.slice(0,n).join(", ")+(xs.length>n?", …":"") : null; };
+const aidUniq = (xs) => [...new Set(xs.filter(Boolean))];
+// What the model can read about one object, by input key. null = nothing to send.
+const aidFacts = (o, fam, trace) => {
+  const owners = aidUniq(o.owners || [o.owner]);
+  const F = {name:o.label||o.name, type:o.kind||o.type, kind:o.kind||o.type, connection:o.connectionLabel||null, path:o.db||null,
+    domain:o.domain||null, tags:aidList(o.tags||[]), owner:owners.join(", ")||null,
+    existing:(aidApplied(o.name)||{}).text || o.description || null};
+  if(fam==="governance"){
+    F.parent = o.parent || null;
+    F.related = aidList(o.related||[]);
+    F.linked = (o.linked||[]).length ? `${o.linked.length}, e.g. ${aidList(o.linked,3)}` : null;
+    return F;
+  }
+  aiCall(trace, "asset.get", {name:o.name});
+  const rel = aidProfileOf(o).rel || {};
+  const kids = [...ASSETS.filter(x=>x.parentId===o.id).map(x=>({name:x.name,type:x.type})), ...(rel.contains||[])];
+  const up = (rel.upstream||[]).map(x=>x.name);
+  if(fam==="container"){
+    F.childCount = kids.length ? String(kids.length) : (o.childCount!=null ? String(o.childCount) : null);
+    F.children = aidList(kids.map(k=>k.name));
+    F.childTypes = aidList(aidUniq(kids.map(k=>k.type)));
+  }
+  if(fam==="file"){
+    F.format = o.fileFormat || ((/\.([a-z0-9]+)$/i.exec(o.name)||[])[1]||"").toUpperCase() || null;
+    F.size = o.size && o.size!=="—" ? o.size : null;
+    F.updated = o.updated || null;
+  }
+  if(fam==="bi"){
+    F.parent = (rel.parent&&rel.parent.name) || aidProp(o,"Workbook","Workspace","Project") || null;
+    F.contains = aidList((rel.contains||[]).map(c=>`${c.name} (${c.type})`), 3);
+    const srcs = up.length ? up : [aidProp(o,"Dataset")].filter(Boolean);
+    F.upstream = aidList(srcs);
+    F.fields = aidList(aidUniq(srcs.flatMap(n=>aidColumnsOf(n).map(c=>c.name))), 5);
+  }
+  if(fam==="pipeline"){
+    const down = (rel.downstream||[]).map(x=>x.name);
+    const impact = down.length ? [] : aiCall(trace, "lineage.impact", {asset:o}).map(x=>x.label);
+    F.inputs = aidList(up.length ? up : [aidProp(o,"Refs")].filter(Boolean));
+    F.outputs = aidList(down.length ? down : impact);
+    const m = DBT_META[o.name] || {};
+    F.materialization = m.materialization || aidProp(o,"Materialization") || null;
+    F.lastRun = m.lastRun || aidProp(o,"Last run","Last refresh") || o.updated || null;
+    F.sql = (DBT_SQL[o.name]||{}).raw || null;
+  }
+  if(fam==="metric"){
+    const ex = [aidProp(o,"Metric type"), aidProp(o,"Measure") && `measure ${aidProp(o,"Measure")}`, aidProp(o,"Time grain") && `grain ${aidProp(o,"Time grain")}`].filter(Boolean);
+    F.expression = ex.length ? ex.join(" · ") : null;
+    F.basedOn = aidProp(o,"Semantic model","Over dbt model") || aidList(up) || null;
+    const comps = (DBT_SEMANTIC_COMPONENTS[o.name]||[]).map(c=>c.name);
+    F.parts = aidList(comps.length ? comps : (aidProp(o,"Dimensions")||"").split(/,\s*/).filter(Boolean), 5);
+    const g = aidGlossaryFor(trace, aidEntity(o.name));
+    F.glossary = g ? g.term : null;
+  }
+  return F;
+};
+const aidLow = (s) => s ? s[0].toLowerCase()+s.slice(1) : s;
+// What an object is about, from its name, without the words that only name its type.
+const AID_TYPE_WORDS = /^(dashboard|report|detail|overview|workbook|story|sheet|worksheet|flow|prep|pipeline|etl|dag|job|model|dataset|dataflow|sv|mv|view|vw|fact|fct|dim|stg|int|mart|raw|snapshot|tile|page|app|insights|certified|extract)$/;
+const aidSubject = (name) => {
+  const w = String(name||"").replace(/\.[a-z0-9]+$/i,"").replace(/([a-z])([A-Z])/g,"$1_$2").toLowerCase()
+    .split(/[_\-\s.]+/).filter(x=>x && !AID_TYPE_WORDS.test(x)).map(x=>AID_ABBR[x]||x);
+  return w.length ? w.join(" ") : aidEntity(name);
+};
+// One sentence per supported fact, most important first. Off inputs are never read.
+const aidFamilyText = (fam, F, on, o, variant) => {
+  const has = k => on[k] && F[k];
+  const kind = has("type") ? F.type : (fam==="file"?"file":fam==="bi"?"dashboard":fam==="metric"?"metric":"object");
+  const Kind = /^dbt /.test(kind) ? kind : aidTitle(kind);
+  const plural = (t) => { const w=t.toLowerCase(); return /s$/.test(w)?w:/y$/.test(w)?w.slice(0,-1)+"ies":w+"s"; };
+  const where = has("connection") ? ` in ${F.connection}` : "";
+  const ent = aidSubject(o.label||o.name);
+  const out = [];
+  if(fam==="container"){
+    const types = has("childTypes") ? F.childTypes.replace(/, …$/,"").split(", ").map(plural) : [];
+    const what = types.length ? types.join(", ").replace(/, ([^,]*)$/," and $1") : "objects";
+    out.push(has("childTypes")||has("children")
+      ? `${Kind}${where} holding ${has("childCount")?F.childCount+" ":""}${what}${has("children")?`, such as ${F.children}`:""}.`
+      : `${Kind}${where} for ${ent} data.`);
+    if(has("domain")) out.push(`Part of the ${F.domain} domain.`);
+  }
+  if(fam==="file"){
+    out.push(`${has("format")?F.format:"A"} file that appears to hold ${ent}${has("path")?`, in the ${F.path.split(" / ").slice(0,-1).join(" / ")||F.path} folder`:""}.`);
+    const det = [has("connection")&&`Stored in ${F.connection}`, has("size")&&F.size, has("updated")&&`last modified ${F.updated}`].filter(Boolean);
+    if(det.length) out.push(`${det.join(", ")}.`.replace(/^./,c=>c.toUpperCase()));
+  }
+  if(fam==="bi"){
+    out.push(variant%2
+      ? `${Kind} reporting ${ent}${has("fields")?` by ${F.fields}`:""}.`
+      : `${Kind} that shows ${ent}${has("upstream")?`, built on ${F.upstream}`:""}.`);
+    if(has("contains")) out.push(`Contains ${F.contains}.`);
+    if(has("parent")) out.push(`Published in ${F.parent}${where}.`);
+  }
+  if(fam==="pipeline"){
+    out.push(has("inputs")||has("outputs")
+      ? `${Kind} that ${has("inputs")?`reads ${F.inputs}`:"loads data"}${has("outputs")?` and feeds ${F.outputs}`:""}.`
+      : `${Kind} for ${ent}; its inputs and outputs are not recorded in the catalog, so what it loads needs confirmation.`);
+    if(has("sql")){
+      const q = F.sql.toLowerCase(), steps = [/\bjoin\b/.test(q)&&"joins", /\bwhere\b/.test(q)&&"filters", /\bgroup by\b/.test(q)&&"aggregates", /\bas\s+[a-z_]+/.test(q)&&"renames"].filter(Boolean);
+      if(steps.length) out.push(`It ${steps.join(", ").replace(/, ([^,]*)$/," and $1")} the ${ent} data.`);
+    }
+    if(has("materialization")) out.push(`Materialized as a ${F.materialization}${has("lastRun")?`; last ran ${F.lastRun}`:""}.`);
+  }
+  if(fam==="metric"){
+    out.push(has("expression") ? `Measures ${ent} (${F.expression}).` : `Measures ${ent}.`);
+    if(has("parts")) out.push(`Can be broken down by ${F.parts}.`);
+    if(has("basedOn")) out.push(`Built on ${F.basedOn}.`);
+    if(has("glossary")) out.push(`Business term: ${F.glossary}.`);
+  }
+  if(fam==="governance"){
+    const k = (o.kind||"").toLowerCase();
+    if(k==="glossary term") out.push(`Business term for ${aidLow(F.name)}${has("parent")?` in ${F.parent}`:""}${has("related")?`, also known as ${F.related}`:""}.`);
+    else if(k==="tag") out.push(`Apply to objects that hold ${aidLow(F.name)} data${has("parent")?` (${F.parent} classification)`:""}.`);
+    else if(k==="domain") out.push(`Business domain for ${aidLow(F.name)} data${has("related")?`, including ${F.related}`:""}.`);
+    else out.push(`Data product that delivers ${aidLow(F.name)}${has("parent")?` for the ${F.parent} domain`:""}.`);
+    if(has("linked")) out.push(`${k==="tag"?"Applied to":k==="data product"?"Bundles":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,"$1 assets, including")}.`);
+  }
+  if(has("tags") && fam!=="governance") out.push(`Tagged ${F.tags}.`);
+  if(has("owner")) out.push(`Owned by ${F.owner}.`);
+  return out;
+};
+const aidDraftObject = ({obj, family, role, variant=0, trace=[]}) => {
+  const fam = family || aidFamilyOf(obj);
+  if(fam==="table") return aidDraftAsset({assetName:obj.name, role, variant, trace});
+  if(!fam || !AID_INPUTS[fam]) return null;
+  const S = _aidState.settings, on = {...(S.inputs[fam]||aidAllOn(AID_INPUTS[fam])), name:true};
+  const F = aidFacts(obj, fam, trace);
+  const out = aidFamilyText(fam, F, on, obj, variant);
+  const text = (S.length==="short" ? out.slice(0,2) : out).join(" ");
+  const sent = [
+    ...AID_INPUTS[fam].filter(x=>on[x.k]).map(x=> x.k==="sql" && F.sql ? `${x.l}: ${F.sql.split("\n").filter(l=>l.trim()).slice(0,6).join(" ").replace(/\s+/g," ")} …` : `${x.l}: ${F[x.k]||"—"}`),
+    `Length: ${S.length==="short"?"Short":"Detailed"}`,
+  ];
+  const filled = AID_INPUTS[fam].filter(x=>on[x.k] && F[x.k] && x.k!=="name" && x.k!=="existing").length;
+  const used = aidUniq(["name", ...AID_INPUTS[fam].filter(x=>on[x.k] && F[x.k] && !["name","existing","owner"].includes(x.k)).slice(0,3).map(x=>x.l.toLowerCase())]);
+  return {text, conf:Math.min(0.92, 0.58 + filled*0.05), used, unknown:[], trace, sent,
+          model:aiModelSnap("describe"), prompt:S.prompts[fam], promptLabel:`${aidFamLabel(fam)} prompt`};
 };
 
 
@@ -59937,7 +60325,7 @@ const aidApproverFor = (asset, me) => {
 const aidWithdraw = (id) => {
   const r = _aidState.reqs.find(x=>x.id===id);
   aidSet(s=>({...s, reqs:s.reqs.map(x=>x.id===id?{...x, status:"withdrawn"}:x)}));
-  if(r) pushNotif({category:"Catalog", type:"field_updated", title:`Description request withdrawn · ${r.col?`${r.asset}.${r.col}`:r.asset}`,
+  if(r) pushNotif({category:"Catalog", type:"field_updated", title:`Description request withdrawn · ${r.col?`${r.label||r.asset}.${r.col}`:(r.label||r.asset)}`,
     body:`For ${r.owner} · ${r.requestedBy}'s AI-drafted description no longer needs your approval`, nav:"catalog", asset:r.asset});
 };
 
@@ -60010,42 +60398,80 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
   );
 };
 
-// The Description card's AI half for a table/view. Keeps its own draft state.
-const useAidAssetDraft = ({asset, onToast, onSaved}) => {
+// The Description card's AI half, for any object. `family` picks the inputs and the prompt.
+const _aidSynced = new Set();   // approved drafts already written onto their object
+const useAidAssetDraft = ({asset, onToast, onSaved, family}) => {
   const aid = useAid();
   const {role, roleCfg} = useRole();
   const me = aidMe(roleCfg);
-  const owners = asset.owners || [asset.owner].filter(Boolean);
-  const canSave = aidIsOwner(role, me, owners);
+  const fam = family || aidFamilyOf(asset);
+  const label = asset.label || asset.name;
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [variant, setVariant] = useState(0);
   const ask = (v=variant) => {
     setBusy(true);
     setTimeout(()=>{
-      const d = aidDraftAsset({assetName:asset.name, role, variant:v, trace:[]});
+      const d = aidDraftObject({obj:asset, family:fam, role, variant:v, trace:[]});
       aidSet(s=>({...s, stats:{...s.stats, suggested:s.stats.suggested+1}}));
       setDraft(d); setBusy(false);
-      if(!d) onToast("Nothing to draft from — this asset has no metadata in the catalog","error");
+      if(!d) onToast("Nothing to draft from — this object has no metadata in the catalog","error");
     }, 650);
   };
   const approver = aidApproverFor(asset, me);
   const accept = (text, edited) => {
-    aidRequest(asset.name, null, text, me, approver, {edited, conf:draft.conf});
+    aidRequest(asset.name, null, text, me, approver, {edited, conf:draft.conf, label, kind:asset.kind||asset.type});
     onToast(`Sent to ${approver} for approval`,"success");
-    pushNotif({category:"Catalog", type:"assigned", title:`Approve description · ${asset.name}`, body:`For ${approver} · ${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"stewardship", asset:asset.name});
+    pushNotif({category:"Catalog", type:"assigned", title:`Approve description · ${label}`, body:`For ${approver} · ${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"stewardship", asset:label});
     setDraft(null);
   };
-  return {
-    enabled: aidCanAsk(role),
-    pending: aidPendingFor(asset.name, null),
-    applied: aid.applied[aidKey(asset.name,null)] || null,
-    button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
-    box: draft ? <AIDescDraftBox draft={draft} canSave={false} owner={approver} busy={busy}
+  const applied = aid.applied[aidKey(asset.name,null)] || null;
+  useEffect(()=>{
+    if(!applied || !onSaved) return;
+    const k = aidKey(asset.name,null)+"|"+applied.text;
+    if(_aidSynced.has(k)) return;
+    _aidSynced.add(k); onSaved(applied.text);
+  },[applied && applied.text]);
+  const pending = aidPendingFor(asset.name, null);
+  const box = draft ? <AIDescDraftBox draft={draft} canSave={false} owner={approver} busy={busy}
       onAccept={accept}
       onRegenerate={()=>{ const v=variant+1; setVariant(v); ask(v); }}
-      onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null,
+      onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null;
+  return {
+    enabled: aidCanAsk(role) && aidFamOn(fam),
+    pending, applied, box,
+    button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
   };
+};
+
+// Under a description: the pending-approval card and the open draft.
+const AIDescExtras = ({ai, onToast}) => (
+  <>
+    {ai.pending&&(
+      <div style={{marginTop:10,padding:"10px 12px",borderRadius:8,background:T.amberDim,border:`1px solid ${T.amber}40`}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+          <span style={{fontSize:10.5,fontWeight:700,padding:"1px 8px",borderRadius:99,background:T.amber+"22",color:T.amber}}>Pending approval</span>
+          <span style={{fontSize:11,color:T.textMuted}}>AI description · approver {ai.pending.owner||"—"}</span>
+          <div style={{flex:1}}/>
+          <button onClick={()=>{ aidWithdraw(ai.pending.id); onToast&&onToast("Suggestion withdrawn","info"); }}
+            style={{background:"none",border:"none",padding:0,color:T.textSub,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Withdraw</button>
+        </div>
+        <div style={{fontSize:12.5,color:T.text,lineHeight:1.6}}>{ai.pending.text}</div>
+      </div>
+    )}
+    {ai.box}
+  </>
+);
+// For pages that render a description deep inside a list or tab: the button sits under the text.
+const AIDescAssist = ({obj, family, onSaved, onToast, hasText}) => {
+  const ai = useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved});
+  if(!ai.enabled && !ai.pending) return null;
+  return (
+    <div style={{marginTop:8}}>
+      {ai.enabled&&!ai.pending&&!ai.box&&ai.button(hasText)}
+      <AIDescExtras ai={ai} onToast={onToast}/>
+    </div>
+  );
 };
 
 // Bulk: every column of one table in a drawer, one checkbox per row.
@@ -60063,7 +60489,7 @@ const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
     setBusy(true); setWritten(0);
     const timers = [];
     const t = setTimeout(()=>{
-      const cols = SCHEMA[asset.name] || [];
+      const cols = aidColumnsOf(asset.name);
       const out = cols.map(c=>{
         const d = aidDraftColumn({assetName:asset.name, colName:c.name, role, trace:[]});
         const cur = (aidApplied(asset.name,c.name)||{}).text || c.desc || "";
@@ -60307,46 +60733,60 @@ const AIModelCard = ({k, onToast}) => {
 const AIDescSettings = ({onToast}) => {
   const aid = useAid();
   const S = aid.settings;
+  const [fam, setFam] = useState("table");
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
   const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
+  const setFamOn = (k) => put({families:{...S.families, [k]:!S.families[k]}});
   const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
   const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
-  const onCount = lv => (lv==="table"?AID_TABLE_INPUTS:AID_COLUMN_INPUTS).filter(x=>x.required||S.inputs[lv][x.k]).length;
+  const list = AID_INPUTS[fam];
+  const onCount = list.filter(x=>x.required||S.inputs[fam][x.k]).length;
+  const pk = fam==="table" ? S.length : fam;      // which prompt this family uses
+  const famSel = (
+    <div style={{maxWidth:320}}>
+      <label style={lab}>Object family</label>
+      <select value={fam} onChange={e=>setFam(e.target.value)} style={sel}>
+        {AID_FAMILIES.map(f=><option key={f.k} value={f.k}>{f.l}{S.families[f.k]?"":" · off"}</option>)}
+      </select>
+    </div>
+  );
 
   return (
     <div style={{maxWidth:900}}>
       <div>
+        {/* 1 · Object types */}
+        <AIDCard title="Object types">
+          {AID_FAMILIES.map((f,i)=>(
+            <AIDInputRow key={f.k} first={i===0} item={{k:f.k, l:f.l, ex:f.types.join(", ")}} on={S.families[f.k]}
+              set={()=>{ setFamOn(f.k); onToast(`${f.l}: ✦ ${S.families[f.k]?"hidden":"shown"}`,"success"); }}/>
+          ))}
+        </AIDCard>
+
         {/* 2 · Model inputs */}
         <AIDCard title="Model inputs">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
-            <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                Table descriptions · {onCount("table")} of {AID_TABLE_INPUTS.length} on</div>
-              {AID_TABLE_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.table[x.k]} set={()=>setInput("table",x.k)}/>)}
-            </div>
-            <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                Column descriptions · {onCount("column")} of {AID_COLUMN_INPUTS.length} on</div>
-              {AID_COLUMN_INPUTS.map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={S.inputs.column[x.k]} set={()=>setInput("column",x.k)}/>)}
-            </div>
-          </div>
+          {famSel}
+          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"16px 0 4px"}}>
+            {aidFamLabel(fam)} · {onCount} of {list.length} on</div>
+          {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
         </AIDCard>
 
         {/* 3 · Prompt */}
-        <AIDCard title="Prompt" desc="The instruction sent with the metadata. Each prompt starts from a Solix default you can edit for your house style; Reset to default puts it back.">
-          <div style={{maxWidth:320}}>
-            <label style={lab}>Table description length</label>
-            <select value={S.length} onChange={e=>{ put({length:e.target.value}); onToast(`Table descriptions will be ${e.target.value==="short"?"short":"detailed"}`,"success"); }} style={sel}>
-              <option value="short">Short — one or two sentences</option>
-              <option value="detailed">Detailed — a paragraph of three to five sentences</option>
-            </select>
+        <AIDCard title="Prompt">
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
+            {famSel}
+            <div>
+              <label style={lab}>Description length</label>
+              <select value={S.length} onChange={e=>{ put({length:e.target.value}); onToast(`Descriptions will be ${e.target.value==="short"?"short":"detailed"}`,"success"); }} style={sel}>
+                <option value="short">Short — one or two sentences</option>
+                <option value="detailed">Detailed — a paragraph of three to five sentences</option>
+              </select>
+              <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>All families except Columns & fields</div>
+            </div>
           </div>
-          <AIDPromptBox key={S.length} label={S.length==="short"?"Short table prompt":"Detailed table prompt"}
-            hint="Used for ✦ Suggest description on tables and views."
-            value={S.prompts[S.length]} def={AID_DEFAULT_PROMPTS[S.length]} onSave={v=>savePrompt(S.length, v)}/>
-          <AIDPromptBox label="Column prompt" hint="Used for ✦ Describe columns. Column descriptions are always one sentence."
-            value={S.prompts.column} def={AID_DEFAULT_PROMPTS.column} onSave={v=>savePrompt("column", v)}/>
+          <AIDPromptBox key={pk} label={fam==="table"?(S.length==="short"?"Short table prompt":"Detailed table prompt"):`${aidFamLabel(fam)} prompt`}
+            hint={fam==="column"?"Used for ✦ Describe columns. Always one sentence.":`Used for ✦ Suggest description on ${aidFamLabel(fam).toLowerCase()}.`}
+            value={S.prompts[pk]} def={AID_DEFAULT_PROMPTS[pk]} onSave={v=>savePrompt(pk, v)}/>
         </AIDCard>
 
         {/* 4 · Model */}
