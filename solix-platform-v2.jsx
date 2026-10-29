@@ -57276,6 +57276,14 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   // Closing the drawer always leaves it ready for a fresh "New Classification".
   useEffect(()=>{ if(!newCatPanelOpen){ setEditingCat(null); setNewCatDraft({name:'',description:'',color:'#6366f1'}); } },[newCatPanelOpen]);
 
+  // Admin or the tag's owner deletes directly; anyone else sends the owner a request.
+  const requestTagDelete = (td, via) => {
+    if(tmvRole==='admin'||td.owner===meHandle){ setDeleteConfirm({type:'tag',id:td.id,name:td.name}); return; }
+    requestDeletion({kind:'tag',targetId:td.id,name:td.name,requestedBy:meHandle,note:`Requested via ${via}`,owner:td.owner||null});
+    pushNotif({category:"Ownership",type:"alert",title:`Deletion requested · ${td.name} (tag)`,body:`${meHandle} requested to delete this tag`,nav:"tags",navArg:{tagId:td.id}});
+    onToast('Deletion requested — pending owner approval','success');
+  };
+
   const deleteTag = (tagId) => {
     deleteTagDef(tagId);
     setDeleteConfirm(null);
@@ -57618,8 +57626,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0}}>
-                    <Btn small ghost onClick={()=>openEditCat(selCatId)}>Edit</Btn>
-                    <Btn small variant="primary" onClick={()=>openAddTagIn(selCatId)}>+ Tag</Btn>
+                    <KebabMenu items={[{label:'Add Tag',onClick:()=>openAddTagIn(selCatId)},{label:'Edit',onClick:()=>openEditCat(selCatId)}]}/>
                   </div>
                 </div>
                 {/* Body */}
@@ -57762,7 +57769,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     </div>
                     <div style={{display:'flex',gap:6,flexShrink:0}}>
                       {!editing
-                        ? <button onClick={startEdit} style={{padding:'6px 14px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer',fontWeight:500}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>Edit</button>
+                        ? <KebabMenu items={[{label:'Edit',onClick:startEdit},{label:'Delete',danger:true,onClick:()=>requestTagDelete(selTag,'tag detail')}]}/>
                         : <>
                           <button onClick={saveEdit} style={{padding:'6px 14px',borderRadius:7,background:T.accent,border:'none',color:'#fff',fontSize:12,cursor:'pointer',fontWeight:600}}>{flashSaved?'Saved ✓':'Save'}</button>
                           <button onClick={cancelEdit} style={{padding:'6px 12px',borderRadius:7,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:'pointer'}}>Cancel</button>
@@ -58285,7 +58292,9 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
               <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:4}}>Delete {deleteConfirm.type==='tag'?'Tag':'Category'}</div>
               <div style={{fontSize:12.5,color:T.textMuted,lineHeight:1.6}}>
                 {deleteConfirm.type==='tag'
-                  ? <>Are you sure you want to delete <b style={{color:T.text}}>"{deleteConfirm.name}"</b>? It is applied to <b style={{color:T.text}}>{assetCount(deleteConfirm.id)} asset{assetCount(deleteConfirm.id)!==1?'s':''}</b> and will be removed from all of them.</>
+                  ? <>Are you sure you want to delete <b style={{color:T.text}}>"{deleteConfirm.name}"</b>? {assetCount(deleteConfirm.id)>0
+                      ? <>It is applied to <b style={{color:T.text}}>{assetCount(deleteConfirm.id)} asset{assetCount(deleteConfirm.id)!==1?'s':''}</b> and will be removed from all of them.</>
+                      : <>It is not applied to any assets.</>}</>
                   : <>Are you sure you want to delete the <b style={{color:T.text}}>"{deleteConfirm.name}"</b> category? Tags in this category will become uncategorized.</>
                 }
               </div>
@@ -61043,6 +61052,33 @@ const TagPeoplePicker = ({label, addLabel, people, setPeople}) => {
 
 // draft = {name, category, description, color, owners:[], stewards:[]}; catInput is a
 // typed classification that does not exist yet (created with the tag).
+// ⋮ actions menu for a page header — same look as the glossary term menu.
+const KebabMenu = ({items}) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(()=>{
+    if(!open) return;
+    const h = e => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', h); return ()=>document.removeEventListener('mousedown', h);
+  },[open]);
+  return (
+    <div ref={ref} style={{position:'relative',flexShrink:0}}>
+      <button onClick={()=>setOpen(o=>!o)} title="Actions"
+        style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${open?T.accent:T.border}`,color:T.text,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,fontWeight:700}}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>{if(!open)e.currentTarget.style.borderColor=T.border;}}>⋮</button>
+      {open&&(
+        <div style={{position:'absolute',top:'calc(100% + 6px)',right:0,zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 12px 36px rgba(0,0,0,.18)',minWidth:160,overflow:'hidden'}}>
+          {items.map((it,i)=>(
+            <button key={it.label} onClick={()=>{setOpen(false);it.onClick();}}
+              style={{width:'100%',display:'block',padding:'10px 14px',background:'none',border:'none',borderTop:i?`1px solid ${T.border}`:'none',cursor:'pointer',textAlign:'left',fontSize:12.5,fontWeight:600,color:it.danger?T.rose:T.text}}
+              onMouseEnter={e=>e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='none'}>{it.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const TagFormFields = ({draft, setDraft, catInput, setCatInput, categories, nameNote, lockCategory}) => {
   const [catOpen, setCatOpen] = useState(false);
   const catRef = useRef(null);
