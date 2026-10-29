@@ -18005,7 +18005,9 @@ const AssetOverview = ({asset,data,setData,onToast})=>{
 // most rows a preview may ask for. Rows are queried from the source when the tab opens
 // and are never stored in EDG.
 const SD_ROW_OPTS = [10,50,100];
-const sdKey = (v) => { const id = connIdFrom(v) || String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); return id==="postgresql" ? "postgres" : id; };
+// Connection names ("postgresql_prod", "Snowflake DWH") and asset services ("postgres") meet on one key.
+const SD_DB_IDS = ["postgres","mysql","oracle","sqlserver","mssql","redshift","sap","cdp"];
+const sdKey = (v) => { const n = String(v||"").toLowerCase().replace(/[^a-z0-9]/g,""); return connIdFrom(n) || SD_DB_IDS.find(k=>n.includes(k)) || n; };
 const sdSupported = (v) => (scopeFor(v).objectTypes||[]).includes("Tables");
 const SD_TYPES = new Set(["Table","View"]);
 let _sdState = {};   // connector key -> {on, maxRows}
@@ -18023,21 +18025,24 @@ const sdValue = (col, i, seed) => {
   const r = (n) => (h = (h*1103515245 + 12345) >>> 0) % n;
   const n = col.name.toLowerCase(), t = String(col.type||"").toUpperCase();
   if(col.pk) return String(100000 + i + 1);
+  if(n.endsWith("_id")||n==="id") return String(1000 + r(90000));
   if(n.includes("email")) return ["maya","dev","sarah","alex","james","priya","lena","omar"][r(8)]+"."+["chen","patel","kim","wu","oh","rao","berg","ali"][r(8)]+r(90)+"@example.com";
   if(n.includes("phone")) return "+1 "+(200+r(799))+"-"+(100+r(899))+"-"+(1000+r(8999));
-  if(n.includes("first_name")||n==="name") return ["Ana","Ben","Chloe","Dev","Elif","Farah","Gus","Hana"][r(8)];
+  if(col.nullable && r(9)===0) return null;
+  if(n.includes("first_name")) return ["Ana","Ben","Chloe","Dev","Elif","Farah","Gus","Hana"][r(8)];
   if(n.includes("last_name")) return ["Ortiz","Nakamura","Singh","Brown","Kowalski","Mensah"][r(6)];
+  if(n.includes("name")&&!n.includes("product")) return ["Ana","Ben","Chloe","Dev","Elif","Farah","Gus","Hana"][r(8)]+" "+["Ortiz","Nakamura","Singh","Brown","Kowalski","Mensah"][r(6)];
+  if(n.includes("product")) return ["Wireless Mouse","USB-C Hub","Desk Lamp","Notebook A5","Water Bottle","Headphones"][r(6)];
+  if(n.includes("region")) return ["NA","EMEA","APAC","LATAM"][r(4)];
   if(n.includes("country")) return ["US","GB","DE","IN","JP","BR","CA"][r(7)];
   if(n.includes("city")) return ["Austin","London","Berlin","Pune","Osaka","Toronto"][r(6)];
   if(n.includes("status")) return ["completed","pending","shipped","cancelled","refunded"][r(5)];
   if(n.includes("currency")) return ["USD","EUR","GBP","INR"][r(4)];
-  if(n.endsWith("_id")||n==="id") return String(1000 + r(90000));
   if(t.startsWith("BOOL")) return r(2) ? "true" : "false";
   if(t.includes("TIMESTAMP")||t.includes("DATETIME")) return `2026-${String(1+r(10)).padStart(2,"0")}-${String(1+r(28)).padStart(2,"0")} ${String(r(24)).padStart(2,"0")}:${String(r(60)).padStart(2,"0")}:${String(r(60)).padStart(2,"0")}`;
   if(t.includes("DATE")) return `2026-${String(1+r(10)).padStart(2,"0")}-${String(1+r(28)).padStart(2,"0")}`;
   if(t.includes("DECIMAL")||t.includes("NUMERIC")||t.includes("FLOAT")||t.includes("DOUBLE")) return (r(500000)/100).toFixed(2);
   if(t.includes("INT")||t.includes("NUMBER")) return String(r(10000));
-  if(col.nullable && r(9)===0) return null;
   return ["alpha","bravo","charlie","delta","echo","foxtrot"][r(6)]+"_"+r(1000);
 };
 
@@ -18063,7 +18068,7 @@ const AssetSampleData = ({asset}) => {
   if(!cfg.on) return (
     <div className="fadeIn"><Card2 style={{padding:"40px 24px",textAlign:"center"}}>
       <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>Sample data disabled</div>
-      <div style={{fontSize:12.5,color:T.textMuted}}>Disabled for {conn} in Settings › Connections › Advanced.</div>
+      <div style={{fontSize:12.5,color:T.textMuted}}>Disabled for {conn} in Settings › Connections › Configuration.</div>
     </Card2></div>
   );
   const th = {padding:"8px 14px",fontSize:11,fontWeight:600,color:T.textMuted,textAlign:"left",borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap",background:T.bgElevated,position:"sticky",top:0,zIndex:1};
@@ -45968,6 +45973,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
   const [cfgTab, setCfgTab] = useState(()=>(_svcJump&&_svcJump.name===svc.displayName&&_svcJump.tab)||"overview");
   useEffect(()=>{ _svcJump=null; },[]);
   const aicSt = useAic();
+  const sdCfg = useSampleData(svc.name);
   const onNavSvc = useNav();
   const {roleCfg:svcRoleCfg} = useRole();
   const aicMe = (svcRoleCfg?.email||"you@jnj").split("@")[0];
@@ -46443,6 +46449,27 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
                 </div>
               </div>
               {aicIng&&aicSt.settings.enabled&&<AICIngestFields cfg={aicIngestCfg(aicIng)} onChange={c=>aicSetIngest(svc.displayName, c, aicMe)} typeOptions={aicConnTypeOptions(svc.displayName)}/>}
+            </div>
+          </>)}
+
+          {/* ── Sample data ── */}
+          {sdSupported(svc.name)&&(<>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Sample Data</div>
+            <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <Toggle on={sdCfg.on} onChange={()=>{ sdSet(svc.name,{on:!sdCfg.on}); onToast(sdCfg.on?"Sample data turned off for this connection":"Sample data on for tables and views","info"); }}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Show sample data</div>
+                  <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Tables and views · queried live, not stored</div>
+                </div>
+                {sdCfg.on&&<>
+                  <span style={{fontSize:11.5,color:T.textSub}}>Max rows</span>
+                  <select value={sdCfg.maxRows} onChange={e=>sdSet(svc.name,{maxRows:Number(e.target.value)})}
+                    style={{padding:"4px 8px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",fontFamily:"inherit"}}>
+                    {SD_ROW_OPTS.map(n=><option key={n} value={n}>{n}</option>)}
+                  </select>
+                </>}
+              </div>
             </div>
           </>)}
 
