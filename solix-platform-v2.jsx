@@ -3434,6 +3434,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"24px 28px 0",background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          <AIDescField key={glossary.id} onToast={onToast} onSaved={t=>setGlossaries(p=>p.map(g=>g.id===glossary.id?{...g,desc:t}:g))}
+            obj={{name:"glossary:"+glossary.id, label:glossary.name, kind:"Glossary", related:allTermsInGlossary.map(t=>t.term),
+                  owners:allOwners, stewards:[], description:glossary.desc}}>{ai=><>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:16}}>
               <div style={{width:56,height:56,borderRadius:16,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{glossary.icon}</div>
@@ -3446,10 +3449,13 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 </div>
               </div>
             </div>
-            <div style={{display:"flex",gap:6,flexShrink:0}}>
+            <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+              {ai.slot(!!glossary.desc)}
               <KebabMenu items={[{label:"Add Term",onClick:()=>openModal("newTerm",{glossary:selG})},{label:"Edit",onClick:()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}]}/>
             </div>
           </div>
+          {(ai.pending||ai.box||(ai.applied&&ai.applied.text===glossary.desc))&&<div style={{marginBottom:18,maxWidth:720}}><AIDescFoot ai={ai} text={glossary.desc} onToast={onToast}/></div>}
+          </>}</AIDescField>
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
           {(()=>{
@@ -3791,13 +3797,15 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
           <div style={{flex:1,overflowY:"auto",padding:"28px"}}>
             {termTab==="overview"&&(
               <div style={{maxWidth:720}}>
-                <SectionLabel label="Definition" action={<button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition||"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Edit</button>}/>
-                {term.definition?<p style={{fontSize:14,color:T.text,lineHeight:1.8,margin:0}}>{term.definition}</p>:<div style={{padding:"16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:8,fontSize:13,color:T.textMuted,fontStyle:"italic",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>No definition yet.</span><button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Add</button></div>}
-                <AIDescAssist key={term.id} hasText={!!term.definition} onToast={onToast} onSaved={t=>patchTerm(term.id,{definition:t})}
+                <AIDescField key={term.id} onToast={onToast} onSaved={t=>patchTerm(term.id,{definition:t})}
                   obj={{name:"term:"+term.id, label:term.term, kind:"Glossary term", parent:(glossaries.find(g=>g.id===term.glossary)||{}).name,
                         related:aidUniq([term.abbr, ...(term.synonyms||[])]), linked:(term.linkedAssets||[]).map(x=>x.name||x),
                         tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
-                        stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
+                        stewards:term.stewards||term.reviewers||[], description:term.definition}}>{ai=><>
+                <SectionLabel label="Definition" action={<div style={{display:"flex",alignItems:"center",gap:8}}>{ai.slot(!!term.definition)}<button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition||"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Edit</button></div>}/>
+                {term.definition?<p style={{fontSize:14,color:T.text,lineHeight:1.8,margin:0}}>{term.definition}</p>:!ai.box&&<div style={{padding:"16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:8,fontSize:13,color:T.textMuted,fontStyle:"italic",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>No definition yet.</span><button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Add</button></div>}
+                <AIDescFoot ai={ai} text={term.definition} onToast={onToast}/>
+                </>}</AIDescField>
                 <Divider/>
                 <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
                 {addingRelated&&<div style={{marginBottom:12}}><GlSelect onChange={e=>{if(e.target.value)doAddRelated(term.id,e.target.value);}} defaultValue=""><option value="" disabled>Select a term to link…</option>{terms.filter(t=>t.id!==term.id&&!(term.relatedTerms||[]).includes(t.id)).map(t=>(<option key={t.id} value={t.id}>{t.term} ({glossaries.find(g=>g.id===t.glossary)?.name})</option>))}</GlSelect></div>}
@@ -9594,9 +9602,10 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       <Btn variant={confirmVariant||"primary"} onClick={onConfirm}>{confirmLabel}</Btn>
     </div>
   );
-  const SideLabel = ({label,onEdit}) => (
+  const SideLabel = ({label,onEdit,extra}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
+      {extra}
       {onEdit&&(
         <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
           onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
@@ -10020,7 +10029,11 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       <div style={{display:"flex",minHeight:"100%"}}>
                         {/* Main content — description + rules summary */}
                         <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
-                          <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}/>
+                          <AIDescField key={p.id} onToast={onToast} onSaved={t=>patchPol({description:t})}
+                            obj={{name:"policy:"+p.id, label:p.name, kind:"Policy", category:p.category, scope:typeof p.scope==="string"?[p.scope]:(p.scope&&p.scope.domains)||[],
+                                  rules:(p.rules||[]).map(r=>r.name||r.title).filter(Boolean), regulations:p.regulations||[], owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.description}}>{ai=><>
+                          <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}
+                            extra={!editing&&!p.readOnly?<div style={{marginLeft:"auto",marginRight:6}}>{ai.slot(!!p.description)}</div>:null}/>
                           {editing
                             ? <textarea value={descDraft} onChange={e=>setDescDraft(e.target.value)} rows={5} autoFocus
                                 style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",marginBottom:16}}/>
@@ -10028,6 +10041,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                 {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
                               </div>
                           }
+                          {!editing&&<div style={{marginTop:-10,marginBottom:20}}><AIDescFoot ai={ai} text={p.description} onToast={onToast}/></div>}
+                          </>}</AIDescField>
 
                           {/* ── Evaluation Results banner ── */}
                           {(p.compliancePct!=null||p.lastEvaluated)&&(()=>{
@@ -15128,9 +15143,10 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const CAT_COLOR = {Privacy:T.violet, Security:T.rose, Retention:T.amber, Access:T.blue, Quality:T.green, Governance:"#0ea5e9"};
   const catColor  = c => CAT_COLOR[c]||T.textMuted;
   const sevPill   = s => s ? <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[s]||T.bgElevated,color:SEV_COLOR[s]||T.textSub,border:`1px solid ${SEV_COLOR[s]||T.border}30`}}>{s}</span> : null;
-  const sideLabel = (label, onEdit) => (
+  const sideLabel = (label, onEdit, extra) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
+      {extra}
       {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4}}
         onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
         <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
@@ -15574,11 +15590,18 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       body = (
         <div style={{display:"flex",minHeight:"100%"}}>
           <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,minWidth:0}}>
-            {sideLabel("Description", canEdit(p)&&!isReg&&descEdit===null ? ()=>setDescEdit(p.purpose||"") : null)}
+            <AIDescField key={p.id} onToast={onToast} onSaved={t=>updPol(p.id,x=>addHist({...x,purpose:t},"Description updated from an approved AI draft"))}
+              obj={{name:"pm2:"+p.id, label:p.name, kind:"Policy", category:p.category, scope:p.scope, rules:(p.rules||[]).map(r=>r.name),
+                    regulations:(p.articles||[]).map(a=>{ const fw=pm2Fw(a.fw); return fw?`${fw.name} ${(fw.arts[a.i]||{}).ref||""}`.trim():null; }).filter(Boolean),
+                    owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.purpose}}>{ai=><>
+            {sideLabel("Description", canEdit(p)&&!isReg&&descEdit===null ? ()=>setDescEdit(p.purpose||"") : null,
+              canEdit(p)&&!isReg&&descEdit===null ? <div style={{marginLeft:"auto",marginRight:6}}>{ai.slot(!!p.purpose)}</div> : null)}
             {descEdit!==null
               ? <><textarea value={descEdit} onChange={e=>setDescEdit(e.target.value)} rows={5} autoFocus style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
               : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
+            {descEdit===null&&<div style={{marginTop:-10,marginBottom:20}}><AIDescFoot ai={ai} text={p.purpose} onToast={onToast}/></div>}
+            </>}</AIDescField>
             {p.status==="Active"&&!pScans.some(x=>(x.runs||[]).length)&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <span style={{fontSize:12,fontWeight:700,color:T.amber}}>Not scanned</span><span style={{flex:1,fontSize:12,color:T.textSub}}>No scan runs this policy.</span>
               {scans.length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,fontSize:11.5}}><option value="">Add to a scan…</option>{scans.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
@@ -29083,13 +29106,20 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:24}}>
                 <div>
+                  <AIDescField key={pd.id} onToast={onToast} onSaved={t=>patchProduct(pd.id,{description:t})}
+                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
+                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}>{ai=><>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {!pdDescEditMode&&ai.slot(!!pd.description)}
                     {!pdDescEditMode&&<button onClick={()=>{setPdDescEditValue(pd.description);setPdDescEditMode(true);}}
                       style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
                       onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
                       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>}
+                    </div>
                   </div>
                   {pdDescEditMode
                     ? <div style={{marginBottom:24}}>
@@ -29104,10 +29134,8 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
-                  {!pdDescEditMode&&<AIDescAssist key={pd.id} hasText={!!pd.description} onToast={onToast} onSaved={t=>patchProduct(pd.id,{description:t})}
-                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
-                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
-                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>}
+                  {!pdDescEditMode&&<AIDescFoot ai={ai} text={pd.description} onToast={onToast}/>}
+                  </>}</AIDescField>
 
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
@@ -29588,13 +29616,20 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
             {domainTab==="documentation"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24}}>
                 <div>
+                  <AIDescField key={dm.id} onToast={onToast} onSaved={t=>patchDomain(dm.id,{description:t})}
+                    obj={{name:"domain:"+dm.id, label:dm.displayName||dm.name, kind:"Domain", tags:dm.tags,
+                          related:products.filter(x=>x.domain===dm.name).map(x=>x.displayName||x.name), linked:ASSETS.filter(x=>x.domain===dm.name).map(x=>x.name),
+                          owners:dm.owners, stewards:dm.experts||[], description:dm.description}}>{ai=><>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>About this domain</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {!descEditMode&&ai.slot(!!dm.description)}
                     {!descEditMode&&<button onClick={()=>{setDescEditValue(dm.description);setDescEditMode(true);}}
                       style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
                       onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
                       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>}
+                    </div>
                   </div>
                   {descEditMode
                     ? <div style={{marginBottom:24}}>
@@ -29609,10 +29644,8 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:12}}>{dm.description}</p>
                   }
-                  {!descEditMode&&<AIDescAssist key={dm.id} hasText={!!dm.description} onToast={onToast} onSaved={t=>patchDomain(dm.id,{description:t})}
-                    obj={{name:"domain:"+dm.id, label:dm.displayName||dm.name, kind:"Domain", tags:dm.tags,
-                          related:products.filter(x=>x.domain===dm.name).map(x=>x.displayName||x.name), linked:ASSETS.filter(x=>x.domain===dm.name).map(x=>x.name),
-                          owners:dm.owners, stewards:dm.experts||[], description:dm.description}}/>}
+                  {!descEditMode&&<AIDescFoot ai={ai} text={dm.description} onToast={onToast}/>}
+                  </>}</AIDescField>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${dm.color}`,borderRadius:10,overflow:"hidden"}}>
@@ -31118,7 +31151,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 // ─────────────────────────────────────────────
 // DATA PRODUCTS VIEW (standalone top-level page)
 // ─────────────────────────────────────────────
-const DataProductsView = ({onAsset, onNav}) => {
+const DataProductsView = ({onAsset, onNav, onToast}) => {
   const [products, setProducts]         = useDataProducts();
   const [domains]                       = useDomains();
   const [selectedProductId, setSelectedProductId] = useState(null);
@@ -31274,13 +31307,20 @@ const DataProductsView = ({onAsset, onNav}) => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
                 <div>
+                  <AIDescField key={pd.id} onToast={onToast} onSaved={t=>patchDP(pd.id,{description:t})}
+                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
+                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}>{ai=><>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    {!dvDescEditMode&&ai.slot(!!pd.description)}
                     {!dvDescEditMode&&<button onClick={()=>{setDvDescEditValue(pd.description);setDvDescEditMode(true);}}
                       style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
                       onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
                       <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </button>}
+                    </div>
                   </div>
                   {dvDescEditMode
                     ? <div style={{marginBottom:24}}>
@@ -31295,10 +31335,8 @@ const DataProductsView = ({onAsset, onNav}) => {
                       </div>
                     : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
                   }
-                  {!dvDescEditMode&&<AIDescAssist key={pd.id} hasText={!!pd.description} onSaved={t=>patchDP(pd.id,{description:t})}
-                    obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
-                          linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
-                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>}
+                  {!dvDescEditMode&&<AIDescFoot ai={ai} text={pd.description} onToast={onToast}/>}
+                  </>}</AIDescField>
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
                 <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -57587,7 +57625,11 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
             return (
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                 {/* Header */}
-                <div style={{padding:'24px 28px 20px',background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0,display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
+                <div style={{padding:'24px 28px 20px',background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+                <AIDescField key={selCatId} onToast={onToast} onSaved={t=>setCatMeta(m=>({...m,[selCatId]:{...(m[selCatId]||{}),description:t}}))}
+                  obj={{name:"classification:"+selCatId, label:selCatId.charAt(0).toUpperCase()+selCatId.slice(1), kind:"Classification", related:catTags.map(td=>td.name),
+                        owners:catOwners, stewards:meta.stewards||[], description:meta.description}}>{ai=><>
+                <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
                   <div style={{display:'flex',alignItems:'center',gap:16,minWidth:0}}>
                     <div style={{width:56,height:56,borderRadius:16,background:cc.bg||T.bgElevated,border:`1px solid ${(cc.color||T.border)}33`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                       <span style={{width:18,height:18,borderRadius:'50%',background:cc.color||T.accent,display:'block'}}/>
@@ -57602,9 +57644,13 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       </div>
                     </div>
                   </div>
-                  <div style={{display:'flex',gap:6,flexShrink:0}}>
+                  <div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center'}}>
+                    {ai.slot(!!meta.description)}
                     <KebabMenu items={[{label:'Add Tag',onClick:()=>openAddTagIn(selCatId)},{label:'Edit',onClick:()=>openEditCat(selCatId)}]}/>
                   </div>
+                </div>
+                {(ai.pending||ai.box||(ai.applied&&ai.applied.text===meta.description))&&<div style={{marginTop:12,maxWidth:720}}><AIDescFoot ai={ai} text={meta.description} onToast={onToast}/></div>}
+                </>}</AIDescField>
                 </div>
                 {/* Body */}
                 <div style={{flex:1,overflowY:'auto'}}>
@@ -57785,20 +57831,25 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
 
                       {/* Description */}
                       <div>
-                        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Description</div>
+                        <AIDescField key={selTag.id} onToast={onToast} onSaved={t=>{ updateTagDef(selTag.id,{description:t}); setEditDraft(d=>d&&({...d,description:t})); }}
+                          obj={{name:"tag:"+selTag.id, label:selTag.name, kind:"Tag", parent:selTag.category, domain:selTag.domain, tags:[],
+                                linked:Object.entries(assignments||{}).filter(([,xs])=>(xs||[]).some(x=>x.tagId===selTag.id&&x.status!=='rejected')).map(([id])=>(ASSETS.find(x=>String(x.id)===String(id))||{}).name||id),
+                                owners:selTag.owners||[selTag.owner].filter(Boolean), stewards:selTag.stewards||[], description:selTag.description}}>{ai=><>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,minHeight:26}}>
+                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Description</div>
+                          {!editing&&ai.slot(!!selTag.description)}
+                        </div>
                         {editing
                           ? <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={4}
                               style={{width:'100%',padding:'10px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.65}}
                               onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
                               placeholder="Describe when this tag should be applied…"/>
-                          : <p style={{fontSize:13.5,color:draft.description?T.textSub:T.textMuted,lineHeight:1.75,margin:0,fontStyle:draft.description?'normal':'italic'}}>
+                          : (draft.description||!ai.box)&&<p style={{fontSize:13.5,color:draft.description?T.textSub:T.textMuted,lineHeight:1.75,margin:0,fontStyle:draft.description?'normal':'italic'}}>
                               {draft.description||'No description. Click Edit to add one.'}
                             </p>
                         }
-                        {!editing&&<AIDescAssist key={selTag.id} hasText={!!selTag.description} onToast={onToast} onSaved={t=>updateTagDef(selTag.id,{description:t})}
-                          obj={{name:"tag:"+selTag.id, label:selTag.name, kind:"Tag", parent:selTag.category, domain:selTag.domain, tags:[],
-                                linked:Object.entries(assignments||{}).filter(([,xs])=>(xs||[]).some(x=>x.tagId===selTag.id&&x.status!=='rejected')).map(([id])=>(ASSETS.find(x=>String(x.id)===String(id))||{}).name||id),
-                                owners:selTag.owners||[selTag.owner].filter(Boolean), stewards:selTag.stewards||[], description:selTag.description}}/>}
+                        {!editing&&<AIDescFoot ai={ai} text={selTag.description} onToast={onToast}/>}
+                        </>}</AIDescField>
                       </div>
 
                       <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
@@ -58799,16 +58850,87 @@ Rules:
 - Plain, neutral language. No first person, no marketing words, no Markdown.
 
 Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
-  governance: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+  term: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
 
-Task: describe the glossary term, tag, domain or data product in the metadata below.
+Task: describe the glossary term in the metadata below.
 
 Rules:
 - Use only the metadata provided. Never invent policies, regulations, owners or business rules.
-- Glossary term: define the business concept in one plain sentence, then how it is used, based on its synonyms, related terms and linked assets.
-- Tag: say when the tag should be applied, based on its classification and the objects that carry it.
-- Domain: say which business area it covers and what kinds of data and data products sit in it.
-- Data product: say what it delivers and which assets it bundles.
+- Define the business concept in one plain sentence, then how it is used, based on its synonyms, related terms and linked assets.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  glossary: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the glossary in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say which business area its vocabulary covers, based on the terms it holds.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  tag: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the tag in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say when the tag should be applied, based on its classification and the objects that carry it.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  classification: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the classification in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say what the classification groups and what its tags have in common, based on the tags it holds.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  domain: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the domain in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say which business area it covers and what kinds of data and data products sit in it.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  dataproduct: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the data product in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say what it delivers and which assets it bundles.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  policy: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the policy in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say what the policy checks or does and what data it covers, based only on its rules and scope.
+- Use only the rules and linked regulations listed. Never add requirements from your own knowledge of a regulation.
+- Never state or imply that following the policy makes the organization compliant, and never give legal advice. Name linked regulations as "mapped to", nothing stronger.
 - Do not restate the name as the description.
 - If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
 - Plain, neutral language. No first person, no marketing words, no Markdown.
@@ -58851,8 +58973,15 @@ const AID_FAMILIES = [
   {k:"bi",         l:"Dashboards & reports",           types:["Dashboard","Workbook","Worksheet","Story","Power BI Report","Power BI Dashboard","Power BI Page","Power BI Tile","dbt Exposure"]},
   {k:"pipeline",   l:"Pipelines & transformations",    types:["Pipeline","Flow","Power BI Dataflow","dbt Model","dbt Snapshot","dbt Test","Migration Config","Custom Config"]},
   {k:"metric",     l:"Metrics & semantic models",      types:["Metric","dbt Metric","dbt Semantic Model","Semantic View","Metric View"]},
-  {k:"governance", l:"Glossary, tags, domains & data products", types:["Glossary term","Tag","Domain","Data product"]},
+  {k:"term",           l:"Glossary terms",  types:["Glossary term"]},
+  {k:"glossary",       l:"Glossaries",      types:["Glossary"]},
+  {k:"tag",            l:"Tags",            types:["Tag"]},
+  {k:"classification", l:"Classifications", types:["Classification"]},
+  {k:"domain",         l:"Domains",         types:["Domain"]},
+  {k:"dataproduct",    l:"Data products",   types:["Data product"]},
+  {k:"policy",         l:"Policies",        types:["Policy"]},
 ];
+const AID_GOV_FAMS = ["term","glossary","tag","classification","domain","dataproduct","policy"];
 const aidFamilyOf = (o) => {
   if(!o) return null;
   if(o.aidFamily) return o.aidFamily;
@@ -58925,19 +59054,65 @@ const AID_METRIC_INPUTS = [
   {k:"owner",      l:"Owner",                    ex:"sarah.kim"},
   {k:"existing",   l:"Current description",      ex:"Only when rewriting"},
 ];
-const AID_GOV_INPUTS = [
-  {k:"name",       l:"Name",                        ex:"Customer Lifetime Value", required:true},
-  {k:"kind",       l:"Object type",                 ex:"Glossary term"},
-  {k:"parent",     l:"Parent",                      ex:"Business Glossary"},
-  {k:"related",    l:"Synonyms and related terms",  ex:"CLV, LTV"},
-  {k:"linked",     l:"Linked assets",               ex:"4, e.g. orders, customers"},
-  {k:"domain",     l:"Domain",                      ex:"Commerce"},
-  {k:"tags",       l:"Tags",                        ex:"revenue"},
-  {k:"owner",      l:"Owner",                       ex:"maya.chen"},
-  {k:"existing",   l:"Current description",         ex:"Only when rewriting"},
+const AID_TERM_INPUTS = [
+  {k:"name",       l:"Term name",             ex:"Customer Lifetime Value", required:true},
+  {k:"parent",     l:"Glossary",              ex:"Commerce Glossary"},
+  {k:"related",    l:"Synonyms",              ex:"CLV, LTV"},
+  {k:"linked",     l:"Linked assets",         ex:"4, e.g. orders, customers"},
+  {k:"domain",     l:"Domain",                ex:"Commerce"},
+  {k:"tags",       l:"Tags",                  ex:"revenue"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_GLOSSARY_INPUTS = [
+  {k:"name",       l:"Glossary name",         ex:"Commerce Glossary", required:true},
+  {k:"related",    l:"Terms",                 ex:"Churn Rate, Customer, Order, …"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_TAG_INPUTS = [
+  {k:"name",       l:"Tag name",              ex:"PII", required:true},
+  {k:"parent",     l:"Classification",        ex:"Sensitivity"},
+  {k:"linked",     l:"Applied to",            ex:"5, e.g. customers, users"},
+  {k:"domain",     l:"Domain",                ex:"Commerce"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_CLASSIFICATION_INPUTS = [
+  {k:"name",       l:"Classification name",   ex:"Sensitivity", required:true},
+  {k:"related",    l:"Tags",                  ex:"PII, PHI, PCI-DSS"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_DOMAIN_INPUTS = [
+  {k:"name",       l:"Domain name",           ex:"Commerce", required:true},
+  {k:"related",    l:"Data products",         ex:"Order Analytics, Customer 360"},
+  {k:"linked",     l:"Assets",                ex:"342, e.g. orders, customers"},
+  {k:"tags",       l:"Tags",                  ex:"revenue"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_PRODUCT_INPUTS = [
+  {k:"name",       l:"Data product name",     ex:"Customer 360", required:true},
+  {k:"parent",     l:"Domain",                ex:"Commerce"},
+  {k:"linked",     l:"Assets",                ex:"2, e.g. customers, orders"},
+  {k:"tags",       l:"Tags",                  ex:"revenue"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
+const AID_POLICY_INPUTS = [
+  {k:"name",       l:"Policy name",           ex:"Ownership & accountability", required:true},
+  {k:"category",   l:"Category",              ex:"Governance"},
+  {k:"scope",      l:"Scope",                 ex:"PII, PHI"},
+  {k:"rules",      l:"Rules",                 ex:"Every in-scope table has an owner, …"},
+  {k:"regulations",l:"Linked regulations",    ex:"GDPR Art. 5, HIPAA §164.308"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
 ];
 const AID_INPUTS = {table:AID_TABLE_INPUTS, column:AID_COLUMN_INPUTS, container:AID_CONTAINER_INPUTS, file:AID_FILE_INPUTS,
-                    bi:AID_BI_INPUTS, pipeline:AID_PIPELINE_INPUTS, metric:AID_METRIC_INPUTS, governance:AID_GOV_INPUTS};
+                    bi:AID_BI_INPUTS, pipeline:AID_PIPELINE_INPUTS, metric:AID_METRIC_INPUTS,
+                    term:AID_TERM_INPUTS, glossary:AID_GLOSSARY_INPUTS, tag:AID_TAG_INPUTS, classification:AID_CLASSIFICATION_INPUTS,
+                    domain:AID_DOMAIN_INPUTS, dataproduct:AID_PRODUCT_INPUTS, policy:AID_POLICY_INPUTS};
 const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, x.def!==false]));
 // Asking for a suggestion follows the existing "edit description" permission —
 // there is no separate AI permission to manage.
@@ -58992,7 +59167,7 @@ const aidSources = () => {
     if(types.some(t=>aidFamilyOf({type:t})==="table")) types.splice(types.filter(t=>famIx(t)<=1).length, 0, aidColType(k));
     return {k, l:AID_SOURCE_LABEL[k]||k, types};
   });
-  _aidSources.push({k:"edg", l:AID_SOURCE_LABEL.edg, types:["Glossary term","Tag","Domain","Data product"]});
+  _aidSources.push({k:"edg", l:AID_SOURCE_LABEL.edg, types:AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)).flatMap(x=>x.types)});
   return _aidSources;
 };
 const aidTypeFamily = (svc, t) => t===aidColType(aidSvc(svc)) ? "column" : aidFamilyOf({type:t});
@@ -59169,7 +59344,11 @@ const aidFacts = (o, fam, trace) => {
   const F = {name:o.label||o.name, type:o.kind||o.type, kind:o.kind||o.type, connection:o.connectionLabel||null, path:o.db||null,
     domain:o.domain||null, tags:aidList(o.tags||[]), owner:owners.join(", ")||null,
     existing:(aidApplied(o.name)||{}).text || o.description || null};
-  if(fam==="governance"){
+  if(AID_GOV_FAMS.includes(fam)){
+    F.category = o.category || null;
+    F.scope = aidList(o.scope||[]);
+    F.rules = aidList(o.rules||[], 6);
+    F.regulations = aidList(o.regulations||[], 6);
     F.parent = o.parent || null;
     F.related = aidList(o.related||[]);
     F.linked = (o.linked||[]).length ? `${o.linked.length}, e.g. ${aidList(o.linked,3)}` : null;
@@ -59270,15 +59449,23 @@ const aidFamilyText = (fam, F, on, o, variant) => {
     if(has("basedOn")) out.push(`Built on ${F.basedOn}.`);
     if(has("glossary")) out.push(`Business term: ${F.glossary}.`);
   }
-  if(fam==="governance"){
-    const k = (o.kind||"").toLowerCase();
-    if(k==="glossary term") out.push(`Business term for ${aidLow(F.name)}${has("parent")?` in ${F.parent}`:""}${has("related")?`, also known as ${F.related}`:""}.`);
-    else if(k==="tag") out.push(`Apply to objects that hold ${aidLow(F.name)} data${has("parent")?` (${F.parent} classification)`:""}.`);
-    else if(k==="domain") out.push(`Business domain for ${aidLow(F.name)} data${has("related")?`, including ${F.related}`:""}.`);
-    else out.push(`Data product that delivers ${aidLow(F.name)}${has("parent")?` for the ${F.parent} domain`:""}.`);
-    if(has("linked")) out.push(`${k==="tag"?"Applied to":k==="data product"?"Bundles":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,"$1 assets, including")}.`);
+  if(AID_GOV_FAMS.includes(fam)){
+    const nm = String(F.name).split(" ").map(w=>/^[A-Z0-9&-]{2,}$/.test(w)?w:w.toLowerCase()).join(" "), thin = " Its purpose needs confirmation.";
+    if(fam==="term") out.push(`Business term for ${nm}${has("parent")?` in ${F.parent}`:""}${has("related")?`, also known as ${F.related}`:""}.`);
+    if(fam==="glossary") out.push(has("related") ? `Glossary of business terms such as ${F.related}.` : `Glossary for ${nm}.${thin}`);
+    if(fam==="tag") out.push(`Apply to objects that hold ${nm} data${has("parent")?` (${F.parent} classification)`:""}.`);
+    if(fam==="classification") out.push(has("related") ? `Classification that groups the tags ${F.related}.` : `Classification for ${nm}.${thin}`);
+    if(fam==="domain") out.push(`Business domain for ${nm} data${has("related")?`, including ${F.related}`:""}.`);
+    if(fam==="dataproduct") out.push(`Data product that delivers ${nm}${has("parent")?` for the ${F.parent} domain`:""}.`);
+    if(fam==="policy"){
+      const area = has("scope") ? ` on ${F.scope} data` : "";
+      out.push(has("rules") ? `Policy${area} with these rules: ${F.rules}.` : `Policy${area} for ${nm}.${thin}`);
+      if(has("regulations")) out.push(`Mapped to ${F.regulations}.`);
+      if(has("category")) out.push(`Category: ${F.category}.`);
+    }
+    if(has("linked")) out.push(`${fam==="tag"?"Applied to":fam==="dataproduct"?"Bundles":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,"$1 assets, including")}.`);
   }
-  if(has("tags") && fam!=="governance") out.push(`Tagged ${F.tags}.`);
+  if(has("tags") && !AID_GOV_FAMS.includes(fam)) out.push(`Tagged ${F.tags}.`);
   if(has("owner")) out.push(`Owned by ${F.owner}.`);
   return out;
 };
@@ -61615,6 +61802,9 @@ const useAidAssetDraft = ({asset, onToast, onSaved, family}) => {
     enabled: aidCanAsk(role) && !!fam && aidObjOn(asset.service, asset.kind||asset.type),
     pending, applied, box,
     button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
+    // the button for a Description header, when it should show
+    slot: (hasText) => aidCanAsk(role) && !!fam && aidObjOn(asset.service, asset.kind||asset.type) && !pending && !draft
+      ? <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/> : null,
   };
 };
 
@@ -61636,17 +61826,15 @@ const AIDescExtras = ({ai, onToast}) => (
     {ai.box}
   </>
 );
-// For pages that render a description deep inside a list or tab: the button sits under the text.
-const AIDescAssist = ({obj, family, onSaved, onToast, hasText}) => {
-  const ai = useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved});
-  if(!ai.enabled && !ai.pending) return null;
-  return (
-    <div style={{marginTop:8}}>
-      {ai.enabled&&!ai.pending&&!ai.box&&ai.button(hasText)}
-      <AIDescExtras ai={ai} onToast={onToast}/>
-    </div>
-  );
-};
+// The asset profile's Description behaviour for pages that are not asset profiles:
+// the page draws its own header and text, ai.slot() goes beside Edit, <AIDescFoot> below the text.
+const AIDescField = ({obj, family, onSaved, onToast, children}) => children(useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved}));
+const AIDescFoot = ({ai, text, onToast}) => (
+  <>
+    {ai.applied&&ai.applied.text===text&&<AIDescProvenance rec={ai.applied}/>}
+    <AIDescExtras ai={ai} onToast={onToast}/>
+  </>
+);
 
 // Bulk: every column of one table in a drawer, one checkbox per row.
 const AIDescColumnsDrawer = ({open, asset, onClose, onToast}) => {
@@ -61946,8 +62134,8 @@ const AIDescSettings = ({onToast}) => {
           </div>
 
           <div style={{...cap,margin:"16px 0 2px"}}>{aidFamLabel(fam)} · {onCount} of {list.length} on</div>
-          <div title={shared.join(", ")} style={{fontSize:10.5,color:T.textMuted,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-            Shared with {shared.length} object types: {shared.slice(0,6).join(", ")}{shared.length>6?", …":""}</div>
+          {shared.length>1&&<div title={shared.join(", ")} style={{fontSize:10.5,color:T.textMuted,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            Shared with {shared.length} object types: {shared.slice(0,6).join(", ")}{shared.length>6?", …":""}</div>}
           {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={S.inputs[fam][x.k]} set={()=>setInput(fam,x.k)}/>)}
         </AIDCard>
 
@@ -61963,7 +62151,7 @@ const AIDescSettings = ({onToast}) => {
             </div>
           )}
           <AIDPromptBox key={pk} label={fam==="table"?(S.length==="short"?"Short table prompt":"Detailed table prompt"):`${aidFamLabel(fam)} prompt`}
-            hint={`Used for ✦ ${action} on ${type} and the other ${shared.length-1} object types above.`}
+            hint={shared.length>1?`Used for ✦ ${action} on ${type} and the other ${shared.length-1} object types above.`:`Used for ✦ ${action} on ${type}.`}
             value={S.prompts[pk]} def={AID_DEFAULT_PROMPTS[pk]} onSave={v=>savePrompt(pk, v)}/>
         </AIDCard>
 
@@ -64162,7 +64350,7 @@ export default function App(){
       case "steward-inbox": return <InboxView onToast={showToast}/>;
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
-      case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav}/>;
+      case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "observability": return <QualityView onToast={showToast}/>;
