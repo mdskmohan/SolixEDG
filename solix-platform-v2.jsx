@@ -58999,7 +58999,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI", sap:"SAP"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.
