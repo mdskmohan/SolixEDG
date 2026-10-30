@@ -3801,7 +3801,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                         tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
                         stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
                 <Divider/>
-                <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
+                <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.textSub,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
                 {addingRelated&&<div style={{marginBottom:12}}><GlSelect onChange={e=>{if(e.target.value)doAddRelated(term.id,e.target.value);}} defaultValue=""><option value="" disabled>Select a term to link…</option>{terms.filter(t=>t.id!==term.id&&!(term.relatedTerms||[]).includes(t.id)).map(t=>(<option key={t.id} value={t.id}>{t.term} ({glossaries.find(g=>g.id===t.glossary)?.name})</option>))}</GlSelect></div>}
                 {(term.relatedTerms||[]).length===0&&!addingRelated&&<div style={{fontSize:13,color:T.textMuted,fontStyle:"italic"}}>No related terms linked.</div>}
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
@@ -4076,7 +4076,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                       style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                       <span style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 9px 3px 8px",borderRadius:5,gap:4,background:sel?T.bgHover:T.bgElevated,border:`1px solid ${sel?T.textMuted:T.border}`,color:sel?T.text:T.textSub,fontWeight:sel?600:400}}><GovIcon kind="tag"/>{s}</span>
-                      {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{marginLeft:"auto"}}><path d="M2.5 7.5l3 3 6-6" stroke={c.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{marginLeft:"auto"}}><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </button>
                   );
                 });
@@ -22618,7 +22618,7 @@ const AssetTagsTab = ({assetId, onToast}) => {
             })}
           </div>
         )}
-        <button onClick={()=>{setApplyModalOpen(true);setModalSearch('');setSelectedTagId(null);}} style={{fontSize:12,color:T.accent,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Add tag</button>
+        <button onClick={()=>{setApplyModalOpen(true);setModalSearch('');setSelectedTagId(null);}} style={{fontSize:12,color:T.textSub,background:'none',border:'none',cursor:'pointer',padding:0}}>+ Add tag</button>
       </div>
 
       {/* Remove confirm for governance tags */}
@@ -23832,31 +23832,31 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
               {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
             </div>
             {assetGlOpen&&(
-              <div style={{marginTop:8,background:T.bgSurface,border:"1px solid rgba(139,92,246,.3)",borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+              <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
                 <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
                   <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)}
                     style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                    onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}/>
                 </div>
                 <div style={{maxHeight:200,overflowY:"auto"}}>
                   {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
                     const sel=assetGlTerms.includes(t.term);
                     return(<button key={t.id} onClick={()=>setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term])}
-                      style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                      style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
                       onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:T.text}}>{t.term}</div>
                         <div style={{fontSize:10.5,color:T.textMuted,display:"flex",gap:5,marginTop:1}}>
                           <span>{t.domain}</span>
                         </div>
                       </div>
-                      {sel&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      {sel&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </button>);
                   })}
                   {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
                 </div>
                 <div style={{padding:"6px 8px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
-                  <button onClick={()=>setAssetGlOpen(false)} style={{padding:"4px 12px",borderRadius:5,background:"#8b5cf6",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+                  <button onClick={()=>setAssetGlOpen(false)} style={{padding:"4px 12px",borderRadius:5,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
                 </div>
               </div>
             )}
@@ -26969,31 +26969,31 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                               ))}
                             </div>}
                         {colGlOpen&&(
-                          <div style={{marginTop:8,background:T.bgSurface,border:"1px solid rgba(139,92,246,.3)",borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+                          <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
                             <div style={{padding:"5px 7px",borderBottom:`1px solid ${T.border}`}}>
-                              <input autoFocus placeholder="Search glossary terms…" value={colGlSearch} onChange={e=>setColGlSearch(e.target.value)} style={{width:"100%",padding:"4px 7px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                              <input autoFocus placeholder="Search glossary terms…" value={colGlSearch} onChange={e=>setColGlSearch(e.target.value)} style={{width:"100%",padding:"4px 7px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,fontSize:11.5,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}/>
                             </div>
                             <div style={{maxHeight:180,overflowY:"auto"}}>
                               {GLOSSARY_TERMS.filter(t=>!colGlSearch||t.term.toLowerCase().includes(colGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(colGlSearch.toLowerCase())).map(t=>{
                                 const sel=colGlTerms.includes(t.term);
                                 return(
                                   <button key={t.id} onClick={()=>setColGlTermsMap(m=>({...m,[selCol.name]:sel?(m[selCol.name]||[]).filter(x=>x!==t.term):[...(m[selCol.name]||[]),t.term]}))}
-                                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
                                     onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
                                     <div style={{flex:1,minWidth:0}}>
-                                      <div style={{fontSize:11.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                                      <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{t.term}</div>
                                       <div style={{fontSize:10,color:T.textMuted,display:"flex",gap:5,marginTop:1}}>
                                                       <span>{t.domain}</span>
                                       </div>
                                     </div>
-                                    {sel&&<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                    {sel&&<svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                   </button>
                                 );
                               })}
                               {GLOSSARY_TERMS.filter(t=>!colGlSearch||t.term.toLowerCase().includes(colGlSearch.toLowerCase())).length===0&&<div style={{padding:"12px",fontSize:11.5,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
                             </div>
                             <div style={{padding:"5px 7px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
-                              <button onClick={()=>setColGlOpen(false)} style={{padding:"3px 10px",borderRadius:4,background:"#8b5cf6",border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Done</button>
+                              <button onClick={()=>setColGlOpen(false)} style={{padding:"3px 10px",borderRadius:4,background:T.accent,border:"none",color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>Done</button>
                             </div>
                           </div>
                         )}
@@ -27467,32 +27467,32 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
             {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
           </div>
           {assetGlOpen&&(
-            <div style={{marginTop:8,background:T.bgSurface,border:"1px solid rgba(139,92,246,.3)",borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
+            <div style={{marginTop:8,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>
               <div style={{padding:"6px 8px",borderBottom:`1px solid ${T.border}`}}>
                 <input autoFocus placeholder="Search glossary terms…" value={assetGlSearch} onChange={e=>setAssetGlSearch(e.target.value)}
                   style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
               <div style={{maxHeight:200,overflowY:"auto"}}>
                 {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(assetGlSearch.toLowerCase())).map(t=>{
                   const sel=assetGlTerms.includes(t.term);
                   return(<button key={t.id} onClick={()=>setAssetGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term])}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}}
                     onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:12,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.text}}>{t.term}</div>
                       <div style={{fontSize:10.5,color:T.textMuted,display:"flex",gap:5,marginTop:1}}>
                         
                         <span>{t.domain}</span>
                       </div>
                     </div>
-                    {sel&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    {sel&&<svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </button>);
                 })}
                 {GLOSSARY_TERMS.filter(t=>!assetGlSearch||t.term.toLowerCase().includes(assetGlSearch.toLowerCase())).length===0&&<div style={{padding:"12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}
               </div>
               <div style={{padding:"6px 8px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
-                <button onClick={()=>setAssetGlOpen(false)} style={{padding:"4px 12px",borderRadius:5,background:"#8b5cf6",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
+                <button onClick={()=>setAssetGlOpen(false)} style={{padding:"4px 12px",borderRadius:5,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
               </div>
             </div>
           )}
@@ -29155,12 +29155,12 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                               <input autoFocus value={pdSbSearch} onChange={e=>setPdSbSearch(e.target.value)}
                                 placeholder={pdSbModal==="tags"?"Search or add tag…":pdSbModal==="glossary"?"Search glossary terms…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                                onFocus={e=>e.target.style.borderColor=pdSbModal==="glossary"?"#8b5cf6":T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                                onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(pdSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&pdSbSearch.trim()){patchProduct(pd.id,{tags:[...(pd.tags||[]),pdSbSearch.trim()]});setPdSbSearch("");e.preventDefault();}}}/>
                             </div>}
                             <div style={{overflowY:"auto",flex:1}}>
                               {pdSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchProduct(pd.id,{cert:c});setPdSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
-                              {pdSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!pdSbSearch||t.term.toLowerCase().includes(pdSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(pdSbSearch.toLowerCase())).map(t=>{const sel=pdGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setPdGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
+                              {pdSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!pdSbSearch||t.term.toLowerCase().includes(pdSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(pdSbSearch.toLowerCase())).map(t=>{const sel=pdGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setPdGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
                               {pdSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!pdSbSearch||s.toLowerCase().includes(pdSbSearch.toLowerCase()))).map(s=>(
@@ -29632,7 +29632,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                     <div style={{padding:"14px 16px"}}>
                       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
                         <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Glossary Term(s)</div>
-                        <button onClick={()=>{setDmGlOpen(p=>!p);setDmGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color="#8b5cf6";e.currentTarget.style.background="rgba(139,92,246,.08)";}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
+                        <button onClick={()=>{setDmGlOpen(p=>!p);setDmGlSearch("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}><svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {dmGlossaryTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
@@ -29654,7 +29654,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                   {/* Domain Tag Modal */}
                   {dmTagOpen&&<><div onClick={()=>setDmTagOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:300,display:"flex",flexDirection:"column",maxHeight:"70vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Tags</span><button onClick={()=>setDmTagOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search or add tag…" value={dmTagSearch} onChange={e=>setDmTagSearch(e.target.value)} onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&dmTagSearch.trim()&&!(dm.tags||[]).includes(dmTagSearch.trim())){patchDomain(dm.id,{tags:[...(dm.tags||[]),dmTagSearch.trim()]});setDmTagSearch("");e.preventDefault();}}} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto",padding:"8px 10px",display:"flex",flexWrap:"wrap",gap:6}}>{["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(dm.tags||[]).includes(s)&&(!dmTagSearch||s.toLowerCase().includes(dmTagSearch.toLowerCase()))).map(s=><button key={s} onMouseDown={()=>{patchDomain(dm.id,{tags:[...(dm.tags||[]),s]});}} style={{padding:"5px 12px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;e.currentTarget.style.borderColor=T.accent+"55";}} onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.color=T.textSub;e.currentTarget.style.borderColor=T.border;}}>{s}</button>)}{(dm.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,background:T.accentDim,border:`1px solid ${T.accent}44`,color:T.accent,fontSize:12,fontWeight:600}}>{t}<button onMouseDown={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:T.accent,padding:0,lineHeight:1,display:"flex"}}>{Ic.x(8)}</button></span>)}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmTagOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
                   {/* Domain Glossary Modal */}
-                  {dmGlOpen&&<><div onClick={()=>setDmGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"75vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span><button onClick={()=>setDmGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search glossary terms…" value={dmGlSearch} onChange={e=>setDmGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dmGlSearch.toLowerCase())).map(t=>{const sel=dmGlossaryTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDmGlossaryTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:"#8b5cf6",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
+                  {dmGlOpen&&<><div onClick={()=>setDmGlOpen(false)} style={{position:"fixed",inset:0,zIndex:499,background:"rgba(0,0,0,.35)"}}/><div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:500,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,boxShadow:"0 24px 64px rgba(0,0,0,.4)",width:320,display:"flex",flexDirection:"column",maxHeight:"75vh",overflow:"hidden"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><span style={{fontSize:13.5,fontWeight:700,color:T.text}}>Business Glossary</span><button onClick={()=>setDmGlOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:3,display:"flex",borderRadius:5}} onMouseEnter={e=>e.currentTarget.style.color=T.text} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><svg width="12" height="12" viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg></button></div><div style={{padding:"8px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}><input autoFocus placeholder="Search glossary terms…" value={dmGlSearch} onChange={e=>setDmGlSearch(e.target.value)} style={{width:"100%",padding:"5px 9px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}/></div><div style={{flex:1,overflowY:"auto"}}>{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dmGlSearch.toLowerCase())).map(t=>{const sel=dmGlossaryTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDmGlossaryTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}{GLOSSARY_TERMS.filter(t=>!dmGlSearch||t.term.toLowerCase().includes(dmGlSearch.toLowerCase())).length===0&&<div style={{padding:"16px 12px",fontSize:12,color:T.textMuted,textAlign:"center"}}>No terms match</div>}</div><div style={{padding:"8px 10px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}><button onMouseDown={()=>setDmGlOpen(false)} style={{padding:"5px 14px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Done</button></div></div></>}
                 </div>
               </div>
             )}
@@ -30022,8 +30022,8 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       <label style={lblStyle}>Glossary Term(s)</label>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                         {(st.glossaryTerms||[]).map(t=>(
-                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
-                            {t}<button onClick={()=>setSt(p=>({...p,glossaryTerms:p.glossaryTerms.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                            {t}<button onClick={()=>setSt(p=>({...p,glossaryTerms:p.glossaryTerms.filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textSub,padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
                           </span>
                         ))}
                       </div>
@@ -30036,7 +30036,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                               <button key={t.id} onMouseDown={()=>{if(!(st.glossaryTerms||[]).includes(t.term)){setSt(p=>({...p,glossaryTerms:[...(p.glossaryTerms||[]),t.term]}));}setGlInput("");}}
                                 style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
                                 onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                                <span style={{fontSize:11,padding:"2px 6px",borderRadius:4,background:"rgba(139,92,246,.1)",color:"#8b5cf6",fontWeight:600}}>{t.abbr}</span>
+                                <span style={{fontSize:11,padding:"2px 6px",borderRadius:4,background:T.bgElevated,color:T.textSub,fontWeight:600}}>{t.abbr}</span>
                                 <span style={{fontSize:12,color:T.text}}>{t.term}</span>
                               </button>
                             ))}
@@ -30264,14 +30264,14 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:7}}>
                         {(editDd.glossaryTerms||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
                         {(editDd.glossaryTerms||[]).map(t=>(
-                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.25)",color:"#8b5cf6",fontWeight:600}}>
-                            {t.length>14?t.slice(0,14)+"…":t}<button onClick={()=>setEditDd(p=>({...p,glossaryTerms:(p.glossaryTerms||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.7}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>{Ic.x(8)}</button>
+                          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:12,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:600}}>
+                            {t.length>14?t.slice(0,14)+"…":t}<button onClick={()=>setEditDd(p=>({...p,glossaryTerms:(p.glossaryTerms||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textSub,padding:0,lineHeight:1,display:"flex",opacity:.7}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>{Ic.x(8)}</button>
                           </span>
                         ))}
                       </div>
                       <div style={{position:"relative"}}>
                         <input value={editDdGlInput} onChange={e=>{setEditDdGlInput(e.target.value);setEditDdGlOpen(true);}}
-                          onFocus={e=>{e.target.style.borderColor="#8b5cf6";setEditDdGlOpen(true);}}
+                          onFocus={e=>{e.target.style.borderColor=T.textMuted;setEditDdGlOpen(true);}}
                           onBlur={e=>{e.target.style.borderColor=T.border;setTimeout(()=>setEditDdGlOpen(false),150);}}
                           placeholder="Search glossary terms…" style={{...fldStyle}}/>
                         {editDdGlOpen&&editDdGlInput&&(
@@ -30800,8 +30800,8 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Term(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {ndGlossary.map(t=>(
-                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
-                      {t}<button onClick={()=>setNdGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                      {t}<button onClick={()=>setNdGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:T.textSub,padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
                     </span>
                   ))}
                 </div>
@@ -31306,12 +31306,12 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
                               <input autoFocus value={dpSbSearch} onChange={e=>setDpSbSearch(e.target.value)}
                                 placeholder={dpSbModal==="tags"?"Search or add tag…":dpSbModal==="glossary"?"Search glossary terms…":"Search users…"}
                                 style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
-                                onFocus={e=>e.target.style.borderColor=dpSbModal==="glossary"?"#8b5cf6":T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                                onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}
                                 onKeyDown={e=>{if(dpSbModal==="tags"&&(e.key==="Enter"||e.key===",")&&dpSbSearch.trim()){patchDP(pd.id,{tags:[...(pd.tags||[]),dpSbSearch.trim()]});setDpSbSearch("");e.preventDefault();}}}/>
                             </div>}
                             <div style={{overflowY:"auto",flex:1}}>
                               {dpSbModal==="cert"&&(()=>{const CM={"Draft":{color:"#6b7280",bg:"rgba(107,114,128,.1)",border:"rgba(107,114,128,.25)",icon:"◐"},"In Review":{color:"#d97706",bg:"rgba(217,119,6,.12)",border:"rgba(217,119,6,.3)",icon:"⏳"},"Approved":{color:"#16a34a",bg:"rgba(22,163,74,.12)",border:"rgba(22,163,74,.3)",icon:"✓"},"Rejected":{color:"#e11d48",bg:"rgba(225,29,72,.12)",border:"rgba(225,29,72,.3)",icon:"✕"},"Deprecated":{color:"#7c3aed",bg:"rgba(124,58,237,.1)",border:"rgba(124,58,237,.25)",icon:"—"}};return Object.entries(CM).map(([c,m])=><button key={c} onClick={()=>{patchDP(pd.id,{cert:c});setDpSbModal(null);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"11px 16px",background:pd.cert===c?m.bg:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}} onMouseEnter={e=>{if(pd.cert!==c)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(pd.cert!==c)e.currentTarget.style.background="transparent"}}><span style={{fontSize:16,flexShrink:0}}>{m.icon}</span><span style={{flex:1,fontSize:13,fontWeight:600,color:m.color}}>{c}</span>{pd.cert===c&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={m.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})()}
-                              {dpSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!dpSbSearch||t.term.toLowerCase().includes(dpSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dpSbSearch.toLowerCase())).map(t=>{const sel=dpGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDpGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?"rgba(139,92,246,.06)":"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:sel?"#8b5cf6":T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="#8b5cf6" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
+                              {dpSbModal==="glossary"&&GLOSSARY_TERMS.filter(t=>!dpSbSearch||t.term.toLowerCase().includes(dpSbSearch.toLowerCase())||t.abbr?.toLowerCase().includes(dpSbSearch.toLowerCase())).map(t=>{const sel=dpGlTerms.includes(t.term);return(<button key={t.id} onMouseDown={e=>{e.stopPropagation();setDpGlTerms(prev=>sel?prev.filter(x=>x!==t.term):[...prev,t.term]);}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",background:sel?T.bgHover:"transparent",border:"none",cursor:"pointer",textAlign:"left",transition:"background .1s"}} onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{t.term}</div><div style={{fontSize:11,color:T.textMuted,display:"flex",gap:6,marginTop:1}}><span>{t.domain}</span></div></div>{sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke={T.textSub} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}</button>);})}
                               {dpSbModal==="tags"&&(
                                 <div style={{padding:"10px 12px",display:"flex",flexWrap:"wrap",gap:6}}>
                                   {["PII","revenue","marketing","ML","behavioral","GDPR","operational","finance","platform","events"].filter(s=>!(pd.tags||[]).includes(s)&&(!dpSbSearch||s.toLowerCase().includes(dpSbSearch.toLowerCase()))).map(s=>(
@@ -31980,8 +31980,8 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
                 <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Glossary Term(s)</label>
                 <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                   {npGlossary.map(t=>(
-                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:"rgba(139,92,246,.08)",border:"1px solid rgba(139,92,246,.2)",fontSize:11.5,color:"#8b5cf6"}}>
-                      {t}<button onClick={()=>setNpGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:"#8b5cf6",padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
+                    <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub}}>
+                      {t}<button onClick={()=>setNpGlossary(p=>p.filter(x=>x!==t))} style={{background:"none",border:"none",cursor:"pointer",color:T.textSub,padding:0,lineHeight:1,display:"flex",opacity:.6}}>{Ic.x(7)}</button>
                     </span>
                   ))}
                 </div>
@@ -31989,7 +31989,7 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
                   onKeyDown={e=>{if((e.key==="Enter"||e.key===",")&&npGlInput.trim()){setNpGlossary(p=>[...p,npGlInput.trim()]);setNpGlInput("");e.preventDefault();}}}
                   placeholder="Type and press Enter to add…"
                   style={{width:"100%",padding:"7px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor="#8b5cf6"} onBlur={e=>e.target.style.borderColor=T.border}/>
+                  onFocus={e=>e.target.style.borderColor=T.textMuted} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
               {/* Icon picker — at end */}
               <div>
@@ -57243,13 +57243,13 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     <button onClick={()=>{setNewCatPanelOpen(true);setNewPanelOpen(false);setSelTagId(null);setSelCatId(null);setPlusMenuOpen(false);}}
                       style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500,borderBottom:`1px solid ${T.border}`}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <span style={{width:20,height:20,borderRadius:5,background:'rgba(99,102,241,.12)',display:'flex',alignItems:'center',justifyContent:'center',color:'#6366f1',flexShrink:0}}>{Ic.catalog(10)}</span>
+                      <span style={{width:20,height:20,borderRadius:5,background:T.bgElevated,display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted,flexShrink:0}}>{Ic.catalog(10)}</span>
                       New Classification
                     </button>
                     <button onClick={()=>{setNewPanelOpen(true);setNewCatPanelOpen(false);setSelTagId(null);setSelCatId(null);setPlusMenuOpen(false);}}
                       style={{width:'100%',padding:'10px 12px',background:'transparent',border:'none',textAlign:'left',cursor:'pointer',display:'flex',alignItems:'center',gap:9,color:T.text,fontSize:12,fontWeight:500}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                      <span style={{width:20,height:20,borderRadius:5,background:`${T.accent}14`,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0}}>{Ic.tag(10)}</span>
+                      <span style={{width:20,height:20,borderRadius:5,background:T.bgElevated,display:'flex',alignItems:'center',justifyContent:'center',color:T.textMuted,flexShrink:0}}>{Ic.tag(10)}</span>
                       New Tag
                     </button>
                   </div>
@@ -61142,8 +61142,7 @@ const TagFormFields = ({draft, setDraft, catInput, setCatInput, categories, name
                   <button key={cat} onMouseDown={()=>{set({category:cat});setCatInput('');setCatOpen(false);}}
                     style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:draft.category===cat?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left',fontFamily:'inherit'}}
                     onMouseEnter={e=>{if(draft.category!==cat)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(draft.category!==cat)e.currentTarget.style.background='transparent';}}>
-                    <span style={{width:8,height:8,borderRadius:2,background:cc.color||T.accent,display:'block',flexShrink:0}}/>
-                    <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
+                                        <span style={{flex:1,fontSize:12.5,color:T.text,textTransform:'capitalize'}}>{cat}</span>
                     {draft.category===cat&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
                   </button>
                 );
@@ -61177,18 +61176,6 @@ const TagFormFields = ({draft, setDraft, catInput, setCatInput, categories, name
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
           <TagPeoplePicker label="Owner(s)" addLabel="Add owner" people={draft.owners||[]} setPeople={v=>set({owners:v})}/>
           <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={draft.stewards||[]} setPeople={v=>set({stewards:v})}/>
-        </div>
-      </div>
-
-      {/* Color — last field */}
-      <div>
-        <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-            <button key={c} onClick={()=>set({color:c})}
-              style={{width:26,height:26,borderRadius:'50%',background:c,border:draft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
-          ))}
-          <span style={{marginLeft:4,width:26,height:26,borderRadius:'50%',background:draft.color,border:`2px solid ${T.border}`,display:'inline-block',flexShrink:0}}/>
         </div>
       </div>
     </div>
