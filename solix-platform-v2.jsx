@@ -18128,7 +18128,9 @@ const AssetSchema = ({asset,selCol,onColClick,onToast})=>{
                 <td style={{padding:"10px 14px",fontSize:12,color:T.textSub,maxWidth:260}}>
                   {colDesc(c)}
                   {aid.applied[aidKey(asset.name,c.name)]&&<span title={`AI-drafted · accepted by ${aid.applied[aidKey(asset.name,c.name)].by}`} style={{marginLeft:5,color:T.violet,fontSize:10}}>✦</span>}
-                  {aidPendingFor(asset.name,c.name)&&<span style={{display:"inline-block",marginTop:3,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.amberDim,color:T.amber}} title={(aidPendingFor(asset.name,c.name)||{}).text}>Pending approval</span>}
+                  {aidPendingFor(asset.name,c.name)&&<span role="img" aria-label="Pending approval" title={`Pending approval: ${(aidPendingFor(asset.name,c.name)||{}).text}`} style={{display:"inline-flex",verticalAlign:"middle",marginLeft:8,color:T.amber}}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3.2l2 1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </span>}
                 </td>
               </tr>
             );
@@ -26706,12 +26708,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                 <div style={{padding:14,display:"flex",flexDirection:"column",gap:14}}>
 
                   {/* Description */}
-                  <div>
-                    <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Description</div>
-                    {selCol.desc
-                      ? <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.65,margin:0,padding:"10px 12px",background:T.bgElevated,borderRadius:7,border:`1px solid ${T.border}`}}>{selCol.desc}</p>
-                      : <p style={{fontSize:12,color:T.textMuted,fontStyle:"italic",margin:0}}>No description provided.</p>}
-                  </div>
+                  <DescSection key={asset.id+":"+selCol.name} obj={asset} col={selCol.name} onToast={onToast}
+                    text={(aidApplied(asset.name,selCol.name)||{}).text||selCol.desc}
+                    onSave={(t,fromAI)=>{
+                      const row=(SCHEMA[asset.name]||[]).find(x=>x.name===selCol.name);
+                      if(row) row.desc=t;
+                      setSelCol(c=>c&&c.name===selCol.name?{...c,desc:t}:c);
+                      if(!fromAI) aidSet(st=>{ const applied={...st.applied}; delete applied[aidKey(asset.name,selCol.name)]; return {...st,applied}; });
+                    }}/>
 
                   {/* Details */}
                   <div>
@@ -61603,19 +61607,20 @@ const AIDescDraftBox = ({draft, onAccept, onRegenerate, onDiscard, canSave, owne
 
 // The Description card's AI half, for any object. `family` picks the inputs and the prompt.
 const _aidSynced = new Set();   // approved drafts already written onto their object
-const useAidAssetDraft = ({asset, onToast, onSaved, family}) => {
+const useAidAssetDraft = ({asset, col, onToast, onSaved, family}) => {
   const aid = useAid();
   const {role, roleCfg} = useRole();
   const me = aidMe(roleCfg);
-  const fam = family || aidFamilyOf(asset);
+  const fam = col ? "column" : (family || aidFamilyOf(asset));
   const label = asset.label || asset.name;
+  const typeOn = aidObjOn(asset.service, col ? aidColType(aidSvc(asset.service)) : (asset.kind||asset.type));
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [variant, setVariant] = useState(0);
   const ask = (v=variant) => {
     setBusy(true);
     setTimeout(()=>{
-      const d = aidDraftObject({obj:asset, family:fam, role, variant:v, trace:[]});
+      const d = col ? aidDraftColumn({assetName:asset.name, colName:col, role, variant:v, trace:[]}) : aidDraftObject({obj:asset, family:fam, role, variant:v, trace:[]});
       aidSet(s=>({...s, stats:{...s.stats, suggested:s.stats.suggested+1}}));
       setDraft(d); setBusy(false);
       if(!d) onToast("Nothing to draft from — this object has no metadata in the catalog","error");
@@ -61623,29 +61628,29 @@ const useAidAssetDraft = ({asset, onToast, onSaved, family}) => {
   };
   const approver = aidApproverFor(asset, me);
   const accept = (text, edited) => {
-    aidRequest(asset.name, null, text, me, approver, {edited, conf:draft.conf, label, kind:asset.kind||asset.type});
+    aidRequest(asset.name, col||null, text, me, approver, {edited, conf:draft.conf, label, kind:asset.kind||asset.type});
     onToast(`Sent to ${approver} for approval`,"success");
-    pushNotif({category:"Catalog", type:"assigned", title:`Approve description · ${label}`, body:`For ${approver} · ${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"stewardship", asset:label});
+    pushNotif({category:"Catalog", type:"assigned", title:`Approve description · ${col?`${label}.${col}`:label}`, body:`For ${approver} · ${me} accepted an AI-drafted description${edited?" after editing it":""}`, nav:"stewardship", asset:label});
     setDraft(null);
   };
-  const applied = aid.applied[aidKey(asset.name,null)] || null;
+  const applied = aid.applied[aidKey(asset.name,col)] || null;
   useEffect(()=>{
     if(!applied || !onSaved) return;
-    const k = aidKey(asset.name,null)+"|"+applied.text;
+    const k = aidKey(asset.name,col)+"|"+applied.text;
     if(_aidSynced.has(k)) return;
     _aidSynced.add(k); onSaved(applied.text);
   },[applied && applied.text]);
-  const pending = aidPendingFor(asset.name, null);
+  const pending = aidPendingFor(asset.name, col||null);
   const box = draft ? <AIDescDraftBox draft={draft} canSave={false} owner={approver} busy={busy}
       onAccept={accept}
       onRegenerate={()=>{ const v=variant+1; setVariant(v); ask(v); }}
       onDiscard={()=>{ aidDiscard(); setDraft(null); }}/> : null;
   return {
-    enabled: aidCanAsk(role) && !!fam && aidObjOn(asset.service, asset.kind||asset.type),
+    enabled: aidCanAsk(role) && !!fam && typeOn,
     pending, applied, box,
     button: (hasText) => <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/>,
     // the button for a Description header, when it should show
-    slot: (hasText) => aidCanAsk(role) && !!fam && aidObjOn(asset.service, asset.kind||asset.type) && !pending && !draft
+    slot: (hasText) => aidCanAsk(role) && !!fam && typeOn && !pending && !draft
       ? <AIDescSuggestBtn hasText={hasText} busy={busy} onClick={()=>ask(variant)}/> : null,
   };
 };
@@ -61670,10 +61675,10 @@ const AIDescExtras = ({ai, onToast}) => (
 );
 // One Description section everywhere, drawn exactly like the asset profile's: header with
 // ✦ Suggest / Rewrite and Edit, Save and Cancel while editing. onSave(text, fromAI).
-const DescSection = ({title="Description", sub, text, obj, family, onSave, canEdit=true, onToast, style}) => {
+const DescSection = ({title="Description", sub, text, obj, col, family, onSave, canEdit=true, onToast, style}) => {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(text||"");
-  const ai = useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved:t=>{ setVal(t); onSave(t,true); }});
+  const ai = useAidAssetDraft({asset:obj, col, family, onToast:onToast||(()=>{}), onSaved:t=>{ setVal(t); onSave(t,true); }});
   return (
     <Card2 style={style}>
       <div style={{padding:"14px 16px"}}>
