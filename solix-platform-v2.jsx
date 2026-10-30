@@ -3434,15 +3434,11 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     return (
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"24px 28px 0",background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-          <AIDescField key={glossary.id} onToast={onToast} onSaved={t=>setGlossaries(p=>p.map(g=>g.id===glossary.id?{...g,desc:t}:g))}
-            obj={{name:"glossary:"+glossary.id, label:glossary.name, kind:"Glossary", related:allTermsInGlossary.map(t=>t.term),
-                  owners:allOwners, stewards:[], description:glossary.desc}}>{ai=><>
           <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:18}}>
             <div style={{display:"flex",alignItems:"center",gap:16}}>
               <div style={{width:56,height:56,borderRadius:16,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>{glossary.icon}</div>
               <div>
                 <div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:"-0.3px",marginBottom:4}}>{glossary.name}</div>
-                {glossary.desc&&<div style={{fontSize:13,color:T.textSub,lineHeight:1.5,maxWidth:520,marginBottom:8}}>{glossary.desc}</div>}
                 <div style={{display:"flex",alignItems:"center",gap:16}}>
                   <span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:T.textMuted}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 5.5h5M4.5 8h3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg><strong style={{color:T.text}}>{allTermsInGlossary.length}</strong> terms</span>
                   {allOwners.length>0&&<span style={{display:"flex",alignItems:"center",gap:5,fontSize:12,color:T.textMuted}}><svg width="12" height="12" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.2"/><path d="M2 12c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg><strong style={{color:T.text}}>{allOwners.length}</strong> owners</span>}
@@ -3450,14 +3446,16 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-              {ai.slot(!!glossary.desc)}
               <KebabMenu items={[{label:"Add Term",onClick:()=>openModal("newTerm",{glossary:selG})},{label:"Edit",onClick:()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}]}/>
             </div>
           </div>
-          {(ai.pending||ai.box||(ai.applied&&ai.applied.text===glossary.desc))&&<div style={{marginBottom:18,maxWidth:720}}><AIDescFoot ai={ai} text={glossary.desc} onToast={onToast}/></div>}
-          </>}</AIDescField>
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
+          <div style={{padding:"24px 28px 0"}}>
+            <DescSection key={glossary.id} text={glossary.desc} onToast={onToast} onSave={t=>setGlossaries(p=>p.map(g=>g.id===glossary.id?{...g,desc:t}:g))}
+              obj={{name:"glossary:"+glossary.id, label:glossary.name, kind:"Glossary", related:allTermsInGlossary.map(t=>t.term),
+                    owners:allOwners, stewards:[], description:glossary.desc}}/>
+          </div>
           {(()=>{
             const allT=allTermsInGlossary;
             const totalTerms=allT.length;
@@ -3797,15 +3795,11 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
           <div style={{flex:1,overflowY:"auto",padding:"28px"}}>
             {termTab==="overview"&&(
               <div style={{maxWidth:720}}>
-                <AIDescField key={term.id} onToast={onToast} onSaved={t=>patchTerm(term.id,{definition:t})}
+                <DescSection key={term.id} title="Definition" text={term.definition} onToast={onToast} onSave={t=>patchTerm(term.id,{definition:t})}
                   obj={{name:"term:"+term.id, label:term.term, kind:"Glossary term", parent:(glossaries.find(g=>g.id===term.glossary)||{}).name,
                         related:aidUniq([term.abbr, ...(term.synonyms||[])]), linked:(term.linkedAssets||[]).map(x=>x.name||x),
                         tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
-                        stewards:term.stewards||term.reviewers||[], description:term.definition}}>{ai=><>
-                <SectionLabel label="Definition" action={<div style={{display:"flex",alignItems:"center",gap:8}}>{ai.slot(!!term.definition)}<button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:term.definition||"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer"}}>Edit</button></div>}/>
-                {term.definition?<p style={{fontSize:14,color:T.text,lineHeight:1.8,margin:0}}>{term.definition}</p>:!ai.box&&<div style={{padding:"16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:8,fontSize:13,color:T.textMuted,fontStyle:"italic",display:"flex",alignItems:"center",justifyContent:"space-between"}}><span>No definition yet.</span><button onClick={()=>openModal("editTerm",{id:term.id,term:term.term,abbr:term.abbr,definition:"",domain:term.domain,owner:term.owner,category:term.category,cert:term.cert})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",fontSize:12,fontWeight:600}}>+ Add</button></div>}
-                <AIDescFoot ai={ai} text={term.definition} onToast={onToast}/>
-                </>}</AIDescField>
+                        stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
                 <Divider/>
                 <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
                 {addingRelated&&<div style={{marginBottom:12}}><GlSelect onChange={e=>{if(e.target.value)doAddRelated(term.id,e.target.value);}} defaultValue=""><option value="" disabled>Select a term to link…</option>{terms.filter(t=>t.id!==term.id&&!(term.relatedTerms||[]).includes(t.id)).map(t=>(<option key={t.id} value={t.id}>{t.term} ({glossaries.find(g=>g.id===t.glossary)?.name})</option>))}</GlSelect></div>}
@@ -9602,10 +9596,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       <Btn variant={confirmVariant||"primary"} onClick={onConfirm}>{confirmLabel}</Btn>
     </div>
   );
-  const SideLabel = ({label,onEdit,extra}) => (
+  const SideLabel = ({label,onEdit}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
-      {extra}
       {onEdit&&(
         <button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4,transition:"all .12s"}}
           onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
@@ -10029,20 +10022,9 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                       <div style={{display:"flex",minHeight:"100%"}}>
                         {/* Main content — description + rules summary */}
                         <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,overflowY:"auto"}}>
-                          <AIDescField key={p.id} onToast={onToast} onSaved={t=>patchPol({description:t})}
+                          <DescSection key={p.id} text={p.description} canEdit={!p.readOnly} onToast={onToast} onSave={t=>patchPol({description:t})} style={{marginBottom:20}}
                             obj={{name:"policy:"+p.id, label:p.name, kind:"Policy", category:p.category, scope:typeof p.scope==="string"?[p.scope]:(p.scope&&p.scope.domains)||[],
-                                  rules:(p.rules||[]).map(r=>r.name||r.title).filter(Boolean), regulations:p.regulations||[], owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.description}}>{ai=><>
-                          <SideLabel label="Description" onEdit={()=>{setEditing(true);setDescDraft(p.description||"");}}
-                            extra={!editing&&!p.readOnly?<div style={{marginLeft:"auto",marginRight:6}}>{ai.slot(!!p.description)}</div>:null}/>
-                          {editing
-                            ? <textarea value={descDraft} onChange={e=>setDescDraft(e.target.value)} rows={5} autoFocus
-                                style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box",marginBottom:16}}/>
-                            : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>
-                                {p.description||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}
-                              </div>
-                          }
-                          {!editing&&<div style={{marginTop:-10,marginBottom:20}}><AIDescFoot ai={ai} text={p.description} onToast={onToast}/></div>}
-                          </>}</AIDescField>
+                                  rules:(p.rules||[]).map(r=>r.name||r.title).filter(Boolean), regulations:p.regulations||[], owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.description}}/>
 
                           {/* ── Evaluation Results banner ── */}
                           {(p.compliancePct!=null||p.lastEvaluated)&&(()=>{
@@ -14825,7 +14807,6 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const [menu, setMenu]       = useState(null);     // which ⋮ menu is open
   const [hovPol, setHovPol]   = useState(null);
   const [selFolder, setSelFolder] = useState(null); // which framework folder the selected policy was opened from
-  const [descEdit, setDescEdit] = useState(null);
   const [sideEdit, setSideEdit] = useState(null);
   const [expCat, setExpCat]   = useState({});
   const [expFind, setExpFind] = useState(null);
@@ -15143,10 +15124,9 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const CAT_COLOR = {Privacy:T.violet, Security:T.rose, Retention:T.amber, Access:T.blue, Quality:T.green, Governance:"#0ea5e9"};
   const catColor  = c => CAT_COLOR[c]||T.textMuted;
   const sevPill   = s => s ? <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[s]||T.bgElevated,color:SEV_COLOR[s]||T.textSub,border:`1px solid ${SEV_COLOR[s]||T.border}30`}}>{s}</span> : null;
-  const sideLabel = (label, onEdit, extra) => (
+  const sideLabel = (label, onEdit) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
       <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
-      {extra}
       {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4}}
         onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
         <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
@@ -15440,7 +15420,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 const link = fd.fw && p.articles.find(a=>a.fw===fd.fw.id); const pend = link&&link.ok===false;
                 return (<div key={p.id} onMouseEnter={()=>setHovPol(fd.id+p.id)} onMouseLeave={()=>setHovPol(null)}
                   style={{display:"flex",alignItems:"center",background:on?T.accentDim:hov?T.bgHover:"transparent",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`}}>
-                  <button onClick={()=>{ if(on){setSelPol(null);} else {setSelPol(p.id);setSelFolder(fd.id);} setPdTab("overview");setFill(null);setDescEdit(null);setSideEdit(null);}}
+                  <button onClick={()=>{ if(on){setSelPol(null);} else {setSelPol(p.id);setSelFolder(fd.id);} setPdTab("overview");setFill(null);setSideEdit(null);}}
                     style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
                     {srcBox(p)}
                     <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -15590,18 +15570,11 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       body = (
         <div style={{display:"flex",minHeight:"100%"}}>
           <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,minWidth:0}}>
-            <AIDescField key={p.id} onToast={onToast} onSaved={t=>updPol(p.id,x=>addHist({...x,purpose:t},"Description updated from an approved AI draft"))}
+            <DescSection key={p.id} text={p.purpose} canEdit={canEdit(p)&&!isReg} onToast={onToast} style={{marginBottom:20}}
+              onSave={(t,fromAI)=>updPol(p.id,x=>addHist({...x,purpose:t},fromAI?"Description updated from an approved AI draft":"Description edited"))}
               obj={{name:"pm2:"+p.id, label:p.name, kind:"Policy", category:p.category, scope:p.scope, rules:(p.rules||[]).map(r=>r.name),
                     regulations:(p.articles||[]).map(a=>{ const fw=pm2Fw(a.fw); return fw?`${fw.name} ${(fw.arts[a.i]||{}).ref||""}`.trim():null; }).filter(Boolean),
-                    owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.purpose}}>{ai=><>
-            {sideLabel("Description", canEdit(p)&&!isReg&&descEdit===null ? ()=>setDescEdit(p.purpose||"") : null,
-              canEdit(p)&&!isReg&&descEdit===null ? <div style={{marginLeft:"auto",marginRight:6}}>{ai.slot(!!p.purpose)}</div> : null)}
-            {descEdit!==null
-              ? <><textarea value={descEdit} onChange={e=>setDescEdit(e.target.value)} rows={5} autoFocus style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.8,outline:"none",resize:"vertical",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                  <div style={{display:"flex",gap:6,justifyContent:"flex-end",margin:"6px 0 20px"}}><Btn small ghost onClick={()=>setDescEdit(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>{updPol(p.id,x=>addHist({...x,purpose:descEdit.trim()},"Description edited")); setDescEdit(null); onToast("Description saved","success");}}>Save</Btn></div></>
-              : <div style={{fontSize:13,lineHeight:1.8,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:20,minHeight:60}}>{p.purpose||<span style={{color:T.textMuted,fontStyle:"italic"}}>No description — click edit to add one.</span>}</div>}
-            {descEdit===null&&<div style={{marginTop:-10,marginBottom:20}}><AIDescFoot ai={ai} text={p.purpose} onToast={onToast}/></div>}
-            </>}</AIDescField>
+                    owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.purpose}}/>
             {p.status==="Active"&&!pScans.some(x=>(x.runs||[]).length)&&<div style={{marginBottom:16,padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <span style={{fontSize:12,fontWeight:700,color:T.amber}}>Not scanned</span><span style={{flex:1,fontSize:12,color:T.textSub}}>No scan runs this policy.</span>
               {scans.length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,fontSize:11.5}}><option value="">Add to a scan…</option>{scans.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
@@ -24074,13 +24047,15 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
             <Card2 style={{padding:"16px 18px"}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:600,color:T.text}}>Description</span>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                {!editing&&ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!desc)}
-                <button onClick={()=>{ if(editing)onToast("Description saved","success"); setEditing(e=>!e); }}
-                  style={{fontSize:11.5,color:editing?T.accent:T.textMuted,background:"none",border:`1px solid ${editing?T.accent:T.border}`,borderRadius:6,cursor:"pointer",padding:"3px 10px",transition:"all .15s"}}>
-                  {editing?"Save":"Edit"}
-                </button>
-                </div>
+                {editing
+                  ? <div style={{display:"flex",gap:6}}>
+                      <Btn small ghost onClick={()=>{ setEditing(false); onToast("Description saved","success"); }}>Save</Btn>
+                      <Btn small ghost onClick={()=>{ setDesc(asset.description||""); setEditing(false); }}>Cancel</Btn>
+                    </div>
+                  : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      {ai.enabled&&!ai.pending&&!ai.box&&ai.button(!!desc)}
+                      <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditing(true)}>Edit</Btn>
+                    </div>}
               </div>
               {editing
                 ? <textarea value={desc} onChange={e=>setDesc(e.target.value)} rows={4}
@@ -26000,8 +25975,6 @@ const akgMono = {fontFamily:"'Geist Mono',monospace",get color(){return T.text;}
 
 const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
   const m = AKG_META[asset.name];
-  const [editing,setEditing] = useState(false);
-  const [val,setVal] = useState(data.description||"");
   if(!m) return null;
   const owners = data.owners||[];
   const total = Object.values(m.scopeCounts).reduce((s,n)=>s+n,0);
@@ -26019,21 +25992,8 @@ const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
       </div>
     )}
 
-    <Card2>
-      <div style={{padding:"14px 16px"}}>
-        <SH title="Description" sub={m.descFromEai&&!editing?"From EAI · filled because the EDG description was empty":"Set in EDG · never sent to EAI"}
-          action={editing
-            ? <div style={{display:"flex",gap:6}}>
-                <Btn small ghost onClick={()=>{setData(d=>({...d,description:val}));setEditing(false);onToast&&onToast("Description saved","success");}}>Save</Btn>
-                <Btn small ghost onClick={()=>{setVal(data.description||"");setEditing(false);}}>Cancel</Btn>
-              </div>
-            : <Btn small ghost icon={Ic.edit(11)} onClick={()=>setEditing(true)}>Edit</Btn>}/>
-        {editing
-          ? <textarea value={val} onChange={e=>setVal(e.target.value)} rows={3}
-              style={{width:"100%",padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
-          : <div style={{fontSize:12.5,color:data.description?T.textSub:T.textMuted,fontStyle:data.description?"normal":"italic",lineHeight:1.65}}>{data.description||"No description"}</div>}
-      </div>
-    </Card2>
+    <DescSection key={asset.id} text={data.description} sub={m.descFromEai?"From EAI · filled because the EDG description was empty":"Set in EDG · never sent to EAI"}
+      obj={{...asset, ...data}} onToast={onToast} onSave={t=>setData(d=>({...d,description:t}))}/>
 
     <Card2>
       <div style={{padding:"14px 16px"}}>
@@ -28834,8 +28794,6 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
   const [addPanelType,       setAddPanelType]        = useState("dataproduct"); // "dataproduct" | "subdomain"
   const [addHeaderDropdown,  setAddHeaderDropdown]   = useState(false);
   // inline description edit
-  const [descEditMode,  setDescEditMode]  = useState(false);
-  const [descEditValue, setDescEditValue] = useState("");
   // panel tag/glossary inputs
   const [npTagInput,  setNpTagInput]  = useState("");
   const [npGlInput,   setNpGlInput]   = useState("");
@@ -28887,8 +28845,6 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
   const [dpStageFilter,    setDpStageFilter]    = useState("");
   // data product profile state
   const [pdMenuOpen,       setPdMenuOpen]       = useState(false);  // dp ⋮ menu
-  const [pdDescEditMode,   setPdDescEditMode]   = useState(false);
-  const [pdDescEditValue,  setPdDescEditValue]  = useState("");
   const [pdRenameMode,     setPdRenameMode]     = useState(false);
   const [pdRenameValue,    setPdRenameValue]    = useState("");
   const [pdStyleOpen,      setPdStyleOpen]      = useState(false);
@@ -29106,36 +29062,10 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:24}}>
                 <div>
-                  <AIDescField key={pd.id} onToast={onToast} onSaved={t=>patchProduct(pd.id,{description:t})}
+                  <DescSection key={pd.id} text={pd.description} onToast={onToast} onSave={t=>patchProduct(pd.id,{description:t})}
                     obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
                           linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
-                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}>{ai=><>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    {!pdDescEditMode&&ai.slot(!!pd.description)}
-                    {!pdDescEditMode&&<button onClick={()=>{setPdDescEditValue(pd.description);setPdDescEditMode(true);}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>}
-                    </div>
-                  </div>
-                  {pdDescEditMode
-                    ? <div style={{marginBottom:24}}>
-                        <textarea value={pdDescEditValue} onChange={e=>setPdDescEditValue(e.target.value)} rows={5} autoFocus
-                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-                        <div style={{display:"flex",gap:8,marginTop:8}}>
-                          <button onClick={()=>{patchProduct(pd.id,{description:pdDescEditValue.trim()||pd.description});setPdDescEditMode(false);}}
-                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
-                          <button onClick={()=>setPdDescEditMode(false)}
-                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                        </div>
-                      </div>
-                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
-                  }
-                  {!pdDescEditMode&&<AIDescFoot ai={ai} text={pd.description} onToast={onToast}/>}
-                  </>}</AIDescField>
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>
 
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
@@ -29616,36 +29546,10 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
             {domainTab==="documentation"&&(
               <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,280px)",gap:24}}>
                 <div>
-                  <AIDescField key={dm.id} onToast={onToast} onSaved={t=>patchDomain(dm.id,{description:t})}
+                  <DescSection key={dm.id} text={dm.description} onToast={onToast} onSave={t=>patchDomain(dm.id,{description:t})}
                     obj={{name:"domain:"+dm.id, label:dm.displayName||dm.name, kind:"Domain", tags:dm.tags,
                           related:products.filter(x=>x.domain===dm.name).map(x=>x.displayName||x.name), linked:ASSETS.filter(x=>x.domain===dm.name).map(x=>x.name),
-                          owners:dm.owners, stewards:dm.experts||[], description:dm.description}}>{ai=><>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>About this domain</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    {!descEditMode&&ai.slot(!!dm.description)}
-                    {!descEditMode&&<button onClick={()=>{setDescEditValue(dm.description);setDescEditMode(true);}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>}
-                    </div>
-                  </div>
-                  {descEditMode
-                    ? <div style={{marginBottom:24}}>
-                        <textarea value={descEditValue} onChange={e=>setDescEditValue(e.target.value)} rows={5} autoFocus
-                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-                        <div style={{display:"flex",gap:8,marginTop:8}}>
-                          <button onClick={()=>{patchDomain(dm.id,{description:descEditValue.trim()||dm.description});setDescEditMode(false);}}
-                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
-                          <button onClick={()=>setDescEditMode(false)}
-                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                        </div>
-                      </div>
-                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.75,marginBottom:12}}>{dm.description}</p>
-                  }
-                  {!descEditMode&&<AIDescFoot ai={ai} text={dm.description} onToast={onToast}/>}
-                  </>}</AIDescField>
+                          owners:dm.owners, stewards:dm.experts||[], description:dm.description}}/>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:12}}>
                   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${dm.color}`,borderRadius:10,overflow:"hidden"}}>
@@ -31175,8 +31079,6 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
   const [npGlossary, setNpGlossary] = useState([]);
   const [npTagInput, setNpTagInput] = useState("");
   const [npGlInput, setNpGlInput] = useState("");
-  const [dvDescEditMode, setDvDescEditMode] = useState(false);
-  const [dvDescEditValue, setDvDescEditValue] = useState("");
   // standalone product profile extras
   const [dpMenuOpen,       setDpMenuOpen]       = useState(false);
   const [dpAddAssetsOpen,  setDpAddAssetsOpen]  = useState(false);
@@ -31307,36 +31209,10 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
             {productTab==="overview"&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 300px",gap:24}}>
                 <div>
-                  <AIDescField key={pd.id} onToast={onToast} onSaved={t=>patchDP(pd.id,{description:t})}
+                  <DescSection key={pd.id} text={pd.description} onToast={onToast} onSave={t=>patchDP(pd.id,{description:t})}
                     obj={{name:"dp:"+pd.id, label:pd.displayName||pd.name, kind:"Data product", parent:pd.domain, domain:pd.domain, tags:pd.tags,
                           linked:(pd.assetIds||[]).map(id=>(ASSETS.find(x=>x.id===id)||{}).name).filter(Boolean),
-                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}>{ai=><>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    {!dvDescEditMode&&ai.slot(!!pd.description)}
-                    {!dvDescEditMode&&<button onClick={()=>{setDvDescEditValue(pd.description);setDvDescEditMode(true);}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5,transition:"all .12s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    </button>}
-                    </div>
-                  </div>
-                  {dvDescEditMode
-                    ? <div style={{marginBottom:24}}>
-                        <textarea value={dvDescEditValue} onChange={e=>setDvDescEditValue(e.target.value)} rows={5} autoFocus
-                          style={{width:"100%",padding:"10px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,lineHeight:1.75,resize:"vertical",fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
-                        <div style={{display:"flex",gap:8,marginTop:8}}>
-                          <button onClick={()=>{patchDP(pd.id,{description:dvDescEditValue.trim()||pd.description});setDvDescEditMode(false);}}
-                            style={{padding:"6px 16px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button>
-                          <button onClick={()=>setDvDescEditMode(false)}
-                            style={{padding:"6px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                        </div>
-                      </div>
-                    : <p style={{fontSize:13,color:T.textSub,lineHeight:1.7,marginBottom:24}}>{pd.description}</p>
-                  }
-                  {!dvDescEditMode&&<AIDescFoot ai={ai} text={pd.description} onToast={onToast}/>}
-                  </>}</AIDescField>
+                          owners:pd.owners, stewards:pd.experts||pd.stewards||[], description:pd.description}}/>
                 </div>
                 {/* Metadata sidebar — matches asset profile style */}
                 <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
@@ -43005,8 +42881,6 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   const [outPlat,     setOutPlat]     = useState("dbt");
   const [renameFor,   setRenameFor]   = useState(null);  // {kind, obj}
   const [mapFor,  setMapFor]  = useState(null);
-  const [descEdit,setDescEdit]= useState(false);
-  const [descVal, setDescVal] = useState("");
 
   const mdl      = selMdl ? models.find(m=>m.id===selMdl) : null;
   const mMetrics = mdl ? metrics.filter(m=>m.model===mdl.id) : [];
@@ -43213,24 +43087,9 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
           {tab==="overview" && (
             <div style={{flex:1,display:"flex",overflow:"hidden"}}>
               <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
-                <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>Description</div>
-                    {!descEdit&&<button onClick={()=>{setDescVal(mdl.desc);setDescEdit(true);}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 4px",display:"flex",borderRadius:5}}
-                      onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}}
-                      onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>{Ic.edit(13)}</button>}
-                  </div>
-                  {descEdit
-                    ? <div>
-                        <Input2 multiline rows={4} value={descVal} onChange={e=>setDescVal(e.target.value)}/>
-                        <div style={{display:"flex",gap:8,marginTop:8}}>
-                          <Btn small variant="primary" onClick={()=>{patchModel({desc:descVal});setDescEdit(false);onToast&&onToast("Description updated","success");}}>Save</Btn>
-                          <Btn small ghost onClick={()=>setDescEdit(false)}>Cancel</Btn>
-                        </div>
-                      </div>
-                    : <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.65}}>{mdl.desc||"No description yet."}</div>}
-                </div></Card2>
+                <DescSection key={mdl.id} text={mdl.desc} onToast={onToast} onSave={t=>patchModel({desc:t})} style={{marginBottom:16}}
+                  obj={{name:"semantic:"+mdl.id, label:mdl.name, kind:"Semantic model", related:(mdl.datasets||[]).map(d=>d.name||d),
+                        linked:mMetrics.map(x=>x.name), owner:mdl.owner, owners:[mdl.owner].filter(Boolean), stewards:mdl.stewards||[], description:mdl.desc}}/>
 
                 <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <SH title="What these datasets mean"
@@ -57626,9 +57485,6 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
               <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
                 {/* Header */}
                 <div style={{padding:'24px 28px 20px',background:T.bgSurface,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-                <AIDescField key={selCatId} onToast={onToast} onSaved={t=>setCatMeta(m=>({...m,[selCatId]:{...(m[selCatId]||{}),description:t}}))}
-                  obj={{name:"classification:"+selCatId, label:selCatId.charAt(0).toUpperCase()+selCatId.slice(1), kind:"Classification", related:catTags.map(td=>td.name),
-                        owners:catOwners, stewards:meta.stewards||[], description:meta.description}}>{ai=><>
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
                   <div style={{display:'flex',alignItems:'center',gap:16,minWidth:0}}>
                     <div style={{width:56,height:56,borderRadius:16,background:cc.bg||T.bgElevated,border:`1px solid ${(cc.color||T.border)}33`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
@@ -57636,7 +57492,6 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     </div>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:'-0.3px',marginBottom:4,textTransform:'capitalize'}}>{selCatId}</div>
-                      {meta.description&&<div style={{fontSize:13,color:T.textSub,lineHeight:1.5,maxWidth:520,marginBottom:8}}>{meta.description}</div>}
                       <div style={{display:'flex',alignItems:'center',gap:16,fontSize:12,color:T.textMuted}}>
                         <span><strong style={{color:T.text}}>{total}</strong> tag{total!==1?'s':''}</span>
                         <span style={{display:'flex',alignItems:'center',gap:6}}>Owner(s) <PeopleCircles people={catOwners}/></span>
@@ -57645,15 +57500,17 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     </div>
                   </div>
                   <div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center'}}>
-                    {ai.slot(!!meta.description)}
                     <KebabMenu items={[{label:'Add Tag',onClick:()=>openAddTagIn(selCatId)},{label:'Edit',onClick:()=>openEditCat(selCatId)}]}/>
                   </div>
                 </div>
-                {(ai.pending||ai.box||(ai.applied&&ai.applied.text===meta.description))&&<div style={{marginTop:12,maxWidth:720}}><AIDescFoot ai={ai} text={meta.description} onToast={onToast}/></div>}
-                </>}</AIDescField>
                 </div>
                 {/* Body */}
                 <div style={{flex:1,overflowY:'auto'}}>
+                  <div style={{padding:'24px 28px 0'}}>
+                    <DescSection key={selCatId} text={meta.description} onToast={onToast} onSave={t=>setCatMeta(m=>({...m,[selCatId]:{...(m[selCatId]||{}),description:t}}))}
+                      obj={{name:"classification:"+selCatId, label:selCatId.charAt(0).toUpperCase()+selCatId.slice(1), kind:"Classification", related:catTags.map(td=>td.name),
+                            owners:catOwners, stewards:meta.stewards||[], description:meta.description}}/>
+                  </div>
                   {total===0 ? (
                     <div style={{textAlign:'center',padding:'72px 20px'}}>
                       <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:16}}>No tags yet</div>
@@ -57831,25 +57688,18 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
 
                       {/* Description */}
                       <div>
-                        <AIDescField key={selTag.id} onToast={onToast} onSaved={t=>{ updateTagDef(selTag.id,{description:t}); setEditDraft(d=>d&&({...d,description:t})); }}
-                          obj={{name:"tag:"+selTag.id, label:selTag.name, kind:"Tag", parent:selTag.category, domain:selTag.domain, tags:[],
-                                linked:Object.entries(assignments||{}).filter(([,xs])=>(xs||[]).some(x=>x.tagId===selTag.id&&x.status!=='rejected')).map(([id])=>(ASSETS.find(x=>String(x.id)===String(id))||{}).name||id),
-                                owners:selTag.owners||[selTag.owner].filter(Boolean), stewards:selTag.stewards||[], description:selTag.description}}>{ai=><>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:10,minHeight:26}}>
-                          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}}>Description</div>
-                          {!editing&&ai.slot(!!selTag.description)}
-                        </div>
                         {editing
-                          ? <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={4}
-                              style={{width:'100%',padding:'10px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.65}}
-                              onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
-                              placeholder="Describe when this tag should be applied…"/>
-                          : (draft.description||!ai.box)&&<p style={{fontSize:13.5,color:draft.description?T.textSub:T.textMuted,lineHeight:1.75,margin:0,fontStyle:draft.description?'normal':'italic'}}>
-                              {draft.description||'No description. Click Edit to add one.'}
-                            </p>
-                        }
-                        {!editing&&<AIDescFoot ai={ai} text={selTag.description} onToast={onToast}/>}
-                        </>}</AIDescField>
+                          ? <>
+                              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Description</div>
+                              <textarea value={draft.description||''} onChange={e=>setEditDraft(d=>({...d,description:e.target.value}))} rows={4}
+                                style={{width:'100%',padding:'10px 12px',background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:13,outline:'none',resize:'vertical',fontFamily:'inherit',boxSizing:'border-box',lineHeight:1.65}}
+                                onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}
+                                placeholder="Describe when this tag should be applied…"/>
+                            </>
+                          : <DescSection key={selTag.id} text={selTag.description} onToast={onToast} onSave={t=>updateTagDef(selTag.id,{description:t})}
+                              obj={{name:"tag:"+selTag.id, label:selTag.name, kind:"Tag", parent:selTag.category, domain:selTag.domain, tags:[],
+                                    linked:Object.entries(assignments||{}).filter(([,xs])=>(xs||[]).some(x=>x.tagId===selTag.id&&x.status!=='rejected')).map(([id])=>(ASSETS.find(x=>String(x.id)===String(id))||{}).name||id),
+                                    owners:selTag.owners||[selTag.owner].filter(Boolean), stewards:selTag.stewards||[], description:selTag.description}}/>}
                       </div>
 
                       <hr style={{border:'none',borderTop:`1px solid ${T.border}`,margin:0}}/>
@@ -58922,6 +58772,18 @@ Rules:
 - Plain, neutral language. No first person, no marketing words, no Markdown.
 
 Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
+  semanticmodel: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+
+Task: describe the semantic model in the metadata below.
+
+Rules:
+- Use only the metadata provided. Never invent policies, regulations, owners or business rules.
+- Say what business questions it can answer, based on its datasets and metrics.
+- Do not restate the name as the description.
+- If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
+- Plain, neutral language. No first person, no marketing words, no Markdown.
+
+Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
   policy: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
 
 Task: describe the policy in the metadata below.
@@ -58968,7 +58830,7 @@ const AID_COLUMN_INPUTS = [
 const AID_FAMILIES = [
   {k:"table",      l:"Tables & views",                 types:["Table","View","Iceberg Table","Data Source","Power BI Dataset","dbt Source","dbt Seed"]},
   {k:"column",     l:"Columns & fields",               types:["Column","Field","Column / Measure","Model column"]},
-  {k:"container",  l:"Containers",                     types:["Database","Catalog","Schema","Bucket","Folder","Container","Site","Project","Power BI Workspace","Power BI App","Power BI Datasource","dbt Project"]},
+  {k:"container",  l:"Containers",                     types:["Database","Catalog","Schema","Bucket","Folder","Container","Site","Project","Power BI Workspace","Power BI App","Power BI Datasource","dbt Project","Application Knowledge Graph"]},
   {k:"file",       l:"Files",                          types:["Object","Blob"]},
   {k:"bi",         l:"Dashboards & reports",           types:["Dashboard","Workbook","Worksheet","Story","Power BI Report","Power BI Dashboard","Power BI Page","Power BI Tile","dbt Exposure"]},
   {k:"pipeline",   l:"Pipelines & transformations",    types:["Pipeline","Flow","Power BI Dataflow","dbt Model","dbt Snapshot","dbt Test","Migration Config","Custom Config"]},
@@ -58980,8 +58842,9 @@ const AID_FAMILIES = [
   {k:"domain",         l:"Domains",         types:["Domain"]},
   {k:"dataproduct",    l:"Data products",   types:["Data product"]},
   {k:"policy",         l:"Policies",        types:["Policy"]},
+  {k:"semanticmodel",  l:"Semantic models", types:["Semantic model"]},
 ];
-const AID_GOV_FAMS = ["term","glossary","tag","classification","domain","dataproduct","policy"];
+const AID_GOV_FAMS = ["term","glossary","tag","classification","domain","dataproduct","policy","semanticmodel"];
 const aidFamilyOf = (o) => {
   if(!o) return null;
   if(o.aidFamily) return o.aidFamily;
@@ -59100,6 +58963,13 @@ const AID_PRODUCT_INPUTS = [
   {k:"owner",      l:"Owner",                 ex:"maya.chen"},
   {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
 ];
+const AID_SEMANTIC_INPUTS = [
+  {k:"name",       l:"Model name",            ex:"Retail Sales 360", required:true},
+  {k:"related",    l:"Datasets",              ex:"orders, customers, products, …"},
+  {k:"linked",     l:"Metrics",               ex:"12, e.g. Net Revenue, Orders"},
+  {k:"owner",      l:"Owner",                 ex:"maya.chen"},
+  {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
+];
 const AID_POLICY_INPUTS = [
   {k:"name",       l:"Policy name",           ex:"Ownership & accountability", required:true},
   {k:"category",   l:"Category",              ex:"Governance"},
@@ -59112,7 +58982,7 @@ const AID_POLICY_INPUTS = [
 const AID_INPUTS = {table:AID_TABLE_INPUTS, column:AID_COLUMN_INPUTS, container:AID_CONTAINER_INPUTS, file:AID_FILE_INPUTS,
                     bi:AID_BI_INPUTS, pipeline:AID_PIPELINE_INPUTS, metric:AID_METRIC_INPUTS,
                     term:AID_TERM_INPUTS, glossary:AID_GLOSSARY_INPUTS, tag:AID_TAG_INPUTS, classification:AID_CLASSIFICATION_INPUTS,
-                    domain:AID_DOMAIN_INPUTS, dataproduct:AID_PRODUCT_INPUTS, policy:AID_POLICY_INPUTS};
+                    domain:AID_DOMAIN_INPUTS, dataproduct:AID_PRODUCT_INPUTS, policy:AID_POLICY_INPUTS, semanticmodel:AID_SEMANTIC_INPUTS};
 const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, x.def!==false]));
 // Asking for a suggestion follows the existing "edit description" permission —
 // there is no separate AI permission to manage.
@@ -59457,13 +59327,14 @@ const aidFamilyText = (fam, F, on, o, variant) => {
     if(fam==="classification") out.push(has("related") ? `Classification that groups the tags ${F.related}.` : `Classification for ${nm}.${thin}`);
     if(fam==="domain") out.push(`Business domain for ${nm} data${has("related")?`, including ${F.related}`:""}.`);
     if(fam==="dataproduct") out.push(`Data product that delivers ${nm}${has("parent")?` for the ${F.parent} domain`:""}.`);
+    if(fam==="semanticmodel") out.push(has("related") ? `Semantic model over ${F.related}.` : `Semantic model for ${nm}.${thin}`);
     if(fam==="policy"){
       const area = has("scope") ? ` on ${F.scope} data` : "";
       out.push(has("rules") ? `Policy${area} with these rules: ${F.rules}.` : `Policy${area} for ${nm}.${thin}`);
       if(has("regulations")) out.push(`Mapped to ${F.regulations}.`);
       if(has("category")) out.push(`Category: ${F.category}.`);
     }
-    if(has("linked")) out.push(`${fam==="tag"?"Applied to":fam==="dataproduct"?"Bundles":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,"$1 assets, including")}.`);
+    if(has("linked")) out.push(`${fam==="tag"?"Applied to":fam==="dataproduct"?"Bundles":fam==="semanticmodel"?"Defines":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,fam==="semanticmodel"?"$1 metrics, including":"$1 assets, including")}.`);
   }
   if(has("tags") && !AID_GOV_FAMS.includes(fam)) out.push(`Tagged ${F.tags}.`);
   if(has("owner")) out.push(`Owned by ${F.owner}.`);
@@ -61826,9 +61697,33 @@ const AIDescExtras = ({ai, onToast}) => (
     {ai.box}
   </>
 );
-// The asset profile's Description behaviour for pages that are not asset profiles:
-// the page draws its own header and text, ai.slot() goes beside Edit, <AIDescFoot> below the text.
-const AIDescField = ({obj, family, onSaved, onToast, children}) => children(useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved}));
+// One Description section everywhere, drawn exactly like the asset profile's: header with
+// ✦ Suggest / Rewrite and Edit, Save and Cancel while editing. onSave(text, fromAI).
+const DescSection = ({title="Description", sub, text, obj, family, onSave, canEdit=true, onToast, style}) => {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(text||"");
+  const ai = useAidAssetDraft({asset:obj, family, onToast:onToast||(()=>{}), onSaved:t=>{ setVal(t); onSave(t,true); }});
+  return (
+    <Card2 style={style}>
+      <div style={{padding:"14px 16px"}}>
+        <SH title={title} sub={sub} action={!canEdit ? null : editing
+          ? <div style={{display:"flex",gap:6}}>
+              <Btn small ghost onClick={()=>{ onSave(val.trim(),false); setEditing(false); onToast&&onToast(`${title} saved`,"success"); }}>Save</Btn>
+              <Btn small ghost onClick={()=>{ setVal(text||""); setEditing(false); }}>Cancel</Btn>
+            </div>
+          : <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {ai.slot(!!text)}
+              <Btn small ghost icon={Ic.edit(11)} onClick={()=>{ setVal(text||""); setEditing(true); }}>Edit</Btn>
+            </div>}/>
+        {editing
+          ? <textarea value={val} onChange={e=>setVal(e.target.value)} rows={3}
+              style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:8,color:T.text,fontSize:13,outline:"none",resize:"vertical",lineHeight:1.7,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          : (text || !ai.box) && <p style={{fontSize:13,color:text?T.textSub:T.textMuted,fontStyle:text?"normal":"italic",lineHeight:1.8,margin:0}}>{text||`No ${title.toLowerCase()} yet.`}</p>}
+        {!editing&&<AIDescFoot ai={ai} text={text} onToast={onToast}/>}
+      </div>
+    </Card2>
+  );
+};
 const AIDescFoot = ({ai, text, onToast}) => (
   <>
     {ai.applied&&ai.applied.text===text&&<AIDescProvenance rec={ai.applied}/>}
