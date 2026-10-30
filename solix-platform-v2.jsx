@@ -3220,7 +3220,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
         <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5,flexWrap:"wrap"}}>
           <span style={{width:6,height:6,borderRadius:"50%",background:sm.color,display:"inline-block",flexShrink:0}}/>
           <span style={{color:sm.color,fontWeight:600}}>{t.status}</span>
-          {(t.tags||[]).slice(0,2).map(tag=>{const tc_=TAG_COLORS_GLOSS[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={tag} style={{padding:"2px 8px 2px 7px",borderRadius:4,background:tc_.bg,borderTop:`1px solid ${tc_.border}`,borderRight:`1px solid ${tc_.border}`,borderBottom:`1px solid ${tc_.border}`,borderLeft:`3px solid ${tc_.color}`,color:tc_.color,fontSize:10.5,fontWeight:600}}>{tag}</span>;})}
+          {(t.tags||[]).slice(0,2).map(tag=>{const tc_=TAG_COLORS_GLOSS[tag]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={tag} style={{padding:"2px 8px 2px 7px",borderRadius:4,display:"inline-flex",alignItems:"center",gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:10.5,fontWeight:500}}><GovIcon kind="tag"/>{tag}</span>;})}
           <span style={{marginLeft:"auto",color:T.textMuted}}>{t.linked} assets</span>
         </div>
       </div>
@@ -3368,7 +3368,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                               <button onClick={()=>goToTerm(t.id)} style={{flex:1,display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:"2px 0",minWidth:0}}>
                                 <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:isSelT?T.accent:T.textMuted}}><rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 5.5h5M4.5 8h3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
                                 <span style={{flex:1,fontSize:12,fontWeight:isSelT?600:400,color:isSelT?T.accent:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.term}</span>
-                                <span style={{width:6,height:6,borderRadius:"50%",background:cm.color,flexShrink:0}}/>
+                                
                               </button>
                               {hovT&&<button onMouseDown={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxMenu({type:"term",id:t.id,name:t.term,x:r.right+4,y:r.top});}}
                                 style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,letterSpacing:1,marginLeft:2}}
@@ -3390,7 +3390,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                         <button onClick={()=>goToTerm(t.id)} style={{flex:1,display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:"2px 0",minWidth:0}}>
                           <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{flexShrink:0,color:isSelT?T.accent:T.textMuted}}><rect x="2" y="1.5" width="10" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 5.5h5M4.5 8h3.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
                           <span style={{flex:1,fontSize:12,fontWeight:isSelT?600:400,color:isSelT?T.accent:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textAlign:"left"}}>{t.term}</span>
-                          <span style={{width:6,height:6,borderRadius:"50%",background:cm.color,flexShrink:0}}/>
+                          
                         </button>
                         {hovT&&<button onMouseDown={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxMenu({type:"term",id:t.id,name:t.term,x:r.right+4,y:r.top});}}
                           style={{width:20,height:20,borderRadius:4,background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,letterSpacing:1,marginLeft:2}}>···</button>}
@@ -3919,7 +3919,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 {(term.tags||[]).length>0?(term.tags||[]).map(tag=>{
                   const tc=tagColor(tag);
                   return (
-                    <span key={tag} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:tc.bg,borderTop:`1px solid ${tc.border}`,borderRight:`1px solid ${tc.border}`,borderBottom:`1px solid ${tc.border}`,borderLeft:`3px solid ${tc.color}`,color:tc.color,fontWeight:600}}>{tag}</span>
+                    <span key={tag} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{tag}</span>
                   );
                 }):<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>}
               </div>
@@ -4075,7 +4075,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                     <button key={s} onClick={()=>patchTerm(term.id,{tags:sel?(term.tags||[]).filter(x=>x!==s):[...(term.tags||[]),s]})}
                       style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"8px 14px",background:"transparent",border:"none",cursor:"pointer",transition:"background .1s"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <span style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 9px 3px 8px",borderRadius:5,background:sel?c.bg:T.bgElevated,borderTop:`1px solid ${sel?c.border:T.border}`,borderRight:`1px solid ${sel?c.border:T.border}`,borderBottom:`1px solid ${sel?c.border:T.border}`,borderLeft:`3px solid ${sel?c.color:T.borderLight}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>{s}</span>
+                      <span style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 9px 3px 8px",borderRadius:5,gap:4,background:sel?T.bgHover:T.bgElevated,border:`1px solid ${sel?T.textMuted:T.border}`,color:sel?T.text:T.textSub,fontWeight:sel?600:400}}><GovIcon kind="tag"/>{s}</span>
                       {sel&&<svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{marginLeft:"auto"}}><path d="M2.5 7.5l3 3 6-6" stroke={c.color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </button>
                   );
@@ -4357,6 +4357,10 @@ const SERVICE_LOGOS = {
   sap:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0FAAFF"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="Arial">SAP</text></svg>,
   salesforce: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M9 20c-1.7 0-3-1.3-3-3s1.3-3 3-3c.2-1.7 1.7-3 3.4-3 1.2 0 2.2.6 2.8 1.5.6-.9 1.7-1.5 2.9-1.5 1.9 0 3.4 1.5 3.4 3.4 1.4.2 2.5 1.4 2.5 2.9 0 1.7-1.3 3-3 3H9z" fill="white"/></svg>,
 };
+
+// Tags, glossary terms and policies are told apart by icon, not by colour.
+const GOV_ICONS = {tag:Ic.tag, term:Ic.glossary, policy:Ic.policies};
+const GovIcon = ({kind,size=11}) => <span style={{display:"inline-flex",flexShrink:0,color:T.textMuted}}>{GOV_ICONS[kind](size)}</span>;
 
 const ServiceIcon = ({service, size=18}) => {
   const logo = SERVICE_LOGOS[service];
@@ -9099,7 +9103,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
 
   // ─── computed ────────────────────────────────────────────────────────
   const POLICY_CATS = policyCategories.map(c=>c.name);
-  const catColor = cat => cat ? (policyCategories.find(c=>c.name===cat)?.color || T.blue) : T.textMuted;
+  const catColor = () => T.textMuted;
 
   const getGovAssets = (pol) => {
     if (!pol) return [];
@@ -9827,7 +9831,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           onMouseLeave={()=>setHovPolId(null)}>
                           <button onClick={()=>{setSelPolicyId(isSel?null:p.id);setPdTab("overview");setEditing(false);}}
                             style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:`5px 6px 5px ${isUncat?14:30}px`,background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
-                            <span style={{width:8,height:8,borderRadius:"50%",background:catColor(p.category),flexShrink:0,display:"block"}}/>
+                            <GovIcon kind="policy" size={12}/>
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
                             {p.origin&&(
                               <span title={`Imported from ${p.origin.system} — read-only in EDG`}
@@ -10217,8 +10221,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                           <div ref={polCatDropRef} style={{padding:"16px",borderBottom:`1px solid ${T.border}`,position:"relative"}}>
                             <SideLabel label="Category" onEdit={()=>{setPolCatDropOpen(o=>!o);setPolCatDropSearch("");}}/>
                             {p.category
-                              ? <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 9px",borderRadius:5,background:`${catColor(p.category)}0f`,borderTop:`1px solid ${catColor(p.category)}20`,borderRight:`1px solid ${catColor(p.category)}20`,borderBottom:`1px solid ${catColor(p.category)}20`,borderLeft:`3px solid ${catColor(p.category)}`}}>
-                                  <span style={{fontSize:12,color:catColor(p.category),fontWeight:600}}>{p.category}</span>
+                              ? <div style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 8px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>
+                                  <span style={{fontSize:12,color:T.textSub,fontWeight:500}}>{p.category}</span>
                                   <button title="Clear category" onClick={()=>{applyPolField("category","","Category cleared");onToast("Category cleared","success");}} style={{background:"none",border:"none",cursor:"pointer",color:catColor(p.category),padding:0,lineHeight:1,display:"flex",opacity:.55}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".55"}>{Ic.x(8)}</button>
                                 </div>
                               : <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not set</span>}
@@ -10235,7 +10239,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                       <button key={cat} onClick={()=>{applyPolField("category",cat,`Moved to ${cat}`);setPolCatDropOpen(false);setPolCatDropSearch("");onToast(`Moved to ${cat}`,"success");}}
                                         style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:sel?T.accentDim:"transparent",border:"none",cursor:"pointer",textAlign:"left"}}
                                         onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background="transparent";}}>
-                                        <span style={{width:9,height:9,borderRadius:"50%",background:catColor(cat),flexShrink:0,display:"block"}}/>
+                                        <GovIcon kind="policy" size={12}/>
                                         <span style={{flex:1,fontSize:12,color:T.text,textTransform:"capitalize"}}>{cat}</span>
                                         {sel&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
                                       </button>
@@ -10286,7 +10290,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {(p.tags||[]).length===0
                                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags set</span>
-                                : (()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},PHI:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},sensitive:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},regulated:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},financial:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},internal:{bg:T.bgElevated,color:T.textSub,border:T.border},"customer-data":{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},healthcare:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},confidential:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},public:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"}};return (p.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchPol({tags:(p.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                                : (()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},PHI:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"},sensitive:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},regulated:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},financial:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},internal:{bg:T.bgElevated,color:T.textSub,border:T.border},"customer-data":{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},healthcare:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},confidential:{bg:"rgba(239,68,68,.08)",color:"#ef4444",border:"rgba(239,68,68,.2)"},public:{bg:"rgba(22,163,74,.08)",color:"#16a34a",border:"rgba(22,163,74,.2)"}};return (p.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}<button onClick={()=>patchPol({tags:(p.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                               {(p.tags||[]).length>3&&<span title={(p.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(p.tags||[]).length-3}</span>}
                             </div>
                           </SB>
@@ -12198,7 +12202,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   // Discovery drives Masking off PII/PHI/PCI classifications. EDG lifts that decision
                   // into the catalog and resolves a tag predicate → the concrete object set (or, for
                   // Masking, the concrete column set — masking acts on columns, not whole objects).
-                  const TAG_DOT = t => ({PII:T.rose,PHI:T.violet,PCI:T.amber,GDPR:T.blue,regulated:T.blue,financial:T.amber,sensitive:T.rose,healthcare:T.violet,"customer-data":T.accent,confidential:T.green,internal:T.textMuted,public:T.textMuted}[t]||T.textMuted);
                   // Which columns of a table carry a given classification. A name heuristic stands in
                   // for real column-level tags (EDG tags do propagate to columns); honest for a proto.
                   const CLASSIFY_HINTS = {
@@ -12757,8 +12760,8 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                                       </>) : (<>
                                         <CatFieldDropdown label="Classification" required options={POLICY_TAGS} selected={r.targetTags||[]}
                                           onChange={v=>updRule(r.id,"targetTags",v)} placeholder="Search classifications…"
-                                          renderOpt={(o,sel)=><><span style={{width:9,height:9,borderRadius:"50%",background:TAG_DOT(o),flexShrink:0}}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
-                                          renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:TAG_DOT(o)}}/>{o}</span>}/>
+                                          renderOpt={(o,sel)=><><GovIcon kind="tag" size={12}/><span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text}}>{o}</span></>}
+                                          renderChip={o=><span style={{display:"inline-flex",alignItems:"center",gap:5}}><GovIcon kind="tag"/>{o}</span>}/>
                                         {tagTargeting&&(()=>{
                                           if(matchedAssets.length===0) return <div style={{fontSize:11,color:T.amber}}>No objects in scope carry that classification yet.</div>;
                                           // CDP-faithful: the tag resolves to a list of objects, each with its own criteria.
@@ -13807,7 +13810,6 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
       {/* Link Policy to Regulation Requirement — multi-select modal */}
       {/* New / Edit Policy Category slide-in panels */}
       {(()=>{
-        const CAT_COLORS_LIST=["#ee2424","#d97706","#16a34a","#2563eb","#7c3aed","#6366f1","#0891b2","#6b7280"];
         const FRAMEWORKS=REGULATION_FRAMEWORKS;
         const ava=u=>u.split(".").map(s=>s[0]?.toUpperCase()).join("");
         const userRenderOpt=(u,sel)=>(
@@ -13853,16 +13855,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>}
-            <div>
-              <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
-              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
-                {CAT_COLORS_LIST.map(c=>(
-                  <button key={c} onClick={()=>setDraft(d=>({...d,color:c}))}
-                    style={{width:26,height:26,borderRadius:"50%",background:c,border:draft.color===c?`3px solid ${T.text}`:"3px solid transparent",cursor:"pointer",padding:0,flexShrink:0,transition:"border .12s"}}/>
-                ))}
-              </div>
-            </div>
-          </div>
+                      </div>
         );
         return (<>
           {/* ── New Category panel ── */}
@@ -13962,7 +13955,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:2}}>
                         <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{p.name}</span>
-                        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:3,background:`${catColor(p.category)}15`,color:catColor(p.category)}}>{p.category}</span>
+                        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.bgElevated,color:T.textSub}}>{p.category}</span>
                       </div>
                       <div style={{fontSize:11,color:T.textMuted}}>{p.owner||"No owner"}</div>
                     </div>
@@ -15044,7 +15037,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   const originPill = r => r.origin==="custom" ? <span title="Added by your organisation" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,letterSpacing:"0.04em",flexShrink:0}}>CUSTOM</span>
     : <span title="Shipped with the regulation — locked except the values the law leaves open" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,letterSpacing:"0.04em",flexShrink:0}}>PREBUILT</span>;
   const typeDots = p => <span style={{display:"flex",gap:2,flexShrink:0}}>{["validation","enforcement","attestation"].filter(k=>pm2Types(p).includes(k)).map(k=><span key={k} title={PM2_TYPE_META[k].label} style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>)}{!p.rules.length&&<span style={{width:7,height:7,borderRadius:"50%",border:`1px solid ${T.border}`}}/>}</span>;
-  const classChip = c => <span key={c}>{pill(c==="ALL"?T.textSub:PM2_CLASS_META[c].color, c==="ALL"?"All classified data":PM2_CLASS_META[c].label)}</span>;
+  const classChip = c => <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,whiteSpace:"nowrap",flexShrink:0}}><GovIcon kind="tag" size={10}/>{c==="ALL"?"All classified data":PM2_CLASS_META[c].label}</span>;
   const refTag = (text, c) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{text}</span>;
   const secLabel = (t, extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"20px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
   const selStyle = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12};
@@ -15608,7 +15601,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               <div style={{fontSize:11.5,color:T.textSub,marginTop:8,lineHeight:1.55}}>{nextText(p)}</div></>)}
             {SB("Category", canEdit(p)?()=>setSideEdit(sideEdit==="cat"?null:"cat"):null, sideEdit==="cat"
               ? <select autoFocus value={p.category||""} onChange={e=>{const v=e.target.value; updPol(p.id,x=>addHist({...x,category:v},`Category set to ${v||"Not set"}`)); setSideEdit(null);}} style={{...selStyle,width:"100%"}}><option value="">Not set</option>{PM2_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
-              : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:`${catColor(p.category)}14`,color:catColor(p.category),border:`1px solid ${catColor(p.category)}30`}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
+              : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
             {SB("Owners", (isAdmin||p.owner===me)?()=>setSideEdit(sideEdit==="own"?null:"own"):null, sideEdit==="own"
               ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");}) : ownerChip(p.owner))}
             {SB("Stewards", canSubmit(p)?()=>setSideEdit(sideEdit==="stw"?null:"stw"):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
@@ -19505,7 +19498,7 @@ const AssetLineageFull=({asset})=>{
                             <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8}}>Tag(s)</div>
                             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {cMeta.tags.map(t=>{const c=TAG_C_L[t]||{bg:"#f1f5f9",color:"#64748b",border:"#e2e8f0"};return(
-                                <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                                <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}</span>
                               );})}
                             </div>
                           </div>
@@ -19676,7 +19669,7 @@ const AssetLineageFull=({asset})=>{
                     <SLabel>Tag(s)</SLabel>
                     <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                       {selMeta.tags.map(t=>{const c=tagC(t);return(
-                        <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                        <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}</span>
                       );})}
                     </div>
                   </div>}
@@ -19755,9 +19748,9 @@ const PolicyChip = ({link,onNav,compact})=>{
   if(!link) return null;
   return <button onClick={e=>{e.stopPropagation();onNav&&onNav("policymanager",{policyId:link.policyId});}}
     title={`Enforces policy: ${link.policyName}${link.ruleName?" › "+link.ruleName:""}`}
-    style={{display:"inline-flex",alignItems:"center",gap:5,padding:compact?"2px 8px":"3px 10px",borderRadius:6,background:"rgba(124,58,237,.1)",border:"1px solid rgba(124,58,237,.28)",color:"#7c3aed",fontSize:compact?10.5:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",maxWidth:compact?260:"none",overflow:"hidden",textOverflow:"ellipsis",transition:"opacity .12s"}}
+    style={{display:"inline-flex",alignItems:"center",gap:5,padding:compact?"2px 8px":"3px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:compact?10.5:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",maxWidth:compact?260:"none",overflow:"hidden",textOverflow:"ellipsis",transition:"opacity .12s"}}
     onMouseEnter={e=>e.currentTarget.style.opacity=".75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-    <svg width="11" height="11" viewBox="0 0 16 16" fill="none"><path d="M8 1.5l5 2v4c0 3.2-2.1 5.6-5 6.5-2.9-.9-5-3.3-5-6.5v-4l5-2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+    <GovIcon kind="policy"/>
     Enforces: {link.policyName}{!compact&&link.ruleName?` › ${link.ruleName}`:""}
   </button>;
 };
@@ -22645,7 +22638,7 @@ const AssetTagsTab = ({assetId, onToast}) => {
         <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:14,marginTop:16}}>
           {[
             {l:'Tag',        v:<TagPill tagDef={selDef} assignment={selAsgn} size='md'/>},
-            {l:'Category',   v:<span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:catColors[selDef.category]?.bg,color:catColors[selDef.category]?.color,fontWeight:500,textTransform:'capitalize'}}>{selDef.category}</span>},
+            {l:'Category',   v:<span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:T.bgElevated,color:T.textSub,fontWeight:500,textTransform:'capitalize'}}>{selDef.category}</span>},
             {l:'Origin',     v:<span style={{fontSize:12,color:T.textSub}}>{originText(selAsgn.origin,selAsgn.sourceSystem)}</span>},
             {l:'Confirmed by',v:selAsgn.sourceSystems?.length>0?<div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{selAsgn.sourceSystems.map(s=><span key={s} style={{fontSize:10,padding:'2px 6px',borderRadius:3,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub}}>{s}</span>)}</div>:<span style={{fontSize:12,color:T.textMuted}}>—</span>},
             {l:'Propagation', v:<span style={{fontSize:12,color:T.textSub}}>{selDef.propagationMode==='none'?'None — this asset only':selDef.propagationMode==='hierarchy'?'Hierarchy — schema children':selDef.propagationMode==='lineage'?'Lineage — downstream assets':'H+L — maximum coverage'}</span>},
@@ -23799,7 +23792,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
               {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tc(t);return(
-                <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}</span>
               );})}
               {(data.tags||[]).length>3&&!showAllTags&&<span onClick={()=>setShowAllTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{(data.tags||[]).length-3} more</span>}
               {(data.tags||[]).length>3&&showAllTags&&<span onClick={()=>setShowAllTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
@@ -23817,7 +23810,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
                     .map(s=>{
                       const sel=(data.tags||[]).includes(s); const c=tc(s);
                       return <button key={s} onClick={()=>setData(d=>({...d,tags:sel?d.tags.filter(x=>x!==s):[...(d.tags||[]),s]}))}
-                        style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,fontSize:11.5,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,borderTop:`1px solid ${sel?c.border:T.border}`,borderRight:`1px solid ${sel?c.border:T.border}`,borderBottom:`1px solid ${sel?c.border:T.border}`,borderLeft:`3px solid ${sel?c.color:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                        style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,fontSize:11.5,cursor:"pointer",transition:"all .1s",background:sel?T.bgHover:T.bgElevated,border:`1px solid ${sel?T.textMuted:T.border}`,color:sel?T.text:T.textSub,fontWeight:sel?600:400}}><GovIcon kind="tag"/>
                         {sel&&<svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                         {s}
                       </button>;
@@ -23835,7 +23828,7 @@ const ContainerAssetDetail = ({asset, assetStack, onBack, onAsset, onToast}) => 
             <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Glossary Term(s)</MetaLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
               {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-              {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+              {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
               {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
             </div>
             {assetGlOpen&&(
@@ -24082,7 +24075,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
                 ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags applied</span>
                 : <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {asset.tags.map(t=>{const c=tc(t);return(
-                      <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                      <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}</span>
                     );})}
                   </div>
               }
@@ -25609,7 +25602,7 @@ const DbtEnginePanel = ({name,compact})=>{
         <div style={{minWidth:200}}>
           <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>dbt tags</div>
           <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-            {m.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 8px",borderRadius:4,background:"rgba(255,105,75,.1)",color:"#c2410c",border:"1px solid rgba(255,105,75,.25)",fontFamily:"'Geist Mono',monospace"}}>{t}</span>)}
+            {m.tags.map(t=><span key={t} style={{fontSize:10.5,padding:"2px 8px",borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{t}</span>)}
           </div>
         </div>
         <div style={{minWidth:200}}>
@@ -26928,7 +26921,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                               {t.tag}{pend&&<span style={{fontSize:10,fontWeight:700,color:T.amber}}>Pending approval</span>}
                             </span>);})}
                           {visibleTags.map(t=>{const c=ctc(t);return(
-                            <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}</span>
+                            <span key={t} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}</span>
                           );})}
                           {colTags.length>3&&!showAllColTags&&<span onClick={()=>setShowAllColTags(true)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>+{colTags.length-3} more</span>}
                           {colTags.length>3&&showAllColTags&&<span onClick={()=>setShowAllColTags(false)} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",fontWeight:600}}>− less</span>}
@@ -26944,7 +26937,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                                 .map(s=>{
                                   const sel=colTags.includes(s); const c=ctc(s);
                                   return <button key={s} onClick={()=>setColTagsMap(m=>({...m,[selCol.name]:sel?(m[selCol.name]||[]).filter(x=>x!==s):[...(m[selCol.name]||[]),s]}))}
-                                    style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:4,fontSize:11,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,borderTop:`1px solid ${sel?c.border:T.border}`,borderRight:`1px solid ${sel?c.border:T.border}`,borderBottom:`1px solid ${sel?c.border:T.border}`,borderLeft:`3px solid ${sel?c.color:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                                    style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:4,fontSize:11,cursor:"pointer",transition:"all .1s",background:sel?T.bgHover:T.bgElevated,border:`1px solid ${sel?T.textMuted:T.border}`,color:sel?T.text:T.textSub,fontWeight:sel?600:400}}><GovIcon kind="tag"/>
                                     {sel&&<svg width="9" height="9" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                                     {s}
                                   </button>;
@@ -26969,7 +26962,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                           ? <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>
                           : <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                               {colGlTerms.map((t,i)=>(
-                                <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>
+                                <span key={i} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>
                                   {t.length>12?t.slice(0,12)+"…":t}
                                   <button onClick={()=>setColGlTermsMap(m=>({...m,[selCol.name]:(m[selCol.name]||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button>
                                 </span>
@@ -27357,7 +27350,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                 {(data.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
                 {(showAllTags?data.tags||[]:(data.tags||[]).slice(0,3)).map(t=>{const c=tcFull(t);return(
                   <span key={t} title="Click to propagate" onClick={()=>{ const def=_tagCtx?.tagDefs.find(td=>td.name.toLowerCase()===t.toLowerCase()); const m=def?.propagationMode; setPropScope((m==='hierarchy'||m==='lineage'||m==='both')?m:'both'); setPropTag(t); }}
-                    style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600,cursor:"pointer"}}>{t}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
+                    style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500,cursor:"pointer"}}><GovIcon kind="tag"/>{t}<span style={{opacity:.5,fontSize:9}}>⇄</span></span>
                 );})}
                 {(data.tags||[]).length>3&&moreBtn((data.tags||[]).length-3)}
               </>);
@@ -27376,7 +27369,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                   .map(s=>{
                     const sel=(data.tags||[]).includes(s); const c=tcFull(s);
                     return <button key={s} onClick={()=>setData(d=>({...d,tags:sel?d.tags.filter(x=>x!==s):[...(d.tags||[]),s]}))}
-                      style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,fontSize:11.5,cursor:"pointer",transition:"all .1s",background:sel?c.bg:T.bgElevated,borderTop:`1px solid ${sel?c.border:T.border}`,borderRight:`1px solid ${sel?c.border:T.border}`,borderBottom:`1px solid ${sel?c.border:T.border}`,borderLeft:`3px solid ${sel?c.color:T.border}`,color:sel?c.color:T.textSub,fontWeight:sel?600:400}}>
+                      style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,fontSize:11.5,cursor:"pointer",transition:"all .1s",background:sel?T.bgHover:T.bgElevated,border:`1px solid ${sel?T.textMuted:T.border}`,color:sel?T.text:T.textSub,fontWeight:sel?600:400}}><GovIcon kind="tag"/>
                       {sel&&<svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       {s}
                     </button>;
@@ -27406,7 +27399,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                 <div style={{padding:'14px 18px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:14,fontWeight:700,color:T.text}}>Propagate</span>
-                    <span style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px 3px 9px',borderRadius:5,background:pc.bg,borderLeft:`3px solid ${pc.color}`,color:pc.color,fontWeight:600}}>{propTag}</span>
+                    <span style={{display:'inline-flex',alignItems:'center',fontSize:11.5,padding:'3px 10px 3px 9px',borderRadius:5,gap:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{propTag}</span>
                     {locked&&<span style={{fontSize:10.5,color:T.textMuted}}>🔒 locked</span>}
                   </div>
                   <button onClick={()=>setPropTag(null)} style={{background:'none',border:'none',color:T.textMuted,cursor:'pointer',fontSize:16}}>×</button>
@@ -27470,7 +27463,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
           <MetaLabel onEdit={()=>{setAssetGlOpen(p=>!p);setAssetGlSearch("");}}>Glossary Term(s)</MetaLabel>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {assetGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-            {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+            {assetGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setAssetGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
             {assetGlTerms.length>3&&<span title={assetGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{assetGlTerms.length-3}</span>}
           </div>
           {assetGlOpen&&(
@@ -28179,7 +28172,7 @@ const AnalyticsView = ()=>{
                         <span style={{color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:100}}>{td.name}</span>
                         <span style={{color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{td.usageCount||0}</span>
                       </div>
-                      <div style={{height:3,background:T.bgHover,borderRadius:2}}><div style={{height:"100%",width:`${Math.min(100,(td.usageCount||0)/50*100)}%`,background:td.color||T.accent,borderRadius:2}}/></div>
+                      <div style={{height:3,background:T.bgHover,borderRadius:2}}><div style={{height:"100%",width:`${Math.min(100,(td.usageCount||0)/50*100)}%`,background:T.textMuted,borderRadius:2}}/></div>
                     </div>
                   ))}
                 </div>
@@ -29136,7 +29129,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                         <SbLabel onEdit={()=>{setPdSbModal("tags");setPdSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchProduct(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}<button onClick={()=>patchProduct(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                           {(pd.tags||[]).length>3&&<span title={(pd.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.tags||[]).length-3}</span>}
                         </div>
                       </div>
@@ -29145,7 +29138,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                         <SbLabel onEdit={()=>{setPdSbModal("glossary");setPdSbSearch("");}}>Business Glossary</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {pdGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                          {pdGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setPdGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {pdGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setPdGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                           {pdGlTerms.length>3&&<span title={pdGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{pdGlTerms.length-3}</span>}
                         </div>
                       </div>
@@ -29631,7 +29624,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {(dm.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                        {(()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (dm.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                        {(()=>{const TAG_C={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (dm.tags||[]).slice(0,3).map(t=>{const c=TAG_C[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}<button onClick={()=>patchDomain(dm.id,{tags:(dm.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                         {(dm.tags||[]).length>3&&<span title={(dm.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(dm.tags||[]).length-3}</span>}
                       </div>
                     </div>
@@ -29643,7 +29636,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
                       </div>
                       <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                         {dmGlossaryTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                        {dmGlossaryTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                        {dmGlossaryTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDmGlossaryTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                         {dmGlossaryTerms.length>3&&<span title={dmGlossaryTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{dmGlossaryTerms.length-3}</span>}
                       </div>
                     </div>
@@ -31287,7 +31280,7 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
                         <SbLabel onEdit={()=>{setDpSbModal("tags");setDpSbSearch("");}}>Tags</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {(pd.tags||[]).length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No tags added</span>}
-                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:c.bg,borderTop:`1px solid ${c.border}`,borderRight:`1px solid ${c.border}`,borderBottom:`1px solid ${c.border}`,borderLeft:`3px solid ${c.color}`,color:c.color,fontWeight:600}}>{t}<button onClick={()=>patchDP(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
+                          {(()=>{const TC={PII:{bg:"rgba(225,29,72,.1)",color:"#e11d48",border:"rgba(225,29,72,.25)"},revenue:{bg:"rgba(37,99,235,.08)",color:"#2563eb",border:"rgba(37,99,235,.2)"},marketing:{bg:"rgba(245,158,11,.08)",color:"#d97706",border:"rgba(245,158,11,.2)"},ML:{bg:"rgba(99,102,241,.08)",color:"#6366f1",border:"rgba(99,102,241,.2)"},behavioral:{bg:"rgba(6,182,212,.08)",color:"#0891b2",border:"rgba(6,182,212,.2)"},GDPR:{bg:"rgba(124,58,237,.08)",color:"#7c3aed",border:"rgba(124,58,237,.2)"}};return (pd.tags||[]).slice(0,3).map(t=>{const c=TC[t]||{bg:T.bgElevated,color:T.textSub,border:T.border};return <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="tag"/>{t}<button onClick={()=>patchDP(pd.id,{tags:(pd.tags||[]).filter(x=>x!==t)})} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>;});})()}
                           {(pd.tags||[]).length>3&&<span title={(pd.tags||[]).slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{(pd.tags||[]).length-3}</span>}
                         </div>
                       </div>
@@ -31296,7 +31289,7 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
                         <SbLabel onEdit={()=>{setDpSbModal("glossary");setDpSbSearch("");}}>Business Glossary</SbLabel>
                         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
                           {dpGlTerms.length===0&&<span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No terms linked</span>}
-                          {dpGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:"rgba(139,92,246,.08)",borderTop:"1px solid rgba(139,92,246,.2)",borderRight:"1px solid rgba(139,92,246,.2)",borderBottom:"1px solid rgba(139,92,246,.2)",borderLeft:"3px solid #8b5cf6",color:"#8b5cf6",fontWeight:600}}>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDpGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
+                          {dpGlTerms.slice(0,3).map((t,i)=><span key={i} title={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"4px 10px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontWeight:500}}><GovIcon kind="term"/>{t.length>10?t.slice(0,10)+"…":t}<button onClick={()=>setDpGlTerms(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"inherit",padding:0,lineHeight:1,display:"flex",opacity:.6}} onMouseEnter={e=>e.currentTarget.style.opacity="1"} onMouseLeave={e=>e.currentTarget.style.opacity=".6"}>{Ic.x(7)}</button></span>)}
                           {dpGlTerms.length>3&&<span title={dpGlTerms.slice(3).join(", ")} style={{display:"inline-flex",alignItems:"center",fontSize:11.5,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"default",fontWeight:600}}>+{dpGlTerms.length-3}</span>}
                         </div>
                       </div>
@@ -56906,11 +56899,11 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
   const isPending  = assignment?.status === 'pending';
   const isRejected = assignment?.status === 'rejected';
 
-  const baseColor = isConflict ? T.rose : tagDef.color;
-  const bg        = baseColor + '18';
-  const border    = isPending  ? `1px dashed ${baseColor}99`
+  const baseColor = isConflict ? T.rose : T.textSub;
+  const bg        = isConflict ? T.rose + '18' : T.bgElevated;
+  const border    = isPending  ? `1px dashed ${T.textMuted}`
                   : isConflict ? `1px dashed ${T.rose}99`
-                  : `1px solid ${baseColor}33`;
+                  : `1px solid ${T.border}`;
   const opacity   = isRejected ? 0.4 : 1;
 
   const sizeMap = { sm:['2px 7px','11px',4], md:['3px 10px','12px',5], lg:['5px 13px','13px',6] };
@@ -56937,6 +56930,7 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
       onClick={onClick}
       style={{ position:'relative', display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:99, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'all 0.15s', whiteSpace:'nowrap' }}
     >
+      <GovIcon kind="tag" size={size==='lg'?13:11}/>
       {statusDot}
       {tagDef.name}
       {tagDef.propagationLocked && <span style={{fontSize:9,opacity:.7}}>🔒</span>}
@@ -56949,7 +56943,7 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
         <span onClick={e=>e.stopPropagation()} style={{position:'absolute',top:'100%',left:0,zIndex:600,paddingTop:6,cursor:'default',whiteSpace:'normal',fontWeight:400}}>
           <span style={{display:'block',background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 10px 28px rgba(0,0,0,.28)',padding:'9px 11px',width:224,color:T.text}}>
             <span style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
-              <span style={{width:8,height:8,borderRadius:'50%',background:tagDef.color,display:'block',flexShrink:0}}/>
+              <GovIcon kind="tag" size={12}/>
               <span style={{fontSize:12,fontWeight:700,color:T.text}}>{tagDef.name}</span>
               {tagDef.category&&<span style={{fontSize:10,color:T.textMuted,textTransform:'capitalize'}}>· {tagDef.category}</span>}
             </span>
@@ -57174,11 +57168,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
     setDeleteConfirm(null);
     onToast('Classification deleted','success');
   };
-  const getCatStyle = (cat) => {
-    if(catMeta[cat]?.color) return {color:catMeta[cat].color, bg:catMeta[cat].color+'1a'};
-    const MAP = { sensitivity:{color:T.rose,bg:T.roseDim}, regulatory:{color:T.amber,bg:T.amberDim}, business:{color:T.blue,bg:T.blueDim} };
-    return MAP[cat] || {color:T.textSub, bg:T.bgElevated};
-  };
+  const getCatStyle = () => ({color:T.textSub, bg:T.bgElevated});
 
   const openEditCat = (cat) => { const m=catMeta[cat]||{}; setEditingCat(cat); setNewCatDraft({name:cat,description:m.description||'',color:m.color||'#6366f1',owners:m.owners||[],stewards:m.stewards||[]}); setNewPanelOpen(false); setNewCatPanelOpen(true); };
   const openAddTagIn = (cat) => { setNewDraft(d=>({...d,category:cat})); setNewCatInput(''); setNewCatPanelOpen(false); setSelTagId(null); setNewPanelOpen(true); };
@@ -57356,7 +57346,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                           onMouseLeave={()=>setHovItem(null)}>
                           <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                             style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 30px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
-                            {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
+                            <GovIcon kind="tag" size={12}/>
                             <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                             {td.system&&<span title="Platform system tag — cannot be deleted" style={{fontSize:8.5,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,letterSpacing:'0.04em'}}>SYS</span>}
                             <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
@@ -57405,7 +57395,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                         onMouseLeave={()=>setHovItem(null)}>
                         <button onClick={()=>{setSelTagId(td.id);setSelCatId(null);setDetailTab('overview');setEditing(false);setEditDraft(null);setNewPanelOpen(false);setNewCatPanelOpen(false);}}
                           style={{flex:1,display:'flex',alignItems:'center',gap:7,padding:'5px 6px 5px 14px',background:'none',border:'none',cursor:'pointer',textAlign:'left',minWidth:0}}>
-                          {td.color&&<span style={{width:8,height:8,borderRadius:'50%',background:td.color,flexShrink:0,display:'block'}}/>}
+                          <GovIcon kind="tag" size={12}/>
                           <span style={{flex:1,fontSize:12,fontWeight:isSel?600:400,color:isSel?T.text:T.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                           {td.system&&<span title="Platform system tag — cannot be deleted" style={{fontSize:8.5,fontWeight:700,padding:'1px 5px',borderRadius:99,background:T.roseDim,color:T.rose,flexShrink:0,letterSpacing:'0.04em'}}>SYS</span>}
                           <span style={{fontSize:10,color:T.textMuted,flexShrink:0,fontFamily:"'Geist Mono',monospace",marginRight:2}}>{cnt}</span>
@@ -57456,9 +57446,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
           {selCatId&&!selTag&&(()=>{
             const catTags = tagDefs.filter(td=>td.category===selCatId);
             const meta = catMeta[selCatId]||{};
-            // The classification's own colour if one was saved, else the colour its tags carry.
-            const catColor = meta.color || (catTags.find(td=>td.color)||{}).color;
-            const cc = catColor ? {color:catColor, bg:catColor+'1a'} : getCatStyle(selCatId);
+                        const cc = getCatStyle();
             const ownersOf = td => Array.isArray(td.owners)&&td.owners.length ? td.owners : (td.owner?[td.owner]:[]);
             const catOwners = (meta.owners&&meta.owners.length) ? meta.owners : [...new Set(catTags.flatMap(ownersOf))];
             const statusOf = td => td.cert||'Draft';
@@ -57492,7 +57480,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                 <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:16}}>
                   <div style={{display:'flex',alignItems:'center',gap:16,minWidth:0}}>
                     <div style={{width:56,height:56,borderRadius:16,background:cc.bg||T.bgElevated,border:`1px solid ${(cc.color||T.border)}33`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                      <span style={{width:18,height:18,borderRadius:'50%',background:cc.color||T.accent,display:'block'}}/>
+                      <GovIcon kind="tag" size={22}/>
                     </div>
                     <div style={{minWidth:0}}>
                       <div style={{fontSize:22,fontWeight:700,color:T.text,letterSpacing:'-0.3px',marginBottom:4,textTransform:'capitalize'}}>{selCatId}</div>
@@ -57586,7 +57574,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                             style={{display:'flex',alignItems:'center',padding:'10px 16px',borderBottom:i<catTags.length-1?`1px solid ${T.border}`:'none',cursor:'pointer',transition:'background .1s'}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                             <div style={{flex:1,minWidth:0,display:'flex',alignItems:'center',gap:8}}>
-                              <span style={{width:9,height:9,borderRadius:'50%',background:td.color||cc.color,flexShrink:0,display:'block'}}/>
+                              <GovIcon kind="tag" size={12}/>
                               <span style={{fontSize:13,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{td.name}</span>
                             </div>
                             <div style={{width:130}}>
@@ -57610,7 +57598,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
           {/* ── Tag detail panel ── */}
           {selTag&&(()=>{
             // The tag's own colour wins, so the chips match the colour picked when it was created.
-            const cc  = selTag.color ? {color:selTag.color, bg:selTag.color+'1a'} : getCatStyle(selTag.category);
+            const cc  = getCatStyle();
             const draft = editing ? editDraft : selTag;
             const affectedAssets = ASSETS.filter(a=>Object.values(assignments).flat().some(asn=>asn.tagId===selTag.id&&asn.status!=='rejected'&&(asn.assetId===a.id||asn.assetName===a.name)));
             // Columns carrying this tag, listed beside the tables and counted with them.
@@ -57760,7 +57748,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       <div ref={catDropRef} style={{padding:'16px',borderBottom:`1px solid ${T.border}`,position:'relative'}}>
                         <SideLabel ch="Classification" onEdit={()=>{setCatDropOpen(o=>!o);setCatDropSearch('');}}/>
                         {selTag.category
-                          ? (()=>{const cc=selTag.color?{color:selTag.color,bg:selTag.color+'1a'}:getCatStyle(selTag.category);return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
+                          ? (()=>{const cc=getCatStyle();return <span style={{display:'inline-flex',alignItems:'center',fontSize:12,fontWeight:600,padding:'3px 10px',borderRadius:5,background:cc.bg,color:cc.color,border:`1px solid ${cc.color}44`,textTransform:'capitalize'}}>{selTag.category}</span>;})()
                           : <span style={{fontSize:12,color:T.textMuted,fontStyle:'italic'}}>Unclassified</span>}
                         {catDropOpen&&(
                           <div style={{position:'absolute',top:'calc(100% - 6px)',left:16,right:16,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,boxShadow:'0 8px 24px rgba(0,0,0,.18)',zIndex:200,overflow:'hidden'}}>
@@ -57775,7 +57763,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                                   <button key={cat} onClick={()=>{updateTagDef(selTag.id,{category:cat});setCatDropOpen(false);setCatDropSearch('');onToast(`Moved to ${cat}`,'success');}}
                                     style={{width:'100%',display:'flex',alignItems:'center',gap:8,padding:'7px 12px',background:sel?T.accentDim:'transparent',border:'none',cursor:'pointer',textAlign:'left'}}
                                     onMouseEnter={e=>{if(!sel)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!sel)e.currentTarget.style.background='transparent';}}>
-                                    <span style={{width:9,height:9,borderRadius:'50%',background:cc.color,flexShrink:0,display:'block'}}/>
+                                    <GovIcon kind="tag" size={12}/>
                                     <span style={{flex:1,fontSize:12,color:T.text,textTransform:'capitalize'}}>{cat}</span>
                                     {sel&&<span style={{fontSize:11,color:T.accent}}>✓</span>}
                                   </button>
@@ -58123,15 +58111,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={newCatDraft.stewards||[]} setPeople={v=>setNewCatDraft(d=>({...d,stewards:v}))}/>
                   </div>
                 </div>
-                <div>
-                  <label style={{display:'block',fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Color</label>
-                  <div style={{display:'flex',gap:7}}>
-                    {['#ee2424','#d97706','#16a34a','#2563eb','#7c3aed','#6366f1','#0891b2','#6b7280'].map(c=>(
-                      <button key={c} onClick={()=>setNewCatDraft(d=>({...d,color:c}))} style={{width:26,height:26,borderRadius:'50%',background:c,border:newCatDraft.color===c?`3px solid ${T.text}`:'3px solid transparent',cursor:'pointer',padding:0,flexShrink:0,transition:'border .12s'}}/>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                              </div>
             </div>
             <div style={{padding:'14px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
               <button onClick={()=>setNewCatPanelOpen(false)} style={{padding:'8px 18px',borderRadius:8,background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:'pointer',fontWeight:500}}>Cancel</button>
@@ -59019,7 +58999,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"Governance assets"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.
@@ -59041,9 +59021,9 @@ const aidSources = () => {
     if(types.some(t=>aidFamilyOf({type:t})==="table")) types.splice(types.filter(t=>famIx(t)<=1).length, 0, aidColType(k));
     return {k, l:AID_SOURCE_LABEL[k]||k, types};
   });
-  _aidSources.unshift({k:"edg", l:AID_SOURCE_LABEL.edg, types:AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)).flatMap(x=>x.types)});
   return _aidSources;
 };
+const AID_GOV_TYPES = AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)).flatMap(x=>x.types);
 const aidTypeFamily = (svc, t) => t===aidColType(aidSvc(svc)) ? "column" : aidFamilyOf({type:t});
 const aidObjOn = (svc, type) => !(_aidState.settings.typesOff||{})[`${aidSvc(svc)}|${type}`];
 
@@ -61997,8 +61977,10 @@ const AIDescSettings = ({onToast}) => {
   const sources = aidSources();
   const [src, setSrc] = useState(sources[0].k);
   const srcDef = sources.find(x=>x.k===src) || sources[0];
-  const [type, setType] = useState(srcDef.types[0]);
-  const fam = aidTypeFamily(src, type) || "table";
+  const [srcType, setType] = useState(srcDef.types[0]);
+  const [gov, setGov] = useState("");   // a governance asset, picked instead of a source + object type
+  const type = gov || srcType;
+  const fam = (gov ? aidFamilyOf({type:gov}) : aidTypeFamily(src, srcType)) || "table";
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
   const setInput = (level, k) => put({inputs:{...S.inputs, [level]:{...S.inputs[level], [k]:!S.inputs[level][k]}}});
   const savePrompt = (k, v) => { put({prompts:{...S.prompts, [k]:v}}); onToast(v===AID_DEFAULT_PROMPTS[k]?"Prompt reset to default":"Prompt saved","success"); };
@@ -62010,24 +61992,31 @@ const AIDescSettings = ({onToast}) => {
   const pk = fam==="table" ? S.length : fam;      // which prompt this family uses
   const action = fam==="column" ? "Describe columns" : "Suggest description";
   // every source + type that shares these inputs and this prompt
-  const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
+  const shared = gov ? [gov] : sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
 
   return (
     <div style={{maxWidth:900}}>
       <div>
         {/* 1 · Model inputs — per source and object type */}
         <AIDCard title="Model inputs">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
             <div>
               <label style={lab}>Source</label>
-              <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); }} style={sel}>
+              <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); setGov(""); }} style={sel}>
                 {sources.map(x=><option key={x.k} value={x.k}>{x.l}</option>)}
               </select>
             </div>
             <div>
               <label style={lab}>Object type</label>
-              <select value={type} onChange={e=>setType(e.target.value)} style={sel}>
+              <select value={srcType} onChange={e=>{ setType(e.target.value); setGov(""); }} style={sel}>
                 {srcDef.types.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lab}>Governance assets</label>
+              <select value={gov} onChange={e=>setGov(e.target.value)} style={sel}>
+                <option value="">Select</option>
+                {AID_GOV_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
           </div>
