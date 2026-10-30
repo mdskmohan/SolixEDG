@@ -61978,7 +61978,9 @@ const AIDescSettings = ({onToast}) => {
   const [src, setSrc] = useState(sources[0].k);
   const srcDef = sources.find(x=>x.k===src) || sources[0];
   const [srcType, setType] = useState(srcDef.types[0]);
-  const [gov, setGov] = useState("");   // a governance asset, picked instead of a source + object type
+  const [group, setGroup] = useState("catalog");   // catalog assets come from a source; governance assets live in EDG
+  const [govType, setGovType] = useState(AID_GOV_TYPES[0]);
+  const gov = group==="governance" ? govType : "";
   const type = gov || srcType;
   const fam = (gov ? aidFamilyOf({type:gov}) : aidTypeFamily(src, srcType)) || "table";
   const put = (patch) => aidSet(s=>({...s, settings:{...s.settings, ...patch}}));
@@ -62001,23 +62003,29 @@ const AIDescSettings = ({onToast}) => {
         <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
             <div>
-              <label style={lab}>Source</label>
-              <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); setGov(""); }} style={sel}>
-                {sources.map(x=><option key={x.k} value={x.k}>{x.l}</option>)}
+              <label style={lab}>Asset category</label>
+              <select value={group} onChange={e=>setGroup(e.target.value)} style={sel}>
+                <option value="catalog">Catalog assets</option>
+                <option value="governance">Governance assets</option>
               </select>
             </div>
+            {group==="catalog"&&(
+              <div>
+                <label style={lab}>Source</label>
+                <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); }} style={sel}>
+                  {sources.map(x=><option key={x.k} value={x.k}>{x.l}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label style={lab}>Object type</label>
-              <select value={srcType} onChange={e=>{ setType(e.target.value); setGov(""); }} style={sel}>
-                {srcDef.types.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={lab}>Governance assets</label>
-              <select value={gov} onChange={e=>setGov(e.target.value)} style={sel}>
-                <option value="">Select</option>
-                {AID_GOV_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
+              {group==="catalog"
+                ? <select value={srcType} onChange={e=>setType(e.target.value)} style={sel}>
+                    {srcDef.types.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                : <select value={govType} onChange={e=>setGovType(e.target.value)} style={sel}>
+                    {AID_GOV_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>}
             </div>
           </div>
 
