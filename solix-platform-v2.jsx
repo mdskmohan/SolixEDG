@@ -13837,7 +13837,7 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
         const tagRenderOpt=(t,sel)=>(
           <span style={{flex:1,fontSize:12.5,color:sel?T.accent:T.text,fontWeight:sel?600:400}}>{t}</span>
         );
-        const CatFormBody=({draft,setDraft})=>(
+        const CatFormBody=({draft,setDraft,noDesc})=>(
           <div style={{display:"flex",flexDirection:"column",gap:18}}>
             <div>
               <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Category Name <span style={{color:T.rose}}>*</span></label>
@@ -13846,13 +13846,13 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                 style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box"}}
                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
             </div>
-            <div>
+            {!noDesc&&<div>
               <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6}}>Description <span style={{color:T.textMuted,fontWeight:400}}>(optional)</span></label>
               <textarea value={draft.description} onChange={e=>setDraft(d=>({...d,description:e.target.value}))} rows={3}
                 placeholder="What kinds of policies belong in this category?"
                 style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12.5,outline:"none",resize:"none",fontFamily:"inherit",lineHeight:1.6,boxSizing:"border-box"}}
                 onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-            </div>
+            </div>}
             <div>
               <label style={{display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:8}}>Color</label>
               <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
@@ -13910,7 +13910,12 @@ const PolicyManagerView = ({onToast, onNav, deepLinkPolicyId}) => {
                   <button onClick={()=>setPolEditCatOpen(false)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",fontSize:20,lineHeight:1,padding:"0 4px"}}>×</button>
                 </div>
                 <div style={{flex:1,overflowY:"auto",padding:"20px"}}>
-                  {CatFormBody({draft:polEditCatDraft,setDraft:setPolEditCatDraft})}
+                  <DescSection key={polEditCatDraft.id||polEditCatDraft._origName} text={polEditCatDraft.description} onToast={onToast} style={{marginBottom:18}}
+                    onSave={t=>{ setPolEditCatDraft(d=>d&&({...d,description:t})); setPolicyCategories(prev=>prev.map(c=>c.name===polEditCatDraft._origName?{...c,description:t}:c)); }}
+                    obj={{name:"polcat:"+(polEditCatDraft.id||polEditCatDraft._origName), label:polEditCatDraft._origName, kind:"Policy category",
+                          related:policies.filter(x=>x.category===polEditCatDraft._origName).map(x=>x.name),
+                          owners:polEditCatDraft.owners||[], stewards:polEditCatDraft.stewards||[], description:polEditCatDraft.description}}/>
+                  {CatFormBody({draft:polEditCatDraft,setDraft:setPolEditCatDraft,noDesc:true})}
                 </div>
                 <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end",background:T.bgSurface,flexShrink:0}}>
                   <button onClick={()=>setPolEditCatOpen(false)} style={{padding:"8px 18px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,cursor:"pointer",fontWeight:500}}>Cancel</button>
@@ -43088,8 +43093,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
             <div style={{flex:1,display:"flex",overflow:"hidden"}}>
               <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
                 <DescSection key={mdl.id} text={mdl.desc} onToast={onToast} onSave={t=>patchModel({desc:t})} style={{marginBottom:16}}
-                  obj={{name:"semantic:"+mdl.id, label:mdl.name, kind:"Semantic model", related:(mdl.datasets||[]).map(d=>d.name||d),
-                        linked:mMetrics.map(x=>x.name), owner:mdl.owner, owners:[mdl.owner].filter(Boolean), stewards:mdl.stewards||[], description:mdl.desc}}/>
+                  obj={{name:"semantic:"+mdl.id, label:mdl.name, kind:"Semantic model", owners:[mdl.owner].filter(Boolean), stewards:mdl.stewards||[]}}/>
 
                 <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                   <SH title="What these datasets mean"
@@ -58772,13 +58776,14 @@ Rules:
 - Plain, neutral language. No first person, no marketing words, no Markdown.
 
 Output: follow the Length line in the request. Short — one or two sentences, at most 60 words. Detailed — one paragraph of three to five sentences, at most 120 words. Return the description text only.`,
-  semanticmodel: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
+  policycategory: `You write descriptions for a governed data catalog. Readers are business users, analysts and data stewards.
 
-Task: describe the semantic model in the metadata below.
+Task: describe the policy category in the metadata below.
 
 Rules:
 - Use only the metadata provided. Never invent policies, regulations, owners or business rules.
-- Say what business questions it can answer, based on its datasets and metrics.
+- Say what kinds of policies belong in the category, based on the policies it holds.
+- Never state or imply that these policies make the organization compliant.
 - Do not restate the name as the description.
 - If the metadata is too thin to be sure, say what it appears to be and that it needs confirmation.
 - Plain, neutral language. No first person, no marketing words, no Markdown.
@@ -58842,9 +58847,9 @@ const AID_FAMILIES = [
   {k:"domain",         l:"Domains",         types:["Domain"]},
   {k:"dataproduct",    l:"Data products",   types:["Data product"]},
   {k:"policy",         l:"Policies",        types:["Policy"]},
-  {k:"semanticmodel",  l:"Semantic models", types:["Semantic model"]},
+  {k:"policycategory", l:"Policy categories", types:["Policy category"]},
 ];
-const AID_GOV_FAMS = ["term","glossary","tag","classification","domain","dataproduct","policy","semanticmodel"];
+const AID_GOV_FAMS = ["term","glossary","tag","classification","domain","dataproduct","policy","policycategory"];
 const aidFamilyOf = (o) => {
   if(!o) return null;
   if(o.aidFamily) return o.aidFamily;
@@ -58963,10 +58968,9 @@ const AID_PRODUCT_INPUTS = [
   {k:"owner",      l:"Owner",                 ex:"maya.chen"},
   {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
 ];
-const AID_SEMANTIC_INPUTS = [
-  {k:"name",       l:"Model name",            ex:"Retail Sales 360", required:true},
-  {k:"related",    l:"Datasets",              ex:"orders, customers, products, …"},
-  {k:"linked",     l:"Metrics",               ex:"12, e.g. Net Revenue, Orders"},
+const AID_POLICY_CATEGORY_INPUTS = [
+  {k:"name",       l:"Category name",         ex:"Data Privacy", required:true},
+  {k:"related",    l:"Policies",              ex:"PII Data Handling, Consent Tracking"},
   {k:"owner",      l:"Owner",                 ex:"maya.chen"},
   {k:"existing",   l:"Current description",   ex:"Only when rewriting"},
 ];
@@ -58982,7 +58986,7 @@ const AID_POLICY_INPUTS = [
 const AID_INPUTS = {table:AID_TABLE_INPUTS, column:AID_COLUMN_INPUTS, container:AID_CONTAINER_INPUTS, file:AID_FILE_INPUTS,
                     bi:AID_BI_INPUTS, pipeline:AID_PIPELINE_INPUTS, metric:AID_METRIC_INPUTS,
                     term:AID_TERM_INPUTS, glossary:AID_GLOSSARY_INPUTS, tag:AID_TAG_INPUTS, classification:AID_CLASSIFICATION_INPUTS,
-                    domain:AID_DOMAIN_INPUTS, dataproduct:AID_PRODUCT_INPUTS, policy:AID_POLICY_INPUTS, semanticmodel:AID_SEMANTIC_INPUTS};
+                    domain:AID_DOMAIN_INPUTS, dataproduct:AID_PRODUCT_INPUTS, policy:AID_POLICY_INPUTS, policycategory:AID_POLICY_CATEGORY_INPUTS};
 const aidAllOn = (list) => Object.fromEntries(list.map(x=>[x.k, x.def!==false]));
 // Asking for a suggestion follows the existing "edit description" permission —
 // there is no separate AI permission to manage.
@@ -59327,14 +59331,14 @@ const aidFamilyText = (fam, F, on, o, variant) => {
     if(fam==="classification") out.push(has("related") ? `Classification that groups the tags ${F.related}.` : `Classification for ${nm}.${thin}`);
     if(fam==="domain") out.push(`Business domain for ${nm} data${has("related")?`, including ${F.related}`:""}.`);
     if(fam==="dataproduct") out.push(`Data product that delivers ${nm}${has("parent")?` for the ${F.parent} domain`:""}.`);
-    if(fam==="semanticmodel") out.push(has("related") ? `Semantic model over ${F.related}.` : `Semantic model for ${nm}.${thin}`);
+    if(fam==="policycategory") out.push(has("related") ? `Policy category that holds ${F.related}.` : `Policy category for ${nm}.${thin}`);
     if(fam==="policy"){
       const area = has("scope") ? ` on ${F.scope} data` : "";
       out.push(has("rules") ? `Policy${area} with these rules: ${F.rules}.` : `Policy${area} for ${nm}.${thin}`);
       if(has("regulations")) out.push(`Mapped to ${F.regulations}.`);
       if(has("category")) out.push(`Category: ${F.category}.`);
     }
-    if(has("linked")) out.push(`${fam==="tag"?"Applied to":fam==="dataproduct"?"Bundles":fam==="semanticmodel"?"Defines":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,fam==="semanticmodel"?"$1 metrics, including":"$1 assets, including")}.`);
+    if(has("linked")) out.push(`${fam==="tag"?"Applied to":fam==="dataproduct"?"Bundles":"Linked to"} ${F.linked.replace(/^(\d+), e\.g\./,"$1 assets, including")}.`);
   }
   if(has("tags") && !AID_GOV_FAMS.includes(fam)) out.push(`Tagged ${F.tags}.`);
   if(has("owner")) out.push(`Owned by ${F.owner}.`);
