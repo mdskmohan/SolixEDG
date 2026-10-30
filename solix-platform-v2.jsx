@@ -59019,7 +59019,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"EDG governance objects"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"Governance assets"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.
@@ -59041,7 +59041,7 @@ const aidSources = () => {
     if(types.some(t=>aidFamilyOf({type:t})==="table")) types.splice(types.filter(t=>famIx(t)<=1).length, 0, aidColType(k));
     return {k, l:AID_SOURCE_LABEL[k]||k, types};
   });
-  _aidSources.push({k:"edg", l:AID_SOURCE_LABEL.edg, types:AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)).flatMap(x=>x.types)});
+  _aidSources.unshift({k:"edg", l:AID_SOURCE_LABEL.edg, types:AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)).flatMap(x=>x.types)});
   return _aidSources;
 };
 const aidTypeFamily = (svc, t) => t===aidColType(aidSvc(svc)) ? "column" : aidFamilyOf({type:t});
@@ -62011,43 +62011,11 @@ const AIDescSettings = ({onToast}) => {
   const action = fam==="column" ? "Describe columns" : "Suggest description";
   // every source + type that shares these inputs and this prompt
   const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
-  // Every object's fields on one screen; a row opens that object's switches and prompt below.
-  const inputsRef = useRef(null);
-  const openFam = (k) => {
-    const d = sources.find(x=>x.types.some(t=>aidTypeFamily(x.k,t)===k));
-    if(!d) return;
-    setSrc(d.k); setType(d.types.find(t=>aidTypeFamily(d.k,t)===k));
-    inputsRef.current && inputsRef.current.scrollIntoView({behavior:"smooth",block:"start"});
-  };
-  const famRow = (x) => {
-    const fields = AID_INPUTS[x.k].filter(i=>i.required||S.inputs[x.k][i.k]);
-    const active = x.k===fam;
-    return (
-      <button key={x.k} onClick={()=>openFam(x.k)} style={{display:"grid",gridTemplateColumns:"190px 1fr 56px",gap:12,alignItems:"center",width:"100%",padding:"9px 10px",textAlign:"left",cursor:"pointer",fontFamily:"inherit",
-          background:active?T.accentDim:"transparent",border:"none",borderTop:`1px solid ${T.border}`}}>
-        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{x.l}</span>
-        <span style={{display:"flex",flexWrap:"wrap",gap:4}}>
-          {fields.map(i=><span key={i.k} title={i.ex} style={{fontSize:10.5,color:T.textSub,padding:"1px 7px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>{i.l}</span>)}
-        </span>
-        <span style={{fontSize:10.5,color:T.textMuted,textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>{fields.length} / {AID_INPUTS[x.k].length}</span>
-      </button>
-    );
-  };
-  const hasSource = (x) => sources.some(d=>d.types.some(t=>aidTypeFamily(d.k,t)===x.k));
 
   return (
     <div style={{maxWidth:900}}>
       <div>
-        {/* Everything sent, per object */}
-        <AIDCard title="Fields sent to the model">
-          <div style={{...cap,margin:"0 0 6px"}}>Governance objects</div>
-          {AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)&&hasSource(x)).map(famRow)}
-          <div style={{...cap,margin:"16px 0 6px"}}>Catalog objects</div>
-          {AID_FAMILIES.filter(x=>!AID_GOV_FAMS.includes(x.k)&&hasSource(x)).map(famRow)}
-        </AIDCard>
-
         {/* 1 · Model inputs — per source and object type */}
-        <div ref={inputsRef} style={{scrollMarginTop:12}}/>
         <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
             <div>
