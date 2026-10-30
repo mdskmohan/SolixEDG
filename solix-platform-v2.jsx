@@ -18042,7 +18042,7 @@ const AssetSampleData = ({asset}) => {
 
   if(!cfg.on) return (
     <div className="fadeIn"><Card2 style={{padding:"40px 24px",textAlign:"center"}}>
-      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>Sample data disabled</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>Data Preview disabled</div>
       <div style={{fontSize:12.5,color:T.textMuted}}>Disabled for {conn} in Settings › Connections › Configuration.</div>
     </Card2></div>
   );
@@ -26522,7 +26522,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
       ]
     : [
         {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},
-        ...(SD_TYPES.has(asset.type)&&sdSupported(asset.service)?[{key:"sample",label:"Sample Data"}]:[]),
+        ...(SD_TYPES.has(asset.type)&&sdSupported(asset.service)?[{key:"sample",label:"Data Preview"}]:[]),
         {key:"lineage",label:"Lineage"},
         ...(dbtOnTable?[{key:"dbt",label:"dbt"}]:[]),
         ...(glueOnTable?[{key:"glue",label:"Glue"}]:[]),
@@ -37498,10 +37498,10 @@ const IntegrationsView = ({onToast, deepLinkConnName})=>{
                   ))}
                 </div>
                 {sdSupported(configTarget&&configTarget.name)&&<>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Sample Data</div>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Data Preview</div>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:22}}>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7}}>
-                      <span style={{fontSize:11.5,color:T.textSub}}>Show sample data</span>
+                      <span style={{fontSize:11.5,color:T.textSub}}>Show data preview</span>
                       <Toggle on={sdCfg.on} onChange={()=>sdSet(configTarget.name,{on:!sdCfg.on})}/>
                     </div>
                     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,opacity:sdCfg.on?1:.5}}>
@@ -44905,7 +44905,7 @@ const AddServiceWizard = ({onClose, onDone}) => {
     caps.endorsements&&{key:"endorsements", label:"Endorsements",
       desc:"Read Promoted and Certified endorsements from the tenant. They stay read-only: EDG certification is separate and lives on the asset.",
       value:enableTagSync, setter:setEnableTagSync},
-    (scope.objectTypes||[]).includes("Tables")&&{key:"sample", label:"Sample data",
+    (scope.objectTypes||[]).includes("Tables")&&{key:"sample", label:"Data preview",
       desc:"Preview rows on table and view profiles. Queried from the source when opened; not stored in EDG.",
       value:enableSample, setter:setEnableSample},
     // Structured sources only: classification needs columns.
@@ -46328,12 +46328,12 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
 
           {/* ── Sample data ── */}
           {sdSupported(svc.name)&&(<>
-            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Sample Data</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10,marginTop:4}}>Data Preview</div>
             <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",marginBottom:20}}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
-                <Toggle on={sdCfg.on} onChange={()=>{ sdSet(svc.name,{on:!sdCfg.on}); onToast(sdCfg.on?"Sample data turned off for this connection":"Sample data on for tables and views","info"); }}/>
+                <Toggle on={sdCfg.on} onChange={()=>{ sdSet(svc.name,{on:!sdCfg.on}); onToast(sdCfg.on?"Data preview turned off for this connection":"Data preview on for tables and views","info"); }}/>
                 <div style={{flex:1}}>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Show sample data</div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Show data preview</div>
                   <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Tables and views · queried live, not stored</div>
                 </div>
                 {sdCfg.on&&<>
@@ -59015,7 +59015,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"EDG"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", edg:"EDG governance objects"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.
@@ -62007,11 +62007,43 @@ const AIDescSettings = ({onToast}) => {
   const action = fam==="column" ? "Describe columns" : "Suggest description";
   // every source + type that shares these inputs and this prompt
   const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
+  // Every object's fields on one screen; a row opens that object's switches and prompt below.
+  const inputsRef = useRef(null);
+  const openFam = (k) => {
+    const d = sources.find(x=>x.types.some(t=>aidTypeFamily(x.k,t)===k));
+    if(!d) return;
+    setSrc(d.k); setType(d.types.find(t=>aidTypeFamily(d.k,t)===k));
+    inputsRef.current && inputsRef.current.scrollIntoView({behavior:"smooth",block:"start"});
+  };
+  const famRow = (x) => {
+    const fields = AID_INPUTS[x.k].filter(i=>i.required||S.inputs[x.k][i.k]);
+    const active = x.k===fam;
+    return (
+      <button key={x.k} onClick={()=>openFam(x.k)} style={{display:"grid",gridTemplateColumns:"190px 1fr 56px",gap:12,alignItems:"center",width:"100%",padding:"9px 10px",textAlign:"left",cursor:"pointer",fontFamily:"inherit",
+          background:active?T.accentDim:"transparent",border:"none",borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:12,fontWeight:600,color:T.text}}>{x.l}</span>
+        <span style={{display:"flex",flexWrap:"wrap",gap:4}}>
+          {fields.map(i=><span key={i.k} title={i.ex} style={{fontSize:10.5,color:T.textSub,padding:"1px 7px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`}}>{i.l}</span>)}
+        </span>
+        <span style={{fontSize:10.5,color:T.textMuted,textAlign:"right",fontFamily:"'Geist Mono',monospace"}}>{fields.length} / {AID_INPUTS[x.k].length}</span>
+      </button>
+    );
+  };
+  const hasSource = (x) => sources.some(d=>d.types.some(t=>aidTypeFamily(d.k,t)===x.k));
 
   return (
     <div style={{maxWidth:900}}>
       <div>
+        {/* Everything sent, per object */}
+        <AIDCard title="Fields sent to the model">
+          <div style={{...cap,margin:"0 0 6px"}}>Governance objects</div>
+          {AID_FAMILIES.filter(x=>AID_GOV_FAMS.includes(x.k)&&hasSource(x)).map(famRow)}
+          <div style={{...cap,margin:"16px 0 6px"}}>Catalog objects</div>
+          {AID_FAMILIES.filter(x=>!AID_GOV_FAMS.includes(x.k)&&hasSource(x)).map(famRow)}
+        </AIDCard>
+
         {/* 1 · Model inputs — per source and object type */}
+        <div ref={inputsRef} style={{scrollMarginTop:12}}/>
         <AIDCard title="Model inputs">
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:660}}>
             <div>
