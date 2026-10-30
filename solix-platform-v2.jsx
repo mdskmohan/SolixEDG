@@ -3809,7 +3809,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                     const rel=terms.find(t=>t.id===rid);if(!rel)return null;
                     const rcm=CERT_META[rel.cert]||CERT_META.Draft;
                     return (<div key={rid} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,transition:"border-color .1s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"55"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                      <button onClick={()=>goToTerm(rid)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:0}}><span style={{fontSize:12.5,fontWeight:600,color:T.accent}}>{rel.term}</span><span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:99,background:rcm.bg,color:rcm.color,border:`1px solid ${rcm.border}`}}>{rcm.icon}</span></button>
+                      <button onClick={()=>goToTerm(rid)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:0}}><GovIcon kind="term" size={12}/><span style={{fontSize:12.5,fontWeight:500,color:T.text}}>{rel.term}</span><span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:99,background:rcm.bg,color:rcm.color,border:`1px solid ${rcm.border}`}}>{rcm.icon}</span></button>
                       <button onClick={()=>patchTerm(term.id,{relatedTerms:(term.relatedTerms||[]).filter(id=>id!==rid)})} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0,display:"flex",marginLeft:2}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><IcX s={9}/></button>
                     </div>);
                   })}
@@ -3928,9 +3928,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             {/* GLOSSARY */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
               <SideLabel ch="Glossary"/>
-              <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"4px 12px 4px 9px",borderRadius:5,background:`${T.accent}0f`,borderTop:`1px solid ${T.accent}20`,borderRight:`1px solid ${T.accent}20`,borderBottom:`1px solid ${T.accent}20`,borderLeft:`3px solid ${T.accent}`}}>
+              <div style={{display:"inline-flex",alignItems:"center",gap:7,padding:"4px 12px 4px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`}}>
                 <span style={{fontSize:13}}>{termGlossary?.icon}</span>
-                <span style={{fontSize:12,fontWeight:600,color:T.accent}}>{termGlossary?.name||term.domain}</span>
+                <span style={{fontSize:12,fontWeight:500,color:T.textSub}}>{termGlossary?.name||term.domain}</span>
               </div>
             </div>
 
@@ -28157,7 +28157,7 @@ const AnalyticsView = ()=>{
                   </div>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                     {catCounts.map(({cat,count})=>(
-                      <span key={cat} style={{fontSize:10.5,padding:"2px 8px",borderRadius:99,background:`${catColors[cat]||T.accent}15`,color:catColors[cat]||T.accent,border:`1px solid ${catColors[cat]||T.accent}33`,textTransform:"capitalize",fontWeight:600}}>{cat}: {count}</span>
+                      <span key={cat} style={{fontSize:10.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,textTransform:"capitalize",fontWeight:600}}>{cat}: {count}</span>
                     ))}
                   </div>
                   {ungoverned>0&&<div style={{fontSize:11.5,color:T.amber,display:"flex",alignItems:"center",gap:5}}>
@@ -57631,7 +57631,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     </div>
                   )}
                   <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:14}}>
-                    <span style={{width:12,height:12,borderRadius:'50%',background:selTag.color,flexShrink:0,display:'block',marginTop:4,boxShadow:`0 0 0 3px ${selTag.color}33`}}/>
+                    <span style={{display:'inline-flex',marginTop:3}}><GovIcon kind="tag" size={16}/></span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                         <span style={{fontSize:17,fontWeight:700,color:T.text}}>{selTag.name}</span>
@@ -57855,7 +57855,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,padding:'10px 14px',background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
                         <span style={{color:T.accent,display:'flex'}}>{Ic.catalog(14)}</span>
                         <span style={{fontSize:13,fontWeight:600,color:T.text}}>{linkedCount} asset{linkedCount!==1?'s':''} tagged with</span>
-                        <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 10px',borderRadius:99,background:(selTag.color||T.accent)+'18',border:`1px solid ${(selTag.color||T.accent)}33`,fontSize:12,fontWeight:600,color:selTag.color||T.accent}}>
+                        <span style={{display:'inline-flex',alignItems:'center',gap:5,padding:'2px 10px',borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,fontWeight:600,color:selTag.color||T.accent}}>
                           {selTag.name}
                         </span>
                       </div>
