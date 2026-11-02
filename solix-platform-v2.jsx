@@ -60644,7 +60644,13 @@ const aicUpstream = (a) => {
 };
 // Only objects that present data inherit from lineage — not tests, projects, folders or containers.
 const aicInherits = (a) => !/test|project|site|workspace|folder|database|schema|catalog|(^| )app$|bucket|container|prefix|directory|pipeline|(^| )flow$|dag|task/i.test(a.type||"");
-const aicLineageCarriers = (a, tag) => (_aicState.settings.inputs||{}).lineage===false ? [] : aicUpstream(a).filter(u=>u.tags.includes(tag) || ((tag==="PII"||AIC_REGULATORY.includes(tag)) && (u.pii || u.tags.includes("PII")))).map(u=>u.name);
+const aicFam = (a) => aidFamilyOf(a) || "table";
+// Whether a family's model input is on. Inputs a family doesn't list are never read.
+const aicInOn = (fam, k) => { const x = (AIC_INPUTS[fam]||[]).find(i=>i.k===k); if(!x) return false; if(x.required) return true;
+  return x.tier ? !!_aicState.settings.tiers[x.tier] : (_aicState.settings.inputs[fam]||{})[k]!==false; };
+// Everything stored under a container, at any depth.
+const aicChildren = (a) => { const pre = `${a.db} / `; return ASSETS.filter(x=>x.id!==a.id && x.connectionLabel===a.connectionLabel && (x.db||"").startsWith(pre)); };
+const aicLineageCarriers = (a, tag) => !aicInOn(aicFam(a),"lineage") ? [] : aicUpstream(a).filter(u=>u.tags.includes(tag) || ((tag==="PII"||AIC_REGULATORY.includes(tag)) && (u.pii || u.tags.includes("PII")))).map(u=>u.name);
 const aicRunScan = (p, st) => {
   if(p.mode==="both") return [...aicRunScan({...p, mode:"existing"}, st), ...aicRunScan({...p, mode:"new"}, st)];
   const lv = aicLevelsOf(p);
@@ -60692,6 +60698,11 @@ const aicRunScan = (p, st) => {
       if(!aicObjLevelOk(p, a)) return;
       const cols = colFind.filter(f=>f.assetId===a.id && f.kind!=="clear");
       const personal = cols.filter(f=>f.tag==="PII");
+      const fam = aicFam(a);
+      // A database or schema has no columns of its own: its evidence is what it holds.
+      const kids = fam==="container" && aicInOn(fam,"childTags") ? aicChildren(a) : [];
+      const kidFind = kids.length && scanDets.length ? aicScan({tiers, valueAllowed:st.settings.valueAllowed, assets:kids, detectors:scanDets}).filter(f=>f.kind!=="clear") : [];
+      const kidsWith = (tag) => kids.filter(k=>(k.tags||[]).includes(tag) || kidFind.some(f=>f.assetId===k.id && f.tag===tag));
       tags.forEach(tag=>{
         const def = aicTagDef(tag);
         let conf = 0, why = "", tier = "meaning", note = "";
@@ -60704,6 +60715,14 @@ const aicRunScan = (p, st) => {
           conf = 0.72; tier = "rollup";
           why = `Holds personal data (${personal.slice(0,3).map(f=>f.col).join(", ")}). ${tag} applies if these people are in its jurisdiction — confirm before accepting.`;
           note = "Personal data in this table";
+        } else if(kidsWith(tag).length || (AIC_REGULATORY.includes(tag) && kidsWith("PII").length)){
+          const direct = kidsWith(tag), held = direct.length ? direct : kidsWith("PII");
+          const names = [...new Set(held.map(k=>k.name))].slice(0,3).join(", ");
+          conf = direct.length ? Math.min(0.92, 0.74 + 0.03*held.length) : 0.7; tier = "children";
+          why = direct.length
+            ? `${held.length} of the ${kids.length} objects it holds carr${held.length>1?"y":"ies"} ${tag}: ${names}.`
+            : `Holds personal data in ${names}. ${tag} applies if these people are in its jurisdiction — confirm before accepting.`;
+          note = `${held.length} of ${kids.length} objects`;
         } else if(!aicHasCols(a) && aicInherits(a) && aicLineageCarriers(a, tag).length){
           const ups = aicLineageCarriers(a, tag);
           conf = 0.8; tier = "lineage";
@@ -60711,8 +60730,8 @@ const aicRunScan = (p, st) => {
           note = `Upstream: ${ups.slice(0,2).join(", ")}${ups.length>2?` +${ups.length-2}`:""}`;
         } else if(!AIC_DETECTORS.some(d=>d.tag===tag)){
           const tw = aicWordsOf(tag);
-          const dom = (a.domain||"").toLowerCase();
-          const aw = new Set([...aicWordsOf(a.name.replace(/_/g," ")), ...aicWordsOf(a.description)]);
+          const dom = aicInOn(fam,"domain") ? (a.domain||"").toLowerCase() : "";
+          const aw = new Set([...aicWordsOf(a.name.replace(/_/g," ")), ...(aicInOn(fam,"desc") ? aicWordsOf(a.description) : [])]);
           if(tw.some(w=>w===dom)){ conf = 0.84; why = `${a.name} belongs to the ${a.domain} domain, which is what "${tag}" means.`; note = `Domain: ${a.domain}`; }
           else { const m = tw.filter(w=>aw.has(w)); if(m.length){ conf = 0.74; why = `The name or description mentions "${m.join(", ")}", which matches "${tag}".`; note = `Matches "${m.join(", ")}"`; } }
         }
@@ -60773,33 +60792,114 @@ const AIC_SEED_STATS = {
 };
 
 const AIC_AUTO_MIN_PRECISION = 0.95;
-const AIC_INPUTS = [
-  {k:"name",     l:"Object name",            ex:"customers", required:true},
-  {k:"type",     l:"Object type",            ex:"Table / View / Report"},
-  {k:"domain",   l:"Domain",                 ex:"Commerce"},
-  {k:"desc",     l:"Object description",     ex:"One row per customer account"},
-  {k:"tags",     l:"Existing tags",          ex:"Customer Data"},
-  {k:"colNames", l:"Column names",           ex:"cust_email, ssn, card_no", tier:"name"},
-  {k:"colTypes", l:"Column data types",      ex:"VARCHAR(255), DATE"},
-  {k:"colDesc",  l:"Column descriptions",    ex:"Customer's primary email"},
-  {k:"fk",       l:"Foreign key references", ex:"orders.customer_id → customers.id", tier:"graph"},
-  {k:"lineage",  l:"Upstream lineage",       ex:"Tags on upstream objects"},
-];
-const AIC_DEFAULT_PROMPT = `You classify data assets for a governed data catalog.
+// Same object families as AI Descriptions, but the model reads the evidence for a tag:
+// no owner or current description fields, plus lineage and tags on contents.
+const AIC_FAMS = ["table","column","container","file","bi","pipeline","metric"];
+const AIC_INPUTS = {
+  table:[
+    {k:"name",     l:"Object name",         ex:"customers", required:true},
+    {k:"type",     l:"Object type",         ex:"Table / View"},
+    {k:"domain",   l:"Domain",              ex:"Commerce"},
+    {k:"desc",     l:"Object description",  ex:"One row per customer account"},
+    {k:"tags",     l:"Existing tags",       ex:"Customer Data"},
+    {k:"colNames", l:"Column names",        ex:"cust_email, ssn, card_no"},
+    {k:"lineage",  l:"Upstream lineage",    ex:"Tags on upstream objects"},
+  ],
+  column:[
+    {k:"name",     l:"Column name",            ex:"cust_email", required:true},
+    {k:"colTypes", l:"Data type",              ex:"VARCHAR(255)"},
+    {k:"colDesc",  l:"Column description",     ex:"Customer's primary email"},
+    {k:"fk",       l:"Foreign key reference",  ex:"orders.customer_id → customers.id", tier:"graph"},
+    {k:"table",    l:"Table name",             ex:"customers"},
+    {k:"domain",   l:"Domain",                 ex:"Commerce"},
+    {k:"tags",     l:"Existing tags",          ex:"PII"},
+  ],
+  container:[
+    {k:"name",       l:"Name",                ex:"COMMERCE", required:true},
+    {k:"type",       l:"Object type",         ex:"Schema"},
+    {k:"connection", l:"Connection",          ex:"Snowflake DWH"},
+    {k:"path",       l:"Path",                ex:"SNOWFLAKE_PROD / COMMERCE"},
+    {k:"domain",     l:"Domain",              ex:"Commerce"},
+    {k:"desc",       l:"Description",         ex:"Order and customer tables"},
+    {k:"tags",       l:"Existing tags",       ex:"Customer Data"},
+    {k:"children",   l:"Child names",         ex:"orders, customers, products, …"},
+    {k:"childTypes", l:"Child object types",  ex:"Table, View"},
+    {k:"childTags",  l:"Tags on contents",    ex:"customers (PII)"},
+    {k:"lineage",    l:"Upstream lineage",    ex:"Tags on upstream objects"},
+  ],
+  file:[
+    {k:"name",       l:"File name",           ex:"contracts_2025.pdf", required:true},
+    {k:"format",     l:"File type",           ex:"PDF"},
+    {k:"path",       l:"Path",                ex:"ecs / legal / contracts_2025.pdf"},
+    {k:"connection", l:"Connection",          ex:"Amazon S3"},
+    {k:"domain",     l:"Domain",              ex:"Finance"},
+    {k:"desc",       l:"Description",         ex:"Signed customer contracts"},
+    {k:"tags",       l:"Existing tags",       ex:"confidential"},
+    {k:"lineage",    l:"Upstream lineage",    ex:"Tags on upstream objects"},
+  ],
+  bi:[
+    {k:"name",     l:"Title",                     ex:"Revenue_Dashboard", required:true},
+    {k:"type",     l:"Object type",               ex:"Dashboard"},
+    {k:"parent",   l:"Workspace or project",      ex:"Revenue_Analytics"},
+    {k:"contains", l:"Contents",                  ex:"Revenue_by_Region (Worksheet)"},
+    {k:"fields",   l:"Fields and measures used",  ex:"revenue, region, cust_email"},
+    {k:"domain",   l:"Domain",                    ex:"Finance"},
+    {k:"desc",     l:"Description",               ex:"Monthly revenue by region"},
+    {k:"tags",     l:"Existing tags",             ex:"KPI"},
+    {k:"lineage",  l:"Upstream lineage",          ex:"Tags on upstream objects"},
+  ],
+  pipeline:[
+    {k:"name",    l:"Name",                ex:"stg_orders", required:true},
+    {k:"type",    l:"Object type",         ex:"dbt Model"},
+    {k:"outputs", l:"Downstream lineage",  ex:"int_orders_enriched"},
+    {k:"sql",     l:"SQL / code",          ex:"Off by default · can contain literal values from filters", def:false},
+    {k:"domain",  l:"Domain",              ex:"Commerce"},
+    {k:"desc",    l:"Description",         ex:"Cleans raw orders"},
+    {k:"tags",    l:"Existing tags",       ex:"staging"},
+    {k:"lineage", l:"Upstream lineage",    ex:"Tags on upstream objects"},
+  ],
+  metric:[
+    {k:"name",       l:"Name",                     ex:"daily_revenue", required:true},
+    {k:"type",       l:"Object type",              ex:"dbt Metric"},
+    {k:"expression", l:"Expression",               ex:"simple · measure revenue_total · grain day"},
+    {k:"parts",      l:"Dimensions and measures",  ex:"order_date, region"},
+    {k:"glossary",   l:"Glossary terms",           ex:"Revenue"},
+    {k:"domain",     l:"Domain",                   ex:"Finance"},
+    {k:"desc",       l:"Description",              ex:"Revenue per day"},
+    {k:"tags",       l:"Existing tags",            ex:"KPI"},
+    {k:"lineage",    l:"Upstream lineage",         ex:"Tags on upstream objects"},
+  ],
+};
+const aicPrompt = (role, task, rules) => `You classify ${role} for a governed data catalog.
 
-Task: suggest tags for the object and for each of its columns in the metadata below. The tag taxonomy is always provided.
+Task: ${task} The tag taxonomy is always provided.
 
 Rules:
 - Use only the metadata provided. You never see data values; do not assume what they contain.
 - Prefer tags from the taxonomy and use each tag's exact name.
 - Suggest a new tag only when a clear business or sensitivity concept is present and no taxonomy tag fits. Give it a short Title Case name, the classification it belongs in, and a one-line description.
-- Columns: judge each one from its name, data type, description and foreign key reference. A column that references an already-tagged column inherits that tag.
-- Object: tag the object when its description, domain, columns or upstream lineage support it. Personal data in any column means the object carries the personal-data tag.
-- Do not suggest a tag the object or column already has.
+${rules.map(r=>`- ${r}`).join("\n")}
+- Do not suggest a tag the target already has.
 - Ambiguous names (id, code, value, flag) are weak evidence: lower the confidence rather than guess.
 - Return nothing for a target with no supported tag.
 
-Output: one entry per suggestion with target (object, or column name), tag, isNew (true/false), classification (new tags only), confidence (0.00–1.00), and reason — one line naming the metadata it relied on.`;
+Output: one entry per suggestion with target, tag, isNew (true/false), classification (new tags only), confidence (0.00–1.00), and reason — one line naming the metadata it relied on.`;
+const AIC_DEFAULT_PROMPTS = {
+  table: aicPrompt("tables and views", "suggest tags for the table or view in the metadata below.",
+    ["Tag the object when its description, domain, columns or upstream lineage support it.", "Personal data in any column means the object carries the personal-data tag."]),
+  column: aicPrompt("columns and fields", "suggest tags for each column or field in the metadata below.",
+    ["Judge each column from its name, data type, description and foreign key reference.", "A column that references an already-tagged column inherits that tag."]),
+  container: aicPrompt("databases, schemas and other containers", "suggest tags for the container in the metadata below.",
+    ["A container carries a sensitivity or regulatory tag when its contents carry it. Name how many of its contents do.", "Tag a business concept only when its name, description or domain states it, or most of its contents share it."]),
+  file: aicPrompt("files and stored objects", "suggest tags for the file in the metadata below.",
+    ["Judge from the file name, type, path and description. You never read the file's contents.", "A path naming a business area (legal, hr, finance) is supporting evidence, not proof of sensitive content."]),
+  bi: aicPrompt("dashboards and reports", "suggest tags for the dashboard or report in the metadata below.",
+    ["A report carries a tag when the fields it uses or its upstream sources carry it.", "Do not infer sensitivity from the title alone."]),
+  pipeline: aicPrompt("pipelines and transformations", "suggest tags for the pipeline or transformation in the metadata below.",
+    ["A transformation carries a tag when its upstream inputs carry it and its code does not remove or mask that data.", "Treat a test or job with no data of its own as having nothing to tag."]),
+  metric: aicPrompt("metrics and semantic models", "suggest tags for the metric or semantic model in the metadata below.",
+    ["Tag business concepts from its expression, parts and glossary terms.", "A metric aggregates its inputs: carry a personal-data tag only when a dimension exposes personal data."]),
+};
 const AIC_AUTO_MIN_DECISIONS = 50;
 const aicPrecision = (s) => { const n=s.accepted+s.rejected; return n ? s.accepted/n : 0; };
 const aicAutoEarned = (s) => (s.accepted+s.rejected) >= AIC_AUTO_MIN_DECISIONS && aicPrecision(s) >= AIC_AUTO_MIN_PRECISION;
@@ -60809,8 +60909,8 @@ let _aicState = {
     // The master switch. A new tenant starts with this OFF and no profile; this
     // demo tenant has been running for a month, so it is on with two.
     enabled:true,
-    prompt: AIC_DEFAULT_PROMPT,
-    inputs:{type:true, domain:true, desc:true, tags:true, colTypes:true, colDesc:true, lineage:true},
+    prompts: {...AIC_DEFAULT_PROMPTS},
+    inputs: Object.fromEntries(AIC_FAMS.map(f=>[f, Object.fromEntries(AIC_INPUTS[f].filter(x=>!x.tier).map(x=>[x.k, x.def!==false]))])),
     tiers:{name:true, value:true, graph:true},
     // Value inspection reads sample data, and some domains cannot permit that.
     // Platform holds the HR tables, where sampling salary and name columns is
@@ -60987,6 +61087,7 @@ let _bgJobJump = null;   // job id → Settings › Background Jobs, drawer open
 // ── Small pieces ──────────────────────────────────────────────────────────────
 const AIC_TIER_META = {
   rollup: {label:"Columns", color:"#7c3aed", title:"Rolled up from what was found in the table's columns"},
+  children:{label:"Contents", color:"#7c3aed", title:"Rolled up from the objects this database, schema or folder holds"},
   meaning:{label:"Meaning", color:"#0d9488", title:"Matched on what the table or column name means — reads no data"},
   name: {label:"Name",  color:"#9090a8", title:"Column name matched a pattern. Reads no data — and proves nothing on its own."},
   value:{label:"Value", color:"#0284c7", title:"Profiled value shapes were inspected. Requires data access."},
@@ -61407,36 +61508,52 @@ const AICEvidence = ({f, pos, total, onPrev, onNext, onDecide, onUndo, decision,
 const AICControlPanel = ({onToast}) => {
   const st = useAic();
   const put = (patch) => aicSet(x=>({...x, settings:{...x.settings, ...patch}, findings:null}));
-  const inputs = st.settings.inputs || {};
-  const inOn = x => x.required || (x.tier ? !!st.settings.tiers[x.tier] : inputs[x.k]!==false);
+  // The sources a scan can pick, with the same object types AI Descriptions lists for them.
+  const scannable = new Set(Object.values(aicSourceList()).map(aidSvc));
+  const sources = aidSources().filter(x=>scannable.has(x.k));
+  const [src, setSrc] = useState(sources[0].k);
+  const srcDef = sources.find(x=>x.k===src) || sources[0];
+  const [type, setType] = useState(srcDef.types[0]);
+  const fam = aidTypeFamily(src, type) || "table";
+  const inputs = st.settings.inputs;
   const flip = x => x.tier ? put({tiers:{...st.settings.tiers, [x.tier]:!st.settings.tiers[x.tier]}})
-                           : put({inputs:{...inputs, [x.k]:!inOn(x)}});
+                           : put({inputs:{...inputs, [fam]:{...inputs[fam], [x.k]:!aicInOn(fam,x.k)}}});
+  const list = AIC_INPUTS[fam];
+  const shared = sources.flatMap(x=>x.types.filter(t=>aidTypeFamily(x.k,t)===fam).map(t=>`${t} (${x.l})`));
+  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,fontFamily:"inherit",cursor:"pointer"};
+  const lab = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:6};
   return (
     <div style={{maxWidth:900}}>
       <div>
-        {/* 2 · Model inputs */}
+        {/* 1 · Model inputs — per source and object type */}
         <AIDCard title="Model inputs">
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:24}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                Object · {AIC_INPUTS.slice(0,5).filter(inOn).length} of 5 on</div>
-              {AIC_INPUTS.slice(0,5).map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={inOn(x)} set={()=>flip(x)}/>)}
+              <label style={lab}>Source</label>
+              <select value={src} onChange={e=>{ const d=sources.find(x=>x.k===e.target.value); setSrc(d.k); setType(d.types[0]); }} style={sel}>
+                {sources.map(x=><option key={x.k} value={x.k}>{x.l}</option>)}
+              </select>
             </div>
             <div>
-              <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:4}}>
-                Columns & relationships · {AIC_INPUTS.slice(5).filter(inOn).length} of {AIC_INPUTS.length-5} on</div>
-              {AIC_INPUTS.slice(5).map((x,i)=><AIDInputRow key={x.k} item={x} first={i===0} on={inOn(x)} set={()=>flip(x)}/>)}
+              <label style={lab}>Object type</label>
+              <select value={type} onChange={e=>setType(e.target.value)} style={sel}>
+                {srcDef.types.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
             </div>
           </div>
+          <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"16px 0 2px"}}>
+            {aidFamLabel(fam)} · {list.filter(x=>aicInOn(fam,x.k)).length} of {list.length} on</div>
+          {shared.length>1&&<div title={shared.join(", ")} style={{fontSize:10.5,color:T.textMuted,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            Shared with {shared.length} object types: {shared.slice(0,6).join(", ")}{shared.length>6?", …":""}</div>}
+          {list.map((x,i)=><AIDInputRow key={fam+x.k} item={x} first={i===0} on={aicInOn(fam,x.k)} set={()=>flip(x)}/>)}
         </AIDCard>
 
-        {/* 3 · Prompt */}
-        <AIDCard title="Prompt" desc="Used for meaning-based matches and new-tag suggestions.">
-          <div style={{marginTop:-14}}>
-            <AIDPromptBox label="Classification prompt" hint="Detector and pattern matches do not use the prompt."
-              value={st.settings.prompt||AIC_DEFAULT_PROMPT} def={AIC_DEFAULT_PROMPT}
-              onSave={v=>{ put({prompt:v}); onToast(v===AIC_DEFAULT_PROMPT?"Prompt reset to default":"Prompt saved","success"); }}/>
-          </div>
+        {/* 2 · Prompt — the prompt for the selected object type */}
+        <AIDCard title="Prompt">
+          <AIDPromptBox key={fam} label={`${aidFamLabel(fam)} prompt`}
+            hint={shared.length>1?`Used for scans of ${type} and the other ${shared.length-1} object types above. Detector and pattern matches do not use the prompt.`:`Used for scans of ${type}. Detector and pattern matches do not use the prompt.`}
+            value={st.settings.prompts[fam]} def={AIC_DEFAULT_PROMPTS[fam]}
+            onSave={v=>{ put({prompts:{...st.settings.prompts, [fam]:v}}); onToast(v===AIC_DEFAULT_PROMPTS[fam]?"Prompt reset to default":"Prompt saved","success"); }}/>
         </AIDCard>
 
         {/* 4 · Model */}
@@ -61463,7 +61580,7 @@ const AICControlPanel = ({onToast}) => {
 // jobs (Settings › Background Jobs). `groups` = [{title, rows:[[field, value]]}].
 const aiModelSnap = (k) => { const m = ((_da.settings||{}).models||{})[k] || DA_SETTINGS_SEED.models[k] || {};
   return {provider:(DA_PROVIDERS[m.provider]||{}).label||m.provider, model:m.model, temp:m.temp, maxTok:m.maxTok}; };
-const AISentToModel = ({model, prompt, promptLabel="Prompt", groups, note}) => {
+const AISentToModel = ({model, prompt, promptLabel="Prompt", prompts, groups, note}) => {
   const head = {fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:".06em",textTransform:"uppercase",margin:"14px 0 6px"};
   const box = {border:`1px solid ${T.border}`,borderRadius:8,background:T.bgSurface,overflow:"hidden"};
   const kv = (k, v, i) => (
@@ -61477,8 +61594,12 @@ const AISentToModel = ({model, prompt, promptLabel="Prompt", groups, note}) => {
       <div style={box}>
         {[["Provider",model.provider],["Model",model.model],["Temperature",model.temp],["Max output tokens",model.maxTok]].map(([k,v],i)=>kv(k,v,i))}
       </div>
-      <div style={head}>{promptLabel}</div>
-      <div style={{...box,padding:"9px 11px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.6,color:T.text,whiteSpace:"pre-wrap"}}>{prompt}</div>
+      {(prompts||[{label:promptLabel, text:prompt}]).map(p=>(
+        <React.Fragment key={p.label}>
+          <div style={head}>{p.label}</div>
+          <div style={{...box,padding:"9px 11px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.6,color:T.text,whiteSpace:"pre-wrap"}}>{p.text}</div>
+        </React.Fragment>
+      ))}
       <div style={head}>Metadata sent</div>
       {groups.map((g,gi)=>(
         <div key={gi} style={{...box,marginBottom:8}}>
@@ -61492,29 +61613,37 @@ const AISentToModel = ({model, prompt, promptLabel="Prompt", groups, note}) => {
 };
 // The classification request for one object, built from Settings › Model inputs.
 const aicPayloadFor = (a) => {
-  const S = _aicState.settings, I = S.inputs || {}, on = k => I[k]!==false;
+  const fam = aicFam(a), on = k => aicInOn(fam,k), colOn = k => aicInOn("column",k);
   const cols = SCHEMA[a.name] || [];
   const list = (xs) => xs.length ? xs.slice(0,8).join(", ")+(xs.length>8?`, … (${xs.length})`:"") : "none";
   const refs = cols.map(c=>{ const m=/Reference to ([a-zA-Z_0-9.]+)/.exec(c.desc||""); return m?`${c.name} → ${m[1]}`:null; }).filter(Boolean);
-  const rows = [["Object name", a.name]];
-  if(on("type"))   rows.push(["Object type", a.type]);
-  if(on("domain")) rows.push(["Domain", a.domain]);
-  if(on("desc"))   rows.push(["Object description", a.description]);
-  if(on("tags"))   rows.push(["Existing tags", list(a.tags||[])]);
-  if(S.tiers.name) rows.push(["Column names", list(cols.map(c=>c.name))]);
-  if(on("colTypes")) rows.push(["Column data types", list(cols.map(c=>`${c.name} ${c.type}`))]);
-  if(on("colDesc"))  rows.push(["Column descriptions", list(cols.filter(c=>c.desc).map(c=>`${c.name}: ${c.desc}`))]);
-  if(S.tiers.graph)  rows.push(["Foreign key references", list(refs)]);
-  if(on("lineage"))  { let up=[]; try { up = aicUpstream(a); } catch(e){}
-    rows.push(["Upstream lineage", list(up.map(u=>u.tags.length?`${u.name} (${u.tags.join(", ")})`:u.name))]); }
+  const F = aidFacts(a, fam, []);
+  const kids = fam==="container" ? aicChildren(a) : [];
+  const vals = {...F, name:a.name, desc:a.description, tags:list(a.tags||[]), colNames:list(cols.map(c=>c.name)),
+    children:list(kids.map(k=>k.name)), childTypes:list([...new Set(kids.map(k=>k.type))]),
+    childTags:list(kids.filter(k=>(k.tags||[]).length).map(k=>`${k.name} (${k.tags.join(", ")})`))};
+  if(on("lineage")){ let up=[]; try { up = aicUpstream(a); } catch(e){}
+    vals.lineage = list(up.map(u=>u.tags.length?`${u.name} (${u.tags.join(", ")})`:u.name)); }
+  const rows = AIC_INPUTS[fam].filter(x=>on(x.k)).map(x=>[x.l, vals[x.k]]);
+  // Objects with columns also carry their columns, under the Columns & fields inputs.
+  if(cols.length){
+    if(fam!=="table") rows.push(["Column names", vals.colNames]);
+    if(colOn("colTypes")) rows.push(["Column data types", list(cols.map(c=>`${c.name} ${c.type}`))]);
+    if(colOn("colDesc"))  rows.push(["Column descriptions", list(cols.filter(c=>c.desc).map(c=>`${c.name}: ${c.desc}`))]);
+    if(colOn("fk"))       rows.push(["Foreign key references", list(refs)]);
+  }
   return {title:a.name, rows};
 };
-const aicSentFor = (run) => run ? {
-  model: aiModelSnap("classify"),
-  prompt: _aicState.settings.prompt || AIC_DEFAULT_PROMPT,
-  taxonomy: run.mode==="new" ? "New tags only" : (run.tags||[]).join(", ") + (run.mode==="both" ? " + new tags" : ""),
-  groups: aicProfileAssets(run).map(aicPayloadFor),
-} : null;
+const aicSentFor = (run) => { if(!run) return null;
+  const assets = aicProfileAssets(run), lv = aicLevelsOf(run);
+  const fams = new Set(assets.filter(a=>aicObjLevelOk(run,a)).map(aicFam));
+  if(lv.column && assets.some(aicHasCols)) fams.add("column");
+  return {
+    model: aiModelSnap("classify"),
+    prompts: AIC_FAMS.filter(f=>fams.has(f)).map(f=>({label:`${aidFamLabel(f)} prompt`, text:_aicState.settings.prompts[f]})),
+    taxonomy: run.mode==="new" ? "New tags only" : (run.tags||[]).join(", ") + (run.mode==="both" ? " + new tags" : ""),
+    groups: assets.map(aicPayloadFor),
+  }; };
 
 // ── AI Descriptions · on the object ──────────────────────────────────────────
 // The ✦ button on a Description field and the draft box it opens. `onSaved`
@@ -63018,7 +63147,7 @@ const AICJobsCard = ({onToast}) => {
                   {j.log.map((l,i)=><div key={i} style={{color:lvl[l.lvl]||T.textSub}}>{l.lvl==="err"?"✕":l.lvl==="warn"?"!":l.lvl==="ok"?"✓":"·"} {l.msg}</div>)}
                 </div>
               ) : (()=>{ const sent = j.sent || aicSentFor(st.profiles.find(p=>p.id===j.runId));
-                return sent ? <AISentToModel model={sent.model} prompt={sent.prompt} promptLabel="Classification prompt"
+                return sent ? <AISentToModel model={sent.model} prompts={sent.prompts}
                     groups={[{title:"Request", rows:[["Tags to suggest", sent.taxonomy||"—"], ["Objects", String(sent.groups.length)]]}, ...sent.groups]}
                     note="One request per object. No data values are sent."/>
                   : <div style={{fontSize:12,color:T.textMuted}}>The scan for this job was deleted.</div>; })()}
