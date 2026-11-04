@@ -7,6 +7,8 @@ import {
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import * as CTX from "./src/context/engine.js";
+import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
 // ─────────────────────────────────────────────
 // THEME SYSTEM
@@ -2915,7 +2917,13 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
   // Two levels only: Glossary -> Term. Sub-categories are gone, so terms sit straight under their glossary.
   const [glossaries, setGlossaries] = useState(()=>GLOSSARY_DATA.map(g=>({...g,categories:[]})));
-  const [terms,      setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
+  const [termsAll,   setTerms]      = useGlossaryTerms(); // shared store — synced with Inbox
+  useCtxState();
+  const glPersona = ctxPersona();
+  // The simulated persona sees only the terms of its domains, everywhere in this view.
+  const terms = termsAll.filter(t=>CTX.canSeeDomain(glPersona, t.domain));
+  const glNav = useNav();
+  const [delBlock, setDelBlock] = useState(null);   // dependencies that stop a delete
   const [slStore]                   = useSemanticLayer();  // concepts, entities and metrics live there
   const [selG,       setSelG]       = useState("g1");
   const [selCat,     setSelCat]     = useState(null);
@@ -2989,6 +2997,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
 
   const openModal = (type,data={}) => { setModal({type,data}); setForm({...data}); };
   const termForm = t => ({id:t?.id,term:t?.term,definition:t?.definition,domain:t?.domain,glossary:t?.glossary,cert:t?.cert,
+    termType:t?.termType, synonymsText:t?(t.synonyms||[]).join(", "):"",
     owners:Array.isArray(t?.owners)?t.owners:(t?.owner?[t.owner]:[]), stewards:Array.isArray(t?.stewards)?t.stewards:(t?.steward?[t.steward]:[])});
   const closeModal = () => { setModal(null); setForm({}); };
 
@@ -3045,14 +3054,23 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   };
 
   // ── Term CRUD ──
+  const termFormErrors = (isEdit) => {
+    const errs = [];
+    const name = (form.term||"").trim();
+    if(!name) errs.push("Term name is required.");
+    else if(termsAll.some(t=>t.term.trim().toLowerCase()===name.toLowerCase() && (!isEdit || t.id!==modal.data.id))) errs.push(`A term named "${name}" already exists.`);
+    if((form.definition||"").length>2000) errs.push("Keep the definition under 2,000 characters.");
+    return errs;
+  };
   const doCreateTerm = () => {
-    if(!form.term?.trim()) return;
+    if(termFormErrors(false).length) return;
     const t = {
       id:`t${Date.now()}`,term:form.term.trim(),abbr:"—",
       glossary:form.glossary||selG,category:"",
       domain:form.domain||"Commerce",owner:(form.owners||[])[0]||meHandle,owners:form.owners||[],
       steward:(form.stewards||[])[0]||"",stewards:form.stewards||[],linked:0,
-      cert:form.cert||"Draft",
+      cert:form.cert||"Draft", status:form.cert||"Draft", termType:form.termType||"Term",
+      synonyms:(form.synonymsText||"").split(",").map(x=>x.trim()).filter(Boolean),
       definition:form.definition||"",relatedTerms:[],tags:[],refs:[],
       linkedAssets:[],readme:"",
       activity:[{user:meHandle,avatar:ava(meHandle),action:"Created term",time:"Just now"}],
@@ -3062,8 +3080,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
     closeModal(); onToast(`Term "${t.term}" created`,"success");
   };
   const doUpdateTerm = () => {
-    if(!form.term?.trim()) return;
-    setTerms(p=>p.map(t=>t.id===modal.data.id?{...t,term:form.term.trim(),definition:form.definition??t.definition,domain:form.domain||t.domain,glossary:form.glossary||t.glossary,cert:form.cert||t.cert,
+    if(termFormErrors(true).length) return;
+    setTerms(p=>p.map(t=>t.id===modal.data.id?{...t,term:form.term.trim(),definition:form.definition??t.definition,domain:form.domain||t.domain,glossary:form.glossary||t.glossary,cert:form.cert||t.cert,status:form.cert||t.status||t.cert,
+      termType:form.termType||t.termType||"Term", synonyms:form.synonymsText!=null?form.synonymsText.split(",").map(x=>x.trim()).filter(Boolean):t.synonyms,
       ...(form.owners?{owners:form.owners,owner:form.owners[0]||""}:{}),...(form.stewards?{stewards:form.stewards,steward:form.stewards[0]||""}:{})}:t));
     closeModal(); onToast("Term updated","success");
   };
@@ -3076,9 +3095,12 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
       closeModal(); onToast("Deletion requested — pending owner approval","success");
       return;
     }
-    setTerms(p=>p.filter(t=>t.id!==id));
+    // One rule: a term that something approved or published depends on is not deleted.
+    const r = ctxDeleteTerm(id, meHandle);
+    if(!r.ok){ closeModal(); setDelBlock({term:t, dep:r.dep}); return; }
     if(selTerm===id) setSelTerm(null);
-    closeModal(); onToast("Term deleted","success");
+    closeModal();
+    onToast(r.dep.cascade.length ? `Term deleted · ${r.dep.cascade.length} pending proposal${r.dep.cascade.length===1?"":"s"} rejected` : "Term deleted","success");
   };
 
   // ── Term metadata ──
@@ -3801,19 +3823,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                         tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
                         stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
                 <Divider/>
-                <SectionLabel label="Related Terms" action={<button onClick={()=>setAddingRelated(p=>!p)} style={{fontSize:12,color:T.textSub,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Link Term</button>}/>
-                {addingRelated&&<div style={{marginBottom:12}}><GlSelect onChange={e=>{if(e.target.value)doAddRelated(term.id,e.target.value);}} defaultValue=""><option value="" disabled>Select a term to link…</option>{terms.filter(t=>t.id!==term.id&&!(term.relatedTerms||[]).includes(t.id)).map(t=>(<option key={t.id} value={t.id}>{t.term} ({glossaries.find(g=>g.id===t.glossary)?.name})</option>))}</GlSelect></div>}
-                {(term.relatedTerms||[]).length===0&&!addingRelated&&<div style={{fontSize:13,color:T.textMuted,fontStyle:"italic"}}>No related terms linked.</div>}
-                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                  {(term.relatedTerms||[]).map(rid=>{
-                    const rel=terms.find(t=>t.id===rid);if(!rel)return null;
-                    const rcm=CERT_META[rel.cert]||CERT_META.Draft;
-                    return (<div key={rid} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,transition:"border-color .1s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+"55"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                      <button onClick={()=>goToTerm(rid)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",padding:0}}><GovIcon kind="term" size={12}/><span style={{fontSize:12.5,fontWeight:500,color:T.text}}>{rel.term}</span><span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:99,background:rcm.bg,color:rcm.color,border:`1px solid ${rcm.border}`}}>{rcm.icon}</span></button>
-                      <button onClick={()=>patchTerm(term.id,{relatedTerms:(term.relatedTerms||[]).filter(id=>id!==rid)})} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0,display:"flex",marginLeft:2}} onMouseEnter={e=>e.currentTarget.style.color=T.rose} onMouseLeave={e=>e.currentTarget.style.color=T.textMuted}><IcX s={9}/></button>
-                    </div>);
-                  })}
-                </div>
+                <CtxTermRelations term={term} onToast={onToast} onOpenTerm={goToTerm}/>
+                <CtxTermLinks term={term} onToast={onToast} onNav={glNav}/>
                 <Divider/>
                 <SectionLabel label="References" action={<button onClick={()=>setAddingRef(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Add Link</button>}/>
                 {addingRef&&(<div style={{padding:"12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:12,display:"flex",flexDirection:"column",gap:8}}><GlInput placeholder="Label" value={refForm.label} onChange={e=>setRefForm(f=>({...f,label:e.target.value}))} style={{fontSize:12}}/><GlInput placeholder="URL https://…" value={refForm.url} onChange={e=>setRefForm(f=>({...f,url:e.target.value}))} style={{fontSize:12}}/><div style={{display:"flex",gap:6,justifyContent:"flex-end"}}><button onClick={()=>{setAddingRef(false);setRefForm({label:"",url:""}); }} style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Cancel</button><button onClick={()=>doAddRef(term.id)} disabled={!refForm.url.trim()} style={{padding:"5px 12px",borderRadius:6,background:refForm.url.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:refForm.url.trim()?"pointer":"default"}}>Add</button></div></div>)}
@@ -4185,15 +4196,19 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 </div>
                 <GlTA value={form.definition||""} onChange={e=>setForm(f=>({...f,definition:e.target.value}))} placeholder="Clear, precise business definition…" rows={4}/>
               </div>
+              <div><GlLabel>Synonyms</GlLabel><GlInput value={form.synonymsText||""} onChange={e=>setForm(f=>({...f,synonymsText:e.target.value}))} placeholder="Comma-separated, e.g. Sales, Takings"/></div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div><GlLabel>Glossary</GlLabel><GlSelect value={form.glossary||selG||"g1"} onChange={e=>setForm(f=>({...f,glossary:e.target.value}))}>{glossaries.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</GlSelect></div>
                 <div><GlLabel>Status</GlLabel><GlSelect value={form.cert||"Draft"} onChange={e=>setForm(f=>({...f,cert:e.target.value}))}>{["Draft","In Review"].map(c=><option key={c}>{c}</option>)}</GlSelect></div>
+                <div><GlLabel>Type</GlLabel><GlSelect value={form.termType||"Term"} onChange={e=>setForm(f=>({...f,termType:e.target.value}))}>{Object.keys(GLOSSARY_TERM_TYPES).map(k=><option key={k} value={k}>{GLOSSARY_TERM_TYPES[k].l}</option>)}</GlSelect></div>
+                <div><GlLabel>Domain</GlLabel><GlSelect value={form.domain||"Commerce"} onChange={e=>setForm(f=>({...f,domain:e.target.value}))}>{["Commerce","Finance","Product","Marketing","Procurement"].map(d=><option key={d}>{d}</option>)}</GlSelect></div>
                 <TagPeoplePicker label="Owner(s)" addLabel="Add owner" people={form.owners||[]} setPeople={v=>setForm(f=>({...f,owners:v}))}/>
                 <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={form.stewards||[]} setPeople={v=>setForm(f=>({...f,stewards:v}))}/>
               </div>
               <div style={{display:"flex",gap:8,justifyContent:"flex-end",paddingTop:4}}>
                 <button onClick={closeModal} style={{padding:"8px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
-                <button onClick={isEdit?doUpdateTerm:doCreateTerm} disabled={!form.term?.trim()} style={{padding:"8px 20px",borderRadius:8,background:form.term?.trim()?T.accent:"rgba(238,36,36,.25)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:form.term?.trim()?"pointer":"default"}}>{isEdit?"Save Changes":"Create Term"}</button>
+                {termFormErrors(isEdit).length>0&&(form.term!==undefined)&&<div role="alert" style={{fontSize:11.5,color:T.rose,alignSelf:"center",marginRight:"auto"}}>{termFormErrors(isEdit)[0]}</div>}
+                <button onClick={isEdit?doUpdateTerm:doCreateTerm} disabled={termFormErrors(isEdit).length>0} title={termFormErrors(isEdit)[0]||undefined} style={{padding:"8px 20px",borderRadius:8,background:termFormErrors(isEdit).length===0?T.accent:"rgba(238,36,36,.25)",border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:termFormErrors(isEdit).length===0?"pointer":"default"}}>{isEdit?"Save Changes":"Create Term"}</button>
               </div>
             </div>
           </div>
@@ -4253,6 +4268,20 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
       {renderModal()}
       {renderCtxMenu()}
       {renderTransitionModal()}
+      <Modal open={!!delBlock} onClose={()=>setDelBlock(null)} title={delBlock?`"${delBlock.term.term}" cannot be deleted`:""}>
+        {delBlock&&<div>
+          <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginTop:0}}>{delBlock.dep.rule}</p>
+          <div style={{fontSize:12,fontWeight:700,color:T.text,margin:"10px 0 6px"}}>Depends on it</div>
+          {delBlock.dep.blocking.map(b=><div key={b.kind+b.id} style={{fontSize:12,color:T.text,padding:"4px 0"}}>• {b.label}</div>)}
+          {delBlock.dep.cascade.length>0&&<><div style={{fontSize:12,fontWeight:700,color:T.text,margin:"10px 0 6px"}}>Would be rejected automatically</div>
+            {delBlock.dep.cascade.map(b=><div key={b.kind+b.id} style={{fontSize:12,color:T.textSub,padding:"4px 0"}}>• {b.label}</div>)}</>}
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}>
+            <Btn ghost onClick={()=>setDelBlock(null)}>Close</Btn>
+            {canSetTermStatus(delBlock.term)&&(LIFECYCLE_TRANSITIONS[ctxStatusOf(delBlock.term)]||[]).includes("Deprecated")&&
+              <Btn variant="primary" onClick={()=>{const id=delBlock.term.id; setDelBlock(null); setTransitionModal({id, to:"Deprecated", label:"Deprecate"});}}>Deprecate instead</Btn>}
+          </div>
+        </div>}
+      </Modal>
     </div>
   );
 };
@@ -4515,10 +4544,10 @@ const QScore = ({score})=>{
   );
 };
 
-const Btn = ({children,variant,ghost,small,icon,onClick,disabled})=>{
+const Btn = ({children,variant,ghost,small,icon,onClick,disabled,title})=>{
   const base = {display:"inline-flex",alignItems:"center",gap:5,padding:small?"4px 10px":"7px 14px",borderRadius:7,fontSize:small?11:12.5,fontWeight:600,cursor:disabled?"not-allowed":"pointer",border:"none",transition:"all .12s",opacity:disabled?.5:1,whiteSpace:"nowrap"};
   const styles = variant==="primary"?{...base,background:T.accent,color:"#fff"}:variant==="danger"?{...base,background:T.roseDim,color:T.rose,border:`1px solid ${T.rose}33`}:ghost?{...base,background:"transparent",color:T.textSub,border:`1px solid ${T.border}`}:{...base,background:T.bgElevated,color:T.text,border:`1px solid ${T.border}`};
-  return <button style={styles} onClick={onClick} disabled={disabled}>{icon&&<span style={{display:"flex"}}>{icon}</span>}{children}</button>;
+  return <button style={styles} onClick={onClick} disabled={disabled} title={title}>{icon&&<span style={{display:"flex"}}>{icon}</span>}{children}</button>;
 };
 
 const Input2 = ({value,onChange,placeholder,icon,style,multiline,rows=3})=>{
@@ -5523,6 +5552,7 @@ const GROUPS = [
     {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"semanticlayer",  icon:"semantic",      label:"Semantic Models"},
+    {key:"context",        icon:"lineage",       label:"Context"},
     {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
   ]},
@@ -5531,7 +5561,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","settings","tags","aipipelines"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","settings","tags","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -38238,9 +38268,10 @@ const slConceptLayout = (concepts, crels) => {
     rows[d].forEach((c,i)=>nodes.push({...c, x:PADX + i*(NW+GAPX), y:PADY + Number(d)*(NH+GAPY), w:NW, h:NH}));
   });
   const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
-  const edges = crels.map(r=>{
+  // Only approved relationships are drawn here; proposals live in the Context explorer until reviewed.
+  const edges = crels.filter(r=>!r.status||r.status==="approved").map(r=>{
     const a=byId[r.from], b=byId[r.to]; if(!a||!b) return null;
-    const taxonomy = r.type==="part_of" && a.broader===b.id;
+    const taxonomy = (r.type==="part_of"||r.type==="is_a") && a.broader===b.id;
     return {...r, taxonomy,
             x1:a.x+a.w/2, y1:taxonomy? a.y : a.y+a.h/2,
             x2:b.x+b.w/2, y2:taxonomy? b.y+b.h : b.y+b.h/2};
@@ -39013,6 +39044,244 @@ const useSemanticLayer = () => {
 const slEntity  = (id) => _slState.entities.find(e=>e.id===id);
 const slMetric  = (id) => _slState.metrics.find(m=>m.id===id);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTEXT — one persisted state for semantic models, glossary, links,
+// relationships, versions, profiles and request history.
+//
+// The screens keep reading the stores they always read (_slState, _gtState,
+// DQ_TEST_CASES). This block (1) migrates seeded relationships into typed,
+// reviewable records, (2) gives every published model an immutable version,
+// (3) hydrates all of it from the persistence adapter and (4) writes it back on
+// every change. Logic lives in src/context/engine.js so the UI, the API preview
+// and the tests share one implementation.
+// ═══════════════════════════════════════════════════════════════════════════
+const ctxStatusOf = (t) => (t && (t.status || t.cert)) || "Draft";
+const ctxIsoAgo = (s) => {
+  const m = /^(\d+(?:\.\d+)?)\s*(m|min|h|d)/i.exec(String(s||"").trim());
+  const now = Date.now();
+  if(!m) return new Date(now - 36e5).toISOString();
+  const ms = /^d/i.test(m[2]) ? 864e5 : /^h/i.test(m[2]) ? 36e5 : 6e4;
+  return new Date(now - (+m[1]) * ms).toISOString();
+};
+
+// Relationship types the concept canvas has to be able to label.
+Object.entries(CTX.REL_TYPES).forEach(([k,v]) => { if(!SL_REL_TYPES[k]) SL_REL_TYPES[k] = {l:v.l, inv:v.inv, card:"many_to_many"}; });
+
+// (1) Seeded relationships become typed, approved, attributable records. A taxonomy
+//     edge written as part_of is really "is a kind of"; untyped related terms
+//     become related_to so both ends read them the same way.
+(() => {
+  const rels = _slState.crels.map(r => {
+    const a = GLOSSARY_TERMS.find(t=>t.id===r.from);
+    return {...r, type: r.type==="part_of" && a && a.broader===r.to ? "is_a" : r.type,
+            status:"approved", source:"seed", proposedBy:"seed", reviewedBy:(a&&a.owner)||"seed", reviewedAt:"2026-09-18T09:00:00.000Z", history:[]};
+  });
+  GLOSSARY_TERMS.forEach(t => (t.relatedTerms||[]).forEach(rid => {
+    if(rid===t.id || !GLOSSARY_TERMS.some(x=>x.id===rid)) return;
+    if(rels.some(r => r.type==="related_to" && ((r.from===t.id&&r.to===rid)||(r.from===rid&&r.to===t.id)))) return;
+    rels.push({id:`cr_rt_${t.id}_${rid}`, from:t.id, to:rid, type:"related_to", note:"Carried over from the term's related terms.",
+               status:"approved", source:"seed", proposedBy:"seed", reviewedBy:t.owner||"seed", reviewedAt:"2026-09-18T09:00:00.000Z", history:[]});
+  }));
+  _slState = {..._slState, crels: rels};
+})();
+
+// (2) A model that was published before versioning existed gets its v1 here.
+const _ctxSeedVersions = [];
+_slState = {..._slState, models: _slState.models.map(m => {
+  if(!m.lastPublished) return m;
+  const snap = CTX.snapshotModel(_slState, m.id);
+  const v = {id:`ver_${m.id}_1`, modelId:m.id, n:1, hash:CTX.snapshotHash(snap), snapshot:snap,
+             publishedAt:`${m.lastPublished}T09:00:00.000Z`, publishedBy:m.owner||"seed", note:"Initial publication", supersedes:null, seeded:true, validation:null};
+  _ctxSeedVersions.push(v);
+  return {...m, publishedVersionId: v.id};
+})};
+
+// Every quality result carries the moment it was observed.
+DQ_TEST_CASES.forEach(t => { if(!t.observedAt) t.observedAt = ctxIsoAgo(t.lastRun); });
+
+const CTX_SL_COLLS = ["models","metrics","vendor","concepts","crels","dims","facts","entities","rels"];
+const _CTX_SEED = JSON.parse(JSON.stringify({sl:_slState, gt:_gtState, dq:DQ_TEST_CASES, versions:_ctxSeedVersions, profiles:CTX.SEED_PROFILES}));
+const _ctxSubs = new Set();
+let _ctxState = {versions:_ctxSeedVersions.map(v=>({...v})), linkRecords:[], profiles:CTX.SEED_PROFILES.map(p=>({...p})),
+                 history:[], views:[], personaId:"steward"};
+let _ctxStorageError = null;
+const CTX_STORE = createStorageAdapter({
+  storage: (() => { try { return typeof window!=="undefined" ? window.localStorage : null; } catch(e){ return null; } })(),
+  key: "solix-edg.prototype.state.v1",
+  onError: (e) => { _ctxStorageError = e; _ctxSubs.forEach(fn=>fn()); },
+});
+
+// (3) Hydrate. A seeded record the user deleted stays deleted; a record the user
+//     created is kept exactly as saved.
+(() => {
+  const saved = CTX_STORE.load();
+  if(!saved) return;
+  const tomb = saved.tomb || {};
+  const sl = {};
+  CTX_SL_COLLS.forEach(c => { sl[c] = mergeSaved(_CTX_SEED.sl[c], saved.sl && saved.sl[c], tomb["sl."+c]); });
+  _slState = {..._slState, ...sl};
+  if(saved.gt) _gtState = mergeSaved(_CTX_SEED.gt, saved.gt, tomb.gt);
+  if(saved.dq){ const next = mergeSaved(_CTX_SEED.dq, saved.dq, tomb.dq); DQ_TEST_CASES.splice(0, DQ_TEST_CASES.length, ...next); _dqtcSnap = DQ_TEST_CASES.slice(); }
+  if(saved.ctx) _ctxState = {..._ctxState, ...saved.ctx,
+    versions: mergeSaved(_CTX_SEED.versions, saved.ctx.versions, tomb.versions),
+    profiles: mergeSaved(_CTX_SEED.profiles, saved.ctx.profiles, tomb.profiles)};
+})();
+
+// (4) Persist on every change, debounced, and once more on unload.
+let _ctxSaveT = null, _ctxLastSaved = null;
+const ctxPersistNow = () => {
+  clearTimeout(_ctxSaveT);
+  const doc = {sl:{}, tomb:{}};
+  CTX_SL_COLLS.forEach(c => { doc.sl[c] = _slState[c]; doc.tomb["sl."+c] = tombstonesOf(_CTX_SEED.sl[c], _slState[c]); });
+  doc.gt = _gtState; doc.tomb.gt = tombstonesOf(_CTX_SEED.gt, _gtState);
+  doc.dq = DQ_TEST_CASES; doc.tomb.dq = tombstonesOf(_CTX_SEED.dq, DQ_TEST_CASES);
+  doc.ctx = _ctxState; doc.tomb.versions = tombstonesOf(_CTX_SEED.versions, _ctxState.versions);
+  doc.tomb.profiles = tombstonesOf(_CTX_SEED.profiles, _ctxState.profiles);
+  if(CTX_STORE.save(doc)){ _ctxLastSaved = new Date().toISOString(); if(_ctxStorageError){ _ctxStorageError = null; _ctxSubs.forEach(fn=>fn()); } }
+};
+const ctxSchedulePersist = () => { clearTimeout(_ctxSaveT); _ctxSaveT = setTimeout(ctxPersistNow, 200); };
+if(typeof window!=="undefined") window.addEventListener("beforeunload", ctxPersistNow);
+
+// A re-run replaces the case object; that is an observation, so it is stamped.
+const _ctxDqSeen = new Map(DQ_TEST_CASES.map(t => [t.id, t]));
+const ctxOnDQ = () => {
+  const now = new Date().toISOString();
+  DQ_TEST_CASES.forEach(t => {
+    const prev = _ctxDqSeen.get(t.id);
+    if(prev && prev !== t){
+      const ran = (t.history||[]).length !== (prev.history||[]).length || t.status !== prev.status || t.lastVal !== prev.lastVal;
+      if(ran) t.observedAt = now; else if(!t.observedAt) t.observedAt = prev.observedAt;
+    } else if(!prev && !t.observedAt) t.observedAt = now;
+    _ctxDqSeen.set(t.id, t);
+  });
+  ctxSchedulePersist();
+};
+_slSubs.add(ctxSchedulePersist); _gtSubs.add(ctxSchedulePersist); _dqtcSubs.add(ctxOnDQ);
+
+const ctxSet = (up) => { _ctxState = typeof up==="function" ? up(_ctxState) : up; _ctxSubs.forEach(fn=>fn()); ctxSchedulePersist(); };
+// Re-renders on ANY of the stores the context reads — a term approved in the
+// Glossary or a DQ re-run is visible here at once.
+const useCtxState = () => {
+  const [, force] = useState(0);
+  useEffect(() => {
+    const fn = () => force(n => n + 1);
+    [_ctxSubs, _slSubs, _gtSubs, _dqtcSubs].forEach(s => s.add(fn));
+    return () => { [_ctxSubs, _slSubs, _gtSubs, _dqtcSubs].forEach(s => s.delete(fn)); };
+  }, []);
+  return _ctxState;
+};
+const useCtxActor = () => { const {roleCfg} = useRole(); return ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0]; };
+const ctxPersona = () => CTX.personaOf(_ctxState.personaId);
+
+// The world the engine reads — the live stores, nothing copied.
+const ctxWorld = () => ({
+  sl: _slState, versions: _ctxState.versions, terms: _gtState.map(t => ({...t, status: ctxStatusOf(t)})),
+  crels: _slState.crels, linkRecords: _ctxState.linkRecords, dq: DQ_TEST_CASES, schema: SCHEMA,
+  profiles: _ctxState.profiles, history: _ctxState.history,
+});
+
+// ── Actions. Every screen calls these; none writes the stores directly.
+const ctxProposeRel = (input, actor) => {
+  const w = ctxWorld();
+  const r = CTX.proposeRelationship(w.crels, w.terms, input, actor);
+  if(r.ok) slSet(s => ({...s, crels: r.rels}));
+  return r;
+};
+const ctxReviewRel = (id, decision, actor, note) => {
+  const r = CTX.reviewRelationship(_slState.crels, id, decision, actor, note);
+  if(r.ok) slSet(s => ({...s, crels: r.rels}));
+  return r;
+};
+const ctxRemoveRel = (id, actor, note) => slSet(s => ({...s, crels: CTX.removeRelationship(s.crels, id, actor, note)}));
+// Changing the TYPE of a relationship is a new claim, so it goes back to review.
+const ctxEditRel = (id, patch, actor) => {
+  const w = ctxWorld();
+  const cur = w.crels.find(r => r.id === id);
+  if(!cur) return {ok:false, errors:[{msg:"Relationship not found."}]};
+  const next = {...cur, ...patch};
+  const typeChanged = next.type !== cur.type || next.from !== cur.from || next.to !== cur.to;
+  if(typeChanged){
+    const chk = CTX.checkRelationship(w.crels, w.terms, next, {ignoreId:id});
+    if(!chk.ok) return chk;
+  }
+  const at = new Date().toISOString();
+  slSet(s => ({...s, crels: s.crels.map(r => r.id !== id ? r : {...next,
+    status: typeChanged ? "proposed" : r.status,
+    ...(typeChanged ? {proposedBy:actor, proposedAt:at, reviewedBy:null, reviewedAt:null} : {}),
+    history: [...(r.history||[]), {action: typeChanged ? `Edited (${(CTX.REL_TYPES[cur.type]||{}).l||cur.type} → ${(CTX.REL_TYPES[next.type]||{}).l||next.type}) — needs review` : "Note edited", by:actor, at, note:""}]})}));
+  return {ok:true};
+};
+const ctxProposeLink = (input, actor) => {
+  const w = ctxWorld();
+  const r = CTX.proposeLink(w.sl, w.terms, w.linkRecords, input, actor);
+  if(r.ok) ctxSet(s => ({...s, linkRecords: r.records}));
+  return r;
+};
+const ctxReviewLink = (id, decision, actor, note) => {
+  const r = CTX.reviewLink(_slState, _ctxState.linkRecords, id, decision, actor, note);
+  if(!r.ok) return r;
+  if(r.sl !== _slState) slSet(r.sl);
+  ctxSet(s => ({...s, linkRecords: r.records}));
+  return r;
+};
+const ctxRemoveLink = (link, actor, note) => {
+  const r = CTX.removeLink(_slState, _ctxState.linkRecords, link, actor, note);
+  if(r.sl !== _slState) slSet(r.sl);
+  ctxSet(s => ({...s, linkRecords: r.records}));
+};
+const ctxPublish = (modelId, actor, note) => {
+  const w = ctxWorld();
+  const r = CTX.publishModel(w.sl, w.versions, modelId, w.terms, {schema:SCHEMA}, actor, note);
+  if(!r.ok) return r;
+  slSet(r.sl);
+  ctxSet(s => ({...s, versions: r.versions}));
+  return r;
+};
+const ctxValidate = (modelId, versionId) => {
+  const w = ctxWorld();
+  const snap = versionId ? (w.versions.find(v => v.id === versionId) || {}).snapshot : CTX.snapshotModel(w.sl, modelId);
+  return CTX.validateSnapshot(snap, {terms:w.terms, schema:SCHEMA});
+};
+const ctxRun = (req, actor, opts) => {
+  try {
+    const res = CTX.buildContext(ctxWorld(), req, {requestId:`ctx_${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`});
+    const rec = {id:res.requestId, at:res.generatedAt, by:actor, request:res.request, response:res, rerunOf:(opts&&opts.rerunOf)||null};
+    ctxSet(s => ({...s, history:[rec, ...s.history].slice(0, 200)}));
+    return {ok:true, rec};
+  } catch(e) {
+    return {ok:false, error:{code:e.code||"service_error", message:e.message||String(e), field:e.field||null}};
+  }
+};
+// Deleting a term follows ONE rule (CTX.termDependencies): blocked while anything
+// approved or published depends on it; pending proposals are rejected with it.
+const ctxDeleteTerm = (termId, actor) => {
+  const dep = CTX.termDependencies(ctxWorld(), termId);
+  if(!dep.canDelete) return {ok:false, dep};
+  const at = new Date().toISOString();
+  const why = "Term deleted";
+  slSet(s => ({...s, crels: s.crels.map(r => (r.from===termId||r.to===termId) && r.status==="proposed"
+    ? {...r, status:"rejected", reviewedBy:actor, reviewedAt:at, reviewNote:why, history:[...(r.history||[]), {action:"Rejected", by:actor, at, note:why}]} : r)}));
+  ctxSet(s => ({...s, linkRecords: s.linkRecords.map(r => r.termId===termId && r.status==="proposed"
+    ? {...r, status:"rejected", reviewedBy:actor, reviewedAt:at, reviewNote:why, history:[...(r.history||[]), {action:"Rejected", by:actor, at, note:why}]} : r)}));
+  gtSet(p => p.filter(t => t.id !== termId));
+  return {ok:true, dep};
+};
+// Reset Demo restores seeded records only; everything the user created stays.
+const ctxResetDemo = () => {
+  const sl = {};
+  CTX_SL_COLLS.forEach(c => { sl[c] = resetSeeded(_CTX_SEED.sl[c], _slState[c]); });
+  _slState = {..._slState, ...sl};
+  _gtState = resetSeeded(_CTX_SEED.gt, _gtState);
+  const dq = resetSeeded(_CTX_SEED.dq, DQ_TEST_CASES);
+  DQ_TEST_CASES.splice(0, DQ_TEST_CASES.length, ...dq); _dqtcSnap = DQ_TEST_CASES.slice();
+  dq.forEach(t => _ctxDqSeen.set(t.id, t));
+  _ctxState = {..._ctxState, versions: resetSeeded(_CTX_SEED.versions, _ctxState.versions),
+               profiles: resetSeeded(_CTX_SEED.profiles, _ctxState.profiles), personaId:"steward"};
+  [_slSubs, _gtSubs, _dqtcSubs, _ctxSubs].forEach(s => s.forEach(fn => fn()));
+  ctxPersistNow();
+};
+const ctxFmtAt = (iso) => { if(!iso) return "—"; const d = new Date(iso); return isNaN(d) ? String(iso) : d.toISOString().slice(0,16).replace("T"," ") + " UTC"; };
+
 // ── Certification gates. A metric cannot be certified without a declared grain, a
 //    declared time dimension and at least one confirmed implementation binding.
 //    Refusing to publish is the point: ungrained numbers are the disease.
@@ -39573,7 +39842,7 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
           owner:model.owner||"", steward:model.steward||"", targets:[...(model.targets||[])],
           assetIds, joins:(existingRels||[]).filter(r=>ids.includes(r.from)&&ids.includes(r.to)).map(r=>({...r})),
           fields:{}, metrics:[]});
-    setNm({name:"",col:"",agg:"sum",timeDim:""});
+    setMetricOpen(false); setFieldEdit(null);
   },[open, model]);
   if(!open || !d) return null;
 
@@ -41322,8 +41591,8 @@ const SLConceptDrawer = ({concept, concepts, crels, entities, metrics, models, g
   const cov = slConceptCoverage(c, entities, metrics);
   const parent = concepts.find(x=>x.id===c.broader);
   const children = concepts.filter(x=>x.broader===c.id);
-  const out = crels.filter(r=>r.from===c.id && r.type!=="part_of");
-  const inc = crels.filter(r=>r.to===c.id && r.type!=="part_of");
+  const out = crels.filter(r=>r.from===c.id && r.type!=="part_of" && r.type!=="is_a" && (!r.status||r.status==="approved"));
+  const inc = crels.filter(r=>r.to===c.id && r.type!=="part_of" && r.type!=="is_a" && (!r.status||r.status==="approved"));
   const term = c.termId ? gTerms.find(t=>t.id===c.termId) : null;
   const cfg = SL_COV[cov.state];
   const Head = ({children:ch}) => <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",margin:"22px 0 9px"}}>{ch}</div>;
@@ -42851,12 +43120,941 @@ const SLPublishDrawer = ({open, onClose, mdl, ents, rels, mets, dims, facts, onP
 // ═══════════════════════════════════════════════════════════════════════════
 // THE SCREEN — a list of semantic models, then one model at a time.
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTEXT — UI. Shared pieces first (chips, drawers, review actions), then the
+// panels embedded in Semantic Models and the Glossary, then the Context screen.
+// ═══════════════════════════════════════════════════════════════════════════
+const CTX_STATUS = {
+  approved:   {l:"Approved",   c:"#16a34a"}, proposed:{l:"Proposed", c:"#d97706"}, rejected:{l:"Rejected", c:"#e11d48"},
+  removed:    {l:"Removed",    c:"#6b7280"}, superseded:{l:"Superseded", c:"#6b7280"}, published:{l:"Published", c:"#16a34a"},
+  draft:      {l:"Draft",      c:"#6b7280"}, ok:{l:"OK", c:"#16a34a"}, ok_with_warnings:{l:"OK with warnings", c:"#d97706"},
+  blocked:    {l:"Blocked",    c:"#e11d48"}, needs_clarification:{l:"Needs clarification", c:"#7c3aed"},
+  insufficient_context:{l:"Insufficient context", c:"#6b7280"}, pass:{l:"Pass", c:"#16a34a"}, warn:{l:"Warn", c:"#d97706"},
+  fail:{l:"Fail", c:"#e11d48"}, missing:{l:"Missing", c:"#6b7280"}, error:{l:"Error", c:"#e11d48"}, warning:{l:"Warning", c:"#d97706"},
+  service_error:{l:"Service error", c:"#e11d48"}, invalid_request:{l:"Invalid request", c:"#e11d48"},
+};
+const CtxChip = ({s, label}) => {
+  const m = CTX_STATUS[s] || {l:s||"—", c:"#6b7280"};
+  return <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:4,background:`${m.c}14`,color:m.c,border:`1px solid ${m.c}33`,whiteSpace:"nowrap"}}>{label||m.l}</span>;
+};
+const CtxLabel = ({children, req}) => <div style={{fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5}}>{children}{req&&<span style={{color:T.rose}}> *</span>}</div>;
+const ctxFieldStyle = () => ({width:"100%",boxSizing:"border-box",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit"});
+const CtxSel = ({value, onChange, children, disabled, ariaLabel}) => (
+  <select aria-label={ariaLabel} value={value==null?"":value} disabled={disabled} onChange={e=>onChange(e.target.value)} style={{...ctxFieldStyle(),cursor:disabled?"not-allowed":"pointer"}}>{children}</select>
+);
+const CtxInput = ({value, onChange, placeholder, ariaLabel, multiline, rows=3, mono}) => multiline
+  ? <textarea aria-label={ariaLabel} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows} style={{...ctxFieldStyle(),resize:"vertical",lineHeight:1.5,fontFamily:mono?"'Geist Mono',monospace":"inherit",fontSize:mono?11.5:12.5}}/>
+  : <input aria-label={ariaLabel} value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={ctxFieldStyle()}/>;
+const CtxErrors = ({errors}) => !errors || !errors.length ? null : (
+  <div role="alert" style={{padding:"9px 12px",background:T.roseDim,border:`1px solid ${T.rose}33`,borderRadius:8,display:"flex",flexDirection:"column",gap:4}}>
+    {errors.map((e,i)=><div key={i} style={{fontSize:11.5,color:T.rose}}>{e.msg||e.message||String(e)}</div>)}
+  </div>
+);
+const CtxEmpty = ({title, sub, action}) => (
+  <div style={{padding:"36px 20px",textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:10,background:T.bgSurface}}>
+    <div style={{fontSize:13,fontWeight:600,color:T.text}}>{title}</div>
+    {sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:4}}>{sub}</div>}
+    {action&&<div style={{marginTop:12}}>{action}</div>}
+  </div>
+);
+const CtxDrawer = ({title, sub, onClose, children, footer, width=480}) => (
+  <><div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.25)",zIndex:1100}}/>
+    <div role="dialog" aria-label={title} className="slideInRight" style={{position:"fixed",top:0,right:0,bottom:0,width,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1101,display:"flex",flexDirection:"column",boxShadow:"-8px 0 32px rgba(0,0,0,.18)"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+        <div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>
+        <button aria-label="Close" onClick={onClose} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(14)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>{children}</div>
+      {footer&&<div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:8,justifyContent:"flex-end"}}>{footer}</div>}
+    </div>
+  </>
+);
+const ctxTermName = (id) => { const t = _gtState.find(x=>x.id===id); return t ? t.term : "(deleted term)"; };
+const ctxTermVisible = (t) => !!t && CTX.canSeeDomain(ctxPersona(), t.domain);
+
+// ── Approve / reject, used wherever a proposal appears. Reject needs a reason.
+const CtxReviewButtons = ({kind, id, onToast, compact}) => {
+  const actor = useCtxActor();
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState(null);
+  const act = (decision) => {
+    const r = kind==="rel" ? ctxReviewRel(id, decision, actor, decision==="reject"?reason:"") : ctxReviewLink(id, decision, actor, decision==="reject"?reason:"");
+    if(!r.ok){ setErr(r.error); return; }
+    setRejecting(false); setReason(""); setErr(null);
+    onToast && onToast(decision==="approve" ? "Approved" : "Rejected", "success");
+  };
+  if(rejecting) return (
+    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+      <input aria-label="Reason for rejecting" autoFocus value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason (required)" style={{...ctxFieldStyle(),width:180,padding:"4px 8px",fontSize:11.5}}/>
+      <Btn small variant="danger" onClick={()=>act("reject")} disabled={!reason.trim()} title={!reason.trim()?"A reason is required to reject":undefined}>Reject</Btn>
+      <Btn small ghost onClick={()=>{setRejecting(false);setReason("");setErr(null);}}>Cancel</Btn>
+      {err&&<span style={{fontSize:11,color:T.rose}}>{err}</span>}
+    </div>
+  );
+  return (
+    <div style={{display:"flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+      <Btn small variant="primary" onClick={()=>act("approve")}>{compact?"Approve":"Approve"}</Btn>
+      <Btn small ghost onClick={()=>setRejecting(true)}>Reject</Btn>
+      {err&&<span style={{fontSize:11,color:T.rose}}>{err}</span>}
+    </div>
+  );
+};
+
+// ── Add / edit a term relationship. Validation runs as you choose.
+const CtxRelDrawer = ({initial, onClose, onToast}) => {
+  useCtxState();
+  const actor = useCtxActor();
+  const editing = initial && initial.id ? _slState.crels.find(r=>r.id===initial.id) : null;
+  const [f, setF] = useState(() => editing ? {from:editing.from, to:editing.to, type:editing.type, note:editing.note||""}
+                                           : {from:(initial&&initial.from)||"", to:(initial&&initial.to)||"", type:(initial&&initial.type)||"", note:""});
+  const [errs, setErrs] = useState(null);
+  const w = ctxWorld();
+  const terms = w.terms.filter(t => ctxTermVisible(t) && t.status!=="Deprecated" && t.status!=="Rejected").sort((a,b)=>a.term.localeCompare(b.term));
+  const src = terms.find(t=>t.id===f.from);
+  const types = Object.entries(CTX.REL_TYPES).filter(([k,v]) => !src || v.from.includes(src.termType||"Term"));
+  const rt = CTX.REL_TYPES[f.type];
+  const targets = terms.filter(t => t.id!==f.from && (!rt || rt.to.includes(t.termType||"Term")));
+  const live = f.from && f.to && f.type ? CTX.checkRelationship(w.crels, w.terms, f, {ignoreId: editing && editing.id}) : null;
+  const submit = () => {
+    if(!f.from || !f.to || !f.type){ setErrs([{msg:"Choose a source term, a relationship type and a target term."}]); return; }
+    const r = editing ? ctxEditRel(editing.id, f, actor) : ctxProposeRel({...f, source:(initial&&initial.source)||"user"}, actor);
+    if(!r.ok){ setErrs(r.errors); return; }
+    onToast && onToast(editing ? "Relationship updated" : "Relationship proposed — it appears in Review until approved", "success");
+    onClose();
+  };
+  return (
+    <CtxDrawer title={editing?"Edit relationship":"Add relationship"} sub={editing?`Currently ${CTX_STATUS[editing.status]?.l||editing.status}. Changing the type or ends sends it back to review.`:"Proposed relationships are used only after they are approved."}
+      onClose={onClose} footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={submit} disabled={!!(live&&!live.ok)} title={live&&!live.ok?live.errors[0].msg:undefined}>{editing?"Save":"Propose"}</Btn></>}>
+      <div><CtxLabel req>Source term</CtxLabel>
+        <CtxSel ariaLabel="Source term" value={f.from} onChange={v=>{setF(p=>({...p,from:v,type:"",to:""}));setErrs(null);}}>
+          <option value="">Select…</option>{terms.map(t=><option key={t.id} value={t.id}>{t.term} · {t.termType||"Term"}</option>)}
+        </CtxSel></div>
+      <div><CtxLabel req>Relationship</CtxLabel>
+        <CtxSel ariaLabel="Relationship type" value={f.type} onChange={v=>{setF(p=>({...p,type:v,to:""}));setErrs(null);}} disabled={!f.from}>
+          <option value="">{f.from?"Select…":"Choose a source term first"}</option>
+          {types.map(([k,v])=><option key={k} value={k}>{v.l} → {v.to.join(" / ")}</option>)}
+        </CtxSel></div>
+      <div><CtxLabel req>Target term</CtxLabel>
+        <CtxSel ariaLabel="Target term" value={f.to} onChange={v=>{setF(p=>({...p,to:v}));setErrs(null);}} disabled={!f.type}>
+          <option value="">{f.type?(targets.length?"Select…":"No term of an allowed type"):"Choose a relationship first"}</option>
+          {targets.map(t=><option key={t.id} value={t.id}>{t.term} · {t.termType||"Term"}</option>)}
+        </CtxSel></div>
+      <div><CtxLabel>Note</CtxLabel><CtxInput multiline rows={2} ariaLabel="Note" value={f.note} onChange={v=>setF(p=>({...p,note:v}))} placeholder="Why this holds"/></div>
+      {f.from&&f.to&&rt&&<div style={{fontSize:12,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8}}>
+        <b>{ctxTermName(f.from)}</b> {rt.l} <b>{ctxTermName(f.to)}</b><div style={{fontSize:11,color:T.textMuted,marginTop:3}}>Read from {ctxTermName(f.to)}: {rt.symmetric?rt.l:rt.inv} {ctxTermName(f.from)}</div></div>}
+      <CtxErrors errors={errs || (live && !live.ok ? live.errors : null)}/>
+    </CtxDrawer>
+  );
+};
+
+// ── Link a model element (metric / field / dataset) to a glossary term.
+const ctxElementsOf = (modelId) => {
+  const mo = _slState.models.find(m=>m.id===modelId); if(!mo) return [];
+  const ids = mo.entityIds||[];
+  return [
+    ..._slState.metrics.filter(m=>m.model===modelId).map(m=>({kind:"metric", id:m.id, name:m.name, cur:m.termId})),
+    ..._slState.entities.filter(e=>ids.includes(e.id)).map(e=>({kind:"dataset", id:e.id, name:`${e.name} (dataset)`, cur:e.concept})),
+    ..._slState.dims.filter(d=>ids.includes(d.entity)).map(d=>({kind:"field", id:d.id, name:CTX.elementName(_slState,"field",d), cur:d.termId})),
+    ..._slState.facts.filter(x=>ids.includes(x.entity)).map(x=>({kind:"measure", id:x.id, name:CTX.elementName(_slState,"measure",x), cur:x.termId})),
+  ];
+};
+const CtxLinkDrawer = ({initial, onClose, onToast}) => {
+  useCtxState();
+  const actor = useCtxActor();
+  const persona = ctxPersona();
+  const models = _slState.models.filter(m=>CTX.canSeeDomain(persona, m.domain));
+  const [f, setF] = useState({modelId:(initial&&initial.modelId)||(models[0]&&models[0].id)||"", el:initial&&initial.kind&&initial.elementId?`${initial.kind}:${initial.elementId}`:"", termId:(initial&&initial.termId)||"", note:""});
+  const [errs, setErrs] = useState(null);
+  const els = ctxElementsOf(f.modelId);
+  const [kind, elementId] = f.el ? f.el.split(":") : ["",""];
+  const allowed = kind ? CTX.LINK_KINDS[kind].allowed : [];
+  const w = ctxWorld();
+  const terms = w.terms.filter(t => ctxTermVisible(t) && (!kind || allowed.includes(t.termType||"Term"))).sort((a,b)=>a.term.localeCompare(b.term));
+  const cur = els.find(e=>e.kind===kind && e.id===elementId);
+  const live = kind && elementId && f.termId ? CTX.checkLink(w.sl, w.terms, w.linkRecords, {kind, elementId, termId:f.termId}) : null;
+  const submit = () => {
+    if(!kind || !f.termId){ setErrs([{msg:"Choose a model element and a glossary term."}]); return; }
+    const r = ctxProposeLink({kind, elementId, termId:f.termId, note:f.note}, actor);
+    if(!r.ok){ setErrs(r.errors); return; }
+    onToast && onToast("Link proposed — approve it in Review to make it count", "success");
+    onClose();
+  };
+  return (
+    <CtxDrawer title="Link to a glossary term" sub="The link shows on the model, the term and the graph at once. Context uses it after approval and publication."
+      onClose={onClose} footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={submit} disabled={!!(live&&!live.ok)} title={live&&!live.ok?live.errors[0].msg:undefined}>Propose link</Btn></>}>
+      <div><CtxLabel req>Semantic model</CtxLabel>
+        <CtxSel ariaLabel="Semantic model" value={f.modelId} onChange={v=>{setF(p=>({...p,modelId:v,el:"",termId:""}));setErrs(null);}}>
+          {models.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
+        </CtxSel></div>
+      <div><CtxLabel req>Model element</CtxLabel>
+        <CtxSel ariaLabel="Model element" value={f.el} onChange={v=>{setF(p=>({...p,el:v,termId:""}));setErrs(null);}}>
+          <option value="">Select…</option>
+          {["metric","dataset","field","measure"].map(k=>{
+            const items = els.filter(e=>e.kind===k); if(!items.length) return null;
+            return <optgroup key={k} label={k==="metric"?"Metrics":k==="dataset"?"Datasets":k==="field"?"Dimension fields":"Measure fields"}>
+              {items.map(e=><option key={e.id} value={`${e.kind}:${e.id}`}>{e.name}{e.cur?` — now: ${ctxTermName(e.cur)}`:""}</option>)}
+            </optgroup>;
+          })}
+        </CtxSel>
+        {cur&&cur.cur&&<div style={{fontSize:11,color:T.amber,marginTop:5}}>Currently linked to {ctxTermName(cur.cur)}. Approving this replaces it.</div>}</div>
+      <div><CtxLabel req>Glossary term</CtxLabel>
+        <CtxSel ariaLabel="Glossary term" value={f.termId} onChange={v=>{setF(p=>({...p,termId:v}));setErrs(null);}} disabled={!kind}>
+          <option value="">{kind?`Select a ${allowed.join(" / ")} term…`:"Choose an element first"}</option>
+          {terms.map(t=><option key={t.id} value={t.id}>{t.term} · {t.termType||"Term"} · {t.status}</option>)}
+        </CtxSel></div>
+      <div><CtxLabel>Note</CtxLabel><CtxInput multiline rows={2} ariaLabel="Note" value={f.note} onChange={v=>setF(p=>({...p,note:v}))} placeholder="Evidence for the reviewer"/></div>
+      <CtxErrors errors={errs || (live && !live.ok ? live.errors : null)}/>
+    </CtxDrawer>
+  );
+};
+
+// ── One row per link, with the actions its status allows.
+const CtxLinkRow = ({l, showTerm, showElement, onToast, onOpenTerm}) => {
+  const actor = useCtxActor();
+  const el = CTX.elementOf(_slState, l.kind, l.elementId);
+  const models = CTX.modelsOfElement(_slState, l.kind, el);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+      <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",width:62}}>{CTX.LINK_KINDS[l.kind].l}</span>
+      {showElement&&<span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{CTX.elementName(_slState,l.kind,el)}<span style={{fontSize:11,color:T.textMuted,fontWeight:400}}> · {models.map(m=>m.name).join(", ")||"no model"}</span></span>}
+      {showElement&&showTerm&&<span style={{fontSize:11,color:T.textMuted}}>→</span>}
+      {showTerm&&<button onClick={()=>onOpenTerm&&onOpenTerm(l.termId)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12.5,fontWeight:600,color:T.accent}}>{ctxTermName(l.termId)}</button>}
+      <CtxChip s={l.status}/>
+      <span style={{fontSize:10.5,color:T.textMuted}}>{l.source==="model definition"?"from the model definition":`${l.proposedBy||"—"} · ${ctxFmtAt(l.reviewedAt||l.proposedAt)}`}</span>
+      <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+        {l.status==="proposed"&&<CtxReviewButtons kind="link" id={l.id} onToast={onToast}/>}
+        {l.status==="proposed"&&<Btn small ghost onClick={()=>{ctxRemoveLink(l, actor, "Withdrawn"); onToast&&onToast("Proposal withdrawn","success");}}>Withdraw</Btn>}
+        {l.status==="approved"&&(confirm
+          ? <><span style={{fontSize:11,color:T.textSub}}>Remove this link?</span><Btn small variant="danger" onClick={()=>{ctxRemoveLink(l, actor, ""); setConfirm(false); onToast&&onToast("Link removed","success");}}>Remove</Btn><Btn small ghost onClick={()=>setConfirm(false)}>Cancel</Btn></>
+          : <Btn small ghost onClick={()=>setConfirm(true)}>Remove</Btn>)}
+      </div>
+    </div>
+  );
+};
+
+// ── Semantic model › Glossary links tab.
+const CtxModelLinks = ({mdl, onToast, onNav}) => {
+  const st = useCtxState();
+  const [drawer, setDrawer] = useState(null);
+  const [showClosed, setShowClosed] = useState(false);
+  const els = ctxElementsOf(mdl.id);
+  const keys = new Set(els.map(e=>`${e.kind}:${e.id}`));
+  const links = CTX.effectiveLinks(_slState, st.linkRecords).filter(l => keys.has(`${l.kind}:${l.elementId}`) && (showClosed || l.status==="approved" || l.status==="proposed"));
+  const unlinked = els.filter(e => (e.kind==="metric"||e.kind==="dataset") && !e.cur);
+  const openTerm = (id) => onNav && onNav("glossary", {termId:id});
+  return (
+    <div>
+      <SH title="Glossary links" sub="Which business term each metric, field and dataset means. A proposed link is visible everywhere but is not used by context until approved and published."
+        action={<Btn small variant="primary" onClick={()=>setDrawer({modelId:mdl.id})}>Link to term</Btn>}/>
+      <Card2>
+        {links.length===0 ? <div style={{padding:16}}><CtxEmpty title="No glossary links yet" sub="Link a metric or dataset to the term it means." action={<Btn small onClick={()=>setDrawer({modelId:mdl.id})}>Link to term</Btn>}/></div>
+          : links.map(l=><CtxLinkRow key={l.id+l.status} l={l} showTerm showElement onToast={onToast} onOpenTerm={openTerm}/>)}
+      </Card2>
+      <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub,marginTop:8,cursor:"pointer"}}>
+        <input type="checkbox" checked={showClosed} onChange={e=>setShowClosed(e.target.checked)}/> Show rejected, removed and superseded links
+      </label>
+      {unlinked.length>0&&<div style={{marginTop:18}}>
+        <SH title={`Not linked · ${unlinked.length}`} sub="Metrics and datasets with no business meaning declared."/>
+        <Card2>{unlinked.map(e=>(
+          <div key={e.kind+e.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:`1px solid ${T.border}`}}>
+            <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",width:62}}>{CTX.LINK_KINDS[e.kind].l}</span>
+            <span style={{fontSize:12.5,color:T.text}}>{e.name}</span>
+            <div style={{marginLeft:"auto"}}><Btn small ghost onClick={()=>setDrawer({modelId:mdl.id, kind:e.kind, elementId:e.id})}>Link</Btn></div>
+          </div>))}</Card2>
+      </div>}
+      {drawer&&<CtxLinkDrawer initial={drawer} onClose={()=>setDrawer(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+// ── Semantic model › Versions tab: validate the selected version, publish, history.
+const CtxModelVersions = ({mdl, onGoTo, onToast}) => {
+  const st = useCtxState();
+  const actor = useCtxActor();
+  const [sel, setSel] = useState("draft");
+  const [note, setNote] = useState("");
+  const [result, setResult] = useState(null);
+  const vers = CTX.versionsOf(st.versions, mdl.id);
+  const d = CTX.draftState(_slState, st.versions, mdl.id);
+  const pubId = mdl.publishedVersionId;
+  const selV = sel==="draft" ? null : vers.find(v=>v.id===sel);
+  const issues = ctxValidate(mdl.id, selV ? selV.id : null);
+  const errors = issues.filter(i=>i.severity==="error"), warns = issues.filter(i=>i.severity==="warning");
+  const harvested = mdl.source && mdl.source.writable===false;
+  const blockReason = harvested ? `${mdl.name} is harvested from ${mdl.source.platform}; EDG reads it and does not publish it.`
+    : errors.length ? `Fix ${errors.length} error${errors.length===1?"":"s"} first.`
+    : d.pub && !d.changed ? `The draft is identical to published v${d.pub.n}.` : null;
+  const publish = () => {
+    const r = ctxPublish(mdl.id, actor, note);
+    if(!r.ok){ setResult({ok:false, msg:r.error}); return; }
+    setResult({ok:true, msg:`Published v${r.version.n}. Context requests now use v${r.version.n}.`});
+    setNote(""); setSel(r.version.id);
+    onToast && onToast(`${mdl.name} v${r.version.n} published`, "success");
+  };
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 300px",gap:18}}>
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+          <CtxLabel>Version</CtxLabel>
+          <div style={{width:280}}><CtxSel ariaLabel="Version to validate" value={sel} onChange={v=>{setSel(v);setResult(null);}}>
+            <option value="draft">Draft v{d.nextN} (working copy{d.changed?", unpublished changes":", same as published"})</option>
+            {vers.map(v=><option key={v.id} value={v.id}>v{v.n} · {v.id===pubId?"published":"superseded"} · {ctxFmtAt(v.publishedAt)}</option>)}
+          </CtxSel></div>
+          {errors.length===0&&warns.length===0 ? <CtxChip s="pass" label="No issues"/> : <><CtxChip s="error" label={`${errors.length} error${errors.length===1?"":"s"}`}/><CtxChip s="warning" label={`${warns.length} warning${warns.length===1?"":"s"}`}/></>}
+        </div>
+        {result&&<div role="status" style={{fontSize:12,margin:"0 0 10px",padding:"8px 12px",borderRadius:8,background:result.ok?"rgba(22,163,74,.08)":T.roseDim,color:result.ok?T.green:T.rose}}>{result.msg}</div>}
+        <SH title={`Validation · ${selV?`v${selV.n}`:`draft v${d.nextN}`}`} sub={selV?"Validated against today's glossary. A published version is never changed — fix the draft and publish again.":"Errors block publishing; warnings are reported to consumers."}/>
+        <Card2>
+          {issues.length===0 ? <div style={{padding:14,fontSize:12,color:T.textSub}}>Nothing to fix.</div> : issues.map(i=>(
+            <div key={i.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
+              <CtxChip s={i.severity}/>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,color:T.text}}>{i.message}</div><div style={{fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{i.code}</div></div>
+              {!selV&&<Btn small ghost onClick={()=>onGoTo(i)}>{i.fix||"Go to"}</Btn>}
+            </div>))}
+        </Card2>
+        {!selV&&<div style={{marginTop:16}}>
+          <SH title={`Publish draft v${d.nextN}`} sub={d.pub?`Context stays on v${d.pub.n} until this is published.`:"Nothing from this model reaches context until a version is published."}/>
+          <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+            <div style={{flex:1}}><CtxInput ariaLabel="Publication note" value={note} onChange={setNote} placeholder="What changed (recorded in the publication history)"/></div>
+            <Btn variant="primary" onClick={publish} disabled={!!blockReason} title={blockReason||undefined}>Publish v{d.nextN}</Btn>
+          </div>
+          {blockReason&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:6}}>{blockReason}</div>}
+        </div>}
+      </div>
+      <div>
+        <SH title="Publication history"/>
+        <Card2>{vers.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>Never published.</div> : vers.map(v=>(
+          <button key={v.id} onClick={()=>{setSel(v.id);setResult(null);}} style={{display:"block",width:"100%",textAlign:"left",padding:"10px 12px",background:sel===v.id?T.bgHover:"none",border:"none",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:12.5,fontWeight:700,color:T.text}}>v{v.n}</span><CtxChip s={v.id===pubId?"published":"superseded"}/></div>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{ctxFmtAt(v.publishedAt)} · {v.publishedBy}</div>
+            {v.note&&<div style={{fontSize:11,color:T.textSub,marginTop:2}}>{v.note}</div>}
+            <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>{v.snapshot.metrics.length} metrics · {v.snapshot.entities.length} datasets · #{v.hash}</div>
+          </button>))}</Card2>
+      </div>
+    </div>
+  );
+};
+
+// ── Glossary term › Relationships (both directions) and model links.
+const CtxTermRelations = ({term, onToast, onOpenTerm}) => {
+  useCtxState();
+  const actor = useCtxActor();
+  const [drawer, setDrawer] = useState(null);
+  const [confirm, setConfirm] = useState(null);
+  const w = ctxWorld();
+  const rows = CTX.relationsOf(term.id, w.crels, w.terms).filter(r => !r.other || ctxTermVisible(r.other));
+  return (
+    <div style={{marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Relationships</div>
+        <Btn small ghost onClick={()=>setDrawer({from:term.id})} disabled={ctxStatusOf(term)==="Deprecated"} title={ctxStatusOf(term)==="Deprecated"?"A deprecated term cannot take new relationships":undefined}>Add relationship</Btn>
+      </div>
+      {rows.length===0 ? <div style={{fontSize:13,color:T.textMuted,fontStyle:"italic"}}>No relationships.</div> : (
+        <div style={{border:`1px solid ${T.border}`,borderRadius:8}}>
+          {rows.map(r=>(
+            <div key={r.rel.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderBottom:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,color:T.textSub}}>{term.term} <i>{r.label}</i></span>
+              <button onClick={()=>onOpenTerm&&onOpenTerm(r.otherId)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12.5,fontWeight:600,color:T.accent}}>{r.other?r.other.term:"(deleted)"}</button>
+              <CtxChip s={r.rel.status}/>
+              <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+                {r.rel.status==="proposed"&&<CtxReviewButtons kind="rel" id={r.rel.id} onToast={onToast}/>}
+                <Btn small ghost onClick={()=>setDrawer({id:r.rel.id})}>Edit</Btn>
+                {confirm===r.rel.id
+                  ? <><Btn small variant="danger" onClick={()=>{ctxRemoveRel(r.rel.id, actor, ""); setConfirm(null); onToast&&onToast("Relationship removed","success");}}>Remove</Btn><Btn small ghost onClick={()=>setConfirm(null)}>Cancel</Btn></>
+                  : <Btn small ghost onClick={()=>setConfirm(r.rel.id)}>Remove</Btn>}
+              </div>
+            </div>))}
+        </div>)}
+      {drawer&&<CtxRelDrawer initial={drawer} onClose={()=>setDrawer(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+const CtxTermLinks = ({term, onToast, onNav}) => {
+  const st = useCtxState();
+  const [drawer, setDrawer] = useState(false);
+  const links = CTX.effectiveLinks(_slState, st.linkRecords).filter(l => l.termId===term.id && (l.status==="approved"||l.status==="proposed"))
+    .filter(l => CTX.modelsOfElement(_slState, l.kind, CTX.elementOf(_slState, l.kind, l.elementId)).some(m=>CTX.canSeeDomain(ctxPersona(), m.domain)));
+  return (
+    <div style={{marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Semantic model links</div>
+        <div style={{display:"flex",gap:6}}>
+          <Btn small ghost onClick={()=>onNav&&onNav("context",{ctxTab:"impact", target:{kind:"term", id:term.id}})}>Impact</Btn>
+          <Btn small ghost onClick={()=>setDrawer(true)}>Link element</Btn>
+        </div>
+      </div>
+      {links.length===0 ? <div style={{fontSize:13,color:T.textMuted,fontStyle:"italic"}}>No model element is linked to this term.</div>
+        : <div style={{border:`1px solid ${T.border}`,borderRadius:8}}>{links.map(l=><CtxLinkRow key={l.id} l={l} showElement onToast={onToast}/>)}</div>}
+      {drawer&&<CtxLinkDrawer initial={{termId:term.id}} onClose={()=>setDrawer(false)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+// Persona simulation bar — shown wherever persona filtering applies.
+const CtxPersonaBar = ({always}) => {
+  const st = useCtxState();
+  const p = CTX.personaOf(st.personaId);
+  if(!always && p.id==="steward") return null;
+  return (
+    <div role="note" style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px",background:T.violetDim,borderBottom:`1px solid ${T.violet}33`,fontSize:11.5,color:T.text,flexWrap:"wrap"}}>
+      <b>Viewing as {p.label}</b><span style={{color:T.textSub}}>{p.d} Simulated in this browser — a prototype stand-in for real access control.</span>
+      <div style={{marginLeft:"auto",width:190}}><CtxSel ariaLabel="Persona" value={p.id} onChange={v=>ctxSet(s=>({...s, personaId:v}))}>
+        {CTX.PERSONAS.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</CtxSel></div>
+    </div>
+  );
+};
+
+// ── Ontology Explorer: graph from stored records, list alternative, saved views.
+const CTX_NODE_C = {Concept:"#7c3aed", Metric:"#16a34a", Dimension:"#d97706", Term:"#0284c7", metric:"#0f766e", field:"#b45309", dataset:"#2563eb", model:"#e11d48"};
+const CtxExplorer = ({onToast, onNav, onImpact}) => {
+  const st = useCtxState();
+  const actor = useCtxActor();
+  const persona = ctxPersona();
+  const w = ctxWorld();
+  const g = CTX.buildGraph(w, persona);
+  const [q, setQ] = useState("");
+  const [kinds, setKinds] = useState(["Concept","Metric","Dimension","Term","metric","field","dataset"]);
+  const [stats, setStats] = useState(["approved","proposed","structural"]);
+  const [focus, setFocus] = useState(null);
+  const [depth, setDepth] = useState(1);
+  const [expanded, setExpanded] = useState([]);
+  const [connectedOnly, setConnectedOnly] = useState(true);
+  const [zoom, setZoom] = useState(0.9);
+  const [sel, setSel] = useState(null);       // {type:"node"|"edge", id}
+  const [mode, setMode] = useState("graph");
+  const [viewName, setViewName] = useState("");
+  const [relDrawer, setRelDrawer] = useState(null);
+  const [linkDrawer, setLinkDrawer] = useState(null);
+  const [confirmRm, setConfirmRm] = useState(false);
+  // Filters
+  let edges = g.edges.filter(e => stats.includes(e.status));
+  let nodes = g.nodes.filter(n => kinds.includes(n.kind));
+  let ids = new Set(nodes.map(n=>n.id));
+  edges = edges.filter(e => ids.has(e.from) && ids.has(e.to));
+  const nbr = (id) => edges.filter(e=>e.from===id||e.to===id).map(e=>e.from===id?e.to:e.from);
+  if(focus && ids.has(focus)){
+    const keep = new Set([focus]); let fr = [focus];
+    for(let i=0;i<depth;i++){ const nx=[]; fr.forEach(n=>nbr(n).forEach(m=>{ if(!keep.has(m)){ keep.add(m); nx.push(m);} })); fr = nx; }
+    expanded.forEach(x => { if(keep.has(x)) nbr(x).forEach(m=>keep.add(m)); });
+    nodes = nodes.filter(n=>keep.has(n.id));
+  }
+  if(q.trim()){
+    const ql = q.trim().toLowerCase();
+    const hit = new Set(nodes.filter(n=>n.name.toLowerCase().includes(ql)).map(n=>n.id));
+    const keep = new Set(hit); hit.forEach(h=>nbr(h).forEach(m=>keep.add(m)));
+    nodes = nodes.filter(n=>keep.has(n.id));
+  }
+  ids = new Set(nodes.map(n=>n.id));
+  edges = edges.filter(e => ids.has(e.from) && ids.has(e.to));
+  if(connectedOnly && !focus){ const c = new Set(edges.flatMap(e=>[e.from,e.to])); nodes = nodes.filter(n=>c.has(n.id)); }
+  const qHit = (n) => q.trim() && n.name.toLowerCase().includes(q.trim().toLowerCase());
+  // Layout: one column per layer, model → dataset → metric/field → term.
+  const NW=190, NH=30, GX=90, GY=12, PX=16, PY=34;
+  const cols = [[],[],[],[]];
+  nodes.forEach(n => cols[CTX.NODE_KINDS[n.kind].col].push(n));
+  cols.forEach(c => c.sort((a,b)=>a.kind.localeCompare(b.kind)||a.name.localeCompare(b.name)));
+  const used = cols.map((c,i)=>c.length?i:-1).filter(i=>i>=0);
+  const pos = {};
+  used.forEach((ci,k) => cols[ci].forEach((n,j) => { pos[n.id] = {x:PX + k*(NW+GX), y:PY + j*(NH+GY)}; }));
+  const W = PX*2 + Math.max(1,used.length)*(NW+GX), H = PY + Math.max(1,...cols.map(c=>c.length))*(NH+GY) + 20;
+  const selNode = sel && sel.type==="node" ? g.nodes.find(n=>n.id===sel.id) : null;
+  const selEdge = sel && sel.type==="edge" ? g.edges.find(e=>e.id===sel.id) : null;
+  const toggle = (arr, set, v) => set(arr.includes(v) ? arr.filter(x=>x!==v) : [...arr, v]);
+  const saveView = () => {
+    const name = viewName.trim(); if(!name) return;
+    const v = {id:`view_${Date.now().toString(36)}`, name, q, kinds, stats, focus, depth, expanded, connectedOnly, zoom, by:actor, at:new Date().toISOString()};
+    ctxSet(s => ({...s, views:[...s.views.filter(x=>x.name.toLowerCase()!==name.toLowerCase()), v]}));
+    setViewName(""); onToast && onToast(`View "${name}" saved`, "success");
+  };
+  const applyView = (v) => { setQ(v.q||""); setKinds(v.kinds); setStats(v.stats); setFocus(v.focus); setDepth(v.depth||1); setExpanded(v.expanded||[]); setConnectedOnly(v.connectedOnly!==false); setZoom(v.zoom||0.9); setSel(null); };
+  const clearAll = () => { setQ(""); setKinds(["Concept","Metric","Dimension","Term","metric","field","dataset"]); setStats(["approved","proposed","structural"]); setFocus(null); setExpanded([]); setConnectedOnly(true); };
+  const openNode = (n) => {
+    if(n.group==="term") onNav && onNav("glossary", {termId:n.ref});
+    else if(n.kind==="model") onNav && onNav("semanticlayer", {modelId:n.ref});
+    else if(n.kind==="metric") { const m=_slState.metrics.find(x=>x.id===n.ref); m && onNav && onNav("semanticlayer", {modelId:m.model}); }
+    else { const mo = _slState.models.find(m=>(m.entityIds||[]).includes(n.kind==="dataset"?n.ref:(CTX.elementOf(_slState,n.sub||"field",n.ref)||{}).entity)); mo && onNav && onNav("semanticlayer",{modelId:mo.id}); }
+  };
+  const linkKindOf = (n) => n.kind==="metric"?"metric":n.kind==="dataset"?"dataset":n.sub||"field";
+  const modelOfNode = (n) => {
+    if(n.kind==="metric") return (_slState.metrics.find(x=>x.id===n.ref)||{}).model;
+    const entId = n.kind==="dataset" ? n.ref : (CTX.elementOf(_slState, linkKindOf(n), n.ref)||{}).entity;
+    const mo = _slState.models.find(m=>(m.entityIds||[]).includes(entId)); return mo && mo.id;
+  };
+  const Pill = ({on, onClick, children, c}) => <button onClick={onClick} aria-pressed={on} style={{fontSize:11,padding:"3px 9px",borderRadius:99,cursor:"pointer",border:`1px solid ${on?(c||T.accent):T.border}`,background:on?`${c||T.accent}14`:"transparent",color:on?(c||T.text):T.textMuted,fontWeight:600}}>{children}</button>;
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 320px",gap:16}}>
+      <div style={{minWidth:0}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginBottom:8}}>
+          <div style={{width:220}}><CtxInput ariaLabel="Search the graph" value={q} onChange={setQ} placeholder="Search nodes…"/></div>
+          <Tabs2 pill tabs={[{key:"graph",label:"Graph"},{key:"list",label:"List"}]} active={mode} onChange={setMode}/>
+          {mode==="graph"&&<><Btn small ghost onClick={()=>setZoom(z=>Math.min(1.6,+(z+0.1).toFixed(2)))} title="Zoom in">＋</Btn><Btn small ghost onClick={()=>setZoom(z=>Math.max(0.4,+(z-0.1).toFixed(2)))} title="Zoom out">－</Btn><Btn small ghost onClick={()=>setZoom(0.9)}>Reset zoom</Btn><span style={{fontSize:11,color:T.textMuted}}>{Math.round(zoom*100)}%</span></>}
+          <label style={{display:"flex",alignItems:"center",gap:5,fontSize:11.5,color:T.textSub,cursor:"pointer"}}><input type="checkbox" checked={connectedOnly} onChange={e=>setConnectedOnly(e.target.checked)}/>Connected only</label>
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:6}}>
+          {Object.entries(CTX.NODE_KINDS).filter(([k])=>k!=="model"||true).map(([k,v])=><Pill key={k} on={kinds.includes(k)} c={CTX_NODE_C[k]} onClick={()=>toggle(kinds,setKinds,k)}>{v.l}</Pill>)}
+        </div>
+        <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:8,alignItems:"center"}}>
+          <span style={{fontSize:11,color:T.textMuted}}>Edges:</span>
+          {[["approved","Approved"],["proposed","Proposed"],["structural","Model structure"]].map(([k,l])=><Pill key={k} on={stats.includes(k)} onClick={()=>toggle(stats,setStats,k)}>{l}</Pill>)}
+          {focus&&<><span style={{fontSize:11,color:T.textSub,marginLeft:8}}>Focused on <b>{(g.nodes.find(n=>n.id===focus)||{}).name}</b> · depth</span>
+            <CtxSel ariaLabel="Depth" value={depth} onChange={v=>setDepth(+v)}>{[1,2,3].map(d=><option key={d} value={d}>{d}</option>)}</CtxSel>
+            <Btn small ghost onClick={()=>{setFocus(null);setExpanded([]);}}>Clear focus</Btn></>}
+        </div>
+        {nodes.length===0 ? <CtxEmpty title="Nothing matches these filters" sub={g.nodes.length?"Try another search, or turn node types back on.":"There are no records you are permitted to see."} action={g.nodes.length?<Btn small onClick={clearAll}>Clear filters</Btn>:null}/>
+        : mode==="list" ? (
+          <div>
+            <DataTable cols={[{key:"name",label:"Node"},{key:"kind",label:"Type",render:v=>CTX.NODE_KINDS[v].l},{key:"domain",label:"Domain"},{key:"status",label:"Status"},{key:"deg",label:"Connections"}]}
+              rows={nodes.map(n=>({...n, deg:edges.filter(e=>e.from===n.id||e.to===n.id).length}))} onRowClick={r=>setSel({type:"node",id:r.id})}/>
+            <div style={{height:12}}/>
+            <DataTable cols={[{key:"a",label:"From"},{key:"label",label:"Relationship"},{key:"b",label:"To"},{key:"status",label:"Status",render:v=><CtxChip s={v==="structural"?"pass":v} label={v==="structural"?"Model":undefined}/>}]}
+              rows={edges.map(e=>({...e, a:(nodes.find(n=>n.id===e.from)||{}).name, b:(nodes.find(n=>n.id===e.to)||{}).name}))} onRowClick={r=>setSel({type:"edge",id:r.id})}/>
+          </div>
+        ) : (
+          <div style={{border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,overflow:"auto",maxHeight:620}}>
+            <svg role="img" aria-label={`Graph of ${nodes.length} nodes and ${edges.length} edges`} width={W*zoom} height={H*zoom} viewBox={`0 0 ${W} ${H}`} style={{display:"block"}}>
+              {used.map((ci,k)=><text key={ci} x={PX + k*(NW+GX)} y={18} fontSize="10" fontWeight="700" fill={T.textMuted}>{["SEMANTIC MODELS","DATASETS","METRICS & FIELDS","GLOSSARY"][ci]}</text>)}
+              {edges.map(e=>{
+                const a=pos[e.from], b=pos[e.to]; if(!a||!b) return null;
+                const same = a.x===b.x;
+                const x1 = same ? a.x+NW : (a.x<b.x ? a.x+NW : a.x), y1=a.y+NH/2, x2 = same ? b.x+NW : (a.x<b.x ? b.x : b.x+NW), y2=b.y+NH/2;
+                const d = same ? `M${x1},${y1} C${x1+60+Math.abs(y2-y1)*0.15},${y1} ${x2+60+Math.abs(y2-y1)*0.15},${y2} ${x2},${y2}` : `M${x1},${y1} C${(x1+x2)/2},${y1} ${(x1+x2)/2},${y2} ${x2},${y2}`;
+                const on = sel && sel.type==="edge" && sel.id===e.id;
+                const c = e.status==="proposed" ? T.amber : e.kind==="structural" ? T.border : e.kind==="link" ? "#0ea5e9" : T.violet;
+                return <g key={e.id} style={{cursor:"pointer"}} onClick={()=>setSel({type:"edge",id:e.id})}>
+                  <path d={d} fill="none" stroke="transparent" strokeWidth="10"/>
+                  <path d={d} fill="none" stroke={on?T.accent:c} strokeWidth={on?2.4:1.4} strokeDasharray={e.status==="proposed"?"5 4":undefined}><title>{e.label} ({e.status})</title></path>
+                </g>;
+              })}
+              {nodes.map(n=>{
+                const p=pos[n.id]; if(!p) return null;
+                const on = sel && sel.type==="node" && sel.id===n.id;
+                const c = CTX_NODE_C[n.kind];
+                return <g key={n.id} transform={`translate(${p.x},${p.y})`} style={{cursor:"pointer"}} onClick={()=>setSel({type:"node",id:n.id})} onDoubleClick={()=>{setFocus(n.id);setExpanded([]);}}>
+                  <rect width={NW} height={NH} rx="7" fill={on?`${c}22`:T.bgElevated} stroke={on||qHit(n)?c:T.border} strokeWidth={on||qHit(n)?2:1}/>
+                  <rect width="4" height={NH} rx="2" fill={c}/>
+                  <text x="11" y="19" fontSize="11.5" fontWeight="600" fill={T.text}>{n.name.length>26?n.name.slice(0,25)+"…":n.name}</text>
+                  <title>{n.name} · {CTX.NODE_KINDS[n.kind].l}{n.status?` · ${n.status}`:""}</title>
+                </g>;
+              })}
+            </svg>
+          </div>
+        )}
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:8,fontSize:10.5,color:T.textMuted}}>
+          <span><span style={{color:T.violet}}>━</span> relationship</span><span><span style={{color:"#0ea5e9"}}>━</span> glossary link</span><span><span style={{color:T.amber}}>┅</span> proposed</span><span>Double-click a node to focus on it.</span>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <Card2 style={{padding:14}}>
+          {!selNode&&!selEdge&&<div style={{fontSize:12,color:T.textMuted}}>Select a node or an edge to see its details.</div>}
+          {selNode&&<>
+            <div style={{fontSize:10,fontWeight:700,color:CTX_NODE_C[selNode.kind],textTransform:"uppercase"}}>{CTX.NODE_KINDS[selNode.kind].l}</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,margin:"3px 0 6px"}}>{selNode.name}</div>
+            <div style={{fontSize:11.5,color:T.textSub,marginBottom:4}}>{[selNode.domain,selNode.status].filter(Boolean).join(" · ")}</div>
+            {selNode.group==="term"&&<div style={{fontSize:11.5,color:T.textSub,marginBottom:8}}>{(w.terms.find(t=>t.id===selNode.ref)||{}).definition}</div>}
+            <div style={{fontSize:11,color:T.textMuted,marginBottom:10}}>{g.edges.filter(e=>e.from===selNode.id||e.to===selNode.id).length} connections</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <Btn small onClick={()=>openNode(selNode)}>Open</Btn>
+              <Btn small ghost onClick={()=>{setFocus(selNode.id);setExpanded([]);}}>Focus</Btn>
+              {focus&&<Btn small ghost onClick={()=>setExpanded(x=>x.includes(selNode.id)?x:[...x,selNode.id])} disabled={expanded.includes(selNode.id)} title={expanded.includes(selNode.id)?"Already expanded":undefined}>Expand</Btn>}
+              {selNode.group==="term"&&<Btn small ghost onClick={()=>setRelDrawer({from:selNode.ref, source:"graph"})}>Add relationship</Btn>}
+              {selNode.group!=="term"&&selNode.kind!=="model"&&<Btn small ghost onClick={()=>setLinkDrawer({modelId:modelOfNode(selNode), kind:linkKindOf(selNode), elementId:selNode.ref})}>Link to term</Btn>}
+              {selNode.kind!=="model"&&<Btn small ghost onClick={()=>onImpact({kind:selNode.group==="term"?"term":selNode.kind==="field"?linkKindOf(selNode):selNode.kind, id:selNode.ref})}>Impact</Btn>}
+            </div>
+          </>}
+          {selEdge&&<>
+            <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase"}}>{selEdge.kind==="relationship"?"Relationship":selEdge.kind==="link"?"Glossary link":"Model structure"}</div>
+            <div style={{fontSize:13,color:T.text,margin:"4px 0 8px"}}><b>{(g.nodes.find(n=>n.id===selEdge.from)||{}).name}</b> {selEdge.label} <b>{(g.nodes.find(n=>n.id===selEdge.to)||{}).name}</b></div>
+            {selEdge.kind!=="structural"&&<CtxChip s={selEdge.status}/>}
+            <div style={{fontSize:12,fontWeight:700,color:T.text,margin:"12px 0 6px"}}>Why connected?</div>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {CTX.whyConnected(w, selEdge).map((s,i)=>(
+                <div key={i} style={{fontSize:11.5,color:T.textSub,borderLeft:`2px solid ${T.border}`,paddingLeft:8}}>
+                  <b style={{color:T.text}}>{s.step}</b>{s.by?` · ${s.by}`:""}{s.at?` · ${ctxFmtAt(s.at)}`:""}{s.detail?<div>{s.detail}</div>:null}
+                </div>))}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:12}}>
+              {selEdge.status==="proposed"&&<CtxReviewButtons kind={selEdge.kind==="link"?"link":"rel"} id={selEdge.ref} onToast={onToast}/>}
+              {selEdge.kind==="relationship"&&<Btn small ghost onClick={()=>setRelDrawer({id:selEdge.ref})}>Edit</Btn>}
+              {selEdge.kind!=="structural"&&(confirmRm
+                ? <><Btn small variant="danger" onClick={()=>{ if(selEdge.kind==="link") ctxRemoveLink(selEdge.link, actor, ""); else ctxRemoveRel(selEdge.ref, actor, ""); setConfirmRm(false); setSel(null); onToast&&onToast("Removed","success"); }}>Confirm remove</Btn><Btn small ghost onClick={()=>setConfirmRm(false)}>Cancel</Btn></>
+                : <Btn small ghost onClick={()=>setConfirmRm(true)}>Remove</Btn>)}
+            </div>
+          </>}
+        </Card2>
+        <Card2 style={{padding:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:8}}>Saved views</div>
+          <div style={{display:"flex",gap:6,marginBottom:8}}>
+            <CtxInput ariaLabel="View name" value={viewName} onChange={setViewName} placeholder="Name this view"/>
+            <Btn small onClick={saveView} disabled={!viewName.trim()} title={!viewName.trim()?"Name the view first":undefined}>Save</Btn>
+          </div>
+          {st.views.length===0 ? <div style={{fontSize:11.5,color:T.textMuted}}>No saved views.</div> : st.views.map(v=>(
+            <div key={v.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0"}}>
+              <button onClick={()=>applyView(v)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:12,fontWeight:600,color:T.accent,textAlign:"left",flex:1}}>{v.name}</button>
+              <button aria-label={`Delete view ${v.name}`} onClick={()=>ctxSet(s=>({...s, views:s.views.filter(x=>x.id!==v.id)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex"}}>{Ic.x(11)}</button>
+            </div>))}
+        </Card2>
+      </div>
+      {relDrawer&&<CtxRelDrawer initial={relDrawer} onClose={()=>setRelDrawer(null)} onToast={onToast}/>}
+      {linkDrawer&&<CtxLinkDrawer initial={linkDrawer} onClose={()=>setLinkDrawer(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+// ── A context response, rendered from the response object (the JSON tab shows the
+//    same object verbatim).
+const CtxResult = ({res, onChoose, onSuggest, recorded}) => {
+  const [view, setView] = useState("readable");
+  const [copied, setCopied] = useState("");
+  const json = JSON.stringify(res, null, 2);
+  const copy = async (text, what) => { try { await navigator.clipboard.writeText(text); setCopied(what); setTimeout(()=>setCopied(""),1500); } catch(e){ setCopied("Copy failed — select the text and copy it"); } };
+  const download = () => { const b = new Blob([json],{type:"application/json"}); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href=u; a.download=`${res.requestId}.json`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 1000); };
+  const c = res.context;
+  return (
+    <Card2 style={{padding:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <CtxChip s={res.status}/>
+        <span style={{fontSize:11,color:T.textMuted}}>{res.requestId} · {ctxFmtAt(res.generatedAt)} · {res.persona.label} (simulated) · {res.profile.name}</span>
+        <div style={{marginLeft:"auto"}}><Tabs2 pill tabs={[{key:"readable",label:"Readable"},{key:"json",label:"JSON"}]} active={view} onChange={setView}/></div>
+      </div>
+      {recorded&&<div style={{fontSize:11.5,color:T.textSub,padding:"7px 10px",background:T.bgElevated,borderRadius:7,marginBottom:10}}>Recorded response — the model version and evidence timestamps are as they were when it was generated.</div>}
+      {view==="json" ? <>
+        <div style={{display:"flex",gap:6,marginBottom:8}}><Btn small onClick={()=>copy(json,"JSON copied")}>Copy JSON</Btn><Btn small ghost onClick={download}>Download .json</Btn><Btn small ghost onClick={()=>copy(CTX.renderText(res),"Text copied")}>Copy as text</Btn>{copied&&<span style={{fontSize:11,color:T.green}}>{copied}</span>}</div>
+        <pre style={{margin:0,padding:12,background:T.bgElevated,borderRadius:8,fontSize:11,maxHeight:460,overflow:"auto",color:T.text,fontFamily:"'Geist Mono',monospace"}}>{json}</pre>
+      </> : <>
+        <div style={{fontSize:13.5,color:T.text,fontWeight:600,marginBottom:10}}>{res.summary}</div>
+        {res.clarification&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{fontSize:12,color:T.textSub}}>{res.clarification.question}</div>
+          {res.clarification.options.map(o=>(
+            <div key={o.key} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:8}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:700,color:T.text}}>{o.metric} <span style={{fontWeight:400,color:T.textMuted}}>· {o.model} v{o.version} · {o.status}</span></div><div style={{fontSize:11.5,color:T.textSub}}>{o.definition}</div></div>
+              {onChoose&&<Btn small onClick={()=>onChoose(o.key)}>Use this</Btn>}
+            </div>))}
+        </div>}
+        {res.insufficient&&<div style={{fontSize:12,color:T.textSub}}>{res.insufficient.detail}
+          {res.insufficient.suggestions.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}><span style={{fontSize:11,color:T.textMuted}}>You can ask about:</span>{res.insufficient.suggestions.map(s=><button key={s} onClick={()=>onSuggest&&onSuggest(s)} disabled={!onSuggest} style={{fontSize:11,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,cursor:onSuggest?"pointer":"default"}}>{s}</button>)}</div>}</div>}
+        {res.resolved&&<div style={{fontSize:11.5,color:T.textSub,marginBottom:10}}>Source: <b>{res.resolved.model} v{res.resolved.version}</b></div>}
+        {c&&<div style={{display:"grid",gridTemplateColumns:"140px minmax(0,1fr)",gap:"6px 12px",fontSize:12,marginBottom:12}}>
+          <span style={{color:T.textMuted}}>Definition</span><span style={{color:T.text}}>{c.definition}</span>
+          <span style={{color:T.textMuted}}>Glossary term</span><span style={{color:T.text}}>{c.term?`${c.term.name} · ${c.term.status}`:"—"}</span>
+          <span style={{color:T.textMuted}}>Calculation</span><span style={{color:T.text,fontFamily:"'Geist Mono',monospace"}}>{c.calculation}{c.unit?` (${c.unit})`:""}</span>
+          <span style={{color:T.textMuted}}>Grain</span><span style={{color:T.text}}>{c.grain?`one row per ${c.grain.key} of ${c.grain.dataset} (${c.grain.table})`:"—"}</span>
+          <span style={{color:T.textMuted}}>Time</span><span style={{color:T.text}}>{c.time?`${c.time.column} at ${c.time.grain||"—"} grain`:"—"}</span>
+          <span style={{color:T.textMuted}}>Always filtered</span><span style={{color:T.text}}>{c.filters.join("; ")||"—"}</span>
+          <span style={{color:T.textMuted}}>Slice by</span><span style={{color:T.text}}>{c.dimensions.map(d=>d.name+(d.term?` (${d.term})`:"")).join(", ")||"—"}</span>
+          <span style={{color:T.textMuted}}>Joins</span><span style={{color:T.text}}>{c.joins.map(j=>`${j.from} → ${j.to} on ${j.on}${j.fanOutSafe?"":" ⚠ fans out"}`).join("; ")||"—"}</span>
+          <span style={{color:T.textMuted}}>Related</span><span style={{color:T.text}}>{c.relationships.map(r=>`${r.from} ${r.relation} ${r.to}`).join("; ")||"—"}</span>
+          <span style={{color:T.textMuted}}>Owner</span><span style={{color:T.text}}>{c.owner}{c.steward?` · steward ${c.steward}`:""}</span>
+          {c.examples.length>0&&<><span style={{color:T.textMuted}}>Examples</span><span style={{color:T.text}}>{c.examples.join(" · ")}</span></>}
+        </div>}
+        {(res.evidence||[]).length>0&&<>
+          <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:6}}>Trust evidence</div>
+          <div style={{border:`1px solid ${T.border}`,borderRadius:8,marginBottom:10}}>{res.evidence.map(e=>(
+            <div key={e.kind} style={{display:"flex",gap:10,alignItems:"center",padding:"7px 10px",borderBottom:`1px solid ${T.border}`,fontSize:11.5}}>
+              <span style={{width:58}}><CtxChip s={e.status}/></span><span style={{width:150,color:T.text,fontWeight:600}}>{e.label}</span>
+              <span style={{flex:1,color:T.textSub}}>{e.detail}</span><span style={{color:T.textMuted,whiteSpace:"nowrap"}}>{e.at?ctxFmtAt(e.at):"no timestamp"}</span>
+            </div>))}</div></>}
+        {(res.warnings||[]).length>0&&<div style={{display:"flex",flexDirection:"column",gap:4}}>{res.warnings.map((w2,i)=><div key={i} style={{fontSize:11.5,color:res.status==="blocked"?T.rose:T.amber}}>⚠ {w2}</div>)}</div>}
+      </>}
+    </Card2>
+  );
+};
+
+// ── Ask: deterministic context for a question, plus the API / MCP preview.
+const CTX_MCP_TOOL = {name:"edg_get_context", description:"Governed business context for a question, from published semantic models and approved glossary relationships.",
+  inputSchema:{type:"object", required:["question","personaId","profileId"], properties:{question:{type:"string",maxLength:500}, personaId:{type:"string",enum:CTX.PERSONAS.map(p=>p.id)}, profileId:{type:"string"}, domain:{type:"string"}, conceptId:{type:"string"}, purpose:{type:"string"}, choice:{type:"string",description:"A clarification option key"}}}};
+const CtxAsk = ({onToast, seedQuestion}) => {
+  const st = useCtxState();
+  const actor = useCtxActor();
+  const persona = ctxPersona();
+  const [f, setF] = useState({question:seedQuestion||"", profileId:st.profiles[0]&&st.profiles[0].id, domain:"", conceptId:"", purpose:""});
+  const [cur, setCur] = useState(null);       // history record
+  const [err, setErr] = useState(null);
+  const [pane, setPane] = useState("result");
+  const [payload, setPayload] = useState("");
+  const [apiOut, setApiOut] = useState(null);
+  const w = ctxWorld();
+  const concepts = w.terms.filter(t=>t.termType==="Concept" && ctxTermVisible(t));
+  const domains = [...new Set(_slState.models.map(m=>m.domain))].filter(d=>CTX.canSeeDomain(persona,d));
+  const reqOf = (extra) => ({question:f.question, personaId:persona.id, profileId:f.profileId, ...(f.domain?{domain:f.domain}:{}), ...(f.conceptId?{conceptId:f.conceptId}:{}), ...(f.purpose?{purpose:f.purpose}:{}), ...(extra||{})});
+  useEffect(()=>{ setPayload(JSON.stringify(reqOf(), null, 2)); }, [f.question, f.profileId, f.domain, f.conceptId, f.purpose, persona.id]);
+  const run = (extra) => {
+    const r = ctxRun(reqOf(extra), actor);
+    if(!r.ok){ setErr(r.error); setCur(null); return; }
+    setErr(null); setCur(r.rec); setPane("result");
+  };
+  const runLocal = () => {
+    let body;
+    try { body = JSON.parse(payload); } catch(e) { setApiOut({http:400, body:{error:{code:"invalid_json", message:`Request body is not valid JSON: ${e.message}`}}}); return; }
+    const r = ctxRun(body, actor);
+    setApiOut(r.ok ? {http:200, body:r.rec.response} : {http:r.error.code==="invalid_request"?400:500, body:{error:r.error}});
+  };
+  const copy = async (t) => { try { await navigator.clipboard.writeText(t); onToast&&onToast("Copied","success"); } catch(e){ onToast&&onToast("Copy failed — select the text and copy it","error"); } };
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"320px minmax(0,1fr)",gap:16}}>
+      <Card2 style={{padding:14,display:"flex",flexDirection:"column",gap:12,alignSelf:"flex-start"}}>
+        <div><CtxLabel req>Question</CtxLabel><CtxInput multiline rows={3} ariaLabel="Question" value={f.question} onChange={v=>setF(p=>({...p,question:v}))} placeholder="e.g. What was revenue yesterday?"/></div>
+        <div><CtxLabel req>Context profile</CtxLabel><CtxSel ariaLabel="Context profile" value={f.profileId} onChange={v=>setF(p=>({...p,profileId:v}))}>{st.profiles.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</CtxSel></div>
+        <div><CtxLabel>Concept</CtxLabel><CtxSel ariaLabel="Concept" value={f.conceptId} onChange={v=>setF(p=>({...p,conceptId:v}))}><option value="">Any</option>{concepts.map(t=><option key={t.id} value={t.id}>{t.term}</option>)}</CtxSel></div>
+        <div><CtxLabel>Domain</CtxLabel><CtxSel ariaLabel="Domain" value={f.domain} onChange={v=>setF(p=>({...p,domain:v}))}><option value="">Any permitted</option>{domains.map(d=><option key={d}>{d}</option>)}</CtxSel></div>
+        <div><CtxLabel>Purpose</CtxLabel><CtxInput ariaLabel="Purpose" value={f.purpose} onChange={v=>setF(p=>({...p,purpose:v}))} placeholder="Recorded with the request"/></div>
+        <div style={{fontSize:11,color:T.textMuted}}>As <b>{persona.label}</b> (simulated persona)</div>
+        <Btn variant="primary" onClick={()=>run()} disabled={!f.question.trim()} title={!f.question.trim()?"Type a question first":undefined}>Get context</Btn>
+      </Card2>
+      <div style={{minWidth:0}}>
+        <Tabs2 tabs={[{key:"result",label:"Result"},{key:"api",label:"API & MCP preview"}]} active={pane} onChange={setPane}/>
+        {pane==="result"&&<>
+          {err&&<div role="alert" style={{padding:"12px 14px",border:`1px solid ${T.rose}33`,background:T.roseDim,borderRadius:10,marginBottom:12}}>
+            <CtxChip s={err.code==="invalid_request"?"invalid_request":"service_error"}/> <span style={{fontSize:12.5,color:T.text,marginLeft:6}}>{err.message}</span></div>}
+          {!cur&&!err&&<CtxEmpty title="Ask a question to build context" sub="Answers come only from published model versions and approved links and relationships. Nothing is generated by a language model."/>}
+          {cur&&<CtxResult res={cur.response} onChoose={(key)=>run({choice:key})} onSuggest={(s)=>setF(p=>({...p,question:s}))}/>}
+        </>}
+        {pane==="api"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:11.5,color:T.textSub,padding:"8px 12px",background:T.amberDim,border:`1px solid ${T.amber}33`,borderRadius:8}}>
+            Not deployed. No HTTP endpoint or MCP server is running — "Run locally" calls the same in-browser service the Result tab uses, and records the request in History.</div>
+          <Card2 style={{padding:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:T.text}}>POST /api/v1/context</span><span style={{fontSize:11,color:T.textMuted}}>request body (editable)</span>
+              <div style={{marginLeft:"auto",display:"flex",gap:6}}><Btn small ghost onClick={()=>copy(payload)}>Copy</Btn><Btn small ghost onClick={()=>setPayload(JSON.stringify(reqOf(),null,2))}>Reset from form</Btn><Btn small variant="primary" onClick={runLocal}>Run locally</Btn></div></div>
+            <CtxInput multiline mono rows={8} ariaLabel="Request body" value={payload} onChange={setPayload}/>
+            {apiOut&&<><div style={{fontSize:12,fontWeight:700,margin:"10px 0 6px",color:apiOut.http===200?T.green:T.rose}}>HTTP {apiOut.http}</div>
+              <pre style={{margin:0,padding:12,background:T.bgElevated,borderRadius:8,fontSize:11,maxHeight:300,overflow:"auto",color:T.text,fontFamily:"'Geist Mono',monospace"}}>{JSON.stringify(apiOut.body,null,2)}</pre></>}
+          </Card2>
+          <Card2 style={{padding:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><span style={{fontSize:12,fontWeight:700,color:T.text}}>MCP tool definition</span><span style={{fontSize:11,color:T.textMuted}}>preview only</span>
+              <div style={{marginLeft:"auto"}}><Btn small ghost onClick={()=>copy(JSON.stringify(CTX_MCP_TOOL,null,2))}>Copy</Btn></div></div>
+            <pre style={{margin:0,padding:12,background:T.bgElevated,borderRadius:8,fontSize:11,maxHeight:220,overflow:"auto",color:T.text,fontFamily:"'Geist Mono',monospace"}}>{JSON.stringify(CTX_MCP_TOOL,null,2)}</pre>
+            <div style={{fontSize:11,color:T.textMuted,margin:"8px 0 4px"}}>tools/call for the current form:</div>
+            <pre style={{margin:0,padding:12,background:T.bgElevated,borderRadius:8,fontSize:11,overflow:"auto",color:T.text,fontFamily:"'Geist Mono',monospace"}}>{JSON.stringify({jsonrpc:"2.0",method:"tools/call",params:{name:CTX_MCP_TOOL.name,arguments:reqOf()}},null,2)}</pre>
+          </Card2>
+        </div>}
+      </div>
+    </div>
+  );
+};
+
+// ── Profiles
+const CtxProfileDrawer = ({profile, onClose, onToast}) => {
+  const st = useCtxState();
+  const [p, setP] = useState(() => profile ? {...profile} : {id:`prof_${Date.now().toString(36)}`, name:"", desc:"", requireCertified:true, requireApprovedTerm:false, minQualityPct:80, maxStalenessHours:24, onViolation:"warn", onMissingEvidence:"warn", relDepth:1, includeExamples:true});
+  const [errs, setErrs] = useState(null);
+  const save = () => {
+    const chk = CTX.checkProfile(p, st.profiles);
+    if(!chk.ok){ setErrs(chk.errors); return; }
+    const clean = {...p, minQualityPct:Number(p.minQualityPct), maxStalenessHours:Number(p.maxStalenessHours), relDepth:Number(p.relDepth)};
+    ctxSet(s => ({...s, profiles: s.profiles.some(x=>x.id===p.id) ? s.profiles.map(x=>x.id===p.id?clean:x) : [...s.profiles, clean]}));
+    onToast && onToast(`Profile "${p.name}" saved`, "success"); onClose();
+  };
+  const fe = (k) => (errs||[]).filter(e=>e.code===k).map(e=><div key={e.msg} style={{fontSize:11,color:T.rose,marginTop:4}}>{e.msg}</div>);
+  const Chk = ({k, l}) => <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12.5,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={!!p[k]} onChange={e=>setP(x=>({...x,[k]:e.target.checked}))}/>{l}</label>;
+  return (
+    <CtxDrawer title={profile?"Edit context profile":"New context profile"} sub="Rules applied to every context request made with this profile." onClose={onClose}
+      footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>Save profile</Btn></>}>
+      <div><CtxLabel req>Name</CtxLabel><CtxInput ariaLabel="Profile name" value={p.name} onChange={v=>setP(x=>({...x,name:v}))}/>{fe("name")}</div>
+      <div><CtxLabel>Description</CtxLabel><CtxInput ariaLabel="Profile description" value={p.desc} onChange={v=>setP(x=>({...x,desc:v}))}/></div>
+      <Chk k="requireCertified" l="Require a certified metric"/>
+      <Chk k="requireApprovedTerm" l="Require an approved glossary term"/>
+      <Chk k="includeExamples" l="Include example questions"/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div><CtxLabel>Minimum quality (%)</CtxLabel><CtxInput ariaLabel="Minimum quality" value={String(p.minQualityPct)} onChange={v=>setP(x=>({...x,minQualityPct:v}))}/>{fe("minQualityPct")}</div>
+        <div><CtxLabel>Maximum data age (h, 0 = none)</CtxLabel><CtxInput ariaLabel="Maximum data age" value={String(p.maxStalenessHours)} onChange={v=>setP(x=>({...x,maxStalenessHours:v}))}/>{fe("maxStalenessHours")}</div>
+        <div><CtxLabel>When a rule is violated</CtxLabel><CtxSel ariaLabel="On violation" value={p.onViolation} onChange={v=>setP(x=>({...x,onViolation:v}))}><option value="warn">Warn and serve</option><option value="block">Block</option></CtxSel>{fe("onViolation")}</div>
+        <div><CtxLabel>When evidence is missing</CtxLabel><CtxSel ariaLabel="On missing evidence" value={p.onMissingEvidence} onChange={v=>setP(x=>({...x,onMissingEvidence:v}))}><option value="warn">Warn and serve</option><option value="block">Block</option></CtxSel>{fe("onMissingEvidence")}</div>
+        <div><CtxLabel>Relationship depth</CtxLabel><CtxSel ariaLabel="Relationship depth" value={p.relDepth} onChange={v=>setP(x=>({...x,relDepth:+v}))}><option value={1}>1 hop</option><option value={2}>2 hops</option></CtxSel>{fe("relDepth")}</div>
+      </div>
+    </CtxDrawer>
+  );
+};
+const CtxProfiles = ({onToast}) => {
+  const st = useCtxState();
+  const [edit, setEdit] = useState(null);
+  const [del, setDel] = useState(null);
+  return (
+    <div>
+      <SH title="Context profiles" sub="What a consumer must be able to prove before context is served." action={<Btn small variant="primary" onClick={()=>setEdit({})}>New profile</Btn>}/>
+      {st.profiles.length===0 ? <CtxEmpty title="No profiles" sub="A context request needs a profile." action={<Btn small onClick={()=>setEdit({})}>New profile</Btn>}/> :
+      <DataTable cols={[{key:"name",label:"Profile",render:(v,r)=><div><div style={{fontWeight:600}}>{v}</div><div style={{fontSize:11,color:T.textMuted}}>{r.desc}</div></div>},
+        {key:"rules",label:"Rules",render:(v,r)=><span style={{fontSize:11.5,color:T.textSub}}>{[r.requireCertified&&"certified metric", r.requireApprovedTerm&&"approved term", r.minQualityPct>0&&`quality ≥ ${r.minQualityPct}%`, r.maxStalenessHours>0?`≤ ${r.maxStalenessHours} h old`:"no age limit", `depth ${r.relDepth}`].filter(Boolean).join(" · ")}</span>},
+        {key:"onViolation",label:"Violations",render:v=><CtxChip s={v==="block"?"blocked":"warn"} label={v==="block"?"Block":"Warn"}/>},
+        {key:"onMissingEvidence",label:"Missing evidence",render:v=><CtxChip s={v==="block"?"blocked":"warn"} label={v==="block"?"Block":"Warn"}/>},
+        {key:"id",label:"",render:(v,r)=><div style={{display:"flex",gap:6,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+          <Btn small ghost onClick={()=>setEdit(r)}>Edit</Btn>
+          {del===r.id ? <><Btn small variant="danger" onClick={()=>{ctxSet(s=>({...s,profiles:s.profiles.filter(x=>x.id!==r.id)}));setDel(null);onToast&&onToast("Profile deleted","success");}}>Delete</Btn><Btn small ghost onClick={()=>setDel(null)}>Cancel</Btn></>
+            : <Btn small ghost onClick={()=>setDel(r.id)} disabled={st.profiles.length===1} title={st.profiles.length===1?"Keep at least one profile — requests need one":undefined}>Delete</Btn>}
+        </div>}]}
+        rows={st.profiles} onRowClick={r=>setEdit(r)}/>}
+      {edit&&<CtxProfileDrawer profile={edit.id?edit:null} onClose={()=>setEdit(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+// ── History: reopen exactly what was returned; rerun separately against now.
+const ctxHistoryVisible = (h, persona) => {
+  const r = h.response;
+  if(r.request.personaId===persona.id) return true;
+  const doms = (r.sources||[]).filter(s=>s.type==="model").map(s=>(_slState.models.find(m=>m.id===s.id)||{}).domain);
+  return CTX.personaOf(r.request.personaId).domains.every(d=>persona.domains.includes("*")||persona.domains.includes(d)) && doms.every(d=>!d||CTX.canSeeDomain(persona,d));
+};
+const CtxHistory = ({onToast}) => {
+  const st = useCtxState();
+  const actor = useCtxActor();
+  const persona = ctxPersona();
+  const [open, setOpen] = useState(null);
+  const [rerun, setRerun] = useState(null);
+  const rows = st.history.filter(h=>ctxHistoryVisible(h, persona));
+  const rec = open ? st.history.find(h=>h.id===open) : null;
+  const doRerun = () => {
+    const r = ctxRun(rec.request, actor, {rerunOf:rec.id});
+    if(!r.ok){ setRerun({error:r.error}); return; }
+    setRerun({rec:r.rec, diff:CTX.diffResponses(rec.response, r.rec.response)});
+  };
+  return (
+    <div>
+      <SH title="Request history" sub="Every context request, with the response exactly as it was returned. Entries made under a persona with wider access than yours are not shown."/>
+      {rows.length===0 ? <CtxEmpty title="No requests yet" sub="Requests from the Ask tab and the API preview appear here."/> :
+      <DataTable cols={[{key:"at",label:"When",render:v=>ctxFmtAt(v)},{key:"q",label:"Question"},{key:"persona",label:"Persona"},{key:"profile",label:"Profile"},
+        {key:"status",label:"Outcome",render:v=><CtxChip s={v}/>},{key:"ver",label:"Version"},{key:"rr",label:""}]}
+        rows={rows.map(h=>({id:h.id, at:h.at, q:h.request.question, persona:h.response.persona.label, profile:h.response.profile.name, status:h.response.status,
+          ver:h.response.resolved?`${h.response.resolved.model} v${h.response.resolved.version}`:"—", rr:h.rerunOf?"rerun":""}))}
+        onRowClick={r=>{setOpen(r.id);setRerun(null);}}/>}
+      {rec&&<CtxDrawer width={720} title={rec.request.question} sub={`${rec.id} · recorded ${ctxFmtAt(rec.at)} by ${rec.by}`} onClose={()=>{setOpen(null);setRerun(null);}}
+        footer={<><Btn ghost onClick={()=>{setOpen(null);setRerun(null);}}>Close</Btn><Btn variant="primary" onClick={doRerun}>Rerun against current information</Btn></>}>
+        {rerun&&rerun.error&&<CtxErrors errors={[rerun.error]}/>}
+        {rerun&&rerun.rec&&<div style={{padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:8,background:T.bgElevated}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.text,marginBottom:4}}>Rerun {rerun.rec.id} · {ctxFmtAt(rerun.rec.at)}</div>
+          {rerun.diff.length ? rerun.diff.map(d=><div key={d} style={{fontSize:11.5,color:T.textSub}}>• {d}</div>) : <div style={{fontSize:11.5,color:T.textSub}}>Same outcome, version and evidence as recorded.</div>}
+          <div style={{marginTop:8}}><CtxResult res={rerun.rec.response}/></div>
+        </div>}
+        <CtxResult res={rec.response} recorded/>
+      </CtxDrawer>}
+    </div>
+  );
+};
+
+// ── Review: real pending proposals.
+const CtxReview = ({onToast}) => {
+  const st = useCtxState();
+  const w = ctxWorld();
+  const persona = ctxPersona();
+  const links = CTX.effectiveLinks(_slState, st.linkRecords);
+  const pLinks = links.filter(l=>l.status==="proposed").filter(l=>CTX.modelsOfElement(_slState,l.kind,CTX.elementOf(_slState,l.kind,l.elementId)).some(m=>CTX.canSeeDomain(persona,m.domain)));
+  const pRels = w.crels.filter(r=>r.status==="proposed").filter(r=>[r.from,r.to].every(id=>ctxTermVisible(w.terms.find(t=>t.id===id))));
+  const done = [...w.crels.filter(r=>r.reviewedAt && r.source!=="seed").map(r=>({k:"Relationship", at:r.reviewedAt, by:r.reviewedBy, s:r.status, what:`${ctxTermName(r.from)} ${(CTX.REL_TYPES[r.type]||{}).l||r.type} ${ctxTermName(r.to)}`, note:r.reviewNote})),
+                ...st.linkRecords.filter(r=>r.reviewedAt).map(r=>({k:"Link", at:r.reviewedAt, by:r.reviewedBy, s:r.status, what:`${CTX.elementName(_slState,r.kind,CTX.elementOf(_slState,r.kind,r.elementId))} → ${ctxTermName(r.termId)}`, note:r.reviewNote}))]
+               .sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,20);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:18}}>
+      <div><SH title={`Proposed links · ${pLinks.length}`} sub="Approving writes the term onto the model element. Context uses it once a model version containing it is published."/>
+        <Card2>{pLinks.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>Nothing waiting.</div> : pLinks.map(l=><CtxLinkRow key={l.id} l={l} showTerm showElement onToast={onToast}/>)}</Card2></div>
+      <div><SH title={`Proposed relationships · ${pRels.length}`} sub="Approved relationships are traversed when context is built."/>
+        <Card2>{pRels.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>Nothing waiting.</div> : pRels.map(r=>(
+          <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:`1px solid ${T.border}`,flexWrap:"wrap"}}>
+            <span style={{fontSize:12.5,color:T.text}}><b>{ctxTermName(r.from)}</b> {(CTX.REL_TYPES[r.type]||{}).l} <b>{ctxTermName(r.to)}</b></span>
+            <span style={{fontSize:10.5,color:T.textMuted}}>{r.proposedBy} · {ctxFmtAt(r.proposedAt)}{r.note?` · "${r.note}"`:""}</span>
+            <div style={{marginLeft:"auto"}}><CtxReviewButtons kind="rel" id={r.id} onToast={onToast}/></div>
+          </div>))}</Card2></div>
+      <div><SH title="Recently reviewed"/>
+        <Card2>{done.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>No decisions yet.</div> : done.map((d,i)=>(
+          <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${T.border}`,fontSize:12}}>
+            <CtxChip s={d.s}/><span style={{color:T.textMuted,width:80}}>{d.k}</span><span style={{color:T.text,flex:1}}>{d.what}{d.note?<span style={{color:T.textMuted}}> — {d.note}</span>:null}</span><span style={{color:T.textMuted}}>{d.by} · {ctxFmtAt(d.at)}</span>
+          </div>))}</Card2></div>
+    </div>
+  );
+};
+
+// ── Impact: potential (stored dependencies) vs observed (recorded requests).
+const CtxImpact = ({target, setTarget, onNav}) => {
+  const st = useCtxState();
+  const persona = ctxPersona();
+  const w = ctxWorld();
+  const visModels = _slState.models.filter(m=>CTX.canSeeDomain(persona,m.domain));
+  const visEnt = new Set(visModels.flatMap(m=>m.entityIds||[]));
+  const options = {
+    term: w.terms.filter(ctxTermVisible).map(t=>({id:t.id, name:`${t.term} (${t.termType||"Term"})`})),
+    metric: _slState.metrics.filter(m=>visModels.some(x=>x.id===m.model)).map(m=>({id:m.id, name:m.name})),
+    field: _slState.dims.filter(d=>visEnt.has(d.entity)).map(d=>({id:d.id, name:CTX.elementName(_slState,"field",d)})),
+    measure: _slState.facts.filter(d=>visEnt.has(d.entity)).map(d=>({id:d.id, name:CTX.elementName(_slState,"measure",d)})),
+    dataset: _slState.entities.filter(e=>visEnt.has(e.id)).map(e=>({id:e.id, name:e.name})),
+    model: visModels.map(m=>({id:m.id, name:m.name})),
+  };
+  const kind = (target&&target.kind)||"term";
+  const valid = target && (options[kind]||[]).some(o=>o.id===target.id);
+  const imp = valid ? CTX.impactOf(w, target) : null;
+  const pot = imp ? imp.potential.filter(p => p.kind!=="term" || ctxTermVisible(w.terms.find(t=>t.id===p.id))) : [];
+  const obs = imp ? imp.observed.filter(h => ctxHistoryVisible(st.history.find(x=>x.id===h.id)||{response:{request:{personaId:"steward"},sources:[]}}, persona)) : [];
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:16,flexWrap:"wrap"}}>
+        <div style={{width:160}}><CtxLabel>Changing a</CtxLabel><CtxSel ariaLabel="Target type" value={kind} onChange={v=>setTarget({kind:v, id:""})}>
+          {[["term","Glossary term"],["metric","Metric"],["field","Dimension field"],["measure","Measure field"],["dataset","Dataset"],["model","Semantic model"]].map(([k,l])=><option key={k} value={k}>{l}</option>)}</CtxSel></div>
+        <div style={{width:320}}><CtxLabel>Item</CtxLabel><CtxSel ariaLabel="Target item" value={valid?target.id:""} onChange={v=>setTarget({kind, id:v})}>
+          <option value="">Select…</option>{(options[kind]||[]).map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</CtxSel></div>
+      </div>
+      {!valid ? <CtxEmpty title="Choose what you are about to change" sub="Impact is derived from stored links, joins, metric definitions and published versions."/> : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <div><SH title={`Potential impact · ${pot.length}`} sub="From stored dependencies — what could be affected."/>
+          <Card2>{pot.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>Nothing depends on it.</div> : pot.map(p=>(
+            <div key={p.kind+p.id} style={{display:"flex",gap:10,padding:"8px 12px",borderBottom:`1px solid ${T.border}`,alignItems:"center"}}>
+              <span style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",width:62}}>{p.kind}</span>
+              <span style={{fontSize:12.5,color:T.text,flex:1}}>{p.name}{p.linkStatus==="proposed"?<> <CtxChip s="proposed"/></>:null}</span><span style={{fontSize:11,color:T.textMuted}}>{p.via}</span>
+            </div>))}</Card2></div>
+        <div><SH title={`Observed usage · ${obs.length}`} sub="From recorded context requests — what actually consumed it."/>
+          <Card2>{obs.length===0 ? <div style={{padding:14,fontSize:12,color:T.textMuted}}>No recorded request has used it.</div> : obs.map(o=>(
+            <div key={o.id} style={{padding:"8px 12px",borderBottom:`1px solid ${T.border}`}}>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}><CtxChip s={o.status}/><span style={{fontSize:12.5,color:T.text}}>{o.question}</span></div>
+              <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{ctxFmtAt(o.at)} · {CTX.personaOf(o.persona).label} · cited {o.cited.join(", ")}</div>
+            </div>))}</Card2></div>
+      </div>}
+    </div>
+  );
+};
+
+// ── The Context screen.
+const ContextView = ({onToast, onNav, deepLink}) => {
+  const st = useCtxState();
+  const [tab, setTab] = useState((deepLink&&deepLink.ctxTab)||"explorer");
+  const [target, setTarget] = useState((deepLink&&deepLink.target)||{kind:"term", id:""});
+  const [resetOpen, setResetOpen] = useState(false);
+  useEffect(()=>{ if(deepLink&&deepLink.ctxTab){ setTab(deepLink.ctxTab); if(deepLink.target) setTarget(deepLink.target); } },[deepLink]);
+  const w = ctxWorld();
+  const pending = CTX.effectiveLinks(_slState, st.linkRecords).filter(l=>l.status==="proposed").length + w.crels.filter(r=>r.status==="proposed").length;
+  const TABS = [{key:"explorer",label:"Explorer"},{key:"ask",label:"Ask"},{key:"profiles",label:"Profiles"},{key:"history",label:`History · ${st.history.length}`},{key:"review",label:`Review${pending?` · ${pending}`:""}`},{key:"impact",label:"Impact"}];
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Context"}]} actions={<Btn small ghost onClick={()=>setResetOpen(true)}>Reset demo data</Btn>}/>
+      <CtxPersonaBar always/>
+      {_ctxStorageError&&<div role="alert" style={{padding:"6px 14px",background:T.roseDim,color:T.rose,fontSize:11.5}}>Changes could not be saved to this browser ({_ctxStorageError.message}). They will be lost on refresh.</div>}
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px 28px"}}>
+        <Tabs2 tabs={TABS} active={tab} onChange={setTab}/>
+        {tab==="explorer"&&<CtxExplorer onToast={onToast} onNav={onNav} onImpact={(t)=>{setTarget(t);setTab("impact");}}/>}
+        {tab==="ask"&&<CtxAsk onToast={onToast}/>}
+        {tab==="profiles"&&<CtxProfiles onToast={onToast}/>}
+        {tab==="history"&&<CtxHistory onToast={onToast}/>}
+        {tab==="review"&&<CtxReview onToast={onToast}/>}
+        {tab==="impact"&&<CtxImpact target={target} setTarget={setTarget} onNav={onNav}/>}
+      </div>
+      <Modal open={resetOpen} onClose={()=>setResetOpen(false)} title="Reset demo data">
+        <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.6,marginTop:0}}>Restores every <b>seeded</b> semantic model, glossary term, relationship, data-quality test, model version and context profile to its original value, and brings back seeded records that were deleted.</p>
+        <p style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>Anything you created — terms, models, links, proposals, versions, profiles, saved views and request history — is kept.</p>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setResetOpen(false)}>Cancel</Btn>
+          <Btn variant="danger" onClick={()=>{ctxResetDemo(); setResetOpen(false); onToast&&onToast("Seeded demo records restored","success");}}>Reset seeded records</Btn></div>
+      </Modal>
+    </div>
+  );
+};
+
 const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   const { role: slRole, roleCfg: slRoleCfg } = useRole();
   const slMe = ((slRoleCfg&&slRoleCfg.email)||"you@jnj").split("@")[0];
   const [store, setStore] = useSemanticLayer();
   const [gTerms] = useGlossaryTerms();
-  const {models, metrics, vendor, entities, rels, concepts, crels, dims, facts} = store;
+  useCtxState();
+  const slPersona = ctxPersona();
+  // A simulated persona sees only the models of its domains — in the list, in the
+  // profile, and in everything derived from them.
+  const {metrics, vendor, entities, rels, concepts, crels, dims, facts} = store;
+  const models = store.models.filter(m=>CTX.canSeeDomain(slPersona, m.domain));
+  const [ctxLinkFor, setCtxLinkFor] = useState(null);
 
   const [selMdl,  setSelMdl]  = useState(null);
   const [tab,     setTab]     = useState("overview");
@@ -42995,7 +44193,20 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"notify"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
+                  {k:"links",l:"Glossary links"},{k:"versions",l:"Versions"},
                   {k:"config",l:"Configuration"}];
+    // A validation issue opens the place it is fixed.
+    const goToIssue = (i) => {
+      const t = i.target;
+      if(t.kind==="dataset"){ setTab("erd"); setSelEnt(t.id);
+        if(i.code==="dataset.unjoined") setJoinFor("new");
+        else { const e = entities.find(x=>x.id===t.id); if(e) setRenameFor({kind:"entity", obj:e}); } }
+      else if(t.kind==="join"){ setTab("erd"); const r = rels.find(x=>x.id===t.id); if(r) setJoinFor(r); }
+      else if(t.kind==="metric"){ setTab("definitions"); setSelId(t.id); }
+      else if(t.kind==="link"){ setCtxLinkFor({modelId:mdl.id, kind:t.sub, elementId:t.id}); }
+      else if(t.kind==="term"){ onNav && onNav("glossary", {termId:t.id}); }
+      else if(t.kind==="model"){ setMdlDrawer({model:mdl}); }
+    };
     const dis = slDisagreements(mVendor, mMetrics);
     const unclaimed = vendor.filter(v=>v.conformance==="unmanaged");
     const startEdit = () => setMdlDrawer({model:mdl});
@@ -43006,6 +44217,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
           {label:"Semantic Models", onClick:()=>{setSelMdl(null);setSelEnt(null);}},
           {label:mdl.name},
         ]}/>
+        <CtxPersonaBar/>
         <div style={{flex:1,display:"flex",flexDirection:"column",minHeight:0}}
           onClick={()=>{setMdlMenuOpen(false);setMdlStyleOpen(false);}}>
           <div style={{padding:"24px 28px 0",flexShrink:0}}>
@@ -43128,6 +44340,8 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
 
           <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",display:tab==="overview"?"none":"block"}}>
 
+            {tab==="links" && <CtxModelLinks mdl={mdl} onToast={onToast} onNav={onNav}/>}
+            {tab==="versions" && <CtxModelVersions mdl={mdl} onToast={onToast} onGoTo={goToIssue}/>}
             {tab==="erd" && <>
               <SH title="Relationships"
                   sub="Datasets are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
@@ -43561,6 +44775,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
           </>}
         </Modal>
 
+        {ctxLinkFor&&<CtxLinkDrawer initial={ctxLinkFor} onClose={()=>setCtxLinkFor(null)} onToast={onToast}/>}
         <SLRenameDrawer open={!!renameFor} kind={renameFor&&renameFor.kind} obj={renameFor&&renameFor.obj}
           term={renameFor&&renameFor.obj&&renameFor.obj.termId ? gTerms.find(t=>t.id===renameFor.obj.termId) : null}
           onClose={()=>setRenameFor(null)} onSave={saveRename} onToast={onToast}/>
@@ -43623,6 +44838,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Semantic Models"}]}/>
+      <CtxPersonaBar/>
       <div style={{flex:1,overflowY:"auto",padding:28}}>
 
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
@@ -43713,7 +44929,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","settings","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","settings","tags","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -43726,7 +44942,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","tags","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -43738,7 +44954,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","aipipelines"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","aipipelines"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -43750,7 +44966,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","aipipelines","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","context","aipipelines","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -43762,7 +44978,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
@@ -60323,7 +61539,7 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
 // Page titles, used by the dock's context chip.
 const NAV_TITLE = {
   home:"Home", stewardship:"Workspace", catalog:"Catalog", quality:"Data Quality",
-  policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer",
+  policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer", context:"Context",
   glossary:"Glossary", semanticlayer:"Semantic Models", domains:"Domains",
   dataproducts:"Data Products", dataask:"Copilot", settings:"Settings",
   aipipelines:"Pipelines",
@@ -64295,6 +65511,7 @@ export default function App(){
   const [deepLinkDomainId, setDeepLinkDomainId] = useState(null);
   const [deepLinkModelId,  setDeepLinkModelId]  = useState(null);
   const [deepLinkTermId, setDeepLinkTermId] = useState(null);
+  const [ctxDeepLink, setCtxDeepLink] = useState(null);
   const [deepLinkConnName, setDeepLinkConnName] = useState(null);
   const [cpOpen,   setCpOpen]   = useState(false);
   const [cpReq,    setCpReq]    = useState(null);   // {q?, spaceId?, at} handed to the dock by another screen
@@ -64321,7 +65538,8 @@ export default function App(){
     setDeepLinkPolicyId(payload?.policyId ?? null);
     setDeepLinkTagId(payload?.tagId ?? null);
     setDeepLinkDomainId(payload?.domainId ?? null);
-    setDeepLinkTermId(payload?.termName ? (_gtState.find(t=>t.term===payload.termName)?.id ?? null) : null);
+    setDeepLinkTermId(payload?.termId ?? (payload?.termName ? (_gtState.find(t=>t.term===payload.termName)?.id ?? null) : null));
+    setCtxDeepLink(payload?.ctxTab ? {...payload, at:Date.now()} : null);
     setDeepLinkConnName(payload?.connName ?? null);
     setDeepLinkModelId(payload?.modelId ?? null);
     setNav(id); setAssetStack([]);
@@ -64370,6 +65588,7 @@ export default function App(){
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
+      case "context":       return <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
       case "observability": return <QualityView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
