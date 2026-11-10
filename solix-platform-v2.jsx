@@ -5531,6 +5531,7 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 // ─────────────────────────────────────────────
 // SIDEBAR
 // ─────────────────────────────────────────────
+const KNOWLEDGE_LAYER_ENABLED = false;
 const GROUPS = [
   {section:"",items:[
     {key:"home",           icon:"home",          label:"Home"},
@@ -5549,7 +5550,8 @@ const GROUPS = [
     {key:"aipipelines",    icon:"workflow",      label:"Pipelines"},
   ]},
   {section:"Knowledge",items:[
-    {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
+    // Knowledge Layer hidden 2026-11-10: restore by un-commenting and flipping KNOWLEDGE_LAYER_ENABLED
+    // {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"semanticlayer",  icon:"semantic",      label:"Semantic Models"},
     {key:"context",        icon:"lineage",       label:"Context"},
@@ -50771,7 +50773,7 @@ const InboxView = ({onToast}) => {
     {k:"policy",   l:"Policy"},
     {k:"glossary", l:"Glossary"},
     {k:"tags",     l:"Tags"},
-    {k:"knowledge",l:"Knowledge Layer"},
+    ...(KNOWLEDGE_LAYER_ENABLED?[{k:"knowledge",l:"Knowledge Layer"}]:[]),
   ];
   const toggleSec = s => setSecFilters(prev=>{ const n=new Set(prev); n.has(s)?n.delete(s):n.add(s); return n; });
 
@@ -65586,7 +65588,7 @@ export default function App(){
       case "glossary":      return <GlossaryView onToast={showToast} deepLinkTermId={deepLinkTermId}/>;
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
-      case "knowledgelayer":return <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
+      case "knowledgelayer":return !KNOWLEDGE_LAYER_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "context":       return <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
       case "observability": return <QualityView onToast={showToast}/>;
