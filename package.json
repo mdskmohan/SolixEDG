@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "test": "node --test tests/context.test.js"
+    "test": "node --test tests/context.test.js tests/semantic-ai.test.js"
   },
   "dependencies": {
     "@xyflow/react": "^12.10.2",

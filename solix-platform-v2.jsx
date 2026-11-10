@@ -8,6 +8,8 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import * as CTX from "./src/context/engine.js";
+import * as SMAI from "./src/semantic/ai.js";
+import { SL_USAGE } from "./src/semantic/usage-seed.js";
 import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
 // ─────────────────────────────────────────────
@@ -39806,7 +39808,397 @@ const SLBuilderDrawer = ({open, onClose, onSave, metrics, dims, facts, entities,
 
 // ── Create a semantic model. You pick assets; EDG derives the entity. You declare the
 //    joins; EDG checks them. Nothing about the model is invented on your behalf.
-const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existingRels, onToast}) => {
+// ═══ Semantic Model AI ═══════════════════════════════════════════════════════
+// Suggestions come from src/semantic/ai.js (pure). This block holds the settings
+// and the decision log, and the shared pieces the drawer, the model's AI tab and
+// Settings › AI › Semantic Models render. AI suggests; a person accepts.
+const SMAI_KEY = "solix-edg.prototype.smai.v1";
+const SMAI_DEFAULT = {
+  settings:{enabled:true, minConfidence:0.6, bulkAccept:0.9,
+    features:Object.fromEntries(SMAI.FEATURES.map(f=>[f.k,true])),
+    inputs:{schema:true, profiles:true, samples:false, usage:true, bi:true, dbt:true, glossary:true, lineage:true},
+    instructions:""},
+  // Seeded decision history, so the acceptance rate means something on day one.
+  stats:{joins:{accepted:46,rejected:3}, fields:{accepted:212,rejected:19}, hierarchies:{accepted:9,rejected:2},
+         metrics:{accepted:31,rejected:8}, descriptions:{accepted:88,rejected:12}, terms:{accepted:27,rejected:6},
+         validation:{accepted:14,rejected:1}, tests:{accepted:22,rejected:4}, changes:{accepted:5,rejected:0},
+         pii:{accepted:17,rejected:2}, import:{accepted:3,rejected:0}},
+  log:[],
+};
+let _smai = (()=>{ try {
+  const s = JSON.parse(localStorage.getItem(SMAI_KEY)||"null");
+  if(s && s.settings) return {...SMAI_DEFAULT, ...s, stats:{...SMAI_DEFAULT.stats, ...(s.stats||{})},
+    settings:{...SMAI_DEFAULT.settings, ...s.settings,
+      features:{...SMAI_DEFAULT.settings.features, ...(s.settings.features||{})},
+      inputs:{...SMAI_DEFAULT.settings.inputs, ...(s.settings.inputs||{})}}};
+} catch(e) {} return SMAI_DEFAULT; })();
+const _smaiSubs = new Set();
+const smaiSet = (fn) => { _smai = typeof fn==="function" ? fn(_smai) : fn;
+  try { localStorage.setItem(SMAI_KEY, JSON.stringify(_smai)); } catch(e) {}
+  _smaiSubs.forEach(f=>f()); };
+const useSmai = () => { const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _smaiSubs.add(fn); return ()=>{_smaiSubs.delete(fn);}; },[]);
+  return _smai; };
+const smaiOn = (f) => _smai.settings.enabled && _smai.settings.features[f] !== false;
+const smaiDecide = (feature, decision, label) => smaiSet(s=>{
+  const k = decision==="accepted" ? "accepted" : "rejected";
+  const cur = s.stats[feature] || {accepted:0, rejected:0};
+  return {...s, stats:{...s.stats, [feature]:{...cur, [k]:(cur[k]||0)+1}},
+    log:[{feature, decision, label, at:new Date().toISOString()}, ...s.log].slice(0,200)};
+});
+const smaiCtx = (extraEntities, termTypes) => ({
+  schemaOf: t => SCHEMA[t] || [],
+  profileOf: (t,c) => COL_PROFILES[c] || {},
+  glossary: _gtState.filter(t=>!termTypes || termTypes.includes(t.termType||"Term"))
+    .filter(t=>t.status!=="Deprecated" && t.status!=="Rejected")
+    .map(t=>({id:t.id, name:t.term, synonyms:t.synonyms||[], termType:t.termType||"Term"})),
+  metrics: _slState.metrics,
+  entities: [..._slState.entities, ...(extraEntities||[])],
+  usage: SL_USAGE,
+  settings: _smai.settings,
+});
+const smaiPct = (c) => `${Math.round((c||0)*100)}%`;
+const smaiBand = (c) => c>=0.9 ? T.green : c>=0.75 ? T.blue : T.amber;
+
+// ✦ 92% — the confidence of one suggestion, with its reason on hover.
+const SmaiChip = ({conf, why}) => (
+  <span title={why||""} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,
+    background:smaiBand(conf)+"14",color:smaiBand(conf),border:`1px solid ${smaiBand(conf)}38`,whiteSpace:"nowrap",flexShrink:0}}>✦ {smaiPct(conf)}</span>
+);
+const SmaiOriginChips = ({origin}) => (<>{(origin||[]).map(o=>(
+  <span key={o} style={{fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>
+    {({query:"Query history", bi:"BI dashboards", dbt:"dbt metrics", profile:"Profile"})[o]||o}</span>))}</>);
+
+// One suggestion: what, why, evidence, and the two decisions.
+const SmaiCard = ({title, sub, conf, why, evidence, issues, warn, onAccept, onDismiss, acceptLabel, children}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{background:T.bgSurface,border:`1px solid ${warn?T.amber+"55":T.border}`,borderRadius:9,padding:"10px 12px",marginBottom:7}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{title}</span>
+        {conf!=null && <SmaiChip conf={conf} why={why}/>}
+        {children}
+        <span style={{flex:1}}/>
+        {(evidence||[]).length>0 && <button onClick={()=>setOpen(o=>!o)} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>{open?"Hide evidence":"Evidence"}</button>}
+        {onDismiss && <Btn small ghost onClick={onDismiss}>Dismiss</Btn>}
+        {onAccept && <Btn small variant="primary" onClick={onAccept}>{acceptLabel||"Accept"}</Btn>}
+      </div>
+      {sub && <div style={{fontSize:11,color:T.textMuted,marginTop:3,fontFamily:"ui-monospace,monospace"}}>{sub}</div>}
+      {why && <div style={{fontSize:11,color:T.textSub,marginTop:3}}>{why}</div>}
+      {warn && <div style={{fontSize:11,color:T.amber,marginTop:3}}>{warn}</div>}
+      {(issues||[]).map((s,i)=><div key={i} style={{fontSize:11,color:T.amber,marginTop:2}}>· {s}</div>)}
+      {open && <div style={{marginTop:6,paddingTop:6,borderTop:`1px solid ${T.border}`}}>
+        {evidence.map((e,i)=><div key={i} style={{fontSize:10.5,color:T.textMuted,lineHeight:1.6}}>· {e}</div>)}</div>}
+    </div>
+  );
+};
+const SmaiHead = ({title, count, onAcceptAll, allLabel}) => (
+  <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 8px"}}>
+    <span style={{fontSize:11,fontWeight:700,color:T.violet,letterSpacing:".04em"}}>✦ {title.toUpperCase()}</span>
+    {count!=null && <span style={{fontSize:10.5,color:T.textMuted}}>{count}</span>}
+    <span style={{flex:1}}/>
+    {onAcceptAll && <button onClick={onAcceptAll} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0}}>{allLabel||`Accept all ≥ ${smaiPct(_smai.settings.bulkAccept)}`}</button>}
+  </div>
+);
+const SmaiIssue = ({i, onFix, onOpen}) => {
+  const c = i.severity==="error" ? T.rose : i.severity==="warning" ? T.amber : T.textMuted;
+  return (
+    <div style={{display:"flex",gap:10,padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${c}`,borderRadius:8,marginBottom:7}}>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:7}}>
+          <span style={{fontSize:9.5,fontWeight:700,color:c,textTransform:"uppercase"}}>{i.severity}</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.text}}>{i.title}</span>
+        </div>
+        <div style={{fontSize:11,color:T.textSub,marginTop:3,lineHeight:1.5}}>{i.explain}</div>
+      </div>
+      <div style={{display:"flex",gap:6,alignItems:"flex-start",flexShrink:0}}>
+        {onOpen && <Btn small ghost onClick={()=>onOpen(i)}>Open</Btn>}
+        {i.fix && onFix && <Btn small variant="primary" onClick={()=>onFix(i)}>✦ {i.fix.label}</Btn>}
+      </div>
+    </div>
+  );
+};
+
+// ── AI tab on a semantic model ───────────────────────────────────────────────
+const SLAiTab = ({mdl, ents, rels, dims, facts, mets, setStore, onToast, onGoTo}) => {
+  const smai = useSmai();
+  useCtxState();
+  const [sub, setSub] = useState("suggestions");
+  const [gone, setGone] = useState({});            // dismissed in this session
+  const [tests, setTests] = useState(null);
+  const [cmd, setCmd] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const me = "you";
+  if(!smai.settings.enabled) return (
+    <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>AI for semantic models is off · Settings › AI › Semantic Models</div>);
+  const ctx = smaiCtx();
+  const dismiss = (key, feature, label) => { setGone(g=>({...g,[key]:true})); smaiDecide(feature, "rejected", label); };
+  const patchColl = (coll, id, patch) => setStore(prev=>({...prev, [coll]:prev[coll].map(x=>x.id===id?{...x,...patch}:x)}));
+
+  // ── Suggestions ──
+  const fields = [...facts.map(f=>({entity:f.entity, column:f.column, role:"measure", defaultAgg:f.defaultAgg||"sum"}))];
+  const metricSugs = smaiOn("metrics") ? SMAI.suggestMetrics(ents, fields, ctx)
+    .filter(m=>m.conf>=smai.settings.minConfidence && !(m.duplicate && m.duplicate.kind==="exact" && m.duplicate.model===mdl.id) && !gone["m:"+m.name]) : [];
+  const addMetric = (m) => {
+    const id = "m_ai_"+Date.now().toString(36);
+    const e = ents.find(x=>x.id===m.entity);
+    const d = SMAI.describe("metric", {...m, entityName:e&&e.name}, ctx);
+    setStore(prev=>({...prev, metrics:[...prev.metrics, {
+      id, model:mdl.id, name:m.name, type:m.type, status:"Draft", termId:null, domain:mdl.domain, owner:mdl.owner, steward:mdl.steward,
+      unit:m.unit, entity:m.entity, agg:m.agg, col:m.col, numerator:m.numerator, denominator:m.denominator,
+      timeDim:m.timeDim, timeGrain:m.timeGrain||"day", filters:m.filters||[], dims:m.dims||[], definition:d.desc, synonyms:d.synonyms,
+      examples:[], bindings:[], basedOn:[], prov:{by:"ai", conf:m.conf, why:m.why, acceptedBy:me, at:new Date().toISOString()}}]}));
+    smaiDecide("metrics","accepted",m.name); onToast&&onToast(`${m.name} added as a draft metric`,"success");
+  };
+  const descSugs = smaiOn("descriptions") ? [
+    ...dims.filter(x=>!x.desc).map(x=>({coll:"dims", id:x.id, label:x.name, s:SMAI.describe("field", {table:(ents.find(e=>e.id===x.entity)||{}).table, column:x.column, colDesc:((SCHEMA[(ents.find(e=>e.id===x.entity)||{}).table]||[]).find(c=>c.name===x.column)||{}).desc}, ctx), field:"desc"})),
+    ...facts.filter(x=>!x.desc).map(x=>({coll:"facts", id:x.id, label:x.name, s:SMAI.describe("field", {table:(ents.find(e=>e.id===x.entity)||{}).table, column:x.column}, ctx), field:"desc"})),
+    ...mets.filter(x=>!x.definition).map(x=>({coll:"metrics", id:x.id, label:x.name, s:SMAI.describe("metric", {...x, entityName:(ents.find(e=>e.id===x.entity)||{}).name}, ctx), field:"definition"})),
+  ].filter(x=>!gone["d:"+x.id]) : [];
+  const termSugs = smaiOn("terms") ? [
+    ...mets.filter(x=>!x.termId).map(x=>({kind:"metric", el:x, t:SMAI.suggestTerm(x.name, smaiCtx(null, CTX.LINK_KINDS.metric.allowed))})),
+    ...dims.filter(x=>!x.termId).map(x=>({kind:"field", el:x, t:SMAI.suggestTerm(x.name, smaiCtx(null, CTX.LINK_KINDS.field.allowed))})),
+    ...facts.filter(x=>!x.termId).map(x=>({kind:"measure", el:x, t:SMAI.suggestTerm(x.name, smaiCtx(null, CTX.LINK_KINDS.measure.allowed))})),
+  ].filter(x=>x.t && x.t.conf>=smai.settings.minConfidence && !gone["t:"+x.el.id])
+   .filter(x=>!_ctxState.linkRecords.some(r=>r.elementId===x.el.id && r.status==="proposed")) : [];
+  const proposeTerm = (x) => {
+    const r = ctxProposeLink({kind:x.kind, elementId:x.el.id, termId:x.t.termId, source:"ai", note:`AI suggestion · ${x.t.why} · ${smaiPct(x.t.conf)}`}, me);
+    if(!r.ok){ onToast&&onToast((r.errors||[])[0]?.msg||"Could not propose the link","error"); return; }
+    smaiDecide("terms","accepted",x.el.name); onToast&&onToast(`Link to ${x.t.termName} proposed · awaiting review in Glossary links`,"success");
+  };
+  const hierSugs = smaiOn("hierarchies") ? SMAI.suggestHierarchies(ents, ctx)
+    .filter(h=>!(mdl.hierarchies||[]).some(x=>x.name===h.name) && !gone["h:"+h.id]) : [];
+  const piiCols = smaiOn("pii") ? [...dims, ...facts].map(x=>{
+    const e = ents.find(y=>y.id===x.entity); const c = ((SCHEMA[(e||{}).table]||[]).find(y=>y.name===x.column));
+    const s = c && SMAI.sensitivityOf(c); return s ? {x, e, s} : null; }).filter(Boolean) : [];
+
+  // ── Validation ──
+  const issues = smaiOn("validation") ? SMAI.validateModel({entities:ents, joins:rels, dims, facts, metrics:mets}, ctx) : [];
+  const applyFix = (i) => {
+    const f = i.fix;
+    if(f.kind==="setKey") patchColl("entities", f.entityId, {key:f.keys[0], keys:f.keys, evidence:`${f.keys.join(" + ")} · accepted AI fix`});
+    if(f.kind==="removeJoin") setStore(prev=>({...prev, rels:prev.rels.filter(r=>r.id!==f.joinId)}));
+    if(f.kind==="setAgg") patchColl("metrics", f.metricId, {agg:f.agg});
+    smaiDecide("validation","accepted",i.title); onToast&&onToast(`Fixed · ${i.title}`,"success");
+  };
+
+  // ── Changes since the published version ──
+  const pub = CTX.publishedVersion(_ctxState.versions, mdl);
+  const changes = smaiOn("changes") && pub ? SMAI.summarizeChanges(pub.snapshot, CTX.snapshotModel(_slState, mdl.id)) : null;
+
+  const nSug = metricSugs.length + descSugs.length + termSugs.length + hierSugs.length;
+  const SUBS = [{key:"suggestions",label:`Suggestions · ${nSug}`},{key:"validation",label:`Validation · ${issues.length}`},
+                {key:"tests",label:"Test questions"},{key:"changes",label:"Changes"},{key:"edit",label:"Edit"}];
+  return (
+    <div style={{paddingTop:4}}>
+      <div style={{marginBottom:14}}><SegTabs tabs={SUBS} active={sub} onChange={setSub}/></div>
+
+      {sub==="suggestions" && <>
+        {nSug===0 && piiCols.length===0 && <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No open suggestions</div>}
+        {metricSugs.length>0 && <><SmaiHead title="Metrics" count={metricSugs.length}/>
+          {metricSugs.map(m=>(
+            <SmaiCard key={m.name} title={m.name} sub={slMetricLine(m)} conf={m.conf} why={m.why} evidence={m.evidence}
+              warn={m.duplicate ? `${m.duplicate.kind==="exact"?"Same definition as":"Similar to"} ${m.duplicate.name}${m.duplicate.model?` · ${(_slState.models.find(x=>x.id===m.duplicate.model)||{}).name||m.duplicate.model}`:""}` : null}
+              acceptLabel={m.duplicate&&m.duplicate.kind==="exact"?"Add anyway":"Add metric"}
+              onAccept={()=>{ addMetric(m); setGone(g=>({...g,["m:"+m.name]:true})); }} onDismiss={()=>dismiss("m:"+m.name,"metrics",m.name)}>
+              <SmaiOriginChips origin={m.origin}/></SmaiCard>))}</>}
+        {descSugs.length>0 && <><SmaiHead title="Descriptions" count={descSugs.length}
+            onAcceptAll={()=>{ const ok=descSugs.filter(x=>x.s.conf>=smai.settings.bulkAccept); ok.forEach(x=>{ patchColl(x.coll,x.id,{[x.field]:x.s.desc, synonyms:x.s.synonyms}); smaiDecide("descriptions","accepted",x.label); }); onToast&&onToast(`${ok.length} description${ok.length===1?"":"s"} accepted`,"success"); }}/>
+          {descSugs.map(x=>(
+            <SmaiCard key={x.id} title={x.label} conf={x.s.conf} why={x.s.desc}
+              onAccept={()=>{ patchColl(x.coll,x.id,{[x.field]:x.s.desc, synonyms:x.s.synonyms}); smaiDecide("descriptions","accepted",x.label); }}
+              onDismiss={()=>dismiss("d:"+x.id,"descriptions",x.label)}>
+              {(x.s.synonyms||[]).map(s=><span key={s} style={{fontSize:10,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 6px"}}>{s}</span>)}
+            </SmaiCard>))}</>}
+        {termSugs.length>0 && <><SmaiHead title="Glossary links" count={termSugs.length}/>
+          {termSugs.map(x=>(
+            <SmaiCard key={x.el.id} title={`${x.el.name} → ${x.t.termName}`} conf={x.t.conf} why={x.t.why} acceptLabel="Propose link"
+              onAccept={()=>proposeTerm(x)} onDismiss={()=>dismiss("t:"+x.el.id,"terms",x.el.name)}/>))}</>}
+        {hierSugs.length>0 && <><SmaiHead title="Hierarchies" count={hierSugs.length}/>
+          {hierSugs.map(h=>(
+            <SmaiCard key={h.id} title={h.name} sub={h.levels.map(l=>`${(ents.find(e=>e.id===l.entity)||{}).name}.${l.column}`).join(" › ")} conf={h.conf} why={h.why}
+              onAccept={()=>{ setStore(prev=>({...prev, models:prev.models.map(m=>m.id===mdl.id?{...m, hierarchies:[...(m.hierarchies||[]), {name:h.name, levels:h.levels, prov:{by:"ai",conf:h.conf}}]}:m)})); smaiDecide("hierarchies","accepted",h.name); }}
+              onDismiss={()=>dismiss("h:"+h.id,"hierarchies",h.name)}/>))}</>}
+        {(mdl.hierarchies||[]).length>0 && <><SmaiHead title="Hierarchies in this model" count={mdl.hierarchies.length}/>
+          {mdl.hierarchies.map(h=>(
+            <div key={h.name} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,fontSize:11.5}}>
+              <b style={{color:T.text}}>{h.name}</b><span style={{color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{h.levels.map(l=>l.column).join(" › ")}</span></div>))}</>}
+        {piiCols.length>0 && <><SmaiHead title="Sensitive fields" count={piiCols.length}/>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+            {piiCols.map(({x,e,s},i)=>(
+              <div key={x.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<piiCols.length-1?`1px solid ${T.border}`:"none",fontSize:11.5}}>
+                <span style={{fontFamily:"ui-monospace,monospace",color:T.text,width:220}}>{e&&e.name}.{x.column}</span>
+                <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose}}>{s.kind}</span>
+                <span style={{color:T.textMuted}}>{s.why} · masked below Steward</span></div>))}
+          </div></>}
+      </>}
+
+      {sub==="validation" && <>
+        {issues.length===0 ? <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.green}}>✓ No issues found</div>
+          : issues.map(i=><SmaiIssue key={i.id} i={i} onFix={applyFix} onOpen={(x)=>onGoTo&&onGoTo({target:x.target})}/>)}
+      </>}
+
+      {sub==="tests" && <>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <span style={{fontSize:12,color:T.textMuted,flex:1}}>{(mdl.testQuestions||[]).length} saved · {tests?tests.length:0} generated</span>
+          <Btn small onClick={()=>{ const t = SMAI.generateTestQuestions({entities:ents, joins:rels, dims, metrics:mets}, ctx); setTests(t); smaiDecide("tests","accepted",`${t.length} generated`); }}>✦ Generate</Btn>
+          <Btn small variant="primary" disabled={!tests||!tests.length} onClick={()=>{ setStore(prev=>({...prev, models:prev.models.map(m=>m.id===mdl.id?{...m, testQuestions:[...tests.map(t=>({q:t.q, sql:t.sql, metric:t.metric}))]}:m)})); onToast&&onToast(`${tests.length} test questions saved`,"success"); }}>Save as test set</Btn>
+        </div>
+        {(tests||mdl.testQuestions||[]).map((t,i)=>(
+          <div key={i} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,padding:"10px 12px",marginBottom:7}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>{t.q}</span>
+              <span style={{fontSize:10.5,color:T.textMuted}}>{t.metric}</span>
+              <Btn small ghost onClick={()=>{ const m = mets.find(x=>x.name===t.metric); if(!m) return; patchColl("metrics", m.id, {examples:[...new Set([...(m.examples||[]), t.q])]}); onToast&&onToast("Added as an example question","success"); }}>Add as example</Btn>
+            </div>
+            <pre style={{margin:"7px 0 0",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,fontSize:10.5,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace"}}>{t.sql}</pre>
+          </div>))}
+        {!tests && !(mdl.testQuestions||[]).length && <div style={{padding:"20px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No test questions yet</div>}
+      </>}
+
+      {sub==="changes" && <>
+        {!pub ? <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No published version to compare with</div>
+          : <>
+            <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Draft compared with published v{pub.n}</div>
+            {changes.lines.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ No changes since v{pub.n}</div>
+              : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+                  {changes.lines.map((l,i)=>(
+                    <div key={i} style={{display:"flex",gap:9,padding:"8px 12px",borderBottom:i<changes.lines.length-1?`1px solid ${T.border}`:"none",fontSize:11.5,color:T.textSub}}>
+                      <span style={{width:62,fontSize:10,fontWeight:700,textTransform:"uppercase",color:l.kind==="added"?T.green:l.kind==="removed"?T.rose:T.blue}}>{l.kind}</span>{l.text}</div>))}
+                </div>}
+            {changes.impact.length>0 && <div style={{padding:"10px 12px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:8,fontSize:11.5,color:T.textSub}}>
+              <b style={{color:T.amber}}>Affected metrics · </b>{changes.impact.join(", ")}</div>}
+          </>}
+      </>}
+
+      {sub==="edit" && <>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <div style={{flex:1}}><Input2 value={cmd} onChange={e=>{setCmd(e.target.value); setParsed(null);}} placeholder="add metric Average Order Value = Net Revenue / Orders"/></div>
+          <Btn small onClick={()=>setParsed(SMAI.parseEdit(cmd, {metrics:mets, entities:ents.map(e=>({...e, columns:(SCHEMA[e.table]||[]).map(c=>c.name)})), facts}))}>✦ Preview</Btn>
+        </div>
+        {parsed && (parsed.ok
+          ? <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{parsed.summary}</span>
+              <Btn small ghost onClick={()=>setParsed(null)}>Cancel</Btn>
+              <Btn small variant="primary" onClick={()=>{
+                if(parsed.action==="addMetric") addMetric({...parsed.metric, conf:1, why:"Requested in plain language"});
+                if(parsed.action==="renameMetric"){ patchColl("metrics", parsed.metricId, {name:parsed.name}); onToast&&onToast("Metric renamed","success"); }
+                if(parsed.action==="removeMetric"){ setStore(prev=>({...prev, metrics:prev.metrics.filter(m=>m.id!==parsed.metricId)})); onToast&&onToast("Metric removed","success"); }
+                setParsed(null); setCmd(""); }}>Apply</Btn>
+            </div>
+          : <div style={{fontSize:11.5,color:T.amber}}>{parsed.error}</div>)}
+        <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.7}}>
+          add metric &lt;name&gt; = &lt;metric&gt; / &lt;metric&gt; · add metric &lt;name&gt; = sum of &lt;column&gt; · rename metric &lt;name&gt; to &lt;name&gt; · remove metric &lt;name&gt;</div>
+      </>}
+    </div>
+  );
+};
+
+// ── Import from another tool ─────────────────────────────────────────────────
+const SMAI_IMPORT_SAMPLES = {
+  dbt:`semantic_models:\n  - name: orders\n    model: ref('orders')\n    measures:\n      - name: revenue\n        agg: sum\n        expr: amount\n      - name: order_count\n        agg: count_distinct\n        expr: order_id\nmetrics:\n  - name: revenue\n    type: simple\n    type_params:\n      measure: revenue\n  - name: order_count\n    type: simple\n    type_params:\n      measure: order_count\n`,
+  lookml:`view: campaign_spend {\n  sql_table_name: marketing.campaign_spend ;;\n  dimension: channel { type: string }\n  measure: total_cost { type: sum sql: \${TABLE}.cost ;; }\n  measure: total_clicks { type: sum sql: \${TABLE}.clicks ;; }\n}`,
+  snowflake:`CREATE SEMANTIC VIEW sales_sv\n  TABLES ( s AS SNOWFLAKE_PROD.SALES.sales_transactions PRIMARY KEY (txn_id) )\n  METRICS ( s.total_sales AS SUM(s.amount) )`,
+};
+const SMAI_FORMATS = [{v:"dbt",l:"dbt MetricFlow (YAML)"},{v:"lookml",l:"LookML"},{v:"snowflake",l:"Snowflake semantic view"}];
+const SLImportDrawer = ({open, onClose, onOpenInBuilder}) => {
+  const [fmt, setFmt] = useState("dbt");
+  const [text, setText] = useState(SMAI_IMPORT_SAMPLES.dbt);
+  const [res, setRes] = useState(null);
+  useEffect(()=>{ if(open){ setFmt("dbt"); setText(SMAI_IMPORT_SAMPLES.dbt); setRes(null); } },[open]);
+  if(!open) return null;
+  const pool = slModellableAssets();
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:680,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>Import semantic model</div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Format</div>
+          <div style={{marginBottom:12}}><SLSelect value={fmt} onChange={e=>{setFmt(e.target.value); setText(SMAI_IMPORT_SAMPLES[e.target.value]); setRes(null);}} options={SMAI_FORMATS}/></div>
+          <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Definition</div>
+          <textarea value={text} onChange={e=>{setText(e.target.value); setRes(null);}} rows={12}
+            style={{width:"100%",boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,resize:"vertical"}}/>
+          <div style={{marginTop:10}}><Btn small onClick={()=>{ const r = SMAI.importDefinition(fmt, text, smaiCtx()); setRes(r); }}>✦ Convert</Btn></div>
+          {res && !res.ok && <div style={{marginTop:12,fontSize:12,color:T.rose}}>{res.error}</div>}
+          {res && res.ok && <div style={{marginTop:14}}>
+            <SmaiHead title="Datasets" count={res.datasets.length}/>
+            {res.datasets.map(d=>{ const a = pool.find(x=>x.name===d.table); return (
+              <div key={d.table} style={{padding:"9px 12px",background:T.bgSurface,border:`1px solid ${a?T.border:T.amber+"55"}`,borderRadius:8,marginBottom:6,fontSize:11.5}}>
+                <b style={{color:T.text}}>{d.table}</b> <span style={{color:T.textMuted}}>· grain {d.keys.join(" + ")||"—"}{d.keyProv?" · ✦ filled":""} · {d.measures.length} measure{d.measures.length===1?"":"s"}</span>
+                {!a && <span style={{color:T.amber}}> · not in the catalog</span>}</div>); })}
+            <SmaiHead title="Metrics" count={res.metrics.length}/>
+            {res.metrics.map(m=><div key={m.name} style={{fontSize:11.5,color:T.textSub,fontFamily:"ui-monospace,monospace",marginBottom:4}}>{m.name} · {m.agg}({m.col}) on {m.table}</div>)}
+            {res.filled.length>0 && <><SmaiHead title="Filled by AI" count={res.filled.length}/>{res.filled.map((f,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,marginBottom:3}}>· {f}</div>)}</>}
+            {res.warnings.length>0 && <div style={{marginTop:8}}>{res.warnings.map((w,i)=><div key={i} style={{fontSize:11.5,color:T.amber,marginBottom:3}}>· {w}</div>)}</div>}
+          </div>}
+        </div>
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:9,background:T.bg}}>
+          <Btn ghost onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" disabled={!res||!res.ok||!res.datasets.some(d=>pool.some(a=>a.name===d.table))}
+            onClick={()=>{ smaiDecide("import","accepted",fmt); onOpenInBuilder(res); }}>Open in model builder</Btn>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ── Settings › AI › Semantic Models ──────────────────────────────────────────
+const SmaiSettings = ({onToast}) => {
+  const s = useSmai();
+  const set = (patch) => smaiSet(x=>({...x, settings:{...x.settings, ...patch}}));
+  const PCTS = [0.5,0.6,0.7,0.75,0.8,0.85,0.9,0.95].map(v=>({v:String(v), l:smaiPct(v)}));
+  return (
+    <>
+      <AIDCard title="Semantic Models">
+        <AIDRow l="Enabled" on={s.settings.enabled} set={v=>set({enabled:v})}/>
+      </AIDCard>
+      <AIDCard title="Suggestions">
+        {SMAI.FEATURES.map(f=>(
+          <AIDRow key={f.k} l={f.l} on={s.settings.features[f.k]!==false} set={v=>set({features:{...s.settings.features, [f.k]:v}})}/>))}
+      </AIDCard>
+      <AIDCard title="Inputs">
+        {SMAI.INPUTS.map((it,i)=>(
+          <AIDInputRow key={it.k} item={it} first={i===0} on={s.settings.inputs[it.k]!==false} set={v=>set({inputs:{...s.settings.inputs, [it.k]:v}})}/>))}
+      </AIDCard>
+      <AIDCard title="Thresholds">
+        <div style={{display:"flex",gap:14}}>
+          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Minimum confidence to show</div>
+            <SLSelect value={String(s.settings.minConfidence)} onChange={e=>set({minConfidence:parseFloat(e.target.value)})} options={PCTS}/></div>
+          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Accept all at or above</div>
+            <SLSelect value={String(s.settings.bulkAccept)} onChange={e=>set({bulkAccept:parseFloat(e.target.value)})} options={PCTS}/></div>
+        </div>
+      </AIDCard>
+      <AIDCard title="Instructions">
+        <Input2 multiline rows={3} value={s.settings.instructions} onChange={e=>set({instructions:e.target.value})}
+          placeholder="Name metrics in title case. Revenue always excludes cancelled orders."/>
+      </AIDCard>
+      <AIDCard title="Acceptance">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 80px",gap:0,fontSize:11.5}}>
+          {["Suggestion","Accepted","Dismissed","Rate"].map(h=><div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>{h}</div>)}
+          {SMAI.FEATURES.map(f=>{ const st = s.stats[f.k]||{accepted:0,rejected:0}; const n = st.accepted+st.rejected; const r = n ? st.accepted/n : null;
+            return [<div key={f.k+"l"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.text}}>{f.l}</div>,
+              <div key={f.k+"a"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.textSub}}>{st.accepted}</div>,
+              <div key={f.k+"r"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.textSub}}>{st.rejected}</div>,
+              <div key={f.k+"p"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontWeight:700,color:r==null?T.textMuted:r>=0.9?T.green:r>=0.75?T.blue:T.amber}}>{r==null?"—":smaiPct(r)}</div>]; })}
+        </div>
+      </AIDCard>
+      {s.log.length>0 && <AIDCard title="Recent decisions">
+        {s.log.slice(0,10).map((l,i)=>(
+          <div key={i} style={{display:"flex",gap:10,padding:"6px 0",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
+            <span style={{width:80,fontWeight:700,color:l.decision==="accepted"?T.green:T.textMuted}}>{l.decision==="accepted"?"Accepted":"Dismissed"}</span>
+            <span style={{width:150,color:T.textMuted}}>{(SMAI.FEATURES.find(f=>f.k===l.feature)||{}).l||l.feature}</span>
+            <span style={{flex:1,color:T.text}}>{l.label}</span>
+            <span style={{color:T.textMuted}}>{l.at.slice(0,16).replace("T"," ")}</span></div>))}
+      </AIDCard>}
+    </>
+  );
+};
+
+const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existingRels, onToast, seed}) => {
   const isEdit = !!model;
   const SECTIONS = [
     {k:"identity", l:"Identity",  d:"What it is called, and who owns it"},
@@ -39826,12 +40218,28 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
   // on top of this one. One object, one form, wherever you reach it from.
   const [metricOpen, setMetricOpen] = useState(false);
   const [fieldEdit,  setFieldEdit]  = useState(null);   // {field} | "new" | null
+  const smai = useSmai();
 
   useEffect(()=>{ if(!open) return;
     setSec("identity"); setQ(""); setSrcF("all"); setDomF("all");
     setNj({from:"",fromCol:"",to:"",toCol:"",pairs:[{from:"",to:""}]});
     if(!model){
-      setD({name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[],fields:{},fieldMeta:{},metrics:[]});
+      const base = {name:"",desc:"",domain:"Finance",owner:"",steward:"",targets:[],assetIds:[],joins:[],fields:{},fieldMeta:{},metrics:[],
+                    ai:null, keyOverrides:{}, hierarchies:[]};
+      // Opened from Import: the converted definition becomes the starting draft.
+      if(seed && seed.datasets){
+        const pool0 = slModellableAssets();
+        const hits = seed.datasets.map(ds=>({ds, a:pool0.find(x=>x.name===ds.table)})).filter(x=>x.a);
+        const eidOf = (a) => slEntityForAsset(a, existingEntities).entity.id;
+        base.assetIds = hits.map(x=>x.a.id);
+        hits.forEach(({ds,a})=>{ if(ds.keyProv) base.keyOverrides[eidOf(a)] = ds.keys; });
+        (seed.metrics||[]).forEach((m,i)=>{ const h = hits.find(x=>x.ds.table===m.table); if(!h) return; const eid = eidOf(h.a);
+          if(!/count/.test(m.agg||"")) base.fields[`${eid}.${m.col}`] = "measure";
+          base.metrics.push({id:`m_imp_${Date.now().toString(36)}_${i}`, name:m.name, type:"simple", entity:eid, agg:m.agg, col:m.col,
+            timeGrain:"day", filters:[], dims:[], unit:/amount|cost|price|value/.test(m.col)?"USD":"count", status:"Draft", definition:"",
+            prov:{by:"import", format:seed.format}}); });
+      }
+      setD(base);
       setMetricOpen(false); setFieldEdit(null);
       return;
     }
@@ -39843,7 +40251,7 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
     setD({name:model.name||"", desc:model.desc||"", domain:model.domain||"Finance",
           owner:model.owner||"", steward:model.steward||"", targets:[...(model.targets||[])],
           assetIds, joins:(existingRels||[]).filter(r=>ids.includes(r.from)&&ids.includes(r.to)).map(r=>({...r})),
-          fields:{}, metrics:[]});
+          fields:{}, metrics:[], ai:null, keyOverrides:{}, hierarchies:[...(model.hierarchies||[])]});
     setMetricOpen(false); setFieldEdit(null);
   },[open, model]);
   if(!open || !d) return null;
@@ -39860,7 +40268,10 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
   // see exactly the same objects the user will get.
   const derived = d.assetIds.map(id=>{
     const a = pool.find(x=>x.id===id); if(!a) return null;
-    return {asset:a, ...slEntityForAsset(a, existingEntities)};
+    const r = slEntityForAsset(a, existingEntities);
+    const ko = (d.keyOverrides||{})[r.entity.id];
+    return {asset:a, created:r.created,
+      entity: ko ? {...r.entity, key:ko[0], keys:ko, keyStrong:false, evidence:`${ko.join(" + ")} · accepted AI suggestion`} : r.entity};
   }).filter(Boolean);
   const entOf = (eid) => (derived.find(x=>x.entity.id===eid)||{}).entity;
 
@@ -39913,6 +40324,63 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                     name:slPretty(fid.slice(fid.indexOf(".")+1)), additive:true, defaultAgg:"sum", ...(d.fieldMeta||{})[fid]}));
 
   const noKey = derived.filter(x=>!slKeys(x.entity).length);
+
+  // ── AI suggestions for this draft ──
+  const aiDecided = (d.ai && d.ai.decided) || {};
+  const aiMark = (key, feature, decision, label) => {
+    setD(p=>({...p, ai:{...p.ai, decided:{...p.ai.decided, [key]:decision}}}));
+    smaiDecide(feature, decision, label);
+  };
+  const runAI = () => {
+    const ents = derived.map(x=>x.entity);
+    const gen = SMAI.generateModel({entities:ents, domain:d.domain}, smaiCtx(ents));
+    setD(p=>({...p, ai:{...gen, decided:{}}}));
+    onToast&&onToast(`AI suggestions ready · ${gen.joins.length} join${gen.joins.length===1?"":"s"} · ${gen.fields.filter(f=>f.role&&f.role!=="key").length} field roles · ${gen.metrics.length} metric${gen.metrics.length===1?"":"s"}`,"success");
+  };
+  const liveIds = new Set(derived.map(x=>x.entity.id));
+  const aiJoins = d.ai ? d.ai.joins.filter(j=>!aiDecided["j:"+j.id] && liveIds.has(j.from) && liveIds.has(j.to)
+    && !d.joins.some(x=>x.from===j.from && x.to===j.to && x.fromKey===j.fromKey)) : [];
+  const aiMetrics = d.ai ? d.ai.metrics.filter(m=>!aiDecided["m:"+m.id] && liveIds.has(m.entity)) : [];
+  const aiHier = d.ai ? d.ai.hierarchies.filter(h=>!aiDecided["h:"+h.id] && !(d.hierarchies||[]).some(x=>x.name===h.name)) : [];
+  const aiGrains = d.ai ? Object.entries(d.ai.grains||{}).filter(([eid])=>!aiDecided["g:"+eid] && liveIds.has(eid) && !(d.keyOverrides||{})[eid]) : [];
+  const aiIdentity = d.ai && d.ai.identity && !aiDecided.identity ? d.ai.identity : null;
+  const aiFieldsPending = d.ai ? derived.filter(({entity})=>!aiDecided["f:"+entity.id] && d.ai.fields.some(f=>f.entity===entity.id && f.role && f.role!=="key")).length : 0;
+  const aiPending = aiJoins.length + aiMetrics.length + aiHier.length + aiGrains.length + (aiIdentity?1:0) + aiFieldsPending;
+  const acceptJoin = (j) => {
+    setD(p=>({...p, joins:[...p.joins, {id:"r_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5), from:j.from, to:j.to,
+      fromKey:j.fromKey, toKey:j.toKey, fromKeys:j.fromKeys, toKeys:j.toKeys, cardinality:j.cardinality, filterDirection:"single",
+      fanOutSafe:j.fanOutSafe, note:j.note, prov:{by:"ai", conf:j.conf, why:j.why}}]}));
+    aiMark("j:"+j.id, "joins", "accepted", `${j.fromKey} = ${j.toKey}`);
+  };
+  const acceptFields = (eid, ename) => {
+    const fs = d.ai.fields.filter(f=>f.entity===eid && f.role!=="key");
+    setD(p=>({...p,
+      fields:{...p.fields, ...Object.fromEntries(fs.map(f=>[`${eid}.${f.column}`, f.role]))},
+      fieldMeta:{...(p.fieldMeta||{}), ...Object.fromEntries(fs.filter(f=>f.role).map(f=>[`${eid}.${f.column}`, {
+        name:f.name, desc:f.desc||"", synonyms:f.synonyms||[],
+        ...(f.role==="dimension" ? {type:f.dimType||"categorical"} : {defaultAgg:f.defaultAgg||"sum", additive:f.additive!==false}),
+        prov:{by:"ai", conf:f.conf, why:f.why}}]))},
+      ai:{...p.ai, decided:{...p.ai.decided, ["f:"+eid]:"accepted"}}}));
+    smaiDecide("fields", "accepted", `${fs.length} field roles on ${ename}`);
+  };
+  const acceptMetric = (m) => {
+    const id = "m_ai_"+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    setD(p=>({...p,
+      // A summed or averaged column becomes a measure; a counted key stays a key.
+      fields: m.type==="simple" && m.col && !/count/.test(m.agg||"") && !slKeys(entOf(m.entity)).includes(m.col)
+        ? {...p.fields, [`${m.entity}.${m.col}`]: p.fields[`${m.entity}.${m.col}`]||"measure"} : p.fields,
+      metrics:[...p.metrics, {id, name:m.name, type:m.type, entity:m.entity, agg:m.agg, col:m.col, numerator:m.numerator, denominator:m.denominator,
+        timeDim:m.timeDim, timeGrain:m.timeGrain||"day", filters:m.filters||[], dims:m.dims||[], unit:m.unit, definition:m.definition||"",
+        synonyms:m.synonyms||[], examples:[], status:"Draft", prov:{by:"ai", conf:m.conf, why:m.why, origin:m.origin}}]}));
+    aiMark("m:"+m.id, "metrics", "accepted", m.name);
+  };
+  const applyDraftFix = (i) => {
+    const f = i.fix;
+    if(f.kind==="setKey") setD(p=>({...p, keyOverrides:{...(p.keyOverrides||{}), [f.entityId]:f.keys}}));
+    if(f.kind==="removeJoin") setD(p=>({...p, joins:p.joins.filter(j=>j.id!==f.joinId)}));
+    if(f.kind==="setAgg") setD(p=>({...p, metrics:p.metrics.map(m=>m.id===f.metricId?{...m, agg:f.agg}:m)}));
+    smaiDecide("validation", "accepted", i.title);
+  };
   const ready = d.name.trim() && d.owner && d.assetIds.length>0 && noKey.length===0;
 
   const Field = ({label,hint,children}) => (
@@ -39933,7 +40401,11 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
             <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?`Edit ${model.name}`:"New semantic model"}</div>
             <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>Pick the tables, declare how they join, say what each column is for.</div>
           </div>
-          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {d.ai && aiPending>0 && <span style={{fontSize:11,color:T.violet,fontWeight:600}}>✦ {aiPending} to review</span>}
+            {smai.settings.enabled && <Btn small onClick={runAI} disabled={derived.length===0} title={derived.length?"":"Pick datasets first"}>✦ {d.ai?"Regenerate":"Generate with AI"}</Btn>}
+            <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+          </div>
         </div>
 
         <div style={{flex:1,display:"flex",overflow:"hidden"}}>
@@ -39956,6 +40428,9 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
           <div style={{flex:1,overflowY:"auto",padding:"20px 24px"}}>
 
             {sec==="identity" && <>
+              {aiIdentity && <SmaiCard title={aiIdentity.name} conf={aiIdentity.conf} why={aiIdentity.desc} acceptLabel="Use"
+                onAccept={()=>{ setD(p=>({...p, name:p.name||aiIdentity.name, desc:aiIdentity.desc})); aiMark("identity","descriptions","accepted",aiIdentity.name); }}
+                onDismiss={()=>aiMark("identity","descriptions","rejected",aiIdentity.name)}/>}
               <Field label="Name" hint="Name it after the business area, not the tables underneath.">
                 <Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Commerce Revenue"/></Field>
               <Field label="What it is for">
@@ -40034,15 +40509,36 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                       {entity.key ? `one row per ${entity.key}` : "No primary key detected — this model cannot be certified until one is declared."}
                     </div>
                     <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{entity.evidence}</div>
+                    {aiGrains.filter(([eid])=>eid===entity.id).map(([eid,g])=>(
+                      <div key={eid} style={{display:"flex",alignItems:"center",gap:8,marginTop:7,paddingTop:7,borderTop:`1px solid ${T.border}`}}>
+                        <SmaiChip conf={g.conf} why={g.why}/>
+                        <span style={{fontSize:11.5,color:T.textSub,flex:1}}>Grain {g.keys.join(" + ")} · {g.why}</span>
+                        <Btn small ghost onClick={()=>aiMark("g:"+eid,"fields","rejected",`grain ${g.keys.join("+")}`)}>Dismiss</Btn>
+                        <Btn small variant="primary" onClick={()=>{ setD(p=>({...p, keyOverrides:{...(p.keyOverrides||{}), [eid]:g.keys}})); smaiDecide("fields","accepted",`grain ${g.keys.join("+")}`); }}>Use</Btn>
+                      </div>))}
                   </div>
                 ))}
               </div>}
             </>}
 
+            {sec==="assets" && derived.length>0 && smai.settings.enabled && !d.ai && (
+              <div style={{marginTop:14,display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:T.violetDim,border:`1px solid ${T.violet}35`,borderRadius:10}}>
+                <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>✦ Joins, field roles, hierarchies, metrics and descriptions for {derived.length} dataset{derived.length===1?"":"s"}</span>
+                <Btn small variant="primary" onClick={runAI}>Generate with AI</Btn>
+              </div>)}
+
             {sec==="joins" && <>
               <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14,lineHeight:1.6,maxWidth:740}}>
-                You declare the joins. EDG deliberately does not guess them from lineage or foreign keys — a wrongly inferred join silently fans out every measure in the model and nobody notices until an audit. What EDG does do is check the join you drew against the column profiles and tell you when it will misbehave.
+                Every join, suggested or drawn, is checked against the column profiles. Nothing is added until you accept it.
               </div>
+              {aiJoins.length>0 && <div style={{marginBottom:14}}>
+                <SmaiHead title="Suggested joins" count={aiJoins.length}
+                  onAcceptAll={()=>aiJoins.filter(j=>j.conf>=smai.settings.bulkAccept && j.fanOutSafe).forEach(acceptJoin)}/>
+                {aiJoins.map(j=>{ const f=entOf(j.from), t=entOf(j.to); return (
+                  <SmaiCard key={j.id} title={`${f&&f.name} → ${t&&t.name}`} sub={`${j.fromKey} = ${j.toKey} · ${j.cardinality.replace(/_/g," ")}${j.fanOutSafe?" · cannot fan out":""}`}
+                    conf={j.conf} why={j.why} evidence={j.evidence} issues={j.issues}
+                    onAccept={()=>acceptJoin(j)} onDismiss={()=>aiMark("j:"+j.id,"joins","rejected",`${j.fromKey} = ${j.toKey}`)}/>); })}
+              </div>}
 
               {derived.length<2
                 ? <div style={{padding:"26px 20px",textAlign:"center",color:T.textMuted,fontSize:12.5,background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:10}}>
@@ -40144,7 +40640,7 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                           <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{entity.name}</span>
                           <span style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{entity.table}</span>
                           <span style={{flex:1}}/>
-                          <button onClick={()=>setD(p=>({...p, fields:{...p.fields,
+                          <button onClick={()=>d.ai ? acceptFields(entity.id, entity.name) : setD(p=>({...p, fields:{...p.fields,
                             ...Object.fromEntries(cols.filter(c=>!keys.includes(c.name))
                               .map(c=>[`${entity.id}.${c.name}`, slIsFactish(entity,c.name)?"measure":"dimension"]))}}))}
                             style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0}}>
@@ -40161,7 +40657,8 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                             const fid = `${entity.id}.${c.name}`;
                             const isKey = keys.includes(c.name);
                             const role = d.fields[fid] || "";
-                            const proposed = slIsFactish(entity, c.name) ? "measure" : "dimension";
+                            const aiF = d.ai ? d.ai.fields.find(f=>f.entity===entity.id && f.column===c.name) : null;
+                            const proposed = aiF && aiF.role!=="key" ? aiF.role : slIsFactish(entity, c.name) ? "measure" : "dimension";
                             const p = COL_PROFILES[c.name] || {};
                             return (
                               <div key={c.name} style={{display:"flex",alignItems:"center",gap:12,padding:"8px 13px",borderBottom:i<cols.length-1?`1px solid ${T.border}`:"none"}}>
@@ -40176,6 +40673,8 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                                     the field editor makes are the same object. */}
                                 {role && (d.fieldMeta||{})[fid] && <span style={{fontSize:10.5,color:T.text,fontWeight:600,flexShrink:0}}>{(d.fieldMeta||{})[fid].name}</span>}
                                 {c.pii && <span style={{fontSize:9.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,flexShrink:0}}>PII</span>}
+                                {!c.pii && aiF && aiF.sensitive && <span title={`${aiF.sensitive.kind} · ${aiF.sensitive.why}`} style={{fontSize:9.5,fontWeight:600,padding:"1px 6px",borderRadius:4,background:T.roseDim,color:T.rose,border:`1px dashed ${T.rose}66`,flexShrink:0}}>✦ PII</span>}
+                                {aiF && aiF.role!=="key" && <SmaiChip conf={aiF.conf} why={`${aiF.role?({dimension:"Dimension",measure:"Measure"})[aiF.role]:"Leave out"} · ${aiF.why}`}/>}
                                 {isKey
                                   ? <span style={{fontSize:10.5,color:T.violet,width:188,textAlign:"right",flexShrink:0}}>Key — always in the model</span>
                                   : <div style={{display:"flex",gap:2,padding:2,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,flexShrink:0}}>
@@ -40210,7 +40709,30 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                   })}
             </>}
 
+            {sec==="fields" && (aiHier.length>0 || (d.hierarchies||[]).length>0) && <div style={{marginTop:6}}>
+              {aiHier.length>0 && <SmaiHead title="Suggested hierarchies" count={aiHier.length}/>}
+              {aiHier.map(h=>(
+                <SmaiCard key={h.id} title={h.name} sub={h.levels.map(l=>`${(entOf(l.entity)||{}).name}.${l.column}`).join(" › ")} conf={h.conf} why={h.why}
+                  onAccept={()=>{ setD(p=>({...p, hierarchies:[...(p.hierarchies||[]), {name:h.name, levels:h.levels, prov:{by:"ai", conf:h.conf}}]})); aiMark("h:"+h.id,"hierarchies","accepted",h.name); }}
+                  onDismiss={()=>aiMark("h:"+h.id,"hierarchies","rejected",h.name)}/>))}
+              {(d.hierarchies||[]).map(h=>(
+                <div key={h.name} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6,fontSize:11.5}}>
+                  <b style={{color:T.text}}>{h.name}</b><span style={{color:T.textMuted,fontFamily:"ui-monospace,monospace",flex:1}}>{h.levels.map(l=>l.column).join(" › ")}</span>
+                  <button onClick={()=>setD(p=>({...p, hierarchies:p.hierarchies.filter(x=>x.name!==h.name)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+                </div>))}
+            </div>}
+
             {sec==="metrics" && <>
+              {aiMetrics.length>0 && <div style={{marginBottom:14}}>
+                <SmaiHead title="Suggested metrics" count={aiMetrics.length}
+                  onAcceptAll={()=>aiMetrics.filter(m=>m.conf>=smai.settings.bulkAccept && !m.duplicate).forEach(acceptMetric)}/>
+                {aiMetrics.map(m=>(
+                  <SmaiCard key={m.id} title={m.name} sub={slMetricLine(m)} conf={m.conf} why={m.why} evidence={m.evidence}
+                    warn={m.duplicate ? `${m.duplicate.kind==="exact"?"Same definition as":"Similar to"} ${m.duplicate.name}${m.duplicate.model?` · ${(_slState.models.find(x=>x.id===m.duplicate.model)||{}).name||m.duplicate.model}`:""}` : null}
+                    acceptLabel={m.duplicate&&m.duplicate.kind==="exact"?"Add anyway":"Add"}
+                    onAccept={()=>acceptMetric(m)} onDismiss={()=>aiMark("m:"+m.id,"metrics","rejected",m.name)}>
+                    <SmaiOriginChips origin={m.origin}/></SmaiCard>))}
+              </div>}
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
                 <div style={{fontSize:12,color:T.textMuted,flex:1}}>The numbers this model is for.</div>
                 <Btn small variant="primary" icon={Ic.plus(11)}
@@ -40254,6 +40776,9 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                     return n ? `${n} declared · ${m} measure${m===1?"":"s"}` : "none yet";
                   })()],
                   ["Metrics", d.metrics.length ? `${d.metrics.length} drafted` : "none yet"],
+                  ...((d.hierarchies||[]).length ? [["Hierarchies", d.hierarchies.map(h=>h.name).join(", ")]] : []),
+                  ...(d.ai ? [["AI suggestions", (()=>{ const v = Object.values(aiDecided);
+                    return `${v.filter(x=>x==="accepted").length} accepted · ${v.filter(x=>x==="rejected").length} dismissed · ${aiPending} open`; })()]] : []),
                   ["Publishes to", (d.targets||[]).length ? d.targets.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ") : "nothing yet"],
                 ].map(([k,v],i,a)=>(
                   <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:12,padding:"10px 14px",borderBottom:i<a.length-1?`1px solid ${T.border}`:"none"}}>
@@ -40262,6 +40787,12 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
                   </div>
                 ))}
               </div>
+              {smai.settings.enabled && smaiOn("validation") && (()=>{
+                const vi = SMAI.validateModel({entities:draftEnts, joins:d.joins, dims:draftDims, facts:draftFacts, metrics:d.metrics}, smaiCtx(draftEnts));
+                return vi.length>0 && <div style={{marginBottom:14}}>
+                  <SmaiHead title="Checks" count={vi.length}/>
+                  {vi.map(i=><SmaiIssue key={i.id} i={i} onFix={applyDraftFix}/>)}
+                </div>; })()}
               {noKey.length>0 && <div style={{padding:"11px 13px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:9,marginBottom:12}}>
                 <div style={{fontSize:11.5,fontWeight:700,color:T.amber,marginBottom:4}}>{noKey.length} asset{noKey.length===1?"":"s"} without a detectable grain</div>
                 <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55}}>{noKey.map(x=>x.entity.table).join(", ")} — remove them, or declare a key before this model can be certified.</div>
@@ -40286,11 +40817,11 @@ const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existing
               isEdit,
               model: isEdit
                 ? {...model, name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
-                   steward:d.steward||d.owner, entityIds:derived.map(x=>x.entity.id), targets:d.targets||[]}
+                   steward:d.steward||d.owner, entityIds:derived.map(x=>x.entity.id), targets:d.targets||[], hierarchies:d.hierarchies||[]}
                 : {id:"mdl_"+Date.now(), name:d.name.trim(), desc:d.desc, domain:d.domain, owner:d.owner,
                    steward:d.steward||d.owner, status:"Draft", entityIds:derived.map(x=>x.entity.id),
                    targets:d.targets||[], lastPublished:null, created:new Date().toISOString().slice(0,10),
-                   owners:[d.owner], stewards:[d.steward||d.owner], tags:[], terms:[],
+                   owners:[d.owner], stewards:[d.steward||d.owner], tags:[], terms:[], hierarchies:d.hierarchies||[],
                    sync:{enabled:false, targets:[], frequency:"daily", onDrift:"notify"}},
               newEntities: derived.filter(x=>x.created).map(x=>x.entity),
               joins: d.joins,
@@ -44068,6 +44599,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
   const [confFilter, setConfFilter] = useState("all");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [mdlDrawer,   setMdlDrawer]   = useState(null);   // {model} — null model = create
+  const [importOpen,  setImportOpen]  = useState(false);
   const [pubOpen,     setPubOpen]     = useState(false);
   const [dfKind,      setDfKind]      = useState(null);   // "dimension" | "fact" | null
   const [defTab,      setDefTab]      = useState("dimensions");
@@ -44196,6 +44728,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
                   {k:"links",l:"Glossary links"},{k:"versions",l:"Versions"},
+                  ...(_smai.settings.enabled ? [{k:"ai",l:"AI suggestions"}] : []),
                   {k:"config",l:"Configuration"}];
     // A validation issue opens the place it is fixed.
     const goToIssue = (i) => {
@@ -44344,6 +44877,8 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
 
             {tab==="links" && <CtxModelLinks mdl={mdl} onToast={onToast} onNav={onNav}/>}
             {tab==="versions" && <CtxModelVersions mdl={mdl} onToast={onToast} onGoTo={goToIssue}/>}
+            {tab==="ai" && <SLAiTab mdl={mdl} ents={mEnts} rels={mRels} dims={mDims} facts={mFacts} mets={mMetrics}
+              setStore={setStore} onToast={onToast} onGoTo={goToIssue}/>}
             {tab==="erd" && <>
               <SH title="Relationships"
                   sub="Datasets are what you count and the grain says what one row means. A metric can only be sliced by a dimension it can reach through these joins."/>
@@ -44816,7 +45351,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
         )}
         {/* The same drawer the list opens — the detail view has its own return, so it
             needs its own mount or Edit Details opens nothing. */}
-        <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} onClose={()=>setMdlDrawer(null)}
+        <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} seed={mdlDrawer&&mdlDrawer.seed} onClose={()=>setMdlDrawer(null)}
           onSave={saveModel} existingEntities={entities} existingRels={rels} onToast={onToast}/>
         <SLJoinDrawer open={!!joinFor} join={joinFor} entities={mEnts}
           onClose={()=>setJoinFor(null)} onSave={saveJoin} onDelete={deleteJoin} onToast={onToast}/>
@@ -44855,6 +45390,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
           <div style={{flex:1}}>
             <Input2 placeholder="Search semantic models, descriptions, owners…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
           </div>
+          {_smai.settings.enabled && smaiOn("import") && <Btn onClick={()=>setImportOpen(true)}>✦ Import</Btn>}
           <button onClick={()=>setMdlDrawer({model:null})}
             style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",flexShrink:0}}>
             {Ic.plus(10)} New Semantic Model
@@ -44915,8 +45451,10 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
         </div>
       </div>
 
-      <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} onClose={()=>setMdlDrawer(null)}
+      <SLModelDrawer open={!!mdlDrawer} model={mdlDrawer&&mdlDrawer.model} seed={mdlDrawer&&mdlDrawer.seed} onClose={()=>setMdlDrawer(null)}
         onSave={saveModel} existingEntities={entities} existingRels={rels} onToast={onToast}/>
+      <SLImportDrawer open={importOpen} onClose={()=>setImportOpen(false)}
+        onOpenInBuilder={(res)=>{ setImportOpen(false); setMdlDrawer({model:null, seed:res}); }}/>
     </div>
   );
 };
@@ -60628,6 +61166,56 @@ const aiAsk = (q, ctx) => {
   const push     = (b) => blocks.push(b);
   const R        = (intent, headline) => ({q, intent, headline, blocks, trace});
 
+  // ── Semantic models ─────────────────────────────────────────────────────────
+  // Named model + an ask about its metrics, checks or test questions. Reads the
+  // same suggestion engine the model's AI tab uses; a plain-language "add metric"
+  // lands as a Draft, never as a certified metric.
+  const smModel = _smai.settings.enabled ? [..._slState.models].sort((x,y)=>y.name.length-x.name.length).find(m=>s.includes(m.name.toLowerCase())) : null;
+  if(smModel && /\b(metrics?|validat\w*|check|issues?|problems?|test questions?)\b/.test(s)){
+    const ents  = _slState.entities.filter(e=>(smModel.entityIds||[]).includes(e.id));
+    const ids   = ents.map(e=>e.id);
+    const parts = {entities:ents, joins:_slState.rels.filter(r=>ids.includes(r.from)&&ids.includes(r.to)),
+      dims:_slState.dims.filter(d=>ids.includes(d.entity)), facts:_slState.facts.filter(f=>ids.includes(f.entity)),
+      metrics:_slState.metrics.filter(m=>m.model===smModel.id)};
+    const sctx  = smaiCtx();
+    const edit  = q.match(/\b(add|create)\s+(?:a\s+)?metric\b.*/i);
+    if(edit){
+      const cmdText = edit[0].replace(new RegExp(`\\s+(?:to|in|on)\\s+(?:the\\s+)?${smModel.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}(?:\\s+model)?\\s*$`,"i"),"").trim();
+      const r = SMAI.parseEdit(cmdText, {...parts, entities:ents.map(e=>({...e, columns:(SCHEMA[e.table]||[]).map(c=>c.name)}))});
+      trace.push({name:"semantic.edit", args:{model:smModel.name, text:cmdText}, rows:r.ok?1:0, ms:9});
+      if(!r.ok){ push({kind:"text", text:r.error}); return R("semantic-edit", "Could not read that change"); }
+      const id = "m_ai_"+Date.now().toString(36);
+      const ent = ents.find(e=>e.id===r.metric.entity);
+      slSet(prev=>({...prev, metrics:[...prev.metrics, {...r.metric, id, model:smModel.id, status:"Draft", termId:null,
+        domain:smModel.domain, owner:smModel.owner, steward:smModel.steward, examples:[], bindings:[], basedOn:[],
+        definition:SMAI.describe("metric", {...r.metric, entityName:ent&&ent.name}, sctx).desc,
+        prov:{by:"ai", via:"copilot", requestedBy:role, at:new Date().toISOString()}}]}));
+      smaiDecide("metrics","accepted",r.metric.name);
+      push({kind:"text", text:`${r.summary}. Added to **${smModel.name}** as a **Draft** metric — it needs certification before anyone relies on it.`});
+      return R("semantic-edit", `Draft metric added · ${r.metric.name}`);
+    }
+    if(/\b(validat\w*|check|issues?|problems?)\b/.test(s)){
+      const issues = SMAI.validateModel(parts, sctx);
+      trace.push({name:"semantic.validate", args:{model:smModel.name}, rows:issues.length, ms:14});
+      push({kind:"text", text: issues.length ? `**${issues.length} issue${issues.length===1?"":"s"}** in ${smModel.name}. Fixes are one click in the model's **AI suggestions › Validation** tab.` : `No issues found in **${smModel.name}**.`});
+      issues.slice(0,6).forEach(i=>push({kind:"text", text:`**${i.severity}** · ${i.title} — ${i.explain}${i.fix?` *Fix: ${i.fix.label}.*`:""}`}));
+      return R("semantic-validate", `${issues.length} issue${issues.length===1?"":"s"} · ${smModel.name}`);
+    }
+    if(/\btest questions?\b/.test(s)){
+      const tq = SMAI.generateTestQuestions(parts, sctx, 6);
+      trace.push({name:"semantic.tests", args:{model:smModel.name}, rows:tq.length, ms:11});
+      push({kind:"text", text:`**${tq.length} test questions** for ${smModel.name}, each with the SQL it should compile to. Save them as a test set from **AI suggestions › Test questions**.`});
+      tq.forEach(t=>push({kind:"text", text:`· ${t.q}`}));
+      return R("semantic-tests", `${tq.length} test questions · ${smModel.name}`);
+    }
+    const sugs = SMAI.suggestMetrics(ents, parts.facts.map(f=>({entity:f.entity, column:f.column, role:"measure", defaultAgg:f.defaultAgg||"sum"})), sctx)
+      .filter(m=>m.conf>=_smai.settings.minConfidence && !(m.duplicate && m.duplicate.kind==="exact" && m.duplicate.model===smModel.id));
+    trace.push({name:"semantic.suggest", args:{model:smModel.name}, rows:sugs.length, ms:16});
+    push({kind:"text", text: sugs.length ? `**${sugs.length} metric${sugs.length===1?"":"s"}** people already compute on ${smModel.name}'s datasets but the model does not define. Add them from **AI suggestions**, or say *add metric <name> = sum of <column> to ${smModel.name}*.` : `Every metric observed on ${smModel.name}'s datasets is already defined.`});
+    sugs.slice(0,6).forEach(m=>push({kind:"text", text:`· **${m.name}** — ${slMetricLine(m)} · ${smaiPct(m.conf)} · ${m.why}${m.duplicate?` · similar to ${m.duplicate.name}`:""}`}));
+    return R("semantic-suggest", `${sugs.length} suggested metric${sugs.length===1?"":"s"} · ${smModel.name}`);
+  }
+
   // ── Data questions ──────────────────────────────────────────────────────────
   // One conversation, two kinds of answer. A question shaped like governance
   // ("who owns", "what breaks", "which columns") always goes to the graph, even
@@ -63410,17 +63998,19 @@ const AISettingsSection = ({onToast}) => {
   return (
     <>
       <SettSH icon={Ic.bot(16)} title="AI"
-        desc="The Copilot, AI Classification and AI Descriptions — each with its own model. AI proposes; a person decides."/>
+        desc="The Copilot, AI Classification, AI Descriptions and Semantic Models — each with its own model. AI proposes; a person decides."/>
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
           {key:"classification", label:"Classification"},
           {key:"descriptions",   label:"Descriptions"},
+          {key:"semantic",       label:"Semantic Models"},
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
       {tab==="classification" && <AICControlPanel onToast={onToast}/>}
       {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
+      {tab==="semantic"       && <SmaiSettings onToast={onToast}/>}
     </>
   );
 };
