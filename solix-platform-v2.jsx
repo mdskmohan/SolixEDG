@@ -10,6 +10,9 @@ import "@xyflow/react/dist/style.css";
 import * as CTX from "./src/context/engine.js";
 import * as SMAI from "./src/semantic/ai.js";
 import { SL_USAGE } from "./src/semantic/usage-seed.js";
+import * as ONT from "./src/ontology/engine.js";
+import * as OAI from "./src/ontology/ai.js";
+import { IMPORT_SAMPLES as ONT_IMPORT_SAMPLES, IMPORT_SOURCES as ONT_IMPORT_SOURCES } from "./src/ontology/standards.js";
 import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
 // ─────────────────────────────────────────────
@@ -5556,6 +5559,7 @@ const GROUPS = [
     // {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"semanticlayer",  icon:"semantic",      label:"Semantic Models"},
+    {key:"ontologies",     icon:"knowledge",     label:"Ontologies"},
     {key:"context",        icon:"lineage",       label:"Context"},
     {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
@@ -5565,7 +5569,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","settings","tags","aipipelines"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","context","settings","tags","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -40198,6 +40202,804 @@ const SmaiSettings = ({onToast}) => {
   );
 };
 
+// ═══ Ontologies ══════════════════════════════════════════════════════════════
+// The Ontology Manager: what the business is — classes, relationships and the
+// rules that hold — authored here, imported from other tools, or drafted by AI
+// from the semantic models and glossary. A class names its glossary term; the
+// glossary keeps the word, the ontology keeps the thing. Logic lives in
+// src/ontology/ (engine.js, ai.js); this block is state and screens.
+
+const ONT_KEY = "solix-edg.prototype.ont.v1";
+const OAI_KEY = "solix-edg.prototype.oai.v1";
+
+// Seed: one ontology built from the glossary's Concept terms and the concept
+// relationships Context already holds, published as v1; and one imported from
+// Palantir so overlap across ontologies is visible.
+const ontSeed = () => {
+  const concepts = _gtState.filter(t=>t.termType==="Concept");
+  const cid = (tid) => "c_"+tid;
+  const props = (tid) => {
+    const ents = _slState.entities.filter(e=>e.concept===tid);
+    const seen = new Set();
+    return [..._slState.dims, ..._slState.facts].filter(f=>ents.some(e=>e.id===f.entity) && f.type!=="identifier"
+        && !ents.some(e=>e.id===f.entity && slKeys(e).includes(f.column)))
+      .filter(f=>!seen.has(f.name) && seen.add(f.name)).slice(0,6)
+      .map(f=>{ const e = ents.find(x=>x.id===f.entity); const col = (SCHEMA[e.table]||[]).find(c=>c.name===f.column)||{};
+        const t = String(col.type||"").toUpperCase();
+        return {id:"p_"+f.id, name:f.name, column:f.column, required:false, desc:f.desc||"",
+          datatype:/DATE$/.test(t)?"date":/TIME/.test(t)?"dateTime":/BOOL/.test(t)?"boolean":/DEC|NUMERIC|DOUBLE|FLOAT/.test(t)?"decimal":/INT|NUMBER|SERIAL/.test(t)?"integer":"string"}; });
+  };
+  // SKOS "broader" is either generic (Customer → Party: a kind of) or partitive
+  // (Order Line → Order: part of). A line, item or detail is the second kind.
+  const partOf = (t) => { const b = t.broader && concepts.find(x=>x.id===t.broader); return b && new RegExp(`^${b.term}\\s+(line|item|detail|entry)$`,"i").test(t.term) ? b : null; };
+  const classes = concepts.map(t=>({id:cid(t.id), name:t.term, desc:t.definition||"", synonyms:t.synonyms||[],
+    parent:t.broader && !partOf(t)?cid(t.broader):null, termId:t.id, sameAs:[], props:props(t.id)}));
+  const partRels = concepts.filter(partOf).map(t=>({id:"r_part_"+t.id, from:cid(t.id), to:cid(t.broader), name:"part of", inverse:"contains",
+    cardinality:"many_to_one", kind:"part_of", desc:""}));
+  const CARD = {placed_by:"many_to_one", paid_by:"many_to_one", supplied_by:"many_to_one", belongs_to:"many_to_one", part_of:"many_to_one"};
+  const rels = _slState.crels.filter(r=>r.status!=="removed" && r.status!=="rejected" && CTX.REL_TYPES[r.type] && r.type!=="related_to" && r.type!=="is_a")
+    .filter(r=>classes.some(c=>c.id===cid(r.from)) && classes.some(c=>c.id===cid(r.to)))
+    // Context's "part of" edges were shorthand for the taxonomy (now the
+    // hierarchy) or for links not yet modelled; the AI tab proposes the real ones.
+    .filter(r=>r.type!=="part_of")
+    .map(r=>({id:"r_"+r.id, from:cid(r.from), to:cid(r.to), name:CTX.REL_TYPES[r.type].l.replace(/^is /,""), inverse:CTX.REL_TYPES[r.type].inv.replace(/^is /,""),
+      cardinality:CARD[r.type]||"many_to_one", kind:r.type==="part_of"?"part_of":"association", desc:r.note||""})).concat(partRels);
+  const commerce = {id:"ont_commerce", name:"Enterprise Commerce", prefix:"com", namespace:"https://ontology.jnj.com/commerce#",
+    domain:"Commerce", owner:"maya.chen", steward:"dev.patel", status:"Published", created:"2026-09-18",
+    desc:"The commercial concepts every model, report and agent in the group shares: who buys, what is bought, and how it is fulfilled.",
+    source:{kind:"native"}, classes, rels, constraints:[], versions:[]};
+  const pub = ONT.publish(commerce, "maya.chen", "Initial publication from the glossary concepts", "2026-09-18T09:00:00Z");
+  const imp = ONT.importPalantir(ONT_IMPORT_SAMPLES.palantir);
+  const supply = {id:"ont_supply", name:"Supply Chain", prefix:"sup", namespace:"https://ontology.jnj.com/supply#", domain:"Procurement",
+    owner:"sarah.kim", steward:"sarah.kim", status:"Draft", created:"2026-10-02",
+    desc:"Imported from the Palantir Foundry ontology the procurement team maintains.",
+    source:{kind:"import", format:"palantir", connector:"Palantir Foundry"},
+    classes:imp.classes, rels:imp.rels, constraints:imp.constraints, versions:[]};
+  return [pub.ok ? pub.ontology : commerce, supply];
+};
+let _ontState = null;
+const ontLoad = () => {
+  if(_ontState) return _ontState;
+  let saved = null; try { saved = JSON.parse(localStorage.getItem(ONT_KEY)||"null"); } catch(e) {}
+  _ontState = saved && Array.isArray(saved.ontologies) ? saved : {ontologies: ontSeed()};
+  return _ontState;
+};
+const _ontSubs = new Set();
+const ontSet = (fn) => { _ontState = typeof fn==="function" ? fn(ontLoad()) : fn;
+  try { localStorage.setItem(ONT_KEY, JSON.stringify(_ontState)); } catch(e) {}
+  _ontSubs.forEach(f=>f()); };
+const useOnt = () => { const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _ontSubs.add(fn); return ()=>{_ontSubs.delete(fn);}; },[]);
+  return ontLoad(); };
+const ontPatch = (id, fn) => ontSet(s=>({...s, ontologies:s.ontologies.map(o=>o.id===id ? (typeof fn==="function"?fn(o):{...o,...fn}) : o)}));
+const ontById = (id) => ontLoad().ontologies.find(o=>o.id===id);
+const ontClass = (o, id) => (o.classes||[]).find(c=>c.id===id);
+
+// ── Ontology AI settings and decisions (same shape as Semantic Models) ──
+const OAI_DEFAULT = {
+  settings:{enabled:true, minConfidence:0.6, bulkAccept:0.9,
+    features:Object.fromEntries(OAI.FEATURES.map(f=>[f.k,true])),
+    inputs:{models:true, glossary:true, profiles:true, documents:true, standards:true}, instructions:""},
+  stats:{draft:{accepted:14,rejected:2}, extract:{accepted:23,rejected:9}, relationships:{accepted:37,rejected:6}, descriptions:{accepted:41,rejected:5},
+         constraints:{accepted:19,rejected:4}, standards:{accepted:12,rejected:3}, duplicates:{accepted:6,rejected:2}, changes:{accepted:4,rejected:0}, edit:{accepted:9,rejected:1}},
+  log:[],
+};
+let _oai = (()=>{ try { const s = JSON.parse(localStorage.getItem(OAI_KEY)||"null");
+  if(s && s.settings) return {...OAI_DEFAULT, ...s, stats:{...OAI_DEFAULT.stats, ...(s.stats||{})},
+    settings:{...OAI_DEFAULT.settings, ...s.settings, features:{...OAI_DEFAULT.settings.features, ...(s.settings.features||{})}, inputs:{...OAI_DEFAULT.settings.inputs, ...(s.settings.inputs||{})}}};
+} catch(e) {} return OAI_DEFAULT; })();
+const _oaiSubs = new Set();
+const oaiSet = (fn) => { _oai = typeof fn==="function" ? fn(_oai) : fn; try { localStorage.setItem(OAI_KEY, JSON.stringify(_oai)); } catch(e) {} _oaiSubs.forEach(f=>f()); };
+const useOai = () => { const [,force] = useState(0);
+  useEffect(()=>{ const fn=()=>force(n=>n+1); _oaiSubs.add(fn); return ()=>{_oaiSubs.delete(fn);}; },[]); return _oai; };
+const oaiOn = (f) => _oai.settings.enabled && _oai.settings.features[f] !== false;
+const oaiDecide = (feature, decision, label) => oaiSet(s=>{
+  const k = decision==="accepted" ? "accepted" : "rejected"; const cur = s.stats[feature] || {accepted:0, rejected:0};
+  return {...s, stats:{...s.stats, [feature]:{...cur, [k]:(cur[k]||0)+1}}, log:[{feature, decision, label, at:new Date().toISOString()}, ...s.log].slice(0,200)};
+});
+const oaiCtx = () => ({
+  entities: _oai.settings.inputs.models ? _slState.entities : [],
+  joins: _oai.settings.inputs.models ? _slState.rels : [],
+  glossary: _oai.settings.inputs.glossary ? _gtState.map(t=>({id:t.id, name:t.term, definition:t.definition, synonyms:t.synonyms||[]})) : [],
+  schemaOf: t => SCHEMA[t]||[],
+  profileOf: (t,c) => _oai.settings.inputs.profiles ? (COL_PROFILES[c]||{}) : {},
+});
+
+// ── Small shared pieces ──
+const OntStatus = ({o}) => {
+  const dirty = (o.versions||[]).length>0 && ONT.isDirty(o);
+  const c = o.status==="Published" ? T.green : T.textMuted;
+  return (<>
+    <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:c+"16",color:c,border:`1px solid ${c}40`}}>{o.status==="Published"?`Published · v${o.publishedN}`:"Draft"}</span>
+    {dirty && <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,background:T.amberDim,color:T.amber,border:`1px solid ${T.amber}40`}}>Unpublished changes</span>}
+  </>);
+};
+const OntField = ({label, children}) => (
+  <div style={{marginBottom:13}}><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>{label}</div>{children}</div>);
+const OntDrawerShell = ({title, onClose, footer, width=620, children}) => (
+  <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+    <div className="slideInRight" onClick={e=>e.stopPropagation()}
+      style={{position:"absolute",top:0,right:0,bottom:0,width,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{title}</div>
+        <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>{children}</div>
+      <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:9,background:T.bg}}>{footer}</div>
+    </div>
+  </div>
+);
+const OntTable = ({cols, rows, empty, onRow}) => (
+  rows.length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>{empty}</div> :
+  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+    <div style={{display:"grid",gridTemplateColumns:cols.map(c=>c.w||"1fr").join(" "),padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+      {cols.map(c=><span key={c.l} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{c.l}</span>)}
+    </div>
+    {rows.map((r,i)=>(
+      <div key={r.key} onClick={onRow?()=>onRow(r):undefined}
+        style={{display:"grid",gridTemplateColumns:cols.map(c=>c.w||"1fr").join(" "),padding:"10px 14px",borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",cursor:onRow?"pointer":"default",alignItems:"center",gap:8}}
+        onMouseEnter={e=>{if(onRow)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+        {r.cells.map((c,j)=><div key={j} style={{fontSize:12,color:j===0?T.text:T.textSub,fontWeight:j===0?600:400,minWidth:0,overflow:"hidden",textOverflow:"ellipsis"}}>{c}</div>)}
+      </div>))}
+  </div>
+);
+const OntChip = ({children, c}) => (
+  <span style={{fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:4,background:(c||T.textMuted)+"14",color:c||T.textMuted,border:`1px solid ${(c||T.textMuted)}33`,whiteSpace:"nowrap",marginRight:4}}>{children}</span>);
+
+// ── Graph: hierarchy by rows, relationships as labelled curves ──
+const OntGraph = ({o, selected, onSelect}) => {
+  const cls = o.classes||[];
+  if(!cls.length) return <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No classes yet</div>;
+  // Tidy tree: each root's subclasses sit under it, parents centred over their
+  // children; classes with no parent, child or relationship go in a last row.
+  const NW = 132, NH = 32, SX = 150, SY = 96, PAD = 20;
+  const kids = (id) => cls.filter(c=>c.parent===id && c.id!==id).sort((a,b)=>a.name.localeCompare(b.name));
+  const deg = (id) => (o.rels||[]).filter(r=>r.from===id||r.to===id).length;
+  const linked = (c) => c.parent || kids(c.id).length || deg(c.id);
+  const roots = cls.filter(c=>(!c.parent || !ontClass(o,c.parent)) && linked(c)).sort((a,b)=>(deg(b.id)+kids(b.id).length)-(deg(a.id)+kids(a.id).length) || a.name.localeCompare(b.name));
+  const lonely = cls.filter(c=>!linked(c)).sort((a,b)=>a.name.localeCompare(b.name));
+  const pos = {}; let slot = 0; let maxDepth = 0;
+  const place = (c, d, seen) => { if(seen.has(c.id)) return; seen.add(c.id); maxDepth = Math.max(maxDepth, d);
+    const ch = kids(c.id).filter(k=>!seen.has(k.id));
+    if(!ch.length){ pos[c.id] = {x:PAD+NW/2+slot*SX, y:PAD+NH/2+d*SY}; slot++; return; }
+    ch.forEach(k=>place(k, d+1, seen));
+    const xs = ch.map(k=>pos[k.id]).filter(Boolean).map(p=>p.x);
+    pos[c.id] = {x:(Math.min(...xs)+Math.max(...xs))/2, y:PAD+NH/2+d*SY}; };
+  const seen = new Set(); roots.forEach(r=>place(r, 0, seen));
+  const PER = Math.max(slot, 6);
+  const top = PAD+NH/2 + (roots.length ? (maxDepth+1)*SY + 18 : 0);
+  lonely.forEach((c,i)=>{ pos[c.id] = {x:PAD+NW/2+(i%PER)*SX, y:top+Math.floor(i/PER)*(NH+22)}; });
+  const W = PAD*2 + NW + (Math.max(PER,1)-1)*SX;
+  const H = (lonely.length ? top + Math.ceil(lonely.length/PER)*(NH+22) : PAD+NH/2+(maxDepth+1)*SY) + 6;
+  return (
+    <div style={{overflowX:"auto"}}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",minWidth:Math.min(W,760),height:"auto",display:"block"}}>
+      <defs><marker id="ontArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill={T.textMuted}/></marker>
+        <marker id="ontArrowV" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill={T.violet}/></marker></defs>
+      {lonely.length>0 && roots.length>0 && <text x={PAD} y={top-NH/2-8} fontSize="10" fill={T.textMuted}>Not connected</text>}
+      {cls.filter(c=>c.parent && pos[c.parent] && pos[c.id]).map(c=>{ const a=pos[c.id], b=pos[c.parent]; return (
+        <line key={"isa"+c.id} x1={a.x} y1={a.y-NH/2} x2={b.x} y2={b.y+NH/2} stroke={T.violet} strokeWidth="1.4" strokeDasharray="4 3" markerEnd="url(#ontArrowV)"/>); })}
+      {(o.rels||[]).filter(r=>pos[r.from]&&pos[r.to]).map((r,i)=>{ const a=pos[r.from], b=pos[r.to];
+        const same = Math.abs(a.y-b.y)<2; const bend = same ? -(30+(i%3)*12) : 0;
+        const mx=(a.x+b.x)/2, my=(a.y+b.y)/2+bend;
+        const sy = a.y + (same?-NH/2:(b.y>a.y?NH/2:-NH/2));
+        const ey = b.y + (same?-NH/2:(b.y>a.y?-NH/2:NH/2));
+        const on = selected && (r.from===selected||r.to===selected);
+        return (<g key={r.id}>
+          <path d={`M${a.x},${sy} Q${mx},${my} ${b.x},${ey}`} fill="none" stroke={on?T.accent:T.borderLight} strokeWidth={on?1.8:1.3} markerEnd="url(#ontArrow)"/>
+          <text x={mx} y={same?(sy+my)/2:my-3} textAnchor="middle" fontSize="10" fill={on?T.accent:T.textSub} style={{paintOrder:"stroke",stroke:T.bgSurface,strokeWidth:3}}>{r.name}</text>
+        </g>); })}
+      {cls.filter(c=>pos[c.id]).map(c=>{ const p=pos[c.id]; const on = selected===c.id; return (
+        <g key={c.id} onClick={()=>onSelect&&onSelect(c.id)} style={{cursor:"pointer"}}>
+          <rect x={p.x-NW/2} y={p.y-NH/2} width={NW} height={NH} rx="8" fill={on?T.accentDim:T.bgElevated} stroke={on?T.accent:T.border} strokeWidth={on?1.6:1}/>
+          <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11.5" fontWeight="600" fill={T.text}>{c.name.length>18?c.name.slice(0,17)+"…":c.name}</text>
+        </g>); })}
+    </svg></div>
+  );
+};
+
+// ── Editors ──
+const OntClassDrawer = ({o, cls, onClose, onToast}) => {
+  const isNew = !cls || !cls.id;
+  const [d, setD] = useState(()=>({name:"", desc:"", synonyms:[], parent:null, termId:null, props:[], sameAs:[], ...(cls||{})}));
+  const [syn, setSyn] = useState((d.synonyms||[]).join(", "));
+  const concepts = _gtState.filter(t=>t.status!=="Deprecated");
+  const save = () => {
+    if(!d.name.trim()){ onToast&&onToast("Give the class a name","error"); return; }
+    const c = {...d, name:d.name.trim(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean), id:d.id||ONT.uid("c")};
+    ontPatch(o.id, x=>({...x, classes: isNew ? [...x.classes, c] : x.classes.map(y=>y.id===c.id?c:y)}));
+    onToast&&onToast(isNew?`${c.name} added`:`${c.name} saved`,"success"); onClose();
+  };
+  const remove = () => {
+    ontPatch(o.id, x=>({...x, classes:x.classes.filter(y=>y.id!==d.id).map(y=>y.parent===d.id?{...y,parent:null}:y),
+      rels:x.rels.filter(r=>r.from!==d.id&&r.to!==d.id), constraints:x.constraints.filter(k=>k.classId!==d.id)}));
+    onToast&&onToast(`${d.name} removed`,"success"); onClose();
+  };
+  const setProp = (i, patch) => setD(p=>({...p, props:p.props.map((x,j)=>j===i?{...x,...patch}:x)}));
+  return (
+    <OntDrawerShell title={isNew?"New class":d.name} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={remove}>Remove class</Btn></span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add class":"Save"}</Btn></>}>
+      <OntField label="Name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="Subscription"/></OntField>
+      <OntField label="Definition"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      <OntField label="Synonyms"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="Comma separated"/></OntField>
+      <div style={{display:"flex",gap:12}}>
+        <div style={{flex:1}}><OntField label="Is a kind of">
+          <SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})}
+            options={[{v:"",l:"—"}, ...o.classes.filter(c=>c.id!==d.id).map(c=>({v:c.id,l:c.name}))]}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Glossary term">
+          <SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})}
+            options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
+      </div>
+      <OntField label={`Properties · ${d.props.length}`}>
+        {d.props.map((p,i)=>(
+          <div key={p.id||i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+            <div style={{flex:2}}><Input2 value={p.name} onChange={e=>setProp(i,{name:e.target.value})} placeholder="Property"/></div>
+            <div style={{flex:1}}><SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ONT.DATATYPES}/></div>
+            <label style={{fontSize:11,color:T.textSub,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+              <input type="checkbox" checked={!!p.required} onChange={e=>setProp(i,{required:e.target.checked})}/> Required</label>
+            <button onClick={()=>setD(x=>({...x, props:x.props.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+          </div>))}
+        <Btn small icon={Ic.plus(10)} onClick={()=>setD(x=>({...x, props:[...x.props, {id:ONT.uid("p"), name:"", datatype:"string", required:false}]}))}>Add property</Btn>
+      </OntField>
+      {(d.sameAs||[]).length>0 && <OntField label="Equivalent to">
+        {d.sameAs.map(s=>(
+          <div key={s.iri} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,fontSize:11.5}}>
+            <OntChip c={T.blue}>{s.standard}</OntChip><span style={{color:T.text}}>{s.label}</span>
+            <span style={{color:T.textMuted,fontFamily:"ui-monospace,monospace",fontSize:10.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.iri}</span>
+            <button onClick={()=>setD(x=>({...x, sameAs:x.sameAs.filter(y=>y.iri!==s.iri)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>
+          </div>))}
+      </OntField>}
+    </OntDrawerShell>
+  );
+};
+const OntRelDrawer = ({o, rel, onClose, onToast}) => {
+  const isNew = !rel || !rel.id;
+  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{})}));
+  const opts = o.classes.map(c=>({v:c.id,l:c.name}));
+  const save = () => {
+    if(!d.from||!d.to||!d.name.trim()){ onToast&&onToast("Pick both classes and name the relationship","error"); return; }
+    const r = {...d, name:d.name.trim().toLowerCase(), id:d.id||ONT.uid("r")};
+    ontPatch(o.id, x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y)}));
+    onToast&&onToast("Relationship saved","success"); onClose();
+  };
+  return (
+    <OntDrawerShell title={isNew?"New relationship":`${(ontClass(o,d.from)||{}).name} ${d.name} ${(ontClass(o,d.to)||{}).name}`} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, rels:x.rels.filter(y=>y.id!==d.id)})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add relationship":"Save"}</Btn></>}>
+      <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+        <div style={{flex:1}}><OntField label="From"><SLSelect value={d.from} onChange={e=>setD({...d,from:e.target.value})} placeholder="class" options={opts}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Relationship"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value, inverse:d.inverse||OAI.INVERSES[e.target.value.trim().toLowerCase()]||""})} placeholder="placed by"/></OntField></div>
+        <div style={{flex:1}}><OntField label="To"><SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value})} placeholder="class" options={opts}/></OntField></div>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><OntField label="Inverse"><Input2 value={d.inverse} onChange={e=>setD({...d,inverse:e.target.value})} placeholder="places"/></OntField></div>
+        <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Kind"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={[{v:"association",l:"Association"},{v:"part_of",l:"Part of"}]}/></OntField></div>
+      </div>
+      <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+    </OntDrawerShell>
+  );
+};
+const OntConstraintDrawer = ({o, con, onClose, onToast}) => {
+  const isNew = !con || !con.id;
+  const [d, setD] = useState(()=>({classId:"", prop:"", kind:"required", value:"", severity:"violation", desc:"", ...(con||{})}));
+  const c = ontClass(o, d.classId);
+  const needsValue = ["pattern","values","range","cardinality"].includes(d.kind);
+  const save = () => {
+    if(!d.classId){ onToast&&onToast("Pick a class","error"); return; }
+    if(needsValue && !String(d.value).trim()){ onToast&&onToast("Give the constraint a value","error"); return; }
+    const k = {...d, id:d.id||ONT.uid("k")};
+    ontPatch(o.id, x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
+    onToast&&onToast("Constraint saved","success"); onClose();
+  };
+  return (
+    <OntDrawerShell title={isNew?"New constraint":"Constraint"} width={540} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Constraint removed","success"); onClose(); }}>Remove</Btn></span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add constraint":"Save"}</Btn></>}>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value,prop:""})} placeholder="class" options={o.classes.map(x=>({v:x.id,l:x.name}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Property"><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})} options={[{v:"",l:"— whole class"}, ...((c&&c.props)||[]).map(p=>({v:p.name,l:p.name}))]}/></OntField></div>
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><OntField label="Rule"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={Object.entries(ONT.CONSTRAINT_KINDS).map(([v,l])=>({v,l}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Severity"><SLSelect value={d.severity} onChange={e=>setD({...d,severity:e.target.value})} options={[{v:"violation",l:"Violation"},{v:"warning",l:"Warning"}]}/></OntField></div>
+      </div>
+      {needsValue && <OntField label={({pattern:"Pattern", values:"Allowed values", range:"Range (min..max)", cardinality:"Count"})[d.kind]}>
+        <Input2 value={d.value} onChange={e=>setD({...d,value:e.target.value})} placeholder={({pattern:"^[^@]+@[^@]+$", values:"active, paused, closed", range:"0..100", cardinality:"1..*"})[d.kind]}/></OntField>}
+      <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+    </OntDrawerShell>
+  );
+};
+
+// ── New ontology / import / extract ──
+// One drawer, three AI-assisted starts plus blank. Every suggestion is listed
+// with a checkbox; only what is ticked is created.
+const OntNewDrawer = ({open, mode0, target, onClose, onCreated, onToast}) => {
+  const oai = useOai();
+  const [mode, setMode] = useState(mode0||"blank");
+  const [d, setD] = useState({name:"", prefix:"", domain:"Commerce", owner:"maya.chen", steward:"dev.patel", desc:""});
+  const [mdlIds, setMdlIds] = useState([]);
+  const [src, setSrc] = useState("turtle");
+  const [text, setText] = useState(ONT_IMPORT_SAMPLES.turtle);
+  const [docText, setDocText] = useState("");
+  const [res, setRes] = useState(null);      // {classes, rels, constraints, concepts, isA}
+  const [pick, setPick] = useState({});       // key → bool
+  const [addTerms, setAddTerms] = useState(true);
+  useEffect(()=>{ if(open){ setMode(mode0||"blank"); setRes(null); setPick({}); setMdlIds([]); setSrc("turtle"); setText(ONT_IMPORT_SAMPLES.turtle);
+    setDocText("Every customer is a kind of party. Each order is placed by exactly one customer. A subscription is a recurring agreement to deliver a product. Every subscription belongs to one customer. Each order has one or more order lines. A refund is a kind of transaction."); } },[open, mode0]);
+  if(!open) return null;
+  const into = target ? ontById(target) : null;
+  const S = ONT_IMPORT_SOURCES.find(x=>x.v===src)||ONT_IMPORT_SOURCES[0];
+  const tick = (items, f) => Object.fromEntries(items.map(x=>[x.key, f(x)]));
+  const run = () => {
+    if(mode==="generate"){
+      const models = _slState.models.filter(m=>mdlIds.includes(m.id));
+      const r = OAI.draftFromMetadata({models, entities:_slState.entities, joins:_slState.rels, dims:_slState.dims, facts:_slState.facts,
+        concepts:_oai.settings.inputs.glossary ? _gtState.filter(t=>t.termType==="Concept").map(t=>({id:t.id, name:t.term, definition:t.definition, synonyms:t.synonyms, broader:t.broader})) : [],
+        schemaOf:t=>SCHEMA[t]||[]});
+      const out = {classes:r.classes.map(c=>({...c, key:"c:"+c.id})), rels:r.rels.map(x=>({...x, key:"r:"+x.id})), constraints:[], concepts:[]};
+      setRes(out); setPick({...tick(out.classes, x=>x.conf>=_oai.settings.minConfidence), ...tick(out.rels, x=>x.conf>=_oai.settings.minConfidence)});
+      if(!d.name && models.length) setD(p=>({...p, name:`${models[0].domain} Ontology`, domain:models[0].domain}));
+    }
+    if(mode==="import"){
+      const r = ONT.importDocument(S.fmt, text);
+      if(!r.ok){ setRes({error:r.error}); return; }
+      const out = {classes:r.classes.map(c=>({...c, key:"c:"+c.id})), rels:r.rels.map(x=>({...x, key:"r:"+x.id})),
+        constraints:r.constraints.map(k=>({...k, key:"k:"+k.id})), concepts:r.concepts.map(k=>({...k, key:"t:"+k.iri})), ns:r.ns};
+      setRes(out); setPick({...tick(out.classes,()=>true), ...tick(out.rels,()=>true), ...tick(out.constraints,()=>true), ...tick(out.concepts,()=>true)});
+      if(!d.name && r.name) setD(p=>({...p, name:r.name}));
+      if(!d.prefix && r.ns) setD(p=>({...p, prefix:r.ns.prefix}));
+    }
+    if(mode==="extract"){
+      const x = OAI.extractFromText(docText);
+      const classes = x.classes.map(c=>({id:"x_"+ONT.slug(c.name), name:c.name, desc:c.desc, synonyms:[], parent:null, props:[], sameAs:[], termId:null, ...c, key:"c:"+c.name}));
+      x.isA.forEach(i=>{ const c = classes.find(y=>y.name===i.child), p = classes.find(y=>y.name===i.parent); if(c&&p){ c.parent = p.id; c.isAWhy = i.why; } });
+      const rels = x.rels.map((r,i)=>({...r, id:"xr"+i, from:"x_"+ONT.slug(r.from), to:"x_"+ONT.slug(r.to), inverse:OAI.INVERSES[r.name]||"", kind:r.name==="part of"?"part_of":"association", desc:"", key:"r:"+i}))
+        .filter(r=>classes.some(c=>c.id===r.from)&&classes.some(c=>c.id===r.to));
+      setRes({classes, rels, constraints:[], concepts:[]}); setPick({...tick(classes,c=>c.conf>=_oai.settings.minConfidence), ...tick(rels,r=>r.conf>=_oai.settings.minConfidence)});
+    }
+  };
+  const create = () => {
+    const strip = ({key, by, src, conf, why, evidence, state, isAWhy, entity, ...x}) => x;
+    const prov = mode==="import" ? {by:"import", source:S.l} : {by:"ai", feature:mode==="generate"?"draft":"extract", at:new Date().toISOString()};
+    const chosen = {
+      classes:(res&&res.classes||[]).filter(c=>pick[c.key]).map(c=>({...strip(c), ...(c.conf!=null?{prov:{...prov, conf:c.conf, why:c.why}}:{})})),
+      rels:(res&&res.rels||[]).filter(r=>pick[r.key]).map(r=>({...strip(r), ...(r.conf!=null?{prov:{...prov, conf:r.conf, why:r.why}}:{})})),
+      constraints:(res&&res.constraints||[]).filter(k=>pick[k.key]).map(strip),
+    };
+    const keep = new Set(chosen.classes.map(c=>c.id));
+    chosen.classes.forEach(c=>{ if(c.parent && !keep.has(c.parent)) c.parent = null; });
+    chosen.rels = chosen.rels.filter(r=>keep.has(r.from)&&keep.has(r.to));
+    chosen.constraints = chosen.constraints.filter(k=>keep.has(k.classId));
+    // SKOS concepts become Draft glossary terms, linked from the class of the same name.
+    const terms = (res&&res.concepts||[]).filter(k=>pick[k.key]);
+    if(addTerms && terms.length){
+      const now = new Date().toISOString().slice(0,10);
+      gtSet(prev=>[...prev, ...terms.filter(k=>!prev.some(t=>t.term.toLowerCase()===k.name.toLowerCase())).map((k,i)=>({
+        id:`t_skos_${Date.now().toString(36)}_${i}`, term:k.name, abbr:"—", glossary:"g1", category:"c2", domain:d.domain, owner:d.owner, steward:d.steward,
+        linked:0, cert:"Draft", status:"Draft", termType:"Term", broader:null, synonyms:k.synonyms||[], conflictWith:null, deprecationReason:null, successorId:null,
+        proposedVersion:null, auditLog:[{action:"Imported",by:d.owner,at:now,note:`From ${S.l}`}], definition:k.definition||"", relatedTerms:[], tags:["imported"], refs:[],
+        linkedAssets:[], activity:[], readme:""}))]);
+    }
+    if(mode!=="blank" && !chosen.classes.length && !terms.length){ onToast&&onToast("Nothing selected","error"); return; }
+    if(into){
+      ontSet(s=>({...s, ontologies:s.ontologies.map(o=>o.id===into.id ? ONT.mergeInto(o, chosen, prov) : o)}));
+      if(mode!=="import") (res.classes||[]).forEach(c=>oaiDecide(mode==="generate"?"draft":"extract", pick[c.key]?"accepted":"rejected", c.name));
+      onToast&&onToast(`${chosen.classes.length} class${chosen.classes.length===1?"":"es"} merged into ${into.name}${terms.length&&addTerms?` · ${terms.length} glossary terms`:""}`,"success");
+      onCreated(into.id); return;
+    }
+    if(!d.name.trim()){ onToast&&onToast("Give the ontology a name","error"); return; }
+    const pf = (d.prefix||ONT.slug(d.name).slice(0,4)).toLowerCase();
+    const o = {id:"ont_"+Date.now().toString(36), name:d.name.trim(), prefix:pf, namespace:`https://ontology.jnj.com/${pf}#`, domain:d.domain, owner:d.owner, steward:d.steward,
+      status:"Draft", created:new Date().toISOString().slice(0,10), desc:d.desc,
+      source: mode==="import" ? {kind:"import", format:S.v, connector:S.conn?S.l.replace(/ · connection$/,""):null} : mode==="blank" ? {kind:"native"} : {kind:"ai", feature:mode},
+      classes:[], rels:[], constraints:[], versions:[]};
+    const merged = mode==="blank" ? o : ONT.mergeInto(o, chosen, prov);
+    ontSet(s=>({...s, ontologies:[...s.ontologies, merged]}));
+    if(mode==="generate"||mode==="extract") (res.classes||[]).forEach(c=>oaiDecide(mode==="generate"?"draft":"extract", pick[c.key]?"accepted":"rejected", c.name));
+    onToast&&onToast(`${merged.name} created · ${merged.classes.length} classes · ${merged.rels.length} relationships`,"success");
+    onCreated(merged.id);
+  };
+  const MODES = [{v:"blank",l:"Blank"},{v:"generate",l:"✦ Generate from semantic models"},{v:"import",l:"Import"},{v:"extract",l:"✦ Extract from a document"}]
+    .filter(m=>!(m.v==="generate" && !oaiOn("draft")) && !(m.v==="extract" && !oaiOn("extract")))
+    .filter(m=>!into || m.v!=="blank");
+  const Row = ({it, label, sub}) => (
+    <label style={{display:"flex",alignItems:"flex-start",gap:9,padding:"8px 10px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:5,cursor:"pointer"}}>
+      <input type="checkbox" checked={!!pick[it.key]} onChange={e=>setPick(p=>({...p,[it.key]:e.target.checked}))} style={{marginTop:2}}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}><span style={{fontSize:12,fontWeight:600,color:T.text}}>{label}</span>{it.conf!=null && <SmaiChip conf={it.conf} why={it.why}/>}</div>
+        {sub && <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{sub}</div>}
+      </div>
+    </label>);
+  const nm = (id) => ((res&&res.classes||[]).find(c=>c.id===id)||{}).name||id;
+  return (
+    <OntDrawerShell title={into?`Add to ${into.name}`:"New ontology"} width={720} onClose={onClose} footer={<>
+      <Btn ghost onClick={onClose}>Cancel</Btn>
+      <Btn variant="primary" disabled={mode!=="blank" && !(res && !res.error)} onClick={create}>{into?"Add selected":"Create ontology"}</Btn></>}>
+      <OntField label="Start from"><SLSelect value={mode} onChange={e=>{setMode(e.target.value); setRes(null);}} options={MODES}/></OntField>
+      {!into && <>
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:2}}><OntField label="Name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="Enterprise Commerce"/></OntField></div>
+          <div style={{flex:1}}><OntField label="Prefix"><Input2 value={d.prefix} onChange={e=>setD({...d,prefix:e.target.value})} placeholder="com"/></OntField></div>
+        </div>
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:1}}><OntField label="Domain"><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} options={["Commerce","Finance","Product","Marketing","Procurement","Supply Chain","Platform"]}/></OntField></div>
+          <div style={{flex:1}}><OntField label="Owner"><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} options={["maya.chen","sarah.kim","alex.wu","dev.patel","james.oh"]}/></OntField></div>
+          <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} options={["maya.chen","sarah.kim","alex.wu","dev.patel","james.oh"]}/></OntField></div>
+        </div>
+        <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      </>}
+
+      {mode==="generate" && <OntField label="Semantic models">
+        {_slState.models.map(m=>(
+          <label key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0",fontSize:12,color:T.text,cursor:"pointer"}}>
+            <input type="checkbox" checked={mdlIds.includes(m.id)} onChange={e=>{ setMdlIds(p=>e.target.checked?[...p,m.id]:p.filter(x=>x!==m.id)); setRes(null); }}/>
+            {m.name} <span style={{color:T.textMuted,fontSize:11}}>{m.domain} · {(m.entityIds||[]).length} datasets</span></label>))}
+        <div style={{marginTop:8}}><Btn small onClick={run} disabled={!mdlIds.length}>✦ Generate</Btn></div>
+      </OntField>}
+      {mode==="import" && <>
+        <OntField label="Source"><SLSelect value={src} onChange={e=>{ const s2 = ONT_IMPORT_SOURCES.find(x=>x.v===e.target.value); setSrc(e.target.value); setText(ONT_IMPORT_SAMPLES[s2.sample||s2.v]||""); setRes(null); }} options={ONT_IMPORT_SOURCES.map(x=>({v:x.v,l:x.l}))}/></OntField>
+        {S.conn && <div style={{fontSize:11.5,color:T.textSub,marginBottom:8}}>Connection · {S.l.replace(/ · connection$/,"")} (prod) · last read today 07:10</div>}
+        <OntField label={S.conn?"Fetched document":"Document"}>
+          <textarea value={text} onChange={e=>{setText(e.target.value); setRes(null);}} rows={10}
+            style={{width:"100%",boxSizing:"border-box",fontFamily:"ui-monospace,monospace",fontSize:11.5,padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,resize:"vertical"}}/>
+        </OntField>
+        <Btn small onClick={run}>Read</Btn>
+      </>}
+      {mode==="extract" && <>
+        <OntField label="Document text"><Input2 multiline rows={7} value={docText} onChange={e=>{setDocText(e.target.value); setRes(null);}} placeholder="Paste a policy, specification or data dictionary"/></OntField>
+        <Btn small onClick={run} disabled={!docText.trim()}>✦ Extract</Btn>
+      </>}
+
+      {res && res.error && <div style={{marginTop:12,fontSize:12,color:T.rose}}>{res.error}</div>}
+      {res && !res.error && <div style={{marginTop:16}}>
+        {res.classes.length>0 && <><SmaiHead title="Classes" count={res.classes.length}/>
+          {res.classes.map(c=><Row key={c.key} it={c} label={`${c.name}${c.parent?` · kind of ${nm(c.parent)}`:""}`}
+            sub={[c.desc, (c.props||[]).length?`${c.props.length} properties`:null, c.why&&c.conf==null?c.why:null].filter(Boolean).join(" · ")}/>)}</>}
+        {res.rels.length>0 && <><SmaiHead title="Relationships" count={res.rels.length}/>
+          {res.rels.map(r=><Row key={r.key} it={r} label={`${nm(r.from)} ${r.name} ${nm(r.to)}`} sub={[ONT.CARDINALITY[r.cardinality], r.inverse?`inverse: ${r.inverse}`:null, r.why].filter(Boolean).join(" · ")}/>)}</>}
+        {res.constraints.length>0 && <><SmaiHead title="Constraints" count={res.constraints.length}/>
+          {res.constraints.map(k=><Row key={k.key} it={k} label={`${nm(k.classId)}.${k.prop||"—"} · ${ONT.CONSTRAINT_KINDS[k.kind]}${k.value?` ${k.value}`:""}`} sub={k.severity==="warning"?"Warning":null}/>)}</>}
+        {res.concepts.length>0 && <><SmaiHead title="SKOS concepts" count={res.concepts.length}/>
+          <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.text,marginBottom:8}}><input type="checkbox" checked={addTerms} onChange={e=>setAddTerms(e.target.checked)}/> Add as Draft glossary terms</label>
+          {res.concepts.map(k=><Row key={k.key} it={k} label={k.name} sub={[k.definition, k.broader?`broader: ${k.broader}`:null, (k.synonyms||[]).join(", ")].filter(Boolean).join(" · ")}/>)}</>}
+      </div>}
+    </OntDrawerShell>
+  );
+};
+
+// ── AI tab on an ontology ──
+const OntAiTab = ({o, onToast, onOpenClass}) => {
+  const oai = useOai();
+  const [sub, setSub] = useState("suggestions");
+  const [gone, setGone] = useState({});
+  const [std, setStd] = useState("schema");
+  const [cmd, setCmd] = useState(""); const [parsed, setParsed] = useState(null);
+  if(!oai.settings.enabled) return <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>AI for ontologies is off · Settings › AI › Ontologies</div>;
+  const ctx = oaiCtx(); const min = oai.settings.minConfidence;
+  const dismiss = (key, f, label) => { setGone(g=>({...g,[key]:true})); oaiDecide(f, "rejected", label); };
+  const relSugs = oaiOn("relationships") ? OAI.suggestRelationships(o, ctx).filter(x=>x.conf>=min && !gone[x.key]) : [];
+  const acceptRel = (x) => {
+    if(x.kind==="inverse"||x.kind==="cardinality") ontPatch(o.id, y=>({...y, rels:y.rels.map(r=>r.id===x.relId?{...r,...x.patch}:r)}));
+    if(x.kind==="isA") ontPatch(o.id, y=>({...y, classes:y.classes.map(c=>c.id===x.classId?{...c,parent:x.parentId}:c)}));
+    if(x.kind==="rel") ontPatch(o.id, y=>({...y, rels:[...y.rels, {...x.rel, id:ONT.uid("r"), desc:"", prov:{by:"ai", conf:x.conf, why:x.why}}]}));
+    oaiDecide("relationships","accepted",x.title); setGone(g=>({...g,[x.key]:true}));
+  };
+  const descSugs = oaiOn("descriptions") ? o.classes.filter(c=>!c.desc).map(c=>({c, s:OAI.describeClass(c, ctx)})).filter(x=>x.s && x.s.conf>=min && !gone["d:"+x.c.id]) : [];
+  const conSugs = oaiOn("constraints") ? OAI.suggestConstraints(o, ctx).filter(x=>x.conf>=min && !gone[x.key]) : [];
+  const stdSugs = oaiOn("standards") && oai.settings.inputs.standards ? OAI.alignToStandard(o, std).filter(x=>x.conf>=min && !gone[x.key]) : [];
+  const acceptCon = (x) => { ontPatch(o.id, y=>({...y, constraints:[...y.constraints, {id:ONT.uid("k"), classId:x.classId, prop:x.prop, kind:x.kind, value:x.value, severity:"violation", desc:x.why, prov:{by:"ai", conf:x.conf}}]})); oaiDecide("constraints","accepted",x.title); setGone(g=>({...g,[x.key]:true})); };
+  const acceptStd = (x) => { ontPatch(o.id, y=>({...y, classes:y.classes.map(c=>c.id===x.classId?{...c, sameAs:[...(c.sameAs||[]), x.sameAs]}:c)})); oaiDecide("standards","accepted",x.title); setGone(g=>({...g,[x.key]:true})); };
+  const acceptDesc = (x) => { ontPatch(o.id, y=>({...y, classes:y.classes.map(c=>c.id===x.c.id?{...c, desc:x.s.desc, synonyms:[...new Set([...(c.synonyms||[]), ...x.s.synonyms])]}:c)})); oaiDecide("descriptions","accepted",x.c.name); };
+  // Checks
+  const issues = ONT.validate(o);
+  const dups = oaiOn("duplicates") ? OAI.findDuplicates(ontLoad().ontologies, o.id).filter(x=>!gone[x.key]) : [];
+  const applyFix = (i) => {
+    const f = i.fix;
+    if(f.kind==="clearParent") ontPatch(o.id, y=>({...y, classes:y.classes.map(c=>c.id===f.classId?{...c,parent:null}:c)}));
+    if(f.kind==="removeRel") ontPatch(o.id, y=>({...y, rels:y.rels.filter(r=>r.id!==f.relId)}));
+    if(f.kind==="removeConstraint") ontPatch(o.id, y=>({...y, constraints:y.constraints.filter(k=>k.id!==f.constraintId)}));
+    onToast&&onToast(`Fixed · ${i.title}`,"success");
+  };
+  const mergeDup = (x) => {   // within one ontology: fold b into a
+    ontPatch(o.id, y=>{ const a = y.classes.find(c=>c.id===x.a.classId), b = y.classes.find(c=>c.id===x.b.classId); if(!a||!b) return y;
+      const merged = {...a, desc:a.desc||b.desc, synonyms:[...new Set([...(a.synonyms||[]), b.name, ...(b.synonyms||[])])], props:[...(a.props||[]), ...(b.props||[]).filter(p=>!(a.props||[]).some(q=>q.name===p.name))]};
+      return {...y, classes:y.classes.filter(c=>c.id!==b.id).map(c=>c.id===a.id?merged:c.parent===b.id?{...c,parent:a.id}:c),
+        rels:y.rels.map(r=>({...r, from:r.from===b.id?a.id:r.from, to:r.to===b.id?a.id:r.to})), constraints:y.constraints.map(k=>k.classId===b.id?{...k,classId:a.id}:k)}; });
+    oaiDecide("duplicates","accepted",x.title); onToast&&onToast(`${x.b.name} merged into ${x.a.name}`,"success");
+  };
+  const latest = (o.versions||[])[0];
+  const changes = latest ? ONT.diff(latest.snapshot, ONT.snapshot(o)) : [];
+  const nSug = relSugs.length + descSugs.length + conSugs.length + stdSugs.length;
+  return (
+    <div>
+      <div style={{marginBottom:14}}><SegTabs tabs={[{key:"suggestions",label:`Suggestions · ${nSug}`},{key:"checks",label:`Checks · ${issues.length+dups.length}`},{key:"changes",label:"Changes"},{key:"edit",label:"Edit"}]} active={sub} onChange={setSub}/></div>
+      {sub==="suggestions" && <>
+        {relSugs.length>0 && <><SmaiHead title="Relationships and hierarchy" count={relSugs.length} onAcceptAll={()=>relSugs.filter(x=>x.conf>=oai.settings.bulkAccept).forEach(acceptRel)}/>
+          {relSugs.map(x=><SmaiCard key={x.key} title={x.title} conf={x.conf} why={x.why} evidence={x.evidence} onAccept={()=>acceptRel(x)} onDismiss={()=>dismiss(x.key,"relationships",x.title)}>
+            <OntChip>{({inverse:"Inverse",cardinality:"Cardinality",isA:"Is a kind of",rel:"Relationship"})[x.kind]}</OntChip></SmaiCard>)}</>}
+        {descSugs.length>0 && <><SmaiHead title="Definitions" count={descSugs.length}/>
+          {descSugs.map(x=><SmaiCard key={x.c.id} title={x.c.name} conf={x.s.conf} why={x.s.desc} onAccept={()=>acceptDesc(x)} onDismiss={()=>dismiss("d:"+x.c.id,"descriptions",x.c.name)}>
+            <span style={{fontSize:10.5,color:T.textMuted}}>{x.s.why}</span></SmaiCard>)}</>}
+        {conSugs.length>0 && <><SmaiHead title="Constraints from column profiles" count={conSugs.length} onAcceptAll={()=>conSugs.filter(x=>x.conf>=oai.settings.bulkAccept).forEach(acceptCon)}/>
+          {conSugs.map(x=><SmaiCard key={x.key} title={x.title} conf={x.conf} why={x.why} evidence={x.evidence} onAccept={()=>acceptCon(x)} onDismiss={()=>dismiss(x.key,"constraints",x.title)}/>)}</>}
+        {oaiOn("standards") && oai.settings.inputs.standards && <>
+          <div style={{display:"flex",alignItems:"center",gap:10,margin:"10px 0 8px"}}>
+            <span style={{fontSize:11,fontWeight:700,color:T.violet,letterSpacing:".04em"}}>✦ ALIGN TO STANDARD</span>
+            <div style={{width:160}}><SLSelect value={std} onChange={e=>setStd(e.target.value)} options={[{v:"schema",l:"schema.org"},{v:"fibo",l:"FIBO"}]}/></div>
+            <span style={{fontSize:10.5,color:T.textMuted}}>{stdSugs.length}</span>
+          </div>
+          {stdSugs.map(x=><SmaiCard key={x.key} title={x.title} conf={x.conf} why={x.why} evidence={x.evidence} acceptLabel="Link" onAccept={()=>acceptStd(x)} onDismiss={()=>dismiss(x.key,"standards",x.title)}/>)}
+          {stdSugs.length===0 && <div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>Every class that matches is already linked</div>}
+        </>}
+        {nSug===0 && !oaiOn("standards") && <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No open suggestions</div>}
+      </>}
+      {sub==="checks" && <>
+        {issues.length===0 && dups.length===0 && <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.green}}>✓ No issues found</div>}
+        {issues.map(i=><SmaiIssue key={i.id} i={i} onFix={applyFix} onOpen={i.target&&i.target.kind==="class"?()=>onOpenClass(i.target.id):null}/>)}
+        {dups.length>0 && <><SmaiHead title="Duplicates and overlaps" count={dups.length}/>
+          {dups.map(x=><SmaiCard key={x.key} title={x.title} conf={x.conf} why={x.why}
+            acceptLabel={x.within?"Merge":null} onAccept={x.within?()=>mergeDup(x):null} onDismiss={()=>dismiss(x.key,"duplicates",x.title)}>
+            {!x.within && <span style={{fontSize:10.5,color:T.textMuted}}>Align them in Phase 3 mapping, or link both to one glossary term</span>}</SmaiCard>)}</>}
+      </>}
+      {sub==="changes" && (!latest ? <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> : <>
+        <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>Draft compared with published v{latest.n}</div>
+        {changes.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ No changes since v{latest.n}</div> :
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+            {changes.map((l,i)=><div key={i} style={{display:"flex",gap:9,padding:"8px 12px",borderBottom:i<changes.length-1?`1px solid ${T.border}`:"none",fontSize:11.5,color:T.textSub}}>
+              <span style={{width:62,fontSize:10,fontWeight:700,textTransform:"uppercase",color:l.kind==="added"?T.green:l.kind==="removed"?T.rose:T.blue}}>{l.kind}</span>{l.text}</div>)}
+          </div>}
+      </>)}
+      {sub==="edit" && <>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <div style={{flex:1}}><Input2 value={cmd} onChange={e=>{setCmd(e.target.value); setParsed(null);}} placeholder="add relationship Order placed by Customer (many to one)"/></div>
+          <Btn small onClick={()=>setParsed(OAI.parseEdit(cmd, o))}>✦ Preview</Btn>
+        </div>
+        {parsed && (parsed.ok ? <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{parsed.summary}</span>
+          <Btn small ghost onClick={()=>setParsed(null)}>Cancel</Btn>
+          <Btn small variant="primary" onClick={()=>{ ontApplyEdit(o.id, parsed); oaiDecide("edit","accepted",parsed.summary); onToast&&onToast(parsed.summary,"success"); setParsed(null); setCmd(""); }}>Apply</Btn>
+        </div> : <div style={{fontSize:11.5,color:T.amber}}>{parsed.error}</div>)}
+        <div style={{fontSize:11,color:T.textMuted,marginTop:10,lineHeight:1.7}}>add class &lt;name&gt; [is a kind of &lt;class&gt;] · add relationship &lt;class&gt; &lt;verb&gt; &lt;class&gt; (many to one) · make &lt;class&gt; a kind of &lt;class&gt; · rename class &lt;name&gt; to &lt;name&gt; · remove class &lt;name&gt;</div>
+      </>}
+    </div>
+  );
+};
+// Shared by the Edit tab and the Copilot.
+const ontApplyEdit = (ontId, p) => ontPatch(ontId, y=>{
+  if(p.action==="addClass") return {...y, classes:[...y.classes, {id:ONT.uid("c"), name:p.cls.name, desc:"", synonyms:[], parent:p.cls.parent, termId:null, sameAs:[], props:[], prov:{by:"ai", feature:"edit"}}]};
+  if(p.action==="setParent") return {...y, classes:y.classes.map(c=>c.id===p.classId?{...c,parent:p.parent}:c)};
+  if(p.action==="addRel") return {...y, rels:[...y.rels, {...p.rel, id:ONT.uid("r"), desc:"", prov:{by:"ai", feature:"edit"}}]};
+  if(p.action==="renameClass") return {...y, classes:y.classes.map(c=>c.id===p.classId?{...c,name:p.name}:c)};
+  if(p.action==="removeClass") return {...y, classes:y.classes.filter(c=>c.id!==p.classId).map(c=>c.parent===p.classId?{...c,parent:null}:c),
+    rels:y.rels.filter(r=>r.from!==p.classId&&r.to!==p.classId), constraints:y.constraints.filter(k=>k.classId!==p.classId)};
+  return y;
+});
+
+// ── The screen ──
+const OntologyView = ({onToast, onNav}) => {
+  const st = useOnt();
+  const { role: oRole, roleCfg: oCfg } = useRole();
+  const me = ((oCfg&&oCfg.email)||"you@jnj").split("@")[0];
+  const [selId, setSelId] = useState(null);
+  const [tab, setTab] = useState("overview");
+  const [q, setQ] = useState("");
+  const [selClass, setSelClass] = useState(null);
+  const [classEdit, setClassEdit] = useState(null);
+  const [relEdit, setRelEdit] = useState(null);
+  const [conEdit, setConEdit] = useState(null);
+  const [newOpen, setNewOpen] = useState(null);   // {mode, target}
+  const [pubOpen, setPubOpen] = useState(false); const [pubNote, setPubNote] = useState("");
+  const [srcTab, setSrcTab] = useState("owl");
+  const [delOpen, setDelOpen] = useState(false);
+  const [cmpN, setCmpN] = useState(null);
+  const o = selId ? st.ontologies.find(x=>x.id===selId) : null;
+  const drawers = <>
+    {newOpen && <OntNewDrawer open mode0={newOpen.mode} target={newOpen.target} onClose={()=>setNewOpen(null)} onToast={onToast}
+      onCreated={(id)=>{ setNewOpen(null); setSelId(id); setTab("overview"); }}/>}
+    {o && classEdit && <OntClassDrawer o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast}/>}
+    {o && relEdit && <OntRelDrawer o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
+    {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
+  </>;
+
+  if(!o){
+    const shown = st.ontologies.filter(x=>!q || `${x.name} ${x.domain} ${x.owner} ${x.desc}`.toLowerCase().includes(q.toLowerCase()));
+    const nCls = st.ontologies.reduce((n,x)=>n+x.classes.length,0), nRel = st.ontologies.reduce((n,x)=>n+x.rels.length,0);
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[{label:"Ontologies"}]}/>
+        <div style={{flex:1,overflowY:"auto",padding:28}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+            <Metric label="Ontologies" value={String(st.ontologies.length)} sub="registered" color={T.accent}/>
+            <Metric label="Classes" value={String(nCls)} sub="across all ontologies" color={T.blue}/>
+            <Metric label="Relationships" value={String(nRel)} sub="declared"/>
+            <Metric label="Published" value={String(st.ontologies.filter(x=>x.status==="Published").length)} sub={`of ${st.ontologies.length}`} color={T.green}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+            <div style={{flex:1}}><Input2 placeholder="Search ontologies…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+            <Btn onClick={()=>setNewOpen({mode:"import"})}>Import</Btn>
+            <button onClick={()=>setNewOpen({mode:oaiOn("draft")?"generate":"blank"})}
+              style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+              {Ic.plus(10)} New Ontology</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(380px,1fr))",gap:12}}>
+            {shown.map(x=>(
+              <div key={x.id} onClick={()=>{setSelId(x.id); setTab("overview"); setSelClass(null);}}
+                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                  <span style={{fontSize:14,fontWeight:700,color:T.text}}>{x.name}</span><OntStatus o={x}/>
+                  {x.source&&x.source.kind==="import" && <OntChip c={T.blue}>{x.source.connector||"Imported"}</OntChip>}
+                </div>
+                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5,marginBottom:10,minHeight:34}}>{x.desc}</div>
+                <div style={{display:"flex",gap:16,fontSize:11.5,color:T.textMuted}}>
+                  <span><b style={{color:T.text}}>{x.classes.length}</b> classes</span><span><b style={{color:T.text}}>{x.rels.length}</b> relationships</span>
+                  <span><b style={{color:T.text}}>{x.constraints.length}</b> constraints</span><span style={{marginLeft:"auto"}}>{x.domain} · {x.owner}</span>
+                </div>
+              </div>))}
+          </div>
+        </div>
+        {drawers}
+      </div>
+    );
+  }
+
+  const issues = ONT.validate(o);
+  const errs = issues.filter(i=>i.severity==="error").length;
+  const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
+    {key:"constraints",label:`Constraints · ${o.constraints.length}`}, ...(_oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
+    {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
+  const nm = (id) => (ontClass(o,id)||{}).name||"—";
+  const doPublish = () => { const r = ONT.publish(o, me, pubNote);
+    if(!r.ok){ onToast&&onToast(r.error,"error"); return; }
+    ontPatch(o.id, r.ontology); setPubOpen(false); setPubNote(""); onToast&&onToast(`${o.name} published as v${r.version.n}`,"success"); };
+  const download = (name, text) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:"text/turtle"})); a.download = name; a.click(); };
+  const cls = selClass ? ontClass(o, selClass) : null;
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Ontologies",onClick:()=>setSelId(null)},{label:o.name}]}/>
+      <div style={{padding:"22px 28px 0",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:16}}>
+          <div style={{width:56,height:56,borderRadius:16,background:T.accentDim,border:`2px solid ${T.accent}40`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.knowledge(26)}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <h1 style={{fontSize:21,fontWeight:800,color:T.text,margin:"0 0 5px"}}>{o.name}</h1>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <OntStatus o={o}/>
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{o.prefix}: {o.namespace}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{o.domain} · {o.owner}</span>
+            </div>
+          </div>
+          <Btn ghost onClick={()=>setDelOpen(true)}>Delete</Btn>
+          <Btn variant="primary" disabled={(o.versions||[]).length>0 && !ONT.isDirty(o)} onClick={()=>setPubOpen(true)}>Publish</Btn>
+        </div>
+        <Tabs2 tabs={TABS} active={tab} onChange={setTab}/>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px"}}>
+        {tab==="overview" && <div style={{display:"flex",gap:18,alignItems:"flex-start"}}>
+          <div style={{flex:1,minWidth:0}}>
+            <Card2 style={{marginBottom:14}}><div style={{padding:"12px 14px"}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:6}}>Description</div>
+              <Input2 multiline rows={2} value={o.desc} onChange={e=>ontPatch(o.id,{desc:e.target.value})}/>
+            </div></Card2>
+            <Card2><div style={{padding:"12px 14px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8,fontSize:11,color:T.textMuted}}>
+                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub,flex:1}}>Graph</span>
+                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px dashed ${T.violet}`,verticalAlign:"middle",marginRight:4}}/>is a kind of</span>
+                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px solid ${T.borderLight}`,verticalAlign:"middle",marginRight:4}}/>relationship</span>
+              </div>
+              <OntGraph o={o} selected={selClass} onSelect={setSelClass}/>
+            </div></Card2>
+          </div>
+          <div style={{width:280,flexShrink:0}}>
+            {cls ? <Card2><div style={{padding:"14px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{cls.name}</span><Btn small onClick={()=>setClassEdit(cls)}>Edit</Btn></div>
+              <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:10}}>{cls.desc||"No definition"}</div>
+              {[["Kind of", cls.parent?nm(cls.parent):"—"], ["Glossary term", cls.termId?((_gtState.find(t=>t.id===cls.termId)||{}).term||"—"):"—"],
+                ["Properties", (cls.props||[]).map(p=>p.name).join(", ")||"—"], ["Equivalent to", (cls.sameAs||[]).map(s=>`${s.standard} ${s.label}`).join(", ")||"—"],
+                ["Relationships", o.rels.filter(r=>r.from===cls.id||r.to===cls.id).map(r=>r.from===cls.id?`${r.name} ${nm(r.to)}`:`${r.inverse||"← "+r.name} ${nm(r.from)}`).join(" · ")||"—"]].map(([k,v])=>(
+                <div key={k} style={{marginBottom:7}}><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div><div style={{fontSize:11.5,color:T.text}}>{v}</div></div>))}
+            </div></Card2> : <Card2><div style={{padding:"14px 16px"}}>
+              {[["Owner",o.owner],["Steward",o.steward],["Domain",o.domain],["Source", o.source?(o.source.kind==="import"?`Imported · ${o.source.connector||o.source.format}`:o.source.kind==="ai"?"Drafted with AI":"Authored in EDG"):"—"],
+                ["Glossary terms linked", String(o.classes.filter(c=>c.termId).length)],["Standards links", String(o.classes.reduce((n,c)=>n+(c.sameAs||[]).length,0))],
+                ["Checks", errs?`${errs} error${errs===1?"":"s"}`:`${issues.length} note${issues.length===1?"":"s"}`]].map(([k,v])=>(
+                <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontSize:11.5}}>
+                  <span style={{color:T.textMuted}}>{k}</span><span style={{color:k==="Checks"&&errs?T.rose:T.text,fontWeight:600,textAlign:"right"}}>{v}</span></div>))}
+              <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>Select a class in the graph</div>
+            </div></Card2>}
+          </div>
+        </div>}
+
+        {tab==="classes" && <>
+          <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn onClick={()=>setNewOpen({mode:"import", target:o.id})}>Import into this ontology</Btn><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
+          <OntTable empty="No classes yet" onRow={r=>setClassEdit(r.c)}
+            cols={[{l:"Class",w:"1.2fr"},{l:"Kind of",w:"1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Standards",w:"1fr"},{l:"Definition",w:"2.2fr"}]}
+            rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({key:c.id, c, cells:[
+              <span>{c.name}{c.prov&&c.prov.by==="ai"?<span style={{marginLeft:6}}><SmaiChip conf={c.prov.conf||0.8} why={c.prov.why}/></span>:null}</span>,
+              c.parent?nm(c.parent):"—", String((c.props||[]).length), c.termId?((_gtState.find(t=>t.id===c.termId)||{}).term||"—"):"—",
+              (c.sameAs||[]).map(s=><OntChip key={s.iri} c={T.blue}>{s.standard}</OntChip>), c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
+        </>}
+        {tab==="rels" && <>
+          <div style={{display:"flex",marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
+          <OntTable empty="No relationships yet" onRow={r=>setRelEdit(r.r)}
+            cols={[{l:"From"},{l:"Relationship"},{l:"To"},{l:"Inverse"},{l:"Cardinality"},{l:"Kind",w:".7fr"}]}
+            rows={o.rels.map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>, r.kind==="part_of"?"Part of":"Association"]}))}/>
+        </>}
+        {tab==="constraints" && <>
+          <div style={{display:"flex",marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add constraint</Btn></div>
+          <OntTable empty="No constraints yet" onRow={r=>setConEdit(r.k)}
+            cols={[{l:"Class"},{l:"Property"},{l:"Rule"},{l:"Value",w:"1.4fr"},{l:"Severity",w:".7fr"}]}
+            rows={o.constraints.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
+        </>}
+        {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
+        {tab==="versions" && <>
+          {(o.versions||[]).length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
+            <OntTable empty="" onRow={r=>setCmpN(cmpN===r.v.n?null:r.v.n)} cols={[{l:"Version",w:".5fr"},{l:"Published"},{l:"By"},{l:"Note",w:"2fr"},{l:"Classes",w:".6fr"}]}
+              rows={o.versions.map(v=>({key:v.n, v, cells:[`v${v.n}${o.publishedN===v.n?" · current":""}`, v.at.slice(0,16).replace("T"," "), v.by, v.note||"—", String(v.snapshot.classes.length)]}))}/>}
+          {cmpN && (()=>{ const v = o.versions.find(x=>x.n===cmpN); const lines = ONT.diff(v.snapshot, ONT.snapshot(o)); return (
+            <div style={{marginTop:12}}><div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>Draft compared with v{cmpN}</div>
+              {lines.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ Identical</div> : lines.map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}>· {l.text}</div>)}</div>); })()}
+        </>}
+        {tab==="source" && <>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <SegTabs tabs={[{key:"owl",label:"OWL (Turtle)"},{key:"shacl",label:"SHACL"}]} active={srcTab} onChange={setSrcTab}/>
+            <span style={{flex:1}}/>
+            <Btn small onClick={()=>download(`${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`, srcTab==="owl"?ONT.toTurtle(o):ONT.toShacl(o))}>Download .ttl</Btn>
+          </div>
+          <pre style={{margin:0,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace",maxHeight:560,overflow:"auto"}}>
+            {srcTab==="owl" ? ONT.toTurtle(o) : (ONT.toShacl(o).split("\n").filter(Boolean).length>4 ? ONT.toShacl(o) : "# No constraints yet")}</pre>
+        </>}
+      </div>
+      {drawers}
+      <Modal open={pubOpen} onClose={()=>setPubOpen(false)} title={`Publish ${o.name}`}>
+        {errs>0 ? <div style={{fontSize:12.5,color:T.rose,marginBottom:12}}>{errs} error{errs===1?"":"s"} must be fixed first — see AI suggestions › Checks.</div> : <>
+          <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>v{((o.versions||[])[0]||{n:0}).n+1} · {o.classes.length} classes · {o.rels.length} relationships · {o.constraints.length} constraints</div>
+          {(o.versions||[])[0] && <div style={{marginBottom:10}}>{ONT.diff(o.versions[0].snapshot, ONT.snapshot(o)).slice(0,8).map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}>· {l.text}</div>)}</div>}
+          <OntField label="Note"><Input2 value={pubNote} onChange={e=>setPubNote(e.target.value)} placeholder="What changed"/></OntField>
+        </>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setPubOpen(false)}>Cancel</Btn><Btn variant="primary" disabled={errs>0} onClick={doPublish}>Publish</Btn></div>
+      </Modal>
+      <Modal open={delOpen} onClose={()=>setDelOpen(false)} title={`Delete ${o.name}`}>
+        <div style={{fontSize:12.5,color:T.textSub,marginBottom:14}}>{o.classes.length} classes, {o.rels.length} relationships and {(o.versions||[]).length} versions are removed. This cannot be undone.</div>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setDelOpen(false)}>Cancel</Btn>
+          <Btn variant="danger" onClick={()=>{ ontSet(s=>({...s, ontologies:s.ontologies.filter(x=>x.id!==o.id)})); setDelOpen(false); setSelId(null); onToast&&onToast(`${o.name} deleted`,"success"); }}>Delete</Btn></div>
+      </Modal>
+    </div>
+  );
+};
+
+// ── Settings › AI › Ontologies ──
+const OaiSettings = () => {
+  const s = useOai();
+  const set = (patch) => oaiSet(x=>({...x, settings:{...x.settings, ...patch}}));
+  const PCTS = [0.5,0.6,0.7,0.75,0.8,0.85,0.9,0.95].map(v=>({v:String(v), l:smaiPct(v)}));
+  return (<>
+    <AIDCard title="Ontologies"><AIDRow l="Enabled" on={s.settings.enabled} set={v=>set({enabled:v})}/></AIDCard>
+    <AIDCard title="Suggestions">{OAI.FEATURES.map(f=><AIDRow key={f.k} l={f.l} on={s.settings.features[f.k]!==false} set={v=>set({features:{...s.settings.features,[f.k]:v}})}/>)}</AIDCard>
+    <AIDCard title="Inputs">{OAI.INPUTS.map((it,i)=><AIDInputRow key={it.k} item={it} first={i===0} on={s.settings.inputs[it.k]!==false} set={v=>set({inputs:{...s.settings.inputs,[it.k]:v}})}/>)}</AIDCard>
+    <AIDCard title="Thresholds"><div style={{display:"flex",gap:14}}>
+      <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Minimum confidence to show</div><SLSelect value={String(s.settings.minConfidence)} onChange={e=>set({minConfidence:parseFloat(e.target.value)})} options={PCTS}/></div>
+      <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:5}}>Accept all at or above</div><SLSelect value={String(s.settings.bulkAccept)} onChange={e=>set({bulkAccept:parseFloat(e.target.value)})} options={PCTS}/></div>
+    </div></AIDCard>
+    <AIDCard title="Instructions"><Input2 multiline rows={3} value={s.settings.instructions} onChange={e=>set({instructions:e.target.value})} placeholder="Name relationships as verb phrases. Prefer FIBO for finance classes."/></AIDCard>
+    <AIDCard title="Acceptance">
+      <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 80px",fontSize:11.5}}>
+        {["Suggestion","Accepted","Dismissed","Rate"].map(h=><div key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,padding:"6px 0",borderBottom:`1px solid ${T.border}`}}>{h}</div>)}
+        {OAI.FEATURES.map(f=>{ const x = s.stats[f.k]||{accepted:0,rejected:0}; const n = x.accepted+x.rejected; const r = n?x.accepted/n:null;
+          return [<div key={f.k+"l"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.text}}>{f.l}</div>,
+            <div key={f.k+"a"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.textSub}}>{x.accepted}</div>,
+            <div key={f.k+"r"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,color:T.textSub}}>{x.rejected}</div>,
+            <div key={f.k+"p"} style={{padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontWeight:700,color:r==null?T.textMuted:r>=0.9?T.green:r>=0.75?T.blue:T.amber}}>{r==null?"—":smaiPct(r)}</div>]; })}
+      </div>
+    </AIDCard>
+    {s.log.length>0 && <AIDCard title="Recent decisions">{s.log.slice(0,10).map((l,i)=>(
+      <div key={i} style={{display:"flex",gap:10,padding:"6px 0",borderTop:i?`1px solid ${T.border}`:"none",fontSize:11.5}}>
+        <span style={{width:80,fontWeight:700,color:l.decision==="accepted"?T.green:T.textMuted}}>{l.decision==="accepted"?"Accepted":"Dismissed"}</span>
+        <span style={{width:190,color:T.textMuted}}>{(OAI.FEATURES.find(f=>f.k===l.feature)||{}).l||l.feature}</span>
+        <span style={{flex:1,color:T.text}}>{l.label}</span><span style={{color:T.textMuted}}>{l.at.slice(0,16).replace("T"," ")}</span></div>))}</AIDCard>}
+  </>);
+};
+
 const SLModelDrawer = ({open, model, onClose, onSave, existingEntities, existingRels, onToast, seed}) => {
   const isEdit = !!model;
   const SECTIONS = [
@@ -45469,7 +46271,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","settings","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","context","settings","tags","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -45482,7 +46284,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","context","tags","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -45494,7 +46296,7 @@ const ROLES_CONFIG = {
     badge: "rgba(2,132,199,0.12)",
     desc:  "Browse the catalog, explore lineage, run quality checks, and access approved datasets.",
     rbacRole: "analyst",
-    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context","aipipelines"],
+    nav: ["home","search","catalog","quality","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","context","aipipelines"],
     homeWidgets: ["metrics","recentAssets","quality","lineageSnippet","activity"],
   },
   engineer: {
@@ -45506,7 +46308,7 @@ const ROLES_CONFIG = {
     badge: "rgba(124,58,237,0.12)",
     desc:  "Manage pipelines, monitor ingestion health, trace lineage, and maintain data contracts.",
     rbacRole: "engineer",
-    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","context","aipipelines","settings"],
+    nav: ["home","search","catalog","quality","knowledgelayer","semanticlayer","ontologies","context","aipipelines","settings"],
     homeWidgets: ["services","metrics","quality","lineageSnippet","recentAssets","activity"],
   },
   viewer: {
@@ -45518,7 +46320,7 @@ const ROLES_CONFIG = {
     badge: "rgba(75,75,96,0.12)",
     desc:  "Read-only access to approved domains, certified assets and published dashboards.",
     rbacRole: "viewer",
-    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer","context"],
+    nav: ["home","search","catalog","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","context"],
     homeWidgets: ["recentAssets","certifiedAssets","activity"],
   },
 };
@@ -61166,6 +61968,44 @@ const aiAsk = (q, ctx) => {
   const push     = (b) => blocks.push(b);
   const R        = (intent, headline) => ({q, intent, headline, blocks, trace});
 
+  // ── Ontologies ──────────────────────────────────────────────────────────────
+  // Named ontology + an ask about relationships, checks, standards or an edit.
+  const onto = _oai.settings.enabled ? [...ontLoad().ontologies].sort((x,y)=>y.name.length-x.name.length).find(o=>s.includes(o.name.toLowerCase())) : null;
+  if(onto && /\b(relationships?|hierarch\w*|check|issues?|problems?|validat\w*|add (?:a )?(?:class|relationship)|make .+ a kind of|align|standards?|fibo|schema\.org|duplicates?|overlap\w*)\b/.test(s)){
+    const octx = oaiCtx();
+    const edit = q.match(/\b(add (?:a )?(?:class|relationship)\b.*|make .+ a kind of .+)/i);
+    if(edit){
+      const cmdText = edit[0].replace(new RegExp(`\\s+(?:to|in)\\s+(?:the\\s+)?${onto.name.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}(?:\\s+ontology)?\\s*$`,"i"),"").trim();
+      const r = OAI.parseEdit(cmdText, onto);
+      trace.push({name:"ontology.edit", args:{ontology:onto.name, text:cmdText}, rows:r.ok?1:0, ms:8});
+      if(!r.ok){ push({kind:"text", text:r.error}); return R("ontology-edit", "Could not read that change"); }
+      ontApplyEdit(onto.id, r); oaiDecide("edit","accepted",r.summary);
+      push({kind:"text", text:`${r.summary} — done in **${onto.name}**. It is part of the draft until the ontology is published again.`});
+      return R("ontology-edit", r.summary);
+    }
+    if(/\b(check|issues?|problems?|validat\w*|duplicates?|overlap\w*)\b/.test(s)){
+      const issues = ONT.validate(onto), dups = OAI.findDuplicates(ontLoad().ontologies, onto.id);
+      trace.push({name:"ontology.validate", args:{ontology:onto.name}, rows:issues.length+dups.length, ms:10});
+      push({kind:"text", text: issues.length+dups.length ? `**${issues.length} check${issues.length===1?"":"s"}** and **${dups.length} overlap${dups.length===1?"":"s"}** in ${onto.name}. Fix them from **Ontologies › ${onto.name} › AI suggestions › Checks**.` : `No issues in **${onto.name}**.`});
+      issues.slice(0,5).forEach(i=>push({kind:"text", text:`**${i.severity}** · ${i.title}${i.fix?` *Fix: ${i.fix.label}.*`:""}`}));
+      dups.slice(0,3).forEach(d=>push({kind:"text", text:`· ${d.title}`}));
+      return R("ontology-validate", `${issues.length+dups.length} findings · ${onto.name}`);
+    }
+    if(/\b(align|standards?|fibo|schema\.org)\b/.test(s)){
+      const std = /fibo/.test(s) ? "fibo" : "schema";
+      const al = OAI.alignToStandard(onto, std).filter(x=>x.conf>=_oai.settings.minConfidence);
+      trace.push({name:"ontology.align", args:{ontology:onto.name, standard:std}, rows:al.length, ms:9});
+      push({kind:"text", text:`**${al.length} class${al.length===1?"":"es"}** in ${onto.name} match ${std==="fibo"?"FIBO":"schema.org"}. Link them from **AI suggestions › Align to standard**.`});
+      al.slice(0,6).forEach(x=>push({kind:"text", text:`· ${x.title} · ${smaiPct(x.conf)} · ${x.why}`}));
+      return R("ontology-align", `${al.length} matches · ${onto.name}`);
+    }
+    const sug = OAI.suggestRelationships(onto, octx).filter(x=>x.conf>=_oai.settings.minConfidence);
+    trace.push({name:"ontology.suggest", args:{ontology:onto.name}, rows:sug.length, ms:12});
+    push({kind:"text", text: sug.length ? `**${sug.length} suggestion${sug.length===1?"":"s"}** for ${onto.name}'s relationships and hierarchy. Accept them from **AI suggestions**, or say *add relationship <class> <verb> <class> to ${onto.name}*.` : `Nothing to suggest for ${onto.name}'s relationships.`});
+    sug.slice(0,6).forEach(x=>push({kind:"text", text:`· **${x.title}** · ${smaiPct(x.conf)} · ${x.why}`}));
+    return R("ontology-suggest", `${sug.length} suggestions · ${onto.name}`);
+  }
+
   // ── Semantic models ─────────────────────────────────────────────────────────
   // Named model + an ask about its metrics, checks or test questions. Reads the
   // same suggestion engine the model's AI tab uses; a plain-language "add metric"
@@ -62129,7 +62969,7 @@ const CopilotDock = ({open, onClose, ctx, onNav, onToast, req}) => {
 // Page titles, used by the dock's context chip.
 const NAV_TITLE = {
   home:"Home", stewardship:"Workspace", catalog:"Catalog", quality:"Data Quality",
-  policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer", context:"Context",
+  policymanager:"Policies", tags:"Classifications", knowledgelayer:"Knowledge Layer", ontologies:"Ontologies", context:"Context",
   glossary:"Glossary", semanticlayer:"Semantic Models", domains:"Domains",
   dataproducts:"Data Products", dataask:"Copilot", settings:"Settings",
   aipipelines:"Pipelines",
@@ -63998,19 +64838,21 @@ const AISettingsSection = ({onToast}) => {
   return (
     <>
       <SettSH icon={Ic.bot(16)} title="AI"
-        desc="The Copilot, AI Classification, AI Descriptions and Semantic Models — each with its own model. AI proposes; a person decides."/>
+        desc="The Copilot, AI Classification, AI Descriptions, Semantic Models and Ontologies — each with its own model. AI proposes; a person decides."/>
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
           {key:"classification", label:"Classification"},
           {key:"descriptions",   label:"Descriptions"},
           {key:"semantic",       label:"Semantic Models"},
+          {key:"ontology",       label:"Ontologies"},
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
       {tab==="classification" && <AICControlPanel onToast={onToast}/>}
       {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
       {tab==="semantic"       && <SmaiSettings onToast={onToast}/>}
+      {tab==="ontology"       && <OaiSettings/>}
     </>
   );
 };
@@ -66179,6 +67021,7 @@ export default function App(){
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "knowledgelayer":return !KNOWLEDGE_LAYER_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
+      case "ontologies":    return <OntologyView onToast={showToast} onNav={handleNav}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "context":       return <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
       case "observability": return <QualityView onToast={showToast}/>;
