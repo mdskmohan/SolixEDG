@@ -41751,29 +41751,12 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
             <DescSection key={o.id} text={o.desc} onToast={onToast} onSave={t=>ontPatch(o.id,{desc:t})} style={{marginBottom:16}}
               obj={{name:"ontology:"+o.id, label:o.name, kind:"Ontology", owners:[o.owner].filter(Boolean), stewards:[o.steward].filter(Boolean)}}/>
-            {(()=>{ const cv = MAP.coverage(o, mapCtx()); const maps = MAP.mappingsOf(o);
-              const gaps = [
-                ...o.classes.filter(c=>!MAP.sourcesOf(o,c.id).length).map(c=>({key:"c"+c.id, what:c.name, issue:"No data source", act:()=>setClassEdit(c)})),
-                ...o.classes.filter(c=>MAP.sourcesOf(o,c.id).length).map(c=>({c, n:(c.props||[]).filter(p=>!maps.some(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id)).length}))
-                  .filter(x=>x.n).map(x=>({key:"p"+x.c.id, what:x.c.name, issue:`${x.n} propert${x.n===1?"y":"ies"} without a column`, act:()=>setClassEdit(x.c)})),
-                ...o.rels.filter(r=>!maps.some(m=>m.kind==="join" && m.relId===r.id)).map(r=>({key:"r"+r.id, what:`${nm(r.from)} ${r.name} ${nm(r.to)}`, issue:"No join", act:()=>setRelEdit(r)})),
-              ];
+            {(()=>{ const cv = MAP.coverage(o, mapCtx());
               return <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                 <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Data coverage</div>
-                <div style={{display:"flex",gap:10,marginBottom:gaps.length?14:0,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
                   <MapBar label="Classes with a data source" c={cv.classes}/><MapBar label="Properties with a column" c={cv.props}/><MapBar label="Relationships with a join" c={cv.rels}/>
                 </div>
-                {gaps.length>0 && <>
-                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Missing · {gaps.length}</div>
-                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:260,overflowY:"auto"}}>
-                    {gaps.map((g,i)=>(
-                      <div key={g.key} onClick={g.act} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<gaps.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{g.what}</span>
-                        <span style={{fontSize:11,color:T.amber}}>{g.issue}</span>
-                        <span style={{fontSize:11,color:T.accent}}>Fix →</span>
-                      </div>))}
-                  </div></>}
               </div></Card2>; })()}
             <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
