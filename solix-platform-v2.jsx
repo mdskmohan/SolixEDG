@@ -5538,6 +5538,8 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 // SIDEBAR
 // ─────────────────────────────────────────────
 const KNOWLEDGE_LAYER_ENABLED = false;
+// Context hidden 2026-11-16 until the knowledge graph it will read from exists.
+const CONTEXT_ENABLED = false;
 const GROUPS = [
   {section:"",items:[
     {key:"home",           icon:"home",          label:"Home"},
@@ -5561,7 +5563,7 @@ const GROUPS = [
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"semanticlayer",  icon:"semantic",      label:"Semantic Models"},
     {key:"ontologies",     icon:"knowledge",     label:"Ontologies"},
-    {key:"context",        icon:"lineage",       label:"Context"},
+    ...(CONTEXT_ENABLED ? [{key:"context",        icon:"lineage",       label:"Context"}] : []),
     {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
   ]},
@@ -68127,7 +68129,7 @@ export default function App(){
       case "knowledgelayer":return !KNOWLEDGE_LAYER_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
       case "ontologies":    return <OntologyView onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
-      case "context":       return <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
+      case "context":       return !CONTEXT_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
       case "observability": return <QualityView onToast={showToast}/>;
       case "analytics":     return <AnalyticsView/>;
       case "teams":         return <TeamsView onToast={showToast}/>;
