@@ -40313,7 +40313,11 @@ const _oaiSubs = new Set();
 const oaiSet = (fn) => { _oai = typeof fn==="function" ? fn(_oai) : fn; try { localStorage.setItem(OAI_KEY, JSON.stringify(_oai)); } catch(e) {} _oaiSubs.forEach(f=>f()); };
 const useOai = () => { const [,force] = useState(0);
   useEffect(()=>{ const fn=()=>force(n=>n+1); _oaiSubs.add(fn); return ()=>{_oaiSubs.delete(fn);}; },[]); return _oai; };
-const oaiOn = (f) => _oai.settings.enabled && _oai.settings.features[f] !== false;
+// Ontology AI suggestions are hidden for now (user decision 2026-11-16). Flip to
+// bring back the AI suggestions tab, mapping suggestions and Settings › AI ›
+// Ontologies. Drift checks are not AI and stay on.
+const ONT_AI_UI = false;
+const oaiOn = (f) => (ONT_AI_UI || f==="drift") && _oai.settings.enabled && _oai.settings.features[f] !== false;
 const oaiDecide = (feature, decision, label) => oaiSet(s=>{
   const k = decision==="accepted" ? "accepted" : "rejected"; const cur = s.stats[feature] || {accepted:0, rejected:0};
   return {...s, stats:{...s.stats, [feature]:{...cur, [k]:(cur[k]||0)+1}}, log:[{feature, decision, label, at:new Date().toISOString()}, ...s.log].slice(0,200)};
@@ -41654,7 +41658,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const errs = issues.filter(i=>i.severity==="error").length;
   const TABS = [{key:"overview",label:"Overview"},{key:"graph",label:"Graph"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
     {key:"constraints",label:`Constraints · ${o.constraints.length}`}, {key:"mappings",label:`Mappings · ${MAP.mappingsOf(o).length}`},
-    ...(_oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
+    ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
     {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
   const doPublish = () => { const r = ONT.publish(o, me, pubNote);
@@ -65701,21 +65705,21 @@ const AISettingsSection = ({onToast}) => {
   return (
     <>
       <SettSH icon={Ic.bot(16)} title="AI"
-        desc="The Copilot, AI Classification, AI Descriptions, Semantic Models and Ontologies — each with its own model. AI proposes; a person decides."/>
+        desc={`The Copilot, AI Classification, AI Descriptions${ONT_AI_UI?", Semantic Models and Ontologies":" and Semantic Models"} — each with its own model. AI proposes; a person decides.`}/>
       <div style={{marginBottom:18}}>
         <SegTabs tabs={[
           {key:"copilot",        label:"Copilot"},
           {key:"classification", label:"Classification"},
           {key:"descriptions",   label:"Descriptions"},
           {key:"semantic",       label:"Semantic Models"},
-          {key:"ontology",       label:"Ontologies"},
+          ...(ONT_AI_UI ? [{key:"ontology",       label:"Ontologies"}] : []),
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
       {tab==="classification" && <AICControlPanel onToast={onToast}/>}
       {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
       {tab==="semantic"       && <SmaiSettings onToast={onToast}/>}
-      {tab==="ontology"       && <OaiSettings/>}
+      {ONT_AI_UI && tab==="ontology" && <OaiSettings/>}
     </>
   );
 };
