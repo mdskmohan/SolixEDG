@@ -40576,7 +40576,7 @@ const OntNewDrawer = ({open, mode0, target, onClose, onCreated, onToast}) => {
   const [elTab, setElTab] = useState("classes");
   const [addTerms, setAddTerms] = useState(true);
   useEffect(()=>{ if(!open) return;
-    setSec("method"); setMethod(mode0||""); setRes(null); setPick({}); setMdlIds([]); setUseGlossary(true);
+    setSec(target ? "method" : "details"); setMethod(target ? (mode0||"") : "blank"); setRes(null); setPick({}); setMdlIds([]); setUseGlossary(true);
     setFileFmt("turtle"); setFile(null); setConn(""); setProj(""); setFetched(null); setDocText(""); setDocName(""); setElTab("classes");
     setD({name:"", desc:"", domain:"", owner:"", steward:"", prefix:"", ns:"", prefixTouched:false});
   },[open, mode0]);
@@ -40584,8 +40584,11 @@ const OntNewDrawer = ({open, mode0, target, onClose, onCreated, onToast}) => {
 
   const M = ONT_METHODS.find(x=>x.v===method);
   const blank = method==="blank";
+  // Creating an ontology in EDG is manual: Details -> Review. Import, generate and
+  // extract (method !== "blank") are kept for their own flows, opened with a target.
+  const manual = !into;
   const SECTIONS = [
-    {k:"method",  l:"Method"},
+    ...(manual ? [] : [{k:"method",  l:"Method"}]),
     ...(into ? [] : [{k:"details", l:"Details"}]),
     ...(blank ? [] : [{k:"source", l:"Source"}, {k:"elements", l:"Select elements"}]),
     {k:"review",  l:"Review"},
@@ -40821,7 +40824,7 @@ const OntNewDrawer = ({open, mode0, target, onClose, onCreated, onToast}) => {
             </>}
 
             {sec==="review" && <div style={{maxWidth:640}}>
-              <KV rows={[["Method", M?M.l:"—"],
+              <KV rows={[...(manual ? [] : [["Method", M?M.l:"—"]]),
                 ...(into ? [["Target ontology", into.name]] : [["Ontology name", d.name||"—"], ["Description", d.desc||"—"], ["Data domain", ((domains.find(x=>x.name===d.domain)||{}).displayName)||d.domain||"—"],
                   ["Owner", d.owner||"—"], ["Steward", d.steward||d.owner||"—"], ["Namespace", prefix?`${prefix}: ${nsUri}`:"—"]]),
                 ...(blank ? [] : [["Source", method==="generate" ? _slState.models.filter(m=>mdlIds.includes(m.id)).map(m=>m.name).join(", ") : method==="file" ? (file?file.name:"—") : method==="connection" ? (fetched?`${(ONT_CONNECTIONS.find(c=>c.v===conn)||{}).l} · ${fetched.project}`:"—") : (docName||"Pasted text")],
@@ -41206,7 +41209,6 @@ const OntologyView = ({onToast, onNav}) => {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
             <div style={{flex:1}}><Input2 placeholder="Search ontologies…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <Btn onClick={()=>setNewOpen({mode:"file"})}>Import Ontology</Btn>
             <button onClick={()=>setNewOpen({mode:""})}
               style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
               {Ic.plus(10)} New Ontology</button>
@@ -41301,7 +41303,7 @@ const OntologyView = ({onToast, onNav}) => {
         </div>}
 
         {tab==="classes" && <>
-          <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn onClick={()=>setNewOpen({mode:"", target:o.id})}>Import into Ontology</Btn><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
           <OntTable empty="No classes yet" onRow={r=>setClassEdit(r.c)}
             cols={[{l:"Class",w:"1.2fr"},{l:"Parent class",w:"1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Standards",w:"1fr"},{l:"Definition",w:"2.2fr"}]}
             rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({key:c.id, c, cells:[
