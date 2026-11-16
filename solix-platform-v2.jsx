@@ -12,6 +12,7 @@ import * as SMAI from "./src/semantic/ai.js";
 import { SL_USAGE } from "./src/semantic/usage-seed.js";
 import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
+import * as MAP from "./src/ontology/mapping.js";
 import { IMPORT_SAMPLES as ONT_IMPORT_SAMPLES, IMPORT_SOURCES as ONT_IMPORT_SOURCES } from "./src/ontology/standards.js";
 import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
@@ -40244,10 +40245,29 @@ const ontSeed = () => {
     .filter(r=>r.type!=="part_of")
     .map(r=>({id:"r_"+r.id, from:cid(r.from), to:cid(r.to), name:CTX.REL_TYPES[r.type].l.replace(/^is /,""), inverse:CTX.REL_TYPES[r.type].inv.replace(/^is /,""),
       cardinality:CARD[r.type]||"many_to_one", kind:r.type==="part_of"?"part_of":"association", desc:r.note||""})).concat(partRels);
+  // Mapped already: the three commerce datasets, their fields and the placed-by
+  // join. One column was renamed in the warehouse after mapping, so drift has
+  // something real to show. Retail is left for the AI to suggest.
+  let mn = 0;
+  const mk = (kind, classId, extra, target) => ({id:"map_seed_"+(++mn), kind, classId, ...extra, target, status:"approved", by:"maya.chen", at:"2026-09-18T09:00:00.000Z"});
+  const mappings = [];
+  _slState.entities.filter(e=>["e_order","e_customer","e_txn"].includes(e.id) && e.concept).forEach(e=>{
+    const c = classes.find(x=>x.termId===e.concept); if(!c) return;
+    mappings.push(mk("dataset", c.id, {}, {entityId:e.id, keys:slKeys(e)}));
+    c.props.forEach(pr=>{ const f = [..._slState.dims, ..._slState.facts].find(x=>"p_"+x.id===pr.id && x.entity===e.id);
+      if(f) mappings.push(mk("field", c.id, {propId:pr.id}, {entityId:e.id, table:e.table, column:f.column, fieldId:f.id})); });
+  });
+  const cust = classes.find(c=>c.termId==="tc1"), eCust = _slState.entities.find(e=>e.id==="e_customer");
+  if(cust && eCust){
+    cust.props = [...cust.props, {id:"p_cus_last_login", name:"Last Login", datatype:"dateTime", required:false, desc:"When the customer last signed in."}];
+    mappings.push(mk("field", cust.id, {propId:"p_cus_last_login"}, {entityId:eCust.id, table:eCust.table, column:"last_login_at", fieldId:null}));
+  }
+  const placed = rels.find(r=>r.id==="r_cr1"), j1 = _slState.rels.find(x=>x.from==="e_order" && x.to==="e_customer");
+  if(placed && j1) mappings.push(mk("join", placed.from, {relId:placed.id}, {joinId:j1.id}));
   const commerce = {id:"ont_commerce", name:"Enterprise Commerce", prefix:"com", namespace:"https://ontology.jnj.com/commerce#",
     domain:"Commerce", owner:"maya.chen", steward:"dev.patel", status:"Published", created:"2026-09-18",
     desc:"The commercial concepts every model, report and agent in the group shares: who buys, what is bought, and how it is fulfilled.",
-    source:{kind:"native"}, classes, rels, constraints:[], versions:[]};
+    source:{kind:"native"}, classes, rels, constraints:[], mappings, versions:[]};
   const pub = ONT.publish(commerce, "maya.chen", "Initial publication from the glossary concepts", "2026-09-18T09:00:00Z");
   const imp = ONT.importPalantir(ONT_IMPORT_SAMPLES.palantir);
   const supply = {id:"ont_supply", name:"Supply Chain", prefix:"sup", namespace:"https://ontology.jnj.com/supply#", domain:"Procurement",
@@ -40281,7 +40301,8 @@ const OAI_DEFAULT = {
     features:Object.fromEntries(OAI.FEATURES.map(f=>[f.k,true])),
     inputs:{models:true, glossary:true, profiles:true, documents:true, standards:true}, instructions:""},
   stats:{draft:{accepted:14,rejected:2}, extract:{accepted:23,rejected:9}, relationships:{accepted:37,rejected:6}, descriptions:{accepted:41,rejected:5},
-         constraints:{accepted:19,rejected:4}, standards:{accepted:12,rejected:3}, duplicates:{accepted:6,rejected:2}, changes:{accepted:4,rejected:0}, edit:{accepted:9,rejected:1}},
+         constraints:{accepted:19,rejected:4}, standards:{accepted:12,rejected:3}, duplicates:{accepted:6,rejected:2}, changes:{accepted:4,rejected:0}, edit:{accepted:9,rejected:1},
+         mapping:{accepted:63,rejected:7}, drift:{accepted:5,rejected:0}},
   log:[],
 };
 let _oai = (()=>{ try { const s = JSON.parse(localStorage.getItem(OAI_KEY)||"null");
@@ -40777,13 +40798,226 @@ const ontApplyEdit = (ontId, p) => ontPatch(ontId, y=>{
   return y;
 });
 
+// ── Mappings: how an ontology is realised by data (Phase 3) ──
+let _ontJump = null;   // {id, tab, classId} — set before navigating to Ontologies
+const mapCtx = () => ({
+  entities: _slState.entities, joins: _slState.rels, dims: _slState.dims, facts: _slState.facts,
+  metrics: _slState.metrics, models: _slState.models,
+  assets: slModellableAssets().map(a=>({id:a.id, name:a.name, db:a.db})),
+  schemaOf: t => SCHEMA[t]||[],
+  profileOf: (t,c) => _oai.settings.inputs.profiles ? (COL_PROFILES[c]||{}) : {},
+});
+const MapDot = ({state}) => { const c = state==="full"?T.green:state==="partial"?T.amber:T.border;
+  return <span style={{width:8,height:8,borderRadius:"50%",background:c,border:state==="none"?`1px solid ${T.borderLight}`:"none",flexShrink:0,display:"inline-block"}}/>; };
+const MapProv = ({m}) => m.prov && m.prov.by==="ai"
+  ? <SmaiChip conf={m.prov.conf||0.8} why={`Accepted AI suggestion · ${m.prov.why||""}`}/>
+  : <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>by {m.by}</span>;
+const MapBar = ({label, c}) => (
+  <div style={{flex:1,minWidth:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 13px"}}>
+    <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:11,color:T.textMuted,flex:1}}>{label}</span>
+      <span style={{fontSize:16,fontWeight:800,color:c.pct===100?T.green:c.pct>=50?T.text:T.amber}}>{c.pct}%</span></div>
+    <div style={{height:5,background:T.bgElevated,borderRadius:3,margin:"7px 0 5px",overflow:"hidden"}}><div style={{width:`${c.pct}%`,height:"100%",background:c.pct===100?T.green:T.accent}}/></div>
+    <div style={{fontSize:10.5,color:T.textMuted}}>{c.mapped} of {c.total} mapped</div>
+  </div>);
+
+const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
+  const oai = useOai();
+  const { roleCfg } = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+  const [sub, setSub] = useState("workbench");
+  const [sel, setSel] = useState(initialClass || (o.classes[0]||{}).id);
+  const [gone, setGone] = useState({});
+  const ctx = mapCtx();
+  const min = oai.settings.minConfidence;
+  const sugsAll = oaiOn("mapping") ? MAP.suggestMappings(o, ctx) : [];
+  const sugs = sugsAll.filter(s=>!gone[s.key] && (s.kind==="gap" || s.conf>=min));
+  const cov = MAP.coverage(o, ctx);
+  const dr = oaiOn("drift") ? MAP.drift(o, ctx) : [];
+  const maps = MAP.mappingsOf(o);
+  const add = (s, by) => { ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x), by==="human" ? {...MAP.toMapping(s, me), prov:{by:"human"}} : MAP.toMapping(s, me)]}));
+    if(by!=="human") oaiDecide("mapping","accepted",s.title); };
+  const remove = (id) => ontPatch(o.id, x=>({...x, mappings:MAP.mappingsOf(x).filter(m=>m.id!==id)}));
+  const dismiss = (s) => { setGone(g=>({...g,[s.key]:true})); oaiDecide("mapping","rejected",s.title); };
+  // Accepting datasets unlocks fields, joins and metrics — so accept in rounds.
+  const acceptAll = () => {
+    let n = 0;
+    for(let round=0; round<3; round++){
+      const cur = ontById(o.id);
+      const ok = MAP.suggestMappings(cur, ctx).filter(s=>s.kind!=="gap" && s.conf>=_oai.settings.bulkAccept && !gone[s.key]);
+      if(!ok.length) break;
+      ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x), ...ok.map(s=>MAP.toMapping(s, me))]}));
+      ok.forEach(s=>oaiDecide("mapping","accepted",s.title)); n += ok.length;
+    }
+    onToast&&onToast(n?`${n} mapping${n===1?"":"s"} accepted`:"Nothing at or above the threshold","success");
+  };
+  const stateOf = (c) => { const pc = cov.perClass.find(x=>x.classId===c.id);
+    if(!pc || !pc.dataset) return "none"; return pc.props.mapped===pc.props.total && pc.rels.mapped===pc.rels.total ? "full" : "partial"; };
+  const c = o.classes.find(x=>x.id===sel);
+  const ds = c ? MAP.datasetOf(o, c.id) : null;
+  const dsEnt = ds && ds.kind==="dataset" ? _slState.entities.find(e=>e.id===ds.target.entityId) : null;
+  const dsTable = dsEnt ? dsEnt.table : ds ? ds.target.table : null;
+  const cols = dsTable ? (SCHEMA[dsTable]||[]) : [];
+  const sFor = (pred) => sugs.filter(pred);
+  const Section = ({title, children, right}) => (
+    <div style={{marginBottom:16}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}><span style={{fontSize:11,fontWeight:700,color:T.textSub,letterSpacing:".04em",textTransform:"uppercase",flex:1}}>{title}</span>{right}</div>
+      {children}
+    </div>);
+  const Mapped = ({m, label}) => (
+    <div style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:6}}>
+      <span style={{color:T.green,fontSize:12}}>✓</span>
+      <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1,minWidth:0}}>{label||MAP.describeTarget(m, ctx)}</span>
+      {dr.some(d=>d.mappingId===m.id) && <span style={{fontSize:10,fontWeight:700,color:T.rose}}>Broken</span>}
+      <MapProv m={m}/>
+      <button onClick={()=>remove(m.id)} title="Remove mapping" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>
+    </div>);
+  const SugCard = ({s}) => s.kind==="gap"
+    ? <div style={{padding:"9px 12px",background:T.amberDim,border:`1px solid ${T.amber}35`,borderRadius:8,marginBottom:6,fontSize:11.5,color:T.textSub}}><b style={{color:T.amber}}>{s.title}</b> · {s.sub}</div>
+    : <SmaiCard title={s.title} sub={s.sub} conf={s.conf} why={s.why} evidence={s.evidence} acceptLabel="Map" onAccept={()=>add(s)} onDismiss={()=>dismiss(s)}/>;
+  return (
+    <div>
+      <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+        <MapBar label="Classes with data" c={cov.classes}/><MapBar label="Properties" c={cov.props}/>
+        <MapBar label="Relationships" c={cov.rels}/><MapBar label="Metrics with a class" c={cov.metrics}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+        <SegTabs tabs={[{key:"workbench",label:"Workbench"},{key:"coverage",label:"Coverage"},{key:"drift",label:`Drift · ${dr.length}`}]} active={sub} onChange={setSub}/>
+        <span style={{flex:1}}/>
+        {oaiOn("mapping") && <span style={{fontSize:11,color:T.violet,fontWeight:600}}>✦ {sugs.filter(s=>s.kind!=="gap").length} suggestions</span>}
+        {oaiOn("mapping") && <Btn small onClick={acceptAll}>✦ Accept all ≥ {smaiPct(oai.settings.bulkAccept)}</Btn>}
+      </div>
+
+      {sub==="workbench" && <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+        <div style={{width:230,flexShrink:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+          {o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(x=>{ const n = sugs.filter(s=>s.classId===x.id && s.kind!=="gap").length; return (
+            <button key={x.id} onClick={()=>setSel(x.id)}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 12px",background:sel===x.id?T.bgActive:"transparent",border:"none",borderLeft:`2px solid ${sel===x.id?T.accent:"transparent"}`,borderBottom:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left"}}>
+              <MapDot state={stateOf(x)}/>
+              <span style={{fontSize:12,fontWeight:sel===x.id?700:500,color:T.text,flex:1}}>{x.name}</span>
+              {dr.some(d=>(maps.find(m=>m.id===d.mappingId)||{}).classId===x.id) && <span style={{fontSize:10,color:T.rose,fontWeight:700}}>!</span>}
+              {n>0 && <span style={{fontSize:10,fontWeight:700,color:T.violet}}>✦{n}</span>}
+            </button>); })}
+        </div>
+        {c && <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:2}}>{c.name}</div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14}}>{c.desc||"No definition"}</div>
+
+          <Section title="Dataset">
+            {ds ? <Mapped m={ds} label={`${MAP.describeTarget(ds, ctx)}${ds.target.keys&&ds.target.keys.length?` · one ${c.name.toLowerCase()} per ${ds.target.keys.join(" + ")}`:""}`}/> : <>
+              {sFor(s=>s.classId===c.id && (s.kind==="dataset"||s.kind==="table"||(s.kind==="gap"&&!s.relId))).map(s=><SugCard key={s.key} s={s}/>)}
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
+                <span style={{fontSize:11,color:T.textMuted}}>Map to</span>
+                <div style={{width:280}}><SLSelect value="" onChange={e=>{ const v=e.target.value; if(!v) return;
+                  if(v.startsWith("e:")){ const en=_slState.entities.find(x=>x.id===v.slice(2)); add({kind:"dataset", classId:c.id, target:{entityId:en.id, keys:slKeys(en)}, title:`${c.name} ← ${en.name}`}, "human"); }
+                  else { const a = slModellableAssets().find(x=>String(x.id)===v.slice(2)); add({kind:"table", classId:c.id, target:{assetId:a.id, table:a.name, keys:(SCHEMA[a.name]||[]).filter(x=>x.pk).map(x=>x.name)}, title:`${c.name} ← ${a.name}`}, "human"); } }}
+                  placeholder="Pick a dataset or table"
+                  options={[..._slState.entities.map(e=>({v:"e:"+e.id, l:`${e.name} · dataset (${e.table})`})),
+                    ...slModellableAssets().filter(a=>!_slState.entities.some(e=>e.table===a.name)).map(a=>({v:"a:"+a.id, l:`${a.name} · catalog table`}))]}/></div>
+              </div>
+            </>}
+          </Section>
+
+          {(c.props||[]).length>0 && <Section title={`Properties · ${(c.props||[]).length}`}>
+            {!ds ? <div style={{fontSize:11.5,color:T.textMuted}}>Map a dataset first</div> :
+            <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+              {c.props.map((p,i)=>{ const m = maps.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id);
+                const s = !m && sugs.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id);
+                const broken = m && dr.find(d=>d.mappingId===m.id);
+                return (
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<c.props.length-1?`1px solid ${T.border}`:"none"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text,width:150}}>{p.name}</span>
+                  <span style={{fontSize:10.5,color:T.textMuted,width:70}}>{p.datatype||"string"}</span>
+                  <span style={{color:T.textMuted}}>←</span>
+                  <div style={{width:190}}><SLSelect value={m?m.target.column:""} onChange={e=>{ const v=e.target.value;
+                    ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x).filter(y=>!(y.kind==="field"&&y.classId===c.id&&y.propId===p.id)),
+                      ...(v?[{...MAP.toMapping({kind:"field", classId:c.id, propId:p.id, target:{entityId:dsEnt?dsEnt.id:null, table:dsTable, column:v,
+                        fieldId:([..._slState.dims,..._slState.facts].find(f=>dsEnt&&f.entity===dsEnt.id&&f.column===v)||{}).id||null}}, me), prov:{by:"human"}}]:[])]})); }}
+                    options={[{v:"",l:"—"}, ...cols.map(x=>({v:x.name,l:`${x.name} · ${x.type}`})), ...(m && !cols.some(x=>x.name===m.target.column) ? [{v:m.target.column, l:`${m.target.column} · missing`}] : [])]}/></div>
+                  <span style={{flex:1}}/>
+                  {broken && <span title={broken.explain} style={{fontSize:10,fontWeight:700,color:T.rose}}>Broken</span>}
+                  {m && !broken && <MapProv m={m}/>}
+                  {s && <><SmaiChip conf={s.conf} why={s.why}/><span style={{fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{s.target.column}</span>
+                    <Btn small onClick={()=>add(s)}>Map</Btn></>}
+                </div>); })}
+            </div>}
+          </Section>}
+
+          {o.rels.filter(r=>r.from===c.id).length>0 && <Section title="Relationships">
+            {o.rels.filter(r=>r.from===c.id).map(r=>{ const m = maps.find(x=>x.kind==="join" && x.relId===r.id); const to = ontClass(o, r.to);
+              return <div key={r.id}>
+                {m ? <Mapped m={m} label={`${c.name} ${r.name} ${to?to.name:"?"} ← ${MAP.describeTarget(m, ctx)}`}/>
+                   : sFor(s=>s.relId===r.id).length ? sFor(s=>s.relId===r.id).map(s=><SugCard key={s.key} s={s}/>)
+                   : <div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>{c.name} {r.name} {to?to.name:"?"} · map both datasets first</div>}
+              </div>; })}
+          </Section>}
+
+          <Section title="Metrics that measure it">
+            {maps.filter(m=>m.kind==="metric" && m.classId===c.id).map(m=><Mapped key={m.id} m={m}/>)}
+            {sFor(s=>s.kind==="metric" && s.classId===c.id).map(s=><SugCard key={s.key} s={s}/>)}
+            {!maps.some(m=>m.kind==="metric" && m.classId===c.id) && !sFor(s=>s.kind==="metric" && s.classId===c.id).length &&
+              <div style={{fontSize:11.5,color:T.textMuted}}>{ds?"No metric is computed on its dataset":"Map a dataset first"}</div>}
+          </Section>
+        </div>}
+      </div>}
+
+      {sub==="coverage" && <OntTable empty="No classes" onRow={r=>{ setSel(r.id); setSub("workbench"); }}
+        cols={[{l:"Class",w:"1.2fr"},{l:"Data",w:"1.4fr"},{l:"Properties",w:".8fr"},{l:"Relationships",w:".8fr"},{l:"Metrics",w:".6fr"}]}
+        rows={cov.perClass.map(pc=>({key:pc.classId, id:pc.classId, cells:[
+          <span style={{display:"flex",alignItems:"center",gap:7}}><MapDot state={stateOf({id:pc.classId})}/>{pc.name}</span>,
+          pc.dataset ? (pc.datasetKind==="table" ? `${pc.dataset} (catalog)` : ((_slState.entities.find(e=>e.id===pc.dataset)||{}).name||pc.dataset)) : <span style={{color:T.amber}}>Not mapped</span>,
+          pc.props.total ? `${pc.props.mapped} / ${pc.props.total}` : "—", pc.rels.total ? `${pc.rels.mapped} / ${pc.rels.total}` : "—", String(pc.metrics)]}))}/>}
+
+      {sub==="drift" && <>
+        {!oaiOn("drift") ? <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Drift checks are off · Settings › AI › Ontologies</div>
+          : dr.length===0 ? <div style={{padding:"26px 0",textAlign:"center",fontSize:12.5,color:T.green}}>✓ Every mapping still points at something that exists</div>
+          : dr.map(d=><SmaiIssue key={d.key} i={{id:d.key, severity:d.severity, title:d.title, explain:d.explain, fix:d.fix}}
+              onFix={(i)=>{ ontPatch(o.id, x=>MAP.applyFix(x, i.fix)); oaiDecide("drift","accepted",d.title); onToast&&onToast(`Fixed · ${d.title}`,"success"); }}
+              onOpen={()=>{ const m = maps.find(x=>x.id===d.mappingId); if(m){ setSel(m.classId); setSub("workbench"); } }}/>)}
+      </>}
+    </div>
+  );
+};
+
+// ── Ontology tab on a semantic model: which classes its datasets realise ──
+const SLOntologyTab = ({mdl, ents, mets, onNav, onToast}) => {
+  const st = useOnt(); useOai();
+  const ctx = mapCtx();
+  const ids = ents.map(e=>e.id);
+  const rows = st.ontologies.flatMap(o=>MAP.mappingsOf(o).filter(m=>m.kind==="dataset" && ids.includes(m.target.entityId)).map(m=>({o, m})));
+  const fieldsFor = (o, cid, eid) => MAP.mappingsOf(o).filter(m=>m.kind==="field" && m.classId===cid && m.target.entityId===eid).length;
+  const metricMaps = st.ontologies.flatMap(o=>MAP.mappingsOf(o).filter(m=>m.kind==="metric" && mets.some(x=>x.id===m.target.metricId)).map(m=>({o, m})));
+  const unmapped = ents.filter(e=>!rows.some(r=>r.m.target.entityId===e.id));
+  const sugs = oaiOn("mapping") ? st.ontologies.flatMap(o=>MAP.suggestMappings(o, ctx).filter(s=>s.kind==="dataset" && ids.includes(s.target.entityId) && s.conf>=_oai.settings.minConfidence).map(s=>({o, s}))) : [];
+  const open = (o, classId) => { _ontJump = {id:o.id, tab:"mappings", classId}; onNav && onNav("ontologies"); };
+  const me = "you";
+  return (
+    <div>
+      <SH title="Ontology" sub={`${ents.length-unmapped.length} of ${ents.length} datasets realise an ontology class · ${metricMaps.length} of ${mets.length} metrics say what they measure`}/>
+      <OntTable empty="No dataset in this model is mapped to an ontology yet" onRow={r=>open(r.o, r.m.classId)}
+        cols={[{l:"Dataset"},{l:"Class"},{l:"Ontology"},{l:"Fields mapped",w:".7fr"},{l:"",w:".4fr"}]}
+        rows={rows.map(({o,m})=>{ const e = ents.find(x=>x.id===m.target.entityId); const c = ontClass(o, m.classId);
+          return {key:o.id+m.id, o, m, cells:[e.name, c?c.name:"—", o.name, `${fieldsFor(o, m.classId, e.id)} / ${(c&&c.props||[]).length}`, <MapProv m={m}/>]}; })}/>
+      {sugs.length>0 && <div style={{marginTop:14}}><SmaiHead title="Suggested" count={sugs.length}/>
+        {sugs.map(({o,s})=><SmaiCard key={o.id+s.key} title={`${s.title}`} sub={`${o.name} · ${s.sub}`} conf={s.conf} why={s.why} evidence={s.evidence} acceptLabel="Map"
+          onAccept={()=>{ ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x), MAP.toMapping(s, me)]})); oaiDecide("mapping","accepted",s.title); onToast&&onToast(`${s.title} mapped in ${o.name}`,"success"); }}/>)}</div>}
+      {unmapped.length>0 && !sugs.length && <div style={{marginTop:12,fontSize:12,color:T.textMuted}}>Not mapped: {unmapped.map(e=>e.name).join(", ")}</div>}
+      {metricMaps.length>0 && <div style={{marginTop:16}}><SmaiHead title="Metrics and what they measure" count={metricMaps.length}/>
+        {metricMaps.map(({o,m})=><div key={o.id+m.id} style={{fontSize:12,color:T.textSub,padding:"4px 0"}}>{(mets.find(x=>x.id===m.target.metricId)||{}).name} measures <b style={{color:T.text}}>{(ontClass(o,m.classId)||{}).name}</b> · {o.name}</div>)}</div>}
+    </div>
+  );
+};
+
 // ── The screen ──
 const OntologyView = ({onToast, onNav}) => {
   const st = useOnt();
   const { role: oRole, roleCfg: oCfg } = useRole();
   const me = ((oCfg&&oCfg.email)||"you@jnj").split("@")[0];
-  const [selId, setSelId] = useState(null);
-  const [tab, setTab] = useState("overview");
+  const [selId, setSelId] = useState(()=>_ontJump?_ontJump.id:null);
+  const [tab, setTab] = useState(()=>_ontJump?_ontJump.tab:"overview");
+  // Read in the initializers, cleared after mount: React runs initializers twice
+  // in development, so clearing inside one would lose the jump.
+  const [jumpClass] = useState(()=>_ontJump?_ontJump.classId:null);
+  useEffect(()=>{ _ontJump = null; },[]);
   const [q, setQ] = useState("");
   const [selClass, setSelClass] = useState(null);
   const [classEdit, setClassEdit] = useState(null);
@@ -40848,7 +41082,8 @@ const OntologyView = ({onToast, onNav}) => {
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
   const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
-    {key:"constraints",label:`Constraints · ${o.constraints.length}`}, ...(_oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
+    {key:"constraints",label:`Constraints · ${o.constraints.length}`}, {key:"mappings",label:`Mappings · ${MAP.mappingsOf(o).length}`},
+    ...(_oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
     {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
   const doPublish = () => { const r = ONT.publish(o, me, pubNote);
@@ -40901,7 +41136,8 @@ const OntologyView = ({onToast, onNav}) => {
                 <div key={k} style={{marginBottom:7}}><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div><div style={{fontSize:11.5,color:T.text}}>{v}</div></div>))}
             </div></Card2> : <Card2><div style={{padding:"14px 16px"}}>
               {[["Owner",o.owner],["Steward",o.steward],["Domain",o.domain],["Source", o.source?(o.source.kind==="import"?`Imported · ${o.source.connector||o.source.format}`:o.source.kind==="ai"?"Drafted with AI":"Authored in EDG"):"—"],
-                ["Glossary terms linked", String(o.classes.filter(c=>c.termId).length)],["Standards links", String(o.classes.reduce((n,c)=>n+(c.sameAs||[]).length,0))],
+                ["Glossary terms linked", String(o.classes.filter(c=>c.termId).length)],
+                ["Classes with data", (()=>{ const cv = MAP.coverage(o, mapCtx()).classes; return `${cv.mapped} of ${cv.total}`; })()],["Standards links", String(o.classes.reduce((n,c)=>n+(c.sameAs||[]).length,0))],
                 ["Checks", errs?`${errs} error${errs===1?"":"s"}`:`${issues.length} note${issues.length===1?"":"s"}`]].map(([k,v])=>(
                 <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontSize:11.5}}>
                   <span style={{color:T.textMuted}}>{k}</span><span style={{color:k==="Checks"&&errs?T.rose:T.text,fontWeight:600,textAlign:"right"}}>{v}</span></div>))}
@@ -40932,6 +41168,7 @@ const OntologyView = ({onToast, onNav}) => {
             rows={o.constraints.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
         </>}
         {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
+        {tab==="mappings" && <OntMappingsTab key={o.id} o={o} onToast={onToast} onNav={onNav} initialClass={jumpClass}/>}
         {tab==="versions" && <>
           {(o.versions||[]).length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
             <OntTable empty="" onRow={r=>setCmpN(cmpN===r.v.n?null:r.v.n)} cols={[{l:"Version",w:".5fr"},{l:"Published"},{l:"By"},{l:"Note",w:"2fr"},{l:"Classes",w:".6fr"}]}
@@ -45529,7 +45766,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
     const sync = mdl.sync || {enabled:false, targets:mdl.targets||[], frequency:"daily", onDrift:"notify"};
     const TABS = [{k:"overview",l:"Overview"},{k:"erd",l:"Relationships"},
                   {k:"definitions",l:`Definitions · ${mDims.length+mFacts.length+mMetrics.length}`},
-                  {k:"links",l:"Glossary links"},{k:"versions",l:"Versions"},
+                  {k:"links",l:"Glossary links"},{k:"ontology",l:"Ontology"},{k:"versions",l:"Versions"},
                   ...(_smai.settings.enabled ? [{k:"ai",l:"AI suggestions"}] : []),
                   {k:"config",l:"Configuration"}];
     // A validation issue opens the place it is fixed.
@@ -45679,6 +45916,7 @@ const SemanticLayerView = ({onToast, onNav, deepLinkModelId}) => {
 
             {tab==="links" && <CtxModelLinks mdl={mdl} onToast={onToast} onNav={onNav}/>}
             {tab==="versions" && <CtxModelVersions mdl={mdl} onToast={onToast} onGoTo={goToIssue}/>}
+            {tab==="ontology" && <SLOntologyTab mdl={mdl} ents={mEnts} mets={mMetrics} onNav={onNav} onToast={onToast}/>}
             {tab==="ai" && <SLAiTab mdl={mdl} ents={mEnts} rels={mRels} dims={mDims} facts={mFacts} mets={mMetrics}
               setStore={setStore} onToast={onToast} onGoTo={goToIssue}/>}
             {tab==="erd" && <>
@@ -61971,6 +62209,17 @@ const aiAsk = (q, ctx) => {
   // ── Ontologies ──────────────────────────────────────────────────────────────
   // Named ontology + an ask about relationships, checks, standards or an edit.
   const onto = _oai.settings.enabled ? [...ontLoad().ontologies].sort((x,y)=>y.name.length-x.name.length).find(o=>s.includes(o.name.toLowerCase())) : null;
+  if(onto && /\b(mapp\w*|coverage|unmapped|drift\w*)\b/.test(s)){
+    const mctx = mapCtx(), cov = MAP.coverage(onto, mctx), dr = MAP.drift(onto, mctx);
+    const sg = MAP.suggestMappings(onto, mctx).filter(x=>x.kind!=="gap" && x.conf>=_oai.settings.minConfidence);
+    const gaps = MAP.suggestMappings(onto, mctx).filter(x=>x.kind==="gap");
+    trace.push({name:"ontology.mapping", args:{ontology:onto.name}, rows:sg.length+dr.length, ms:14});
+    push({kind:"text", text:`**${onto.name}** · ${cov.classes.mapped} of ${cov.classes.total} classes have data · ${cov.props.pct}% of properties and ${cov.rels.pct}% of relationships mapped · ${dr.length} broken mapping${dr.length===1?"":"s"}. Work through it in **Ontologies › ${onto.name} › Mappings**.`});
+    dr.slice(0,3).forEach(d=>push({kind:"text", text:`**broken** · ${d.title}${d.fix&&d.fix.label?` *Fix: ${d.fix.label}.*`:""}`}));
+    sg.slice(0,5).forEach(x=>push({kind:"text", text:`· **${x.title}** · ${smaiPct(x.conf)} · ${x.why}`}));
+    gaps.slice(0,3).forEach(x=>push({kind:"text", text:`· ${x.title} — ${x.sub}`}));
+    return R("ontology-mapping", `${cov.classes.pct}% of classes mapped · ${onto.name}`);
+  }
   if(onto && /\b(relationships?|hierarch\w*|check|issues?|problems?|validat\w*|add (?:a )?(?:class|relationship)|make .+ a kind of|align|standards?|fibo|schema\.org|duplicates?|overlap\w*)\b/.test(s)){
     const octx = oaiCtx();
     const edit = q.match(/\b(add (?:a )?(?:class|relationship)\b.*|make .+ a kind of .+)/i);

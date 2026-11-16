@@ -82,7 +82,7 @@ export function validate(ont) {
 // ═════════════════════════════ VERSIONS ══════════════════════════════════════
 export function snapshot(ont) {
   return clone({ name: ont.name, prefix: ont.prefix, namespace: ont.namespace, desc: ont.desc || "",
-    classes: ont.classes || [], rels: ont.rels || [], constraints: ont.constraints || [] });
+    classes: ont.classes || [], rels: ont.rels || [], constraints: ont.constraints || [], mappings: ont.mappings || [] });
 }
 export function hash(snap) {
   const norm = (v) => Array.isArray(v) ? v.map(norm) : v && typeof v === "object"
@@ -118,6 +118,7 @@ export function diff(prev, next) {
   prev = prev || {}; next = next || {};
   coll("classes", "class", (x) => x.name, prev, next);
   coll("rels", "relationship", (x, s) => `${nm(s, x.from)} ${x.name} ${nm(s, x.to)}`, prev, next);
+  coll("mappings", "mapping", (x, s) => `${x.kind} for ${nm(s, x.classId)}${x.target && x.target.column ? "." + x.target.column : ""}`, prev, next);
   coll("constraints", "constraint", (x, s) => `${CONSTRAINT_KINDS[x.kind] || x.kind} on ${nm(s, x.classId)}${x.prop ? "." + x.prop : ""}`, prev, next);
   return lines;
 }

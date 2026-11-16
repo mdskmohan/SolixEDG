@@ -294,7 +294,7 @@ export function parseEdit(text, ont) {
 export const FEATURES = [
   { k: "draft", l: "Draft from metadata" }, { k: "extract", l: "Extract from documents" }, { k: "relationships", l: "Relationships, inverses and hierarchy" },
   { k: "descriptions", l: "Definitions and synonyms" }, { k: "constraints", l: "Constraints from profiles" }, { k: "standards", l: "Align to standards" },
-  { k: "duplicates", l: "Duplicate and overlapping classes" }, { k: "changes", l: "Version summaries" }, { k: "edit", l: "Plain-language edits" },
+  { k: "duplicates", l: "Duplicate and overlapping classes" }, { k: "mapping", l: "Mapping suggestions" }, { k: "drift", l: "Mapping drift" }, { k: "changes", l: "Version summaries" }, { k: "edit", l: "Plain-language edits" },
 ];
 export const INPUTS = [
   { k: "models", l: "Semantic models", ex: "Datasets, fields, joins", required: true },
