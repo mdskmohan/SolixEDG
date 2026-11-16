@@ -41164,6 +41164,88 @@ const SLOntologyTab = ({mdl, ents, mets, onNav, onToast}) => {
   );
 };
 
+// ── Presentation shared with Semantic Models: icon badge, colour, status chip ──
+const ontIcon   = (o) => (o && o.icon)  || "◈";
+const ontColour = (o) => (o && o.color) || "#7c3aed";
+const OntStatusChip = ({o}) => {
+  const pub = o.status==="Published", c = CERT_META[pub?"Approved":"Draft"];
+  const dirty = (o.versions||[]).length>0 && ONT.isDirty(o), d = CERT_META["In Review"];
+  return (<>
+    <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,whiteSpace:"nowrap"}}>{c.icon} {pub?`Published · v${o.publishedN}`:"Draft"}</span>
+    {dirty && <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:d.bg,color:d.color,border:`1px solid ${d.border}`,whiteSpace:"nowrap"}}>Unpublished changes</span>}
+  </>);
+};
+const OntSidebar = ({o, cov}) => {
+  const [pane, setPane] = useState(null);
+  const owners = o.owners || (o.owner ? [o.owner] : []);
+  const stewards = o.stewards || (o.steward ? [o.steward] : []);
+  const USERS = STEWARDS_LIST.map(x=>x.name);
+  const toggle = (key, list, v) => { const next = list.includes(v) ? list.filter(x=>x!==v) : [...list, v];
+    ontPatch(o.id, key==="owners" ? {owners:next, owner:next[0]||""} : {stewards:next, steward:next[0]||""}); };
+  const Sec = ({children, last}) => <div style={{padding:"16px",borderBottom:last?"none":`1px solid ${T.border}`}}>{children}</div>;
+  const latest = (o.versions||[])[0];
+  return (
+    <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+      <Sec>
+        <SLMetaLabel>Details</SLMetaLabel>
+        {[["Data domain",o.domain],["Classes",String(o.classes.length)],["Relationships",String(o.rels.length)],["Constraints",String(o.constraints.length)],
+          ["Mappings",String(MAP.mappingsOf(o).length)],["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
+          ["Glossary terms",String(o.classes.filter(c=>c.termId).length)],["Created",o.created||"—"],["Published",latest?`v${latest.n} · ${latest.at.slice(0,10)}`:"Never"],
+          ["Prefix",o.prefix]].map(([k,v])=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
+            <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
+            <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
+          </div>))}
+      </Sec>
+      <Sec><SLMetaLabel>Status</SLMetaLabel><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><OntStatusChip o={o}/></div></Sec>
+      <Sec>
+        <SLMetaLabel onEdit={()=>setPane(p=>p==="owners"?null:"owners")}>Owners</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {owners.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
+          {owners.map(x=><SLPersonChip key={x} name={x} color={T.accent}/>)}
+        </div>
+        <SLPicker open={pane==="owners"} items={USERS} selected={owners} placeholder="Search users…" onToggle={u=>toggle("owners", owners, u)} onDone={()=>setPane(null)}/>
+      </Sec>
+      <Sec last>
+        <SLMetaLabel onEdit={()=>setPane(p=>p==="stewards"?null:"stewards")}>Stewards</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {stewards.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+          {stewards.map(x=><SLPersonChip key={x} name={x} color="#d97706"/>)}
+        </div>
+        <SLPicker open={pane==="stewards"} items={USERS} selected={stewards} placeholder="Search users…" accent="#d97706" onToggle={u=>toggle("stewards", stewards, u)} onDone={()=>setPane(null)}/>
+      </Sec>
+    </div>
+  );
+};
+const OntDetailsDrawer = ({o, onClose, onToast}) => {
+  const [domains] = useDomains();
+  const people = STEWARDS_LIST.map(x=>x.name);
+  const [d, setD] = useState({name:o.name, desc:o.desc||"", domain:o.domain||"", owner:o.owner||"", steward:o.steward||""});
+  const taken = ontLoad().ontologies.some(x=>x.id!==o.id && x.name.trim().toLowerCase()===d.name.trim().toLowerCase());
+  const err = !d.name.trim() ? "Enter an ontology name" : taken ? "An ontology with this name exists" : !d.domain ? "Select a data domain" : !d.owner ? "Select an owner" : null;
+  const save = () => {
+    if(err){ onToast&&onToast(err,"error"); return; }
+    const owners = [d.owner, ...((o.owners||[]).filter(x=>x!==d.owner))], stewards = d.steward ? [d.steward, ...((o.stewards||[]).filter(x=>x!==d.steward))] : (o.stewards||[]);
+    ontPatch(o.id, {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards});
+    onToast&&onToast(`${d.name.trim()} updated`,"success"); onClose();
+  };
+  const Req = ({children}) => <>{children}<span style={{color:T.rose}}> *</span></>;
+  return (
+    <OntDrawerShell title={`Edit ${o.name}`} width={560} onClose={onClose} footer={<>
+      <span style={{flex:1,fontSize:11.5,color:T.textMuted}}>{err||""}</span>
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>Save changes</Btn></>}>
+      <OntField label={<Req>Ontology name</Req>}><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})}/></OntField>
+      <OntField label="Description"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      <OntField label={<Req>Data domain</Req>}><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} placeholder="Select a data domain" options={domains.map(x=>({v:x.name,l:x.displayName||x.name}))}/></OntField>
+      <div style={{display:"flex",gap:12}}>
+        <div style={{flex:1}}><OntField label={<Req>Owner</Req>}><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={people}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Same as owner" options={people}/></OntField></div>
+      </div>
+      <OntField label="Namespace"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{o.prefix}: {o.namespace}</div></OntField>
+    </OntDrawerShell>
+  );
+};
+
 // ── The screen ──
 const OntologyView = ({onToast, onNav}) => {
   const st = useOnt();
@@ -41185,6 +41267,9 @@ const OntologyView = ({onToast, onNav}) => {
   const [srcTab, setSrcTab] = useState("owl");
   const [delOpen, setDelOpen] = useState(false);
   const [cmpN, setCmpN] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [styleOpen, setStyleOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const o = selId ? st.ontologies.find(x=>x.id===selId) : null;
   const drawers = <>
     {newOpen && <OntNewDrawer open mode0={newOpen.mode} target={newOpen.target} onClose={()=>setNewOpen(null)} onToast={onToast}
@@ -41192,6 +41277,7 @@ const OntologyView = ({onToast, onNav}) => {
     {o && classEdit && <OntClassDrawer o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast}/>}
     {o && relEdit && <OntRelDrawer o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
     {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
+    {o && editOpen && <OntDetailsDrawer o={o} onClose={()=>setEditOpen(false)} onToast={onToast}/>}
   </>;
 
   if(!o){
@@ -41213,21 +41299,43 @@ const OntologyView = ({onToast, onNav}) => {
               style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
               {Ic.plus(10)} New Ontology</button>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(380px,1fr))",gap:12}}>
-            {shown.map(x=>(
+          <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{shown.length} ontolog{shown.length!==1?"ies":"y"}</div>
+          {shown.length===0 && <div style={{padding:"60px 0",textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No ontologies match</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Try a different search, or create one</div></div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:16}}>
+            {shown.map(x=>{
+              const cv = MAP.coverage(x, mapCtx());
+              const dirty = (x.versions||[]).length>0 && ONT.isDirty(x);
+              const hue = dirty ? T.amber : x.status==="Published" ? T.accent : T.textMuted;
+              return (
               <div key={x.id} onClick={()=>{setSelId(x.id); setTab("overview"); setSelClass(null);}}
-                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"16px 18px",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
-                  <span style={{fontSize:14,fontWeight:700,color:T.text}}>{x.name}</span><OntStatus o={x}/>
-                  {x.source&&x.source.kind==="import" && <OntChip c={T.blue}>{x.source.connector||"Imported"}</OntChip>}
+                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=hue;e.currentTarget.style.boxShadow=`0 4px 20px ${hue}20`;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{height:4,background:hue}}/>
+                <div style={{padding:"16px 18px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:7}}>
+                    <span style={{width:26,height:26,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
+                      fontSize:14,fontWeight:700,background:`${ontColour(x)}18`,border:`1px solid ${ontColour(x)}45`,color:ontColour(x)}}>{ontIcon(x)}</span>
+                    <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{x.name}</span>
+                    <OntStatusChip o={x}/>
+                    {x.source&&x.source.kind==="import" && <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`}}>{x.source.connector||"Imported"}</span>}
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:12,minHeight:36}}>{x.desc}</div>
+                  <div style={{display:"flex",gap:18,flexWrap:"wrap",alignItems:"baseline",paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
+                    {[["Classes",x.classes.length],["Relationships",x.rels.length],["Constraints",x.constraints.length],["With data",`${cv.classes.pct}%`]].map(([k,v])=>(
+                      <div key={k}>
+                        <div style={{fontSize:17,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{k}</div>
+                      </div>))}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:10.5,color:T.textMuted}}>{x.domain} · {x.owner}</span>
+                    <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{x.prefix}:</span>
+                  </div>
                 </div>
-                <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.5,marginBottom:10,minHeight:34}}>{x.desc}</div>
-                <div style={{display:"flex",gap:16,fontSize:11.5,color:T.textMuted}}>
-                  <span><b style={{color:T.text}}>{x.classes.length}</b> classes</span><span><b style={{color:T.text}}>{x.rels.length}</b> relationships</span>
-                  <span><b style={{color:T.text}}>{x.constraints.length}</b> constraints</span><span style={{marginLeft:"auto"}}>{x.domain} · {x.owner}</span>
-                </div>
-              </div>))}
+              </div>); })}
           </div>
         </div>
         {drawers}
@@ -41250,58 +41358,96 @@ const OntologyView = ({onToast, onNav}) => {
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Ontologies",onClick:()=>setSelId(null)},{label:o.name}]}/>
-      <div style={{padding:"22px 28px 0",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:14,marginBottom:16}}>
-          <div style={{width:56,height:56,borderRadius:16,background:T.accentDim,border:`2px solid ${T.accent}40`,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent,flexShrink:0}}>{Ic.knowledge(26)}</div>
+      <div style={{padding:"24px 28px 0",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+          <div style={{width:64,height:64,borderRadius:18,background:`${ontColour(o)}18`,border:`2.5px solid ${ontColour(o)}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:ontColour(o),fontSize:28,fontWeight:700}}>{ontIcon(o)}</div>
           <div style={{flex:1,minWidth:0}}>
-            <h1 style={{fontSize:21,fontWeight:800,color:T.text,margin:"0 0 5px"}}>{o.name}</h1>
+            <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{o.name}</h1>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <OntStatus o={o}/>
-              <span style={{fontSize:11,color:T.textMuted}}>Namespace <span style={{fontFamily:"ui-monospace,monospace"}}>{o.prefix}: {o.namespace}</span></span>
+              <OntStatusChip o={o}/>
               <span style={{fontSize:11,color:T.textMuted}}>{o.domain} · {o.owner}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>· {o.classes.length} class{o.classes.length===1?"":"es"} · {o.rels.length} relationship{o.rels.length===1?"":"s"}</span>
             </div>
           </div>
-          <Btn ghost onClick={()=>setDelOpen(true)}>Delete</Btn>
-          <Btn variant="primary" disabled={(o.versions||[]).length>0 && !ONT.isDirty(o)} onClick={()=>setPubOpen(true)}>Publish</Btn>
+          <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+            <div style={{position:"relative"}}>
+              <button onClick={()=>{setMenuOpen(v=>!v);setStyleOpen(false);}}
+                style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+              {menuOpen && (
+                <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
+                  {[{icon:"🖊️",label:"Edit Details",sub:"Name, description, data domain, owner",action:()=>{setMenuOpen(false);setEditOpen(true);}},
+                    {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setStyleOpen(true);setMenuOpen(false);}},
+                    {icon:"🚀",label:"Publish",sub:(o.versions||[]).length && !ONT.isDirty(o) ? `No changes since v${o.publishedN}` : `Publish as v${((o.versions||[])[0]||{n:0}).n+1}`,
+                      disabled:(o.versions||[]).length>0 && !ONT.isDirty(o), action:()=>{setMenuOpen(false);setPubOpen(true);}},
+                  ].map(item=>(
+                    <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
+                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:item.disabled?"not-allowed":"pointer",opacity:item.disabled?.45:1,textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                      onMouseEnter={e=>{if(!item.disabled)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:15,marginTop:1}}>{item.icon}</span>
+                      <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                    </button>))}
+                  <button onClick={()=>{setMenuOpen(false);setDelOpen(true);}}
+                    style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,.07)"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <span style={{fontSize:15,marginTop:1}}>🗑️</span>
+                    <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Ontology</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>Permanently remove this ontology</div></div>
+                  </button>
+                </div>)}
+              {styleOpen && (
+                <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:600,width:300,boxSizing:"border-box",background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",padding:16}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.text}}>Style</div>
+                    <button onClick={()=>setStyleOpen(false)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:14}}>{Ic.x(11)}</button>
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Icon</div>
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:14}}>
+                    {["◈","◆","⬡","⊛","◉","△","✦","⌘","❖","⊞","◑","≡"].map(ic=>(
+                      <button key={ic} onClick={()=>ontPatch(o.id,{icon:ic})}
+                        style={{width:32,height:32,borderRadius:7,fontSize:15,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+                          background:ontIcon(o)===ic?`${ontColour(o)}20`:T.bgElevated,border:`1.5px solid ${ontIcon(o)===ic?ontColour(o):T.border}`,color:T.text}}>{ic}</button>))}
+                  </div>
+                  <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:7}}>Colour</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {COLOR_PALETTE.map(c=>(
+                      <button key={c} onClick={()=>ontPatch(o.id,{color:c})}
+                        style={{width:24,height:24,borderRadius:"50%",background:c,border:`2.5px solid ${ontColour(o)===c?"#fff":c}`,outline:ontColour(o)===c?`2px solid ${c}`:"none",cursor:"pointer"}}/>))}
+                  </div>
+                </div>)}
+            </div>
+          </div>
         </div>
         <Tabs2 tabs={TABS} active={tab} onChange={setTab}/>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px"}}>
-        {tab==="overview" && <div style={{display:"flex",gap:18,alignItems:"flex-start"}}>
-          <div style={{flex:1,minWidth:0}}>
-            <Card2 style={{marginBottom:14}}><div style={{padding:"12px 14px"}}>
-              <div style={{fontSize:11.5,fontWeight:700,color:T.textSub,marginBottom:6}}>Description</div>
-              <Input2 multiline rows={2} value={o.desc} onChange={e=>ontPatch(o.id,{desc:e.target.value})}/>
-            </div></Card2>
-            <Card2><div style={{padding:"12px 14px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8,fontSize:11,color:T.textMuted}}>
-                <span style={{fontSize:11.5,fontWeight:700,color:T.textSub,flex:1}}>Graph</span>
-                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px dashed ${T.violet}`,verticalAlign:"middle",marginRight:4}}/>is a kind of</span>
-                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px solid ${T.borderLight}`,verticalAlign:"middle",marginRight:4}}/>relationship</span>
+      {tab==="overview" && (
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
+            <DescSection key={o.id} text={o.desc} onToast={onToast} onSave={t=>ontPatch(o.id,{desc:t})} style={{marginBottom:16}}
+              obj={{name:"ontology:"+o.id, label:o.name, kind:"Ontology", owners:[o.owner].filter(Boolean), stewards:[o.steward].filter(Boolean)}}/>
+            <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,fontSize:11,color:T.textMuted}}>
+                <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Graph</span>
+                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px dashed ${T.violet}`,verticalAlign:"middle",marginRight:4}}/>Parent class</span>
+                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px solid ${T.borderLight}`,verticalAlign:"middle",marginRight:4}}/>Relationship</span>
               </div>
               <OntGraph o={o} selected={selClass} onSelect={setSelClass}/>
             </div></Card2>
-          </div>
-          <div style={{width:280,flexShrink:0}}>
-            {cls ? <Card2><div style={{padding:"14px 16px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{cls.name}</span><Btn small onClick={()=>setClassEdit(cls)}>Edit</Btn></div>
+            {cls && <Card2><div style={{padding:"14px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{cls.name}</span>
+                <Btn small onClick={()=>setClassEdit(cls)}>Edit class</Btn><Btn small ghost onClick={()=>setSelClass(null)}>Close</Btn></div>
               <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:10}}>{cls.desc||"No definition"}</div>
-              {[["Parent class", cls.parent?nm(cls.parent):"—"], ["Glossary term", cls.termId?((_gtState.find(t=>t.id===cls.termId)||{}).term||"—"):"—"],
-                ["Properties", (cls.props||[]).map(p=>p.name).join(", ")||"—"], ["Equivalent to", (cls.sameAs||[]).map(s=>`${s.standard} ${s.label}`).join(", ")||"—"],
-                ["Relationships", o.rels.filter(r=>r.from===cls.id||r.to===cls.id).map(r=>r.from===cls.id?`${r.name} ${nm(r.to)}`:`${r.inverse||"← "+r.name} ${nm(r.from)}`).join(" · ")||"—"]].map(([k,v])=>(
-                <div key={k} style={{marginBottom:7}}><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div><div style={{fontSize:11.5,color:T.text}}>{v}</div></div>))}
-            </div></Card2> : <Card2><div style={{padding:"14px 16px"}}>
-              {[["Owner",o.owner],["Steward",o.steward],["Data domain",o.domain],["Source", o.source?(o.source.kind==="import"?`Imported · ${o.source.connector||o.source.format}`:o.source.kind==="ai"?"Drafted with AI":"Authored in EDG"):"—"],
-                ["Glossary terms linked", String(o.classes.filter(c=>c.termId).length)],
-                ["Classes with data", (()=>{ const cv = MAP.coverage(o, mapCtx()).classes; return `${cv.mapped} of ${cv.total}`; })()],["Standards links", String(o.classes.reduce((n,c)=>n+(c.sameAs||[]).length,0))],
-                ["Checks", errs?`${errs} error${errs===1?"":"s"}`:`${issues.length} note${issues.length===1?"":"s"}`]].map(([k,v])=>(
-                <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,padding:"6px 0",borderBottom:`1px solid ${T.border}`,fontSize:11.5}}>
-                  <span style={{color:T.textMuted}}>{k}</span><span style={{color:k==="Checks"&&errs?T.rose:T.text,fontWeight:600,textAlign:"right"}}>{v}</span></div>))}
-              <div style={{fontSize:11,color:T.textMuted,marginTop:10}}>Select a class in the graph</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"8px 18px"}}>
+                {[["Parent class", cls.parent?nm(cls.parent):"—"], ["Glossary term", cls.termId?((_gtState.find(t=>t.id===cls.termId)||{}).term||"—"):"—"],
+                  ["Properties", (cls.props||[]).map(p=>p.name).join(", ")||"—"], ["Equivalent to", (cls.sameAs||[]).map(s=>`${s.standard} ${s.label}`).join(", ")||"—"],
+                  ["Relationships", o.rels.filter(r=>r.from===cls.id||r.to===cls.id).map(r=>r.from===cls.id?`${r.name} ${nm(r.to)}`:`${r.inverse||"← "+r.name} ${nm(r.from)}`).join(" · ")||"—"]].map(([k,v])=>(
+                  <div key={k}><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div><div style={{fontSize:11.5,color:T.text}}>{v}</div></div>))}
+              </div>
             </div></Card2>}
           </div>
-        </div>}
-
+          <OntSidebar o={o} cov={MAP.coverage(o, mapCtx())}/>
+        </div>
+      )}
+      <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:tab==="overview"?"none":"block"}}>
         {tab==="classes" && <>
           <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
           <OntTable empty="No classes yet" onRow={r=>setClassEdit(r.c)}
