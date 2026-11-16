@@ -40787,17 +40787,27 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) =
 
 const OntRelDrawer = ({o, rel, onClose, onToast}) => {
   const isNew = !rel || !rel.id;
-  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{})}));
+  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
   const opts = o.classes.map(c=>({v:c.id,l:c.name}));
+  // The join that realises this relationship: any semantic-model join between a
+  // dataset of the source class and a dataset of the target class.
+  const entsOf = (cid) => MAP.sourcesOf(o, cid).filter(m=>m.kind==="dataset").map(m=>m.target.entityId);
+  const A = d.from ? entsOf(d.from) : [], B = d.to ? entsOf(d.to) : [];
+  const joins = _slState.rels.filter(j=>(A.includes(j.from)&&B.includes(j.to)) || (B.includes(j.from)&&A.includes(j.to)));
+  const entName = (id) => (_slState.entities.find(e=>e.id===id)||{}).table || id;
+  const cur = MAP.mappingsOf(o).find(m=>m.kind==="join" && m.relId===d.id);
+  const [joinId, setJoinId] = useState(cur ? cur.target.joinId : "");
   const save = () => {
     if(!d.from||!d.to||!d.name.trim()){ onToast&&onToast("Pick both classes and name the relationship","error"); return; }
-    const r = {...d, name:d.name.trim().toLowerCase(), id:d.id||ONT.uid("r")};
-    ontPatch(o.id, x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y)}));
+    const r = {...d, name:d.name.trim().toLowerCase()};
+    const jm = joinId ? [{id:ONT.uid("map"), kind:"join", classId:r.from, relId:r.id, target:{joinId}, status:"approved", by:"you", at:new Date().toISOString(), prov:{by:"human"}}] : [];
+    ontPatch(o.id, x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y),
+      mappings:[...MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===r.id)), ...jm]}));
     onToast&&onToast("Relationship saved","success"); onClose();
   };
   return (
     <OntDrawerShell title={isNew?"New relationship":`${(ontClass(o,d.from)||{}).name} ${d.name} ${(ontClass(o,d.to)||{}).name}`} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, rels:x.rels.filter(y=>y.id!==d.id)})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add relationship":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
         <div style={{flex:1}}><OntField label="Source class"><SLSelect value={d.from} onChange={e=>setD({...d,from:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
@@ -40809,6 +40819,10 @@ const OntRelDrawer = ({o, rel, onClose, onToast}) => {
         <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l}))}/></OntField></div>
         <div style={{flex:1}}><OntField label="Relationship type"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={[{v:"association",l:"Association"},{v:"part_of",l:"Composition (part of)"}]}/></OntField></div>
       </div>
+      <OntField label="Join">
+        <SLSelect value={joinId} onChange={e=>setJoinId(e.target.value)} placeholder={!d.from||!d.to ? "Select both classes first" : !A.length||!B.length ? "Both classes need a semantic-model data source" : joins.length ? "Select a join" : "No join between their data sources"}
+          options={[{v:"",l:"Not mapped"}, ...joins.map(j=>({v:j.id, l:`${entName(j.from)}.${(j.fromKeys||[j.fromKey]).join("+")} = ${entName(j.to)}.${(j.toKeys||[j.toKey]).join("+")}${j.role?` · ${j.role}`:""}`}))]}/>
+      </OntField>
       <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
     </OntDrawerShell>
   );
@@ -41456,7 +41470,7 @@ const SLOntologyTab = ({mdl, ents, mets, onNav, onToast}) => {
   const metricMaps = st.ontologies.flatMap(o=>MAP.mappingsOf(o).filter(m=>m.kind==="metric" && mets.some(x=>x.id===m.target.metricId)).map(m=>({o, m})));
   const unmapped = ents.filter(e=>!rows.some(r=>r.m.target.entityId===e.id));
   const sugs = oaiOn("mapping") ? st.ontologies.flatMap(o=>MAP.suggestMappings(o, ctx).filter(s=>s.kind==="dataset" && ids.includes(s.target.entityId) && s.conf>=_oai.settings.minConfidence).map(s=>({o, s}))) : [];
-  const open = (o, classId) => { _ontJump = {id:o.id, tab:"mappings", classId}; onNav && onNav("ontologies"); };
+  const open = (o, classId) => { _ontJump = {id:o.id, tab:"overview", classId}; onNav && onNav("ontologies"); };
   const me = "you";
   return (
     <div>
@@ -41500,7 +41514,7 @@ const OntSidebar = ({o, cov}) => {
       <Sec>
         <SLMetaLabel>Details</SLMetaLabel>
         {[["Data domain",o.domain],["Classes",String(o.classes.length)],["Relationships",String(o.rels.length)],["Constraints",String(o.constraints.length)],
-          ["Mappings",String(MAP.mappingsOf(o).length)],["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
+          ["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
           ["Glossary terms",String(o.classes.filter(c=>c.termId).length)],["Created",o.created||"—"],["Published",latest?`v${latest.n} · ${latest.at.slice(0,10)}`:"Never"],
           ["Prefix",o.prefix]].map(([k,v])=>(
           <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
@@ -41581,12 +41595,14 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [listQ, setListQ] = useState("");
+  useEffect(()=>{ setListQ(""); },[tab, selId]);
   const o = selId ? st.ontologies.find(x=>x.id===selId) : null;
   const drawers = <>
     {newOpen && <OntNewDrawer open mode0={newOpen.mode} target={newOpen.target} onClose={()=>setNewOpen(null)} onToast={onToast}
       onCreated={(id)=>{ setNewOpen(null); setSelId(id); setTab("overview"); }}/>}
     {o && classEdit && <OntClassDrawer key={classEdit==="new"?"new":classEdit.id} o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast} onAsset={onAsset}/>}
-    {o && relEdit && <OntRelDrawer o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
+    {o && relEdit && <OntRelDrawer key={relEdit==="new"?"new":relEdit.id} o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
     {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
     {o && editOpen && <OntDetailsDrawer o={o} onClose={()=>setEditOpen(false)} onToast={onToast}/>}
   </>;
@@ -41656,8 +41672,8 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
 
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
-  const TABS = [{key:"overview",label:"Overview"},{key:"graph",label:"Graph"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
-    {key:"constraints",label:`Constraints · ${o.constraints.length}`}, {key:"mappings",label:`Mappings · ${MAP.mappingsOf(o).length}`},
+  const TABS = [{key:"overview",label:"Overview"},{key:"graph",label:"Diagram"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
+    {key:"constraints",label:`Constraints · ${o.constraints.length}`},
     ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
     {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
@@ -41735,10 +41751,34 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
             <DescSection key={o.id} text={o.desc} onToast={onToast} onSave={t=>ontPatch(o.id,{desc:t})} style={{marginBottom:16}}
               obj={{name:"ontology:"+o.id, label:o.name, kind:"Ontology", owners:[o.owner].filter(Boolean), stewards:[o.steward].filter(Boolean)}}/>
+            {(()=>{ const cv = MAP.coverage(o, mapCtx()); const maps = MAP.mappingsOf(o);
+              const gaps = [
+                ...o.classes.filter(c=>!MAP.sourcesOf(o,c.id).length).map(c=>({key:"c"+c.id, what:c.name, issue:"No data source", act:()=>setClassEdit(c)})),
+                ...o.classes.filter(c=>MAP.sourcesOf(o,c.id).length).map(c=>({c, n:(c.props||[]).filter(p=>!maps.some(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id)).length}))
+                  .filter(x=>x.n).map(x=>({key:"p"+x.c.id, what:x.c.name, issue:`${x.n} propert${x.n===1?"y":"ies"} without a column`, act:()=>setClassEdit(x.c)})),
+                ...o.rels.filter(r=>!maps.some(m=>m.kind==="join" && m.relId===r.id)).map(r=>({key:"r"+r.id, what:`${nm(r.from)} ${r.name} ${nm(r.to)}`, issue:"No join", act:()=>setRelEdit(r)})),
+              ];
+              return <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Data coverage</div>
+                <div style={{display:"flex",gap:10,marginBottom:gaps.length?14:0,flexWrap:"wrap"}}>
+                  <MapBar label="Classes with a data source" c={cv.classes}/><MapBar label="Properties with a column" c={cv.props}/><MapBar label="Relationships with a join" c={cv.rels}/>
+                </div>
+                {gaps.length>0 && <>
+                  <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Missing · {gaps.length}</div>
+                  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:260,overflowY:"auto"}}>
+                    {gaps.map((g,i)=>(
+                      <div key={g.key} onClick={g.act} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<gaps.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{g.what}</span>
+                        <span style={{fontSize:11,color:T.amber}}>{g.issue}</span>
+                        <span style={{fontSize:11,color:T.accent}}>Fix →</span>
+                      </div>))}
+                  </div></>}
+              </div></Card2>; })()}
             <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
               <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
                 <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Classes</span>
-                <Btn small onClick={()=>setTab("graph")}>View graph</Btn>
+                <Btn small onClick={()=>setTab("graph")}>View diagram</Btn>
                 <Btn small variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn>
               </div>
               {o.classes.length===0 ? <div style={{padding:"18px 0",fontSize:12,color:T.textMuted,textAlign:"center"}}>No classes yet</div> :
@@ -41761,12 +41801,16 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
         </div>
       )}
       <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:tab==="overview"?"none":"block"}}>
-        {tab==="graph" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAddRel={()=>setRelEdit("new")} onAsset={onAsset}/>}
+        {tab==="graph" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAsset={onAsset}/>}
         {tab==="classes" && <>
-          <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
-          <OntTable empty="No classes yet" onRow={r=>setClassEdit(r.c)}
+          <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+            <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
+          <OntTable empty={listQ?"No classes match":"No classes yet"} onRow={r=>setClassEdit(r.c)}
             cols={[{l:"Class",w:"1.2fr"},{l:"Parent class",w:"1fr"},{l:"Data sources",w:"1.2fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Definition",w:"2fr"}]}
-            rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({key:c.id, c, cells:[
+            rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name))
+              .filter(c=>!listQ || `${c.name} ${(c.synonyms||[]).join(" ")} ${c.desc||""} ${c.parent?nm(c.parent):""} ${MAP.sourcesOf(o,c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(" ")} ${(c.props||[]).map(p=>p.name).join(" ")}`.toLowerCase().includes(listQ.toLowerCase()))
+              .map(c=>({key:c.id, c, cells:[
               <span>{c.name}{c.prov&&c.prov.by==="ai"?<span style={{marginLeft:6}}><SmaiChip conf={c.prov.conf||0.8} why={c.prov.why}/></span>:null}</span>,
               c.parent?nm(c.parent):"—",
               MAP.sourcesOf(o, c.id).length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.sourcesOf(o, c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
@@ -41774,19 +41818,23 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
               c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
         </>}
         {tab==="rels" && <>
-          <div style={{display:"flex",marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
-          <OntTable empty="No relationships yet" onRow={r=>setRelEdit(r.r)}
-            cols={[{l:"Source class"},{l:"Relationship"},{l:"Target class"},{l:"Inverse"},{l:"Cardinality"},{l:"Type",w:".9fr"}]}
-            rows={o.rels.map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>, r.kind==="part_of"?"Composition":"Association"]}))}/>
+          <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+            <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
+          <OntTable empty={listQ?"No relationships match":"No relationships yet"} onRow={r=>setRelEdit(r.r)}
+            cols={[{l:"Source class"},{l:"Relationship"},{l:"Target class"},{l:"Inverse"},{l:"Cardinality"},{l:"Join",w:"1.3fr"}]}
+            rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
+              (()=>{ const m = MAP.mappingsOf(o).find(x=>x.kind==="join" && x.relId===r.id); return m ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.describeTarget(m, mapCtx())}</span> : <span style={{color:T.amber}}>Not mapped</span>; })()]}))}/>
         </>}
         {tab==="constraints" && <>
-          <div style={{display:"flex",marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add constraint</Btn></div>
-          <OntTable empty="No constraints yet" onRow={r=>setConEdit(r.k)}
+          <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+            <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add constraint</Btn></div>
+          <OntTable empty={listQ?"No constraints match":"No constraints yet"} onRow={r=>setConEdit(r.k)}
             cols={[{l:"Class"},{l:"Property"},{l:"Constraint type"},{l:"Value",w:"1.4fr"},{l:"Severity",w:".7fr"}]}
-            rows={o.constraints.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"Entire class", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
+            rows={o.constraints.filter(k=>!listQ || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(listQ.toLowerCase())).map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"Entire class", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
         </>}
         {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
-        {tab==="mappings" && <OntMappingsTab key={o.id} o={o} onToast={onToast} onNav={onNav} initialClass={jumpClass} onAsset={onAsset}/>}
         {tab==="versions" && <>
           {(o.versions||[]).length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
             <OntTable empty="" onRow={r=>setCmpN(cmpN===r.v.n?null:r.v.n)} cols={[{l:"Version",w:".5fr"},{l:"Published"},{l:"By"},{l:"Note",w:"2fr"},{l:"Classes",w:".6fr"}]}
@@ -62832,8 +62880,7 @@ const aiAsk = (q, ctx) => {
     const sg = MAP.suggestMappings(onto, mctx).filter(x=>x.kind!=="gap" && x.conf>=_oai.settings.minConfidence);
     const gaps = MAP.suggestMappings(onto, mctx).filter(x=>x.kind==="gap");
     trace.push({name:"ontology.mapping", args:{ontology:onto.name}, rows:sg.length+dr.length, ms:14});
-    push({kind:"text", text:`**${onto.name}** · ${cov.classes.mapped} of ${cov.classes.total} classes have data · ${cov.props.pct}% of properties and ${cov.rels.pct}% of relationships mapped · ${dr.length} broken mapping${dr.length===1?"":"s"}. Work through it in **Ontologies › ${onto.name} › Mappings**.`});
-    dr.slice(0,3).forEach(d=>push({kind:"text", text:`**broken** · ${d.title}${d.fix&&d.fix.label?` *Fix: ${d.fix.label}.*`:""}`}));
+    push({kind:"text", text:`**${onto.name}** · ${cov.classes.mapped} of ${cov.classes.total} classes have a data source · ${cov.props.pct}% of properties have a column and ${cov.rels.pct}% of relationships have a join. See **Ontologies › ${onto.name} › Overview › Data coverage**.`});
     sg.slice(0,5).forEach(x=>push({kind:"text", text:`· **${x.title}** · ${smaiPct(x.conf)} · ${x.why}`}));
     gaps.slice(0,3).forEach(x=>push({kind:"text", text:`· ${x.title} — ${x.sub}`}));
     return R("ontology-mapping", `${cov.classes.pct}% of classes mapped · ${onto.name}`);
