@@ -76,3 +76,19 @@ test("mappings are versioned with the ontology", () => {
   assert.equal(ONT.isDirty(next), true);
   assert.ok(ONT.diff(v1.versions[0].snapshot, ONT.snapshot(next)).some((l) => /Added mapping dataset for Order/.test(l.text)));
 });
+
+test("several sources per class: a catalog table named after the class is suggested as an extra source; fields per source", () => {
+  const c = ctx({ assets: [{ id: 2, name: "customers", db: "crm / customers" }, { id: 9, name: "stores" }] });
+  SCHEMA.customers = [{ name: "customer_id", type: "BIGINT", pk: true }, { name: "email", type: "VARCHAR" }];
+  let o = ont(); o = accept(o, MAP.suggestMappings(o, c), ["dataset"]);
+  const extra = MAP.suggestMappings(o, c).find((x) => x.additional && x.classId === "cC");
+  assert.equal(extra.kind, "table"); assert.equal(extra.target.table, "customers"); assert.deepEqual(extra.target.keys, ["customer_id"]);
+  o = { ...o, mappings: [...o.mappings, MAP.toMapping(extra, "me")] };
+  assert.equal(MAP.sourcesOf(o, "cC").length, 2);
+  const emails = MAP.suggestMappings(o, c).filter((x) => x.kind === "field" && x.propId === "pE");
+  assert.deepEqual(emails.map((x) => x.target.table).sort(), ["customers", "users"]);
+  assert.equal(MAP.coverage(o, c).perClass.find((x) => x.classId === "cC").sources, 2);
+  assert.equal(MAP.sourceFor(c, "orders").kind, "dataset");
+  assert.equal(MAP.sourceFor(c, "customers", 2).kind, "table");
+  delete SCHEMA.customers;
+});

@@ -40354,7 +40354,7 @@ const OntTable = ({cols, rows, empty, onRow}) => (
   rows.length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>{empty}</div> :
   <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
     <div style={{display:"grid",gridTemplateColumns:cols.map(c=>c.w||"1fr").join(" "),gap:8,padding:"8px 14px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-      {cols.map(c=><span key={c.l} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{c.l}</span>)}
+      {cols.map((c,i)=><span key={i} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{c.l}</span>)}
     </div>
     {rows.map((r,i)=>(
       <div key={r.key} onClick={onRow?()=>onRow(r):undefined}
@@ -40420,60 +40420,367 @@ const OntGraph = ({o, selected, onSelect}) => {
 };
 
 // ── Editors ──
-const OntClassDrawer = ({o, cls, onClose, onToast}) => {
+// ── Catalog helpers shared by the class editor, the graph and the workbench ──
+// Every option is a catalog table (or a semantic dataset's table when the catalog
+// has not scanned it); MAP.sourceFor decides whether the mapping goes through a
+// semantic-model dataset or straight to the table.
+const ontCatalogOptions = () => {
+  const assets = slModellableAssets();
+  const extra = _slState.entities.filter(e=>!assets.some(a=>a.name===e.table)).map(e=>({v:"t:"+e.table, l:`${e.table} · ${e.name} dataset`}));
+  const seen = new Set();   // one entry per table name, even when two connections hold it
+  return [...assets.map(a=>({v:"t:"+a.name, l:`${a.name} · ${a.db||a.service}`})), ...extra].filter(x=>!seen.has(x.v) && seen.add(x.v));
+};
+const ontAssetFor = (table) => ASSETS.find(a=>a.name===table);
+const ontDT = (type) => { const t = String(type||"").toUpperCase();
+  return /DATE$/.test(t)?"date":/TIME/.test(t)?"dateTime":/BOOL/.test(t)?"boolean":/DEC|NUMERIC|DOUBLE|FLOAT/.test(t)?"decimal":/INT|NUMBER|SERIAL/.test(t)?"integer":"string"; };
+const ontClassNameOf = (table) => slPretty(String(table||"").replace(/^(dim|fct|fact|vw|stg|raw)_/,"").replace(/_(fact|dim)$/,"")).replace(/ies$/,"y").replace(/([^s])s$/,"$1");
+const OntCatalogLink = ({table, onAsset}) => { const a = ontAssetFor(table);
+  return a && onAsset ? <button onClick={(e)=>{e.stopPropagation(); onAsset(a);}} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0,whiteSpace:"nowrap"}}>Open in catalog ↗</button> : null; };
+const OntSourceRow = ({m, onRemove, onAsset, broken, compact}) => {
+  const ctx = mapCtx(); const table = MAP.sourceTable(m, ctx);
+  const e = m.kind==="dataset" ? _slState.entities.find(x=>x.id===m.target.entityId) : null;
+  const models = e ? _slState.models.filter(x=>(x.entityIds||[]).includes(e.id)).map(x=>x.name) : [];
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,padding:compact?"7px 10px":"9px 12px",background:T.bgSurface,border:`1px solid ${broken?T.rose+"55":T.border}`,borderRadius:8,marginBottom:6}}>
+      <span style={{color:broken?T.rose:T.green,fontSize:12}}>{broken?"!":"✓"}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"ui-monospace,monospace"}}>{table||"missing"}</div>
+        <div style={{fontSize:10.5,color:T.textMuted}}>{m.kind==="dataset" ? `Semantic dataset${models.length?` · ${models.join(", ")}`:""}` : "Catalog table"}{(m.target.keys||[]).length?` · key ${m.target.keys.join(" + ")}`:""}</div>
+      </div>
+      {m.prov && m.prov.by==="ai" && <SmaiChip conf={m.prov.conf||0.8} why={`Accepted AI suggestion · ${m.prov.why||""}`}/>}
+      <OntCatalogLink table={table} onAsset={onAsset}/>
+      {onRemove && <button onClick={onRemove} title="Remove source" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>}
+    </div>);
+};
+
+// ── Class editor ──
+// New classes start from a catalog table: pick it, tick its columns, and the class,
+// its properties and its mappings are created together. A class with no table
+// (an abstract parent such as Party) starts blank. Editing shows the class's data
+// sources and a Column dropdown on every property.
+const OntClassDrawer = ({o, cls, onClose, onToast, onAsset}) => {
+  const { roleCfg } = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
   const isNew = !cls || !cls.id;
-  const [d, setD] = useState(()=>({name:"", desc:"", synonyms:[], parent:null, termId:null, props:[], sameAs:[], ...(cls||{})}));
-  const [syn, setSyn] = useState((d.synonyms||[]).join(", "));
+  const ctx = mapCtx();
+  const [mode, setMode] = useState(isNew ? "catalog" : "edit");
+  const [d, setD] = useState(()=>({name:"", desc:"", synonyms:[], parent:null, termId:null, props:[], sameAs:[], ...(cls||{}), id:(cls&&cls.id)||ONT.uid("c")}));
+  const [syn, setSyn] = useState(((cls&&cls.synonyms)||[]).join(", "));
+  const [maps, setMaps] = useState(()=> cls&&cls.id ? MAP.mappingsOf(o).filter(m=>m.classId===cls.id && ["dataset","table","field"].includes(m.kind)) : []);
+  const [srcIdx, setSrcIdx] = useState(0);
+  const [pickTable, setPickTable] = useState("");
+  const [pickCols, setPickCols] = useState({});
   const concepts = _gtState.filter(t=>t.status!=="Deprecated");
+  const opts = ontCatalogOptions();
+  const sources = maps.filter(m=>m.kind==="dataset"||m.kind==="table");
+  const src = sources[Math.min(srcIdx, Math.max(0, sources.length-1))];
+  const srcTable = src ? MAP.sourceTable(src, ctx) : null;
+  const srcCols = srcTable ? (SCHEMA[srcTable]||[]) : [];
+  const at = () => new Date().toISOString();
+  const mkSource = (table) => { const a = ontAssetFor(table); const s = MAP.sourceFor(ctx, table, a?a.id:null);
+    return {id:ONT.uid("map"), kind:s.kind, classId:d.id, target:s.target, status:"approved", by:me, at:at(), prov:{by:"human"}}; };
+  const mkField = (srcM, pid, col) => { const table = MAP.sourceTable(srcM, ctx);
+    const f = srcM.kind==="dataset" ? [..._slState.dims, ..._slState.facts].find(x=>x.entity===srcM.target.entityId && x.column===col) : null;
+    return {id:ONT.uid("map"), kind:"field", classId:d.id, propId:pid, target:{entityId:srcM.kind==="dataset"?srcM.target.entityId:null, table, column:col, fieldId:f?f.id:null}, status:"approved", by:me, at:at(), prov:{by:"human"}}; };
+  const fieldOf = (pid) => maps.find(m=>m.kind==="field" && m.propId===pid && m.target.table===srcTable);
+  const addSource = (v) => { const table = v.slice(2); if(!table) return;
+    if(sources.some(m=>MAP.sourceTable(m, ctx)===table)){ onToast&&onToast(`${table} is already a source`,"error"); return; }
+    setMaps(p=>[...p, mkSource(table)]); setSrcIdx(sources.length); };
+  const removeSource = (m) => { const t = MAP.sourceTable(m, ctx); setMaps(p=>p.filter(x=>x.id!==m.id && !(x.kind==="field" && x.target.table===t))); setSrcIdx(0); };
+  const setColumn = (pid, col) => setMaps(p=>[...p.filter(x=>!(x.kind==="field" && x.propId===pid && x.target.table===srcTable)), ...(col?[mkField(src, pid, col)]:[])]);
+  const addFromColumn = (col) => { const c = srcCols.find(x=>x.name===col); if(!c) return;
+    const pid = ONT.uid("p");
+    setD(p=>({...p, props:[...p.props, {id:pid, name:slPretty(c.name), datatype:ontDT(c.type), required:!!c.pk||c.nullable===false, desc:c.desc||"", column:c.name}]}));
+    setMaps(p=>[...p, mkField(src, pid, c.name)]); };
+  const setProp = (i, patch) => setD(p=>({...p, props:p.props.map((x,j)=>j===i?{...x,...patch}:x)}));
+  const removeProp = (pid) => { setD(p=>({...p, props:p.props.filter(x=>x.id!==pid)})); setMaps(p=>p.filter(x=>!(x.kind==="field" && x.propId===pid))); };
+  const pickCols0 = (table) => Object.fromEntries((SCHEMA[table]||[]).map(c=>[c.name, true]));
+  const choose = (v) => { const table = v.slice(2); setPickTable(table); setPickCols(pickCols0(table));
+    const a = ontAssetFor(table); setD(p=>({...p, name:p.name||ontClassNameOf(table), desc:p.desc||(a&&a.description)||""})); };
+
+  const taken = o.classes.some(x=>x.id!==d.id && x.name.trim().toLowerCase()===d.name.trim().toLowerCase());
+  const err = !d.name.trim() ? "Enter a class name" : taken ? "A class with this name exists" : mode==="catalog" && !pickTable ? "Select a catalog table" : null;
   const save = () => {
-    if(!d.name.trim()){ onToast&&onToast("Give the class a name","error"); return; }
-    const c = {...d, name:d.name.trim(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean), id:d.id||ONT.uid("c")};
-    ontPatch(o.id, x=>({...x, classes: isNew ? [...x.classes, c] : x.classes.map(y=>y.id===c.id?c:y)}));
-    onToast&&onToast(isNew?`${c.name} added`:`${c.name} saved`,"success"); onClose();
+    if(err){ onToast&&onToast(err,"error"); return; }
+    let c = {...d, name:d.name.trim(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean)};
+    let m2 = maps;
+    if(mode==="catalog"){
+      const s0 = mkSource(pickTable);
+      const chosen = (SCHEMA[pickTable]||[]).filter(x=>pickCols[x.name]);
+      const props = chosen.map(x=>({id:ONT.uid("p"), name:slPretty(x.name), datatype:ontDT(x.type), required:!!x.pk||x.nullable===false, desc:x.desc||"", column:x.name}));
+      c = {...c, props:[...c.props, ...props]};
+      m2 = [s0, ...props.map(p=>mkField(s0, p.id, p.column))];
+    }
+    ontPatch(o.id, x=>({...x,
+      classes: x.classes.some(y=>y.id===c.id) ? x.classes.map(y=>y.id===c.id?c:y) : [...x.classes, c],
+      mappings: [...MAP.mappingsOf(x).filter(m=>!(m.classId===c.id && ["dataset","table","field"].includes(m.kind))), ...m2]}));
+    onToast&&onToast(isNew?`${c.name} added${mode==="catalog"?` from ${pickTable} · ${c.props.length} properties mapped`:""}`:`${c.name} saved`,"success"); onClose();
+  };
+  // Same class, another table: add the table as a source of the existing class and
+  // map the columns that match its properties (by column or by name).
+  const addToExisting = () => {
+    const ex = o.classes.find(x=>x.name.trim().toLowerCase()===d.name.trim().toLowerCase()); if(!ex) return;
+    if(MAP.sourcesOf(o, ex.id).some(m=>MAP.sourceTable(m, ctx)===pickTable)){ onToast&&onToast(`${pickTable} is already a source of ${ex.name}`,"error"); return; }
+    const a = ontAssetFor(pickTable); const sf = MAP.sourceFor(ctx, pickTable, a?a.id:null);
+    const s0 = {id:ONT.uid("map"), kind:sf.kind, classId:ex.id, target:sf.target, status:"approved", by:me, at:at(), prov:{by:"human"}};
+    const cols = (SCHEMA[pickTable]||[]).filter(x=>pickCols[x.name]);
+    const fields = (ex.props||[]).map(p=>{ const c = cols.find(x=>x.name===p.column || slPretty(x.name).toLowerCase()===String(p.name).toLowerCase()); return c ? {...mkField(s0, p.id, c.name), classId:ex.id} : null; }).filter(Boolean);
+    ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x), s0, ...fields]}));
+    onToast&&onToast(`${pickTable} added as a data source of ${ex.name} · ${fields.length} propert${fields.length===1?"y":"ies"} mapped`,"success"); onClose();
   };
   const remove = () => {
     ontPatch(o.id, x=>({...x, classes:x.classes.filter(y=>y.id!==d.id).map(y=>y.parent===d.id?{...y,parent:null}:y),
-      rels:x.rels.filter(r=>r.from!==d.id&&r.to!==d.id), constraints:x.constraints.filter(k=>k.classId!==d.id)}));
+      rels:x.rels.filter(r=>r.from!==d.id&&r.to!==d.id), constraints:x.constraints.filter(k=>k.classId!==d.id),
+      mappings:MAP.mappingsOf(x).filter(m=>m.classId!==d.id)}));
     onToast&&onToast(`${d.name} removed`,"success"); onClose();
   };
-  const setProp = (i, patch) => setD(p=>({...p, props:p.props.map((x,j)=>j===i?{...x,...patch}:x)}));
+  const Req = ({children}) => <>{children}<span style={{color:T.rose}}> *</span></>;
+  const Head = ({children, right}) => <div style={{display:"flex",alignItems:"center",gap:8,margin:"6px 0 8px",paddingTop:14,borderTop:`1px solid ${T.border}`}}>
+    <span style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",flex:1}}>{children}</span>{right}</div>;
+  const identity = <>
+    <OntField label={<Req>Class name</Req>}><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Customer"/>
+      {taken && <div style={{fontSize:11,color:T.rose,marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>A class with this name exists
+        {mode==="catalog" && pickTable && <Btn small onClick={addToExisting}>Add {pickTable} as a data source of {d.name.trim()}</Btn>}</div>}</OntField>
+    <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
+    <OntField label="Synonyms"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
+    <div style={{display:"flex",gap:12}}>
+      <div style={{flex:1}}><OntField label="Parent class"><SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})} options={[{v:"",l:"—"}, ...o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))]}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Glossary term"><SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})} options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
+    </div>
+  </>;
   return (
-    <OntDrawerShell title={isNew?"New class":d.name} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={remove}>Remove class</Btn></span>}
-      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add class":"Save"}</Btn></>}>
-      <OntField label="Class name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Subscription"/></OntField>
-      <OntField label="Definition"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
-      <OntField label="Synonyms"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
-      <div style={{display:"flex",gap:12}}>
-        <div style={{flex:1}}><OntField label="Parent class">
-          <SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})}
-            options={[{v:"",l:"—"}, ...o.classes.filter(c=>c.id!==d.id).map(c=>({v:c.id,l:c.name}))]}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Glossary term">
-          <SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})}
-            options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
-      </div>
-      <OntField label={`Properties · ${d.props.length}`}>
-        {d.props.map((p,i)=>(
-          <div key={p.id||i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
-            <div style={{flex:2}}><Input2 value={p.name} onChange={e=>setProp(i,{name:e.target.value})} placeholder="Property name"/></div>
-            <div style={{flex:1}}><SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ONT.DATATYPES}/></div>
-            <label style={{fontSize:11,color:T.textSub,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-              <input type="checkbox" checked={!!p.required} onChange={e=>setProp(i,{required:e.target.checked})}/> Required</label>
-            <button onClick={()=>setD(x=>({...x, props:x.props.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
-          </div>))}
-        <Btn small icon={Ic.plus(10)} onClick={()=>setD(x=>({...x, props:[...x.props, {id:ONT.uid("p"), name:"", datatype:"string", required:false}]}))}>Add property</Btn>
-      </OntField>
-      {(d.sameAs||[]).length>0 && <OntField label="Equivalent to">
-        {d.sameAs.map(s=>(
-          <div key={s.iri} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,fontSize:11.5}}>
-            <OntChip c={T.blue}>{s.standard}</OntChip><span style={{color:T.text}}>{s.label}</span>
-            <span style={{color:T.textMuted,fontFamily:"ui-monospace,monospace",fontSize:10.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.iri}</span>
-            <button onClick={()=>setD(x=>({...x, sameAs:x.sameAs.filter(y=>y.iri!==s.iri)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>
-          </div>))}
-      </OntField>}
+    <OntDrawerShell title={isNew?"New Class":`Edit ${cls.name}`} width={760} onClose={onClose} footer={<>
+      {!isNew && <span style={{marginRight:"auto"}}><Btn ghost onClick={remove}>Remove class</Btn></span>}
+      {isNew && <span style={{flex:1,fontSize:11.5,color:T.textMuted}}>{err||""}</span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>{isNew?"Create class":"Save changes"}</Btn></>}>
+      {isNew && <OntField label={<Req>Create from</Req>}>
+        <SLSelect value={mode} onChange={e=>{ setMode(e.target.value==="catalog"?"catalog":"edit"); setPickTable(""); }}
+          options={[{v:"catalog",l:"Catalog table"},{v:"edit",l:"Blank class (no table yet)"}]}/></OntField>}
+
+      {mode==="catalog" && <>
+        <OntField label={<Req>Catalog table</Req>}><SLSelect value={pickTable?"t:"+pickTable:""} onChange={e=>choose(e.target.value)} placeholder="Select a catalog table" options={opts}/></OntField>
+        {pickTable && <>
+          {identity}
+          <Head right={<>
+            <Btn small ghost onClick={()=>setPickCols(pickCols0(pickTable))}>Select all</Btn>
+            <Btn small ghost onClick={()=>setPickCols({})}>Clear</Btn>
+            <OntCatalogLink table={pickTable} onAsset={onAsset}/></>}>
+            Properties from {pickTable} · {Object.values(pickCols).filter(Boolean).length} of {(SCHEMA[pickTable]||[]).length}</Head>
+          <OntTable empty="This table has no columns in the catalog" onRow={r=>setPickCols(p=>({...p,[r.key]:!p[r.key]}))}
+            cols={[{l:"",w:"28px"},{l:"Column",w:"1.3fr"},{l:"Property",w:"1.3fr"},{l:"Type"},{l:"Data type",w:".8fr"},{l:"",w:".9fr"}]}
+            rows={(SCHEMA[pickTable]||[]).map(c=>({key:c.name, cells:[<input type="checkbox" readOnly checked={!!pickCols[c.name]}/>,
+              <span style={{fontFamily:"ui-monospace,monospace"}}>{c.name}</span>, slPretty(c.name), c.type, ontDT(c.type),
+              <span>{c.pk && <OntChip c={T.violet}>Key</OntChip>}{c.pii && <OntChip c={T.rose}>PII</OntChip>}</span>]}))}/>
+        </>}
+      </>}
+
+      {mode==="edit" && <>
+        {identity}
+        <Head right={<div style={{width:300}}><SLSelect value="" onChange={e=>addSource(e.target.value)} placeholder="Add a catalog table" options={opts}/></div>}>
+          Data sources · {sources.length}</Head>
+        {sources.length===0 && <div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No table yet · the class has no instances until one is added</div>}
+        {sources.map(m=><OntSourceRow key={m.id} m={m} onAsset={onAsset} onRemove={()=>removeSource(m)}/>)}
+
+        <Head right={<>
+          {src && <div style={{width:210}}><SLSelect value="" onChange={e=>addFromColumn(e.target.value)} placeholder="Add from column"
+            options={srcCols.filter(c=>!maps.some(m=>m.kind==="field" && m.target.table===srcTable && m.target.column===c.name)).map(c=>({v:c.name,l:`${c.name} · ${c.type}`}))}/></div>}
+          <Btn small icon={Ic.plus(10)} onClick={()=>setD(x=>({...x, props:[...x.props, {id:ONT.uid("p"), name:"", datatype:"string", required:false}]}))}>Add property</Btn></>}>
+          Properties · {d.props.length}</Head>
+        {sources.length>1 && <div style={{marginBottom:8}}><SegTabs tabs={sources.map((m,i)=>({key:String(i), label:MAP.sourceTable(m, ctx)}))} active={String(Math.min(srcIdx, sources.length-1))} onChange={k=>setSrcIdx(Number(k))}/></div>}
+        {d.props.length===0 ? <div style={{fontSize:11.5,color:T.textMuted}}>No properties</div> :
+        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:`1.4fr .9fr .6fr ${src?"1.4fr ":""}28px`,gap:8,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+            {["Property","Data type","Required", ...(src?[`Column in ${srcTable}`]:[]), ""].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</span>)}
+          </div>
+          {d.props.map((p,i)=>{ const fm = src ? fieldOf(p.id) : null; return (
+            <div key={p.id||i} style={{display:"grid",gridTemplateColumns:`1.4fr .9fr .6fr ${src?"1.4fr ":""}28px`,gap:8,padding:"6px 12px",alignItems:"center",borderBottom:i<d.props.length-1?`1px solid ${T.border}`:"none"}}>
+              <Input2 value={p.name} onChange={e=>setProp(i,{name:e.target.value})} placeholder="Property name"/>
+              <SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ONT.DATATYPES}/>
+              <input type="checkbox" checked={!!p.required} onChange={e=>setProp(i,{required:e.target.checked})} style={{justifySelf:"start"}}/>
+              {src && <SLSelect value={fm?fm.target.column:""} onChange={e=>setColumn(p.id, e.target.value)} placeholder="Not mapped"
+                options={[{v:"",l:"Not mapped"}, ...srcCols.map(c=>({v:c.name,l:`${c.name} · ${c.type}`})), ...(fm && !srcCols.some(c=>c.name===fm.target.column)?[{v:fm.target.column,l:`${fm.target.column} · missing`}]:[])]}/>}
+              <button onClick={()=>removeProp(p.id)} title="Remove property" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+            </div>); })}
+        </div>}
+        {(d.sameAs||[]).length>0 && <><Head>Equivalent to</Head>
+          {d.sameAs.map(s=>(
+            <div key={s.iri} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,fontSize:11.5}}>
+              <OntChip c={T.blue}>{s.standard}</OntChip><span style={{color:T.text}}>{s.label}</span>
+              <span style={{color:T.textMuted,fontFamily:"ui-monospace,monospace",fontSize:10.5,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.iri}</span>
+              <button onClick={()=>setD(x=>({...x, sameAs:x.sameAs.filter(y=>y.iri!==s.iri)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>
+            </div>))}</>}
+      </>}
     </OntDrawerShell>
   );
 };
+
+// ── Graph tab: the Semantic Models canvas, for classes ──
+const OntClassNode = ({data}) => {
+  const focused = data.focused, c = data.kindColor;
+  return (
+    <div style={{position:"relative",fontFamily:"'Geist Sans','Inter',sans-serif"}}>
+      <Handle type="target" position={Position.Left}  style={{opacity:0,width:1,height:1}}/>
+      <Handle type="source" position={Position.Right} style={{opacity:0,width:1,height:1}}/>
+      <div style={{background:focused?"rgba(99,102,241,0.05)":"#ffffff",border:`1.5px solid ${focused?"#6366f1":c+"55"}`,borderRadius:9,boxSizing:"border-box",width:214,
+        boxShadow:focused?"0 0 0 3px rgba(99,102,241,0.12)":"0 1px 3px rgba(15,23,42,.06)",overflow:"hidden"}}>
+        <div style={{height:3,background:c}}/>
+        <div style={{padding:"10px 12px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:"#0f172a"}}>{data.name}</span>
+            {data.metricCount>0 && <span title="Metrics that measure it" style={{fontSize:9.5,fontWeight:700,color:"#4338ca",background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.33)",borderRadius:8,padding:"1px 7px"}}>{data.metricCount}</span>}
+          </div>
+          {data.parent && <div style={{fontSize:9.5,color:"#7c3aed",marginTop:3}}>kind of {data.parent}</div>}
+          <div style={{fontSize:9.5,color:data.sources?"#94a3b8":"#d97706",marginTop:2,fontFamily:"ui-monospace,monospace"}}>{data.sources || "No data source"}</div>
+          {(data.cols||[]).length>0 && (
+            <div style={{marginTop:8,paddingTop:7,borderTop:"1px solid #e2e8f0"}}>
+              {data.cols.map(x=>(
+                <div key={x.name} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                  <span style={{width:6,height:6,borderRadius:2,background:x.color,flexShrink:0}}/>
+                  <span style={{fontSize:9.5,color:"#475569",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.name}</span>
+                  <span style={{fontSize:8.5,color:x.color,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.role}</span>
+                </div>))}
+              {data.moreCols>0 && <div style={{fontSize:9,color:"#94a3b8",marginTop:2}}>+{data.moreCols} more</div>}
+            </div>)}
+        </div>
+      </div>
+    </div>);
+};
+const ONT_NODE_TYPES = {ontClass: OntClassNode};
+const ONT_COL_ROLE = {key:{l:"Key",c:"#7c3aed"}, mapped:{l:"Mapped property",c:"#16a34a"}, unmapped:{l:"Unmapped property",c:"#d97706"}};
+
+const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) => {
+  const [rf, setRf] = useState(null);
+  const ctx = mapCtx();
+  const maps = MAP.mappingsOf(o);
+  const cls = o.classes;
+  const edgesFT = [...o.rels.map(r=>[r.from,r.to]), ...cls.filter(c=>c.parent).map(c=>[c.id,c.parent])];
+  // Connected classes fan out by hops (many side first, parents to the right);
+  // classes with no relationship or hierarchy sit in a compact grid beside them,
+  // so they do not stretch the canvas into one tall column.
+  const layout = useMemo(()=>{
+    const linked = new Set(edgesFT.flat());
+    const conn = cls.filter(c=>linked.has(c.id)), lone = cls.filter(c=>!linked.has(c.id)).sort((a,b)=>a.name.localeCompare(b.name));
+    const depth = {};
+    conn.forEach(c=>{ depth[c.id] = edgesFT.some(([,t])=>t===c.id) ? null : 0; });
+    for(let pass=0; pass<conn.length; pass++){ let moved = false;
+      edgesFT.forEach(([f,t])=>{ if(depth[f]!=null && (depth[t]==null || depth[t] < depth[f]+1) && depth[f]+1 < conn.length){ depth[t] = depth[f]+1; moved = true; } });
+      if(!moved) break; }
+    conn.forEach(c=>{ if(depth[c.id]==null) depth[c.id] = 0; });
+    const colsBy = {}; conn.forEach(c=>{ (colsBy[depth[c.id]] = colsBy[depth[c.id]] || []).push(c.id); });
+    const tallestConn = Math.max(0, ...Object.values(colsBy).map(c=>c.length));
+    const tallest = Math.max(1, tallestConn);
+    const pos = {};
+    Object.keys(colsBy).sort((a,b)=>a-b).forEach(dd=>{ const col = colsBy[dd]; const off = (tallest-col.length)*(SL_REL_ROW/2);
+      col.forEach((id,i)=>{ pos[id] = {x:Number(dd)*360, y:off+i*SL_REL_ROW}; }); });
+    // Unconnected classes: a grid under the connected ones, as wide as they are.
+    const nCols = conn.length ? Math.max(...Object.keys(colsBy).map(Number))+1 : 0;
+    const perRow = Math.max(3, Math.round((Math.max(nCols,1)*360)/250));
+    const y0 = conn.length ? tallestConn*SL_REL_ROW + 40 : 0;
+    lone.forEach((c,i)=>{ pos[c.id] = {x:(i%perRow)*250, y:y0 + Math.floor(i/perRow)*170}; });
+    return {pos, tallest: tallestConn + Math.ceil(lone.length/perRow)};
+  },[cls.map(c=>c.id+c.parent).join(), o.rels.map(r=>r.id).join()]);
+  const canvasH = Math.max(520, Math.min(820, layout.tallest*SL_REL_ROW + 60));
+  const nodes = useMemo(()=>cls.map(c=>{
+    const srcs = MAP.sourcesOf(o, c.id);
+    const keys = srcs.flatMap(m=>m.target.keys||[]);
+    const rows = [];
+    [...new Set(keys)].forEach(k=>rows.push({name:k, role:"key", color:ONT_COL_ROLE.key.c}));
+    (c.props||[]).forEach(p=>{ const mapped = maps.some(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id);
+      rows.push({name:p.name, role:mapped?"mapped":"prop", color:mapped?ONT_COL_ROLE.mapped.c:ONT_COL_ROLE.unmapped.c}); });
+    return {id:c.id, type:"ontClass", position:layout.pos[c.id]||{x:0,y:0}, data:{
+      name:c.name, parent:c.parent?(ontClass(o,c.parent)||{}).name:null,
+      sources:srcs.map(m=>MAP.sourceTable(m, ctx)).filter(Boolean).join(", "),
+      cols:rows.slice(0,6), moreCols:Math.max(0, rows.length-6),
+      metricCount:maps.filter(m=>m.kind==="metric" && m.classId===c.id).length,
+      kindColor:srcs.length ? ontColour(o) : "#94a3b8", focused:selected===c.id}};
+  }),[cls, maps, layout, selected]);
+  const edges = useMemo(()=>{
+    const seen = {};
+    const relEdges = o.rels.map(r=>{
+      const pair = `${r.from}|${r.to}`; const nth = seen[pair] = (seen[pair]===undefined ? 0 : seen[pair]+1);
+      const dim = selected && r.from!==selected && r.to!==selected;
+      const tone = dim ? "mute" : "base", col = dim ? "#e2e8f0" : "#94a3b8";
+      const card = r.cardinality || "many_to_one";
+      const startMany = /^many/.test(card), endMany = /_many$/.test(card);
+      return {id:r.id, source:r.from, target:r.to, type:"smoothstep", pathOptions:{borderRadius:10, offset:24+nth*34},
+        style:{stroke:col, strokeWidth:1.6}, label:r.name, labelStyle:{fontSize:10, fill:dim?"#cbd5e1":"#475569", fontWeight:600},
+        labelBgStyle:{fill:"#f8fafc"}, labelBgPadding:[4,2],
+        markerStart:startMany?`slCrow-${tone}`:`slOne-${tone}`, markerEnd:endMany?`slCrow-${tone}`:`slOne-${tone}`};
+    });
+    const isaEdges = cls.filter(c=>c.parent && ontClass(o,c.parent)).map(c=>{
+      const dim = selected && c.id!==selected && c.parent!==selected;
+      return {id:"isa_"+c.id, source:c.id, target:c.parent, type:"smoothstep", pathOptions:{borderRadius:10, offset:20},
+        style:{stroke:dim?"#e9d5ff":"#7c3aed", strokeWidth:1.5, strokeDasharray:"5 4"}, label:"is a", labelStyle:{fontSize:10, fill:dim?"#e9d5ff":"#7c3aed", fontWeight:600},
+        labelBgStyle:{fill:"#f8fafc"}, labelBgPadding:[4,2], markerEnd:{type:MarkerType.ArrowClosed, color:dim?"#e9d5ff":"#7c3aed", width:14, height:14}};
+    });
+    return [...relEdges, ...isaEdges];
+  },[o.rels, cls, selected]);
+  const sel = selected ? ontClass(o, selected) : null;
+  const selSrcs = sel ? MAP.sourcesOf(o, sel.id) : [];
+  const selRels = sel ? o.rels.filter(r=>r.from===sel.id||r.to===sel.id) : [];
+  const kids = sel ? cls.filter(c=>c.parent===sel.id) : [];
+  const SLabel = ({children}) => <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",margin:"14px 0 8px"}}>{children}</div>;
+  return (
+    <div style={{display:"flex",flexDirection:"column",height:canvasH}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:"10px 10px 0 0",borderBottom:"none",flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",flex:1}}>
+          {Object.entries(ONT_COL_ROLE).map(([k,v])=>(
+            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}><span style={{width:8,height:8,borderRadius:2,background:v.c,display:"inline-block"}}/>{v.l}</span>))}
+          <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}><span style={{display:"inline-block",width:18,borderTop:"1.5px dashed #7c3aed"}}/>Parent class</span>
+        </div>
+        <SLErdKey d="M24 6 L13 1 M24 6 L13 6 M24 6 L13 12" label="Many"/>
+        <SLErdKey d="M20 1 L20 11" label="One"/>
+        {selected && <button onClick={()=>onSelect(null)} style={{padding:"4px 11px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Clear</button>}
+        <button onClick={()=>rf?.fitView({padding:0.18,duration:400})} style={{padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Fit</button>
+        {onAddRel && <button onClick={onAddRel} disabled={cls.length<2} style={{padding:"4px 12px",borderRadius:6,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>Add relationship</button>}
+      </div>
+      <div style={{display:"flex",flex:1,minHeight:0,border:"1px solid #e2e8f0",borderRadius:"0 0 10px 10px",overflow:"hidden"}}>
+        <div style={{flex:1,minWidth:0,position:"relative",background:"#f8fafc"}}>
+          <SLErdMarkers/>
+          {cls.length===0 ? <div style={{padding:"60px 0",textAlign:"center",fontSize:12.5,color:"#64748b"}}>No classes yet</div> :
+          <ReactFlow nodes={nodes} edges={edges} nodeTypes={ONT_NODE_TYPES} onInit={inst=>setRf(inst)}
+            onNodeClick={(_e,node)=>onSelect(selected===node.id?null:node.id)} minZoom={0.15} maxZoom={2.5}
+            fitView fitViewOptions={{padding:0.18}} nodesDraggable={false} nodesConnectable={false}
+            proOptions={{hideAttribution:true}} colorMode="light" style={{background:"#f8fafc"}}>
+            <Background color="#cbd5e1" gap={22} size={1.2} variant="dots"/>
+            <Controls showInteractive={false} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
+            <MiniMap nodeColor={n=>n.data?.kindColor||"#94a3b8"} style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:8}} maskColor="rgba(248,250,252,0.7)" position="bottom-right"/>
+          </ReactFlow>}
+        </div>
+        <div style={{width:300,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",overflowY:"auto"}}>
+          {!sel ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b",lineHeight:1.65}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:8}}>{cls.length} classes · {o.rels.length} relationship{o.rels.length===1?"":"s"}</div>
+              Select a class for its data sources, properties and relationships.
+            </div>
+          : <div style={{padding:"16px 18px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8}}>
+                <div style={{fontSize:14,fontWeight:700,color:"#0f172a"}}>{sel.name}</div>
+                <button onClick={()=>onEditClass(sel)} title="Edit class" style={{width:24,height:24,borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.edit(12)}</button>
+              </div>
+              <div style={{fontSize:11.5,color:"#475569",lineHeight:1.55,marginTop:4}}>{sel.desc||"No definition"}</div>
+              {sel.parent && <div style={{fontSize:11,color:"#7c3aed",marginTop:6}}>Kind of {(ontClass(o,sel.parent)||{}).name}</div>}
+              {kids.length>0 && <div style={{fontSize:11,color:"#7c3aed",marginTop:3}}>Subclasses: {kids.map(k=>k.name).join(", ")}</div>}
+              <SLabel>Data sources</SLabel>
+              {selSrcs.length===0 ? <div style={{fontSize:11.5,color:"#d97706"}}>No data source</div> :
+                selSrcs.map(m=><OntSourceRow key={m.id} m={m} onAsset={onAsset} compact/>)}
+              <SLabel>Properties</SLabel>
+              {(sel.props||[]).length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None</div> : (sel.props||[]).map(p=>{
+                const fm = maps.filter(m=>m.kind==="field" && m.classId===sel.id && m.propId===p.id);
+                return <div key={p.id} style={{display:"flex",gap:8,fontSize:11.5,marginBottom:5}}>
+                  <span style={{color:"#0f172a",fontWeight:600,flex:1}}>{p.name}</span>
+                  <span style={{color:fm.length?"#16a34a":"#d97706",fontFamily:"ui-monospace,monospace",fontSize:10.5,textAlign:"right"}}>{fm.length?fm.map(m=>`${m.target.table}.${m.target.column}`).join(", "):"not mapped"}</span></div>; })}
+              {selRels.length>0 && <><SLabel>Relationships</SLabel>
+                {selRels.map(r=>{ const other = ontClass(o, r.from===sel.id?r.to:r.from);
+                  return <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6,fontSize:11.5,color:"#0f172a"}}>
+                    {r.from===sel.id ? `${r.name} → ${other?other.name:"—"}` : `${r.inverse||"← "+r.name} ${other?other.name:"—"}`}
+                    <span style={{color:"#94a3b8",fontSize:10.5}}> · {(ONT.CARDINALITY[r.cardinality]||"—")}</span></div>; })}</>}
+            </div>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OntRelDrawer = ({o, rel, onClose, onToast}) => {
   const isNew = !rel || !rel.id;
   const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{})}));
@@ -40977,13 +41284,15 @@ const MapBar = ({label, c}) => (
     <div style={{fontSize:10.5,color:T.textMuted}}>{c.mapped} of {c.total} mapped</div>
   </div>);
 
-const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
+const OntMappingsTab = ({o, onToast, onNav, initialClass, onAsset}) => {
   const oai = useOai();
   const { roleCfg } = useRole();
   const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
   const [sub, setSub] = useState("workbench");
   const [sel, setSel] = useState(initialClass || (o.classes[0]||{}).id);
   const [gone, setGone] = useState({});
+  const [srcIdx, setSrcIdx] = useState(0);
+  useEffect(()=>{ setSrcIdx(0); },[sel]);
   const ctx = mapCtx();
   const min = oai.settings.minConfidence;
   const sugsAll = oaiOn("mapping") ? MAP.suggestMappings(o, ctx) : [];
@@ -41010,9 +41319,10 @@ const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
   const stateOf = (c) => { const pc = cov.perClass.find(x=>x.classId===c.id);
     if(!pc || !pc.dataset) return "none"; return pc.props.mapped===pc.props.total && pc.rels.mapped===pc.rels.total ? "full" : "partial"; };
   const c = o.classes.find(x=>x.id===sel);
-  const ds = c ? MAP.datasetOf(o, c.id) : null;
+  const srcs = c ? MAP.sourcesOf(o, c.id) : [];
+  const ds = srcs[Math.min(srcIdx, Math.max(0, srcs.length-1))] || null;
   const dsEnt = ds && ds.kind==="dataset" ? _slState.entities.find(e=>e.id===ds.target.entityId) : null;
-  const dsTable = dsEnt ? dsEnt.table : ds ? ds.target.table : null;
+  const dsTable = ds ? MAP.sourceTable(ds, ctx) : null;
   const cols = dsTable ? (SCHEMA[dsTable]||[]) : [];
   const sFor = (pred) => sugs.filter(pred);
   const Section = ({title, children, right}) => (
@@ -41059,26 +41369,23 @@ const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
           <div style={{fontSize:15,fontWeight:700,color:T.text,marginBottom:2}}>{c.name}</div>
           <div style={{fontSize:11.5,color:T.textMuted,marginBottom:14}}>{c.desc||"No definition"}</div>
 
-          <Section title="Dataset">
-            {ds ? <Mapped m={ds} label={`${MAP.describeTarget(ds, ctx)}${ds.target.keys&&ds.target.keys.length?` · one ${c.name.toLowerCase()} per ${ds.target.keys.join(" + ")}`:""}`}/> : <>
-              {sFor(s=>s.classId===c.id && (s.kind==="dataset"||s.kind==="table"||(s.kind==="gap"&&!s.relId))).map(s=><SugCard key={s.key} s={s}/>)}
-              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:4}}>
-                <span style={{fontSize:11,color:T.textMuted}}>Map to</span>
-                <div style={{width:280}}><SLSelect value="" onChange={e=>{ const v=e.target.value; if(!v) return;
-                  if(v.startsWith("e:")){ const en=_slState.entities.find(x=>x.id===v.slice(2)); add({kind:"dataset", classId:c.id, target:{entityId:en.id, keys:slKeys(en)}, title:`${c.name} ← ${en.name}`}, "human"); }
-                  else { const a = slModellableAssets().find(x=>String(x.id)===v.slice(2)); add({kind:"table", classId:c.id, target:{assetId:a.id, table:a.name, keys:(SCHEMA[a.name]||[]).filter(x=>x.pk).map(x=>x.name)}, title:`${c.name} ← ${a.name}`}, "human"); } }}
-                  placeholder="Pick a dataset or table"
-                  options={[..._slState.entities.map(e=>({v:"e:"+e.id, l:`${e.name} · dataset (${e.table})`})),
-                    ...slModellableAssets().filter(a=>!_slState.entities.some(e=>e.table===a.name)).map(a=>({v:"a:"+a.id, l:`${a.name} · catalog table`}))]}/></div>
-              </div>
-            </>}
+          <Section title={`Data sources · ${srcs.length}`} right={<div style={{width:280}}><SLSelect value="" placeholder="Add a catalog table" options={ontCatalogOptions()}
+              onChange={e=>{ const table = e.target.value.slice(2); if(!table) return;
+                if(srcs.some(m=>MAP.sourceTable(m, ctx)===table)){ onToast&&onToast(`${table} is already a source`,"error"); return; }
+                const a = ontAssetFor(table); const sf = MAP.sourceFor(ctx, table, a?a.id:null);
+                add({kind:sf.kind, classId:c.id, target:sf.target, title:`${c.name} ← ${table}`}, "human"); setSrcIdx(srcs.length); }}/></div>}>
+            {srcs.map(m=><OntSourceRow key={m.id} m={m} onAsset={onAsset} broken={dr.some(d=>d.mappingId===m.id)} onRemove={()=>{
+              const t = MAP.sourceTable(m, ctx);
+              ontPatch(o.id, x=>({...x, mappings:MAP.mappingsOf(x).filter(y=>y.id!==m.id && !(y.kind==="field" && y.classId===c.id && y.target.table===t))})); setSrcIdx(0); }}/>)}
+            {sFor(s=>s.classId===c.id && (s.kind==="dataset"||s.kind==="table"||(s.kind==="gap"&&!s.relId))).map(s=><SugCard key={s.key} s={s}/>)}
           </Section>
 
           {(c.props||[]).length>0 && <Section title={`Properties · ${(c.props||[]).length}`}>
-            {!ds ? <div style={{fontSize:11.5,color:T.textMuted}}>Map a dataset first</div> :
+            {!ds ? <div style={{fontSize:11.5,color:T.textMuted}}>Add a data source first</div> : <>
+            {srcs.length>1 && <div style={{marginBottom:8}}><SegTabs tabs={srcs.map((m,i)=>({key:String(i), label:MAP.sourceTable(m, ctx)}))} active={String(Math.min(srcIdx, srcs.length-1))} onChange={k=>setSrcIdx(Number(k))}/></div>}
             <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-              {c.props.map((p,i)=>{ const m = maps.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id);
-                const s = !m && sugs.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id);
+              {c.props.map((p,i)=>{ const m = maps.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id && x.target.table===dsTable);
+                const s = !m && sugs.find(x=>x.kind==="field" && x.classId===c.id && x.propId===p.id && x.target.table===dsTable);
                 const broken = m && dr.find(d=>d.mappingId===m.id);
                 return (
                 <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<c.props.length-1?`1px solid ${T.border}`:"none"}}>
@@ -41086,7 +41393,7 @@ const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
                   <span style={{fontSize:10.5,color:T.textMuted,width:70}}>{p.datatype||"string"}</span>
                   <span style={{color:T.textMuted}}>←</span>
                   <div style={{width:190}}><SLSelect value={m?m.target.column:""} onChange={e=>{ const v=e.target.value;
-                    ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x).filter(y=>!(y.kind==="field"&&y.classId===c.id&&y.propId===p.id)),
+                    ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x).filter(y=>!(y.kind==="field"&&y.classId===c.id&&y.propId===p.id&&y.target.table===dsTable)),
                       ...(v?[{...MAP.toMapping({kind:"field", classId:c.id, propId:p.id, target:{entityId:dsEnt?dsEnt.id:null, table:dsTable, column:v,
                         fieldId:([..._slState.dims,..._slState.facts].find(f=>dsEnt&&f.entity===dsEnt.id&&f.column===v)||{}).id||null}}, me), prov:{by:"human"}}]:[])]})); }}
                     options={[{v:"",l:"—"}, ...cols.map(x=>({v:x.name,l:`${x.name} · ${x.type}`})), ...(m && !cols.some(x=>x.name===m.target.column) ? [{v:m.target.column, l:`${m.target.column} · missing`}] : [])]}/></div>
@@ -41096,7 +41403,7 @@ const OntMappingsTab = ({o, onToast, onNav, initialClass}) => {
                   {s && <><SmaiChip conf={s.conf} why={s.why}/><span style={{fontSize:11,color:T.textSub,fontFamily:"ui-monospace,monospace"}}>{s.target.column}</span>
                     <Btn small onClick={()=>add(s)}>Map</Btn></>}
                 </div>); })}
-            </div>}
+            </div></>}
           </Section>}
 
           {o.rels.filter(r=>r.from===c.id).length>0 && <Section title="Relationships">
@@ -41247,7 +41554,7 @@ const OntDetailsDrawer = ({o, onClose, onToast}) => {
 };
 
 // ── The screen ──
-const OntologyView = ({onToast, onNav}) => {
+const OntologyView = ({onToast, onNav, onAsset}) => {
   const st = useOnt();
   const { role: oRole, roleCfg: oCfg } = useRole();
   const me = ((oCfg&&oCfg.email)||"you@jnj").split("@")[0];
@@ -41274,7 +41581,7 @@ const OntologyView = ({onToast, onNav}) => {
   const drawers = <>
     {newOpen && <OntNewDrawer open mode0={newOpen.mode} target={newOpen.target} onClose={()=>setNewOpen(null)} onToast={onToast}
       onCreated={(id)=>{ setNewOpen(null); setSelId(id); setTab("overview"); }}/>}
-    {o && classEdit && <OntClassDrawer o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast}/>}
+    {o && classEdit && <OntClassDrawer key={classEdit==="new"?"new":classEdit.id} o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast} onAsset={onAsset}/>}
     {o && relEdit && <OntRelDrawer o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
     {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
     {o && editOpen && <OntDetailsDrawer o={o} onClose={()=>setEditOpen(false)} onToast={onToast}/>}
@@ -41345,7 +41652,7 @@ const OntologyView = ({onToast, onNav}) => {
 
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
-  const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
+  const TABS = [{key:"overview",label:"Overview"},{key:"graph",label:"Graph"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
     {key:"constraints",label:`Constraints · ${o.constraints.length}`}, {key:"mappings",label:`Mappings · ${MAP.mappingsOf(o).length}`},
     ...(_oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
     {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
@@ -41425,37 +41732,42 @@ const OntologyView = ({onToast, onNav}) => {
             <DescSection key={o.id} text={o.desc} onToast={onToast} onSave={t=>ontPatch(o.id,{desc:t})} style={{marginBottom:16}}
               obj={{name:"ontology:"+o.id, label:o.name, kind:"Ontology", owners:[o.owner].filter(Boolean), stewards:[o.steward].filter(Boolean)}}/>
             <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10,fontSize:11,color:T.textMuted}}>
-                <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Graph</span>
-                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px dashed ${T.violet}`,verticalAlign:"middle",marginRight:4}}/>Parent class</span>
-                <span><span style={{display:"inline-block",width:18,borderTop:`1.5px solid ${T.borderLight}`,verticalAlign:"middle",marginRight:4}}/>Relationship</span>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Classes</span>
+                <Btn small onClick={()=>setTab("graph")}>View graph</Btn>
+                <Btn small variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn>
               </div>
-              <OntGraph o={o} selected={selClass} onSelect={setSelClass}/>
+              {o.classes.length===0 ? <div style={{padding:"18px 0",fontSize:12,color:T.textMuted,textAlign:"center"}}>No classes yet</div> :
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const srcs = MAP.sourcesOf(o, c.id); return (
+                  <div key={c.id} onClick={()=>setClassEdit(c)}
+                    style={{display:"flex",alignItems:"center",gap:11,padding:"10px 13px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,cursor:"pointer",flexWrap:"wrap"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text,minWidth:130}}>{c.name}</span>
+                    <span style={{fontSize:11,color:T.textMuted}}>{c.parent?`kind of ${nm(c.parent)} · `:""}{(c.props||[]).length} propert{(c.props||[]).length===1?"y":"ies"}</span>
+                    <div style={{marginLeft:"auto",display:"flex",gap:5,flexWrap:"wrap"}}>
+                      {srcs.length ? srcs.map(m=><span key={m.id} style={{fontSize:10.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px",fontFamily:"ui-monospace,monospace"}}>{MAP.sourceTable(m, mapCtx())}</span>)
+                        : <span style={{fontSize:10.5,color:T.amber}}>No data source</span>}
+                    </div>
+                  </div>); })}
+              </div>}
             </div></Card2>
-            {cls && <Card2><div style={{padding:"14px 16px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}><span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{cls.name}</span>
-                <Btn small onClick={()=>setClassEdit(cls)}>Edit class</Btn><Btn small ghost onClick={()=>setSelClass(null)}>Close</Btn></div>
-              <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:10}}>{cls.desc||"No definition"}</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:"8px 18px"}}>
-                {[["Parent class", cls.parent?nm(cls.parent):"—"], ["Glossary term", cls.termId?((_gtState.find(t=>t.id===cls.termId)||{}).term||"—"):"—"],
-                  ["Properties", (cls.props||[]).map(p=>p.name).join(", ")||"—"], ["Equivalent to", (cls.sameAs||[]).map(s=>`${s.standard} ${s.label}`).join(", ")||"—"],
-                  ["Relationships", o.rels.filter(r=>r.from===cls.id||r.to===cls.id).map(r=>r.from===cls.id?`${r.name} ${nm(r.to)}`:`${r.inverse||"← "+r.name} ${nm(r.from)}`).join(" · ")||"—"]].map(([k,v])=>(
-                  <div key={k}><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div><div style={{fontSize:11.5,color:T.text}}>{v}</div></div>))}
-              </div>
-            </div></Card2>}
           </div>
           <OntSidebar o={o} cov={MAP.coverage(o, mapCtx())}/>
         </div>
       )}
       <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:tab==="overview"?"none":"block"}}>
+        {tab==="graph" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAddRel={()=>setRelEdit("new")} onAsset={onAsset}/>}
         {tab==="classes" && <>
           <div style={{display:"flex",gap:8,marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
           <OntTable empty="No classes yet" onRow={r=>setClassEdit(r.c)}
-            cols={[{l:"Class",w:"1.2fr"},{l:"Parent class",w:"1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Standards",w:"1fr"},{l:"Definition",w:"2.2fr"}]}
+            cols={[{l:"Class",w:"1.2fr"},{l:"Parent class",w:"1fr"},{l:"Data sources",w:"1.2fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Definition",w:"2fr"}]}
             rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>({key:c.id, c, cells:[
               <span>{c.name}{c.prov&&c.prov.by==="ai"?<span style={{marginLeft:6}}><SmaiChip conf={c.prov.conf||0.8} why={c.prov.why}/></span>:null}</span>,
-              c.parent?nm(c.parent):"—", String((c.props||[]).length), c.termId?((_gtState.find(t=>t.id===c.termId)||{}).term||"—"):"—",
-              (c.sameAs||[]).map(s=><OntChip key={s.iri} c={T.blue}>{s.standard}</OntChip>), c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
+              c.parent?nm(c.parent):"—",
+              MAP.sourcesOf(o, c.id).length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.sourcesOf(o, c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
+              String((c.props||[]).length), c.termId?((_gtState.find(t=>t.id===c.termId)||{}).term||"—"):"—",
+              c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
         </>}
         {tab==="rels" && <>
           <div style={{display:"flex",marginBottom:12}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
@@ -41470,7 +41782,7 @@ const OntologyView = ({onToast, onNav}) => {
             rows={o.constraints.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"Entire class", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
         </>}
         {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
-        {tab==="mappings" && <OntMappingsTab key={o.id} o={o} onToast={onToast} onNav={onNav} initialClass={jumpClass}/>}
+        {tab==="mappings" && <OntMappingsTab key={o.id} o={o} onToast={onToast} onNav={onNav} initialClass={jumpClass} onAsset={onAsset}/>}
         {tab==="versions" && <>
           {(o.versions||[]).length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
             <OntTable empty="" onRow={r=>setCmpN(cmpN===r.v.n?null:r.v.n)} cols={[{l:"Version",w:".5fr"},{l:"Published"},{l:"By"},{l:"Note",w:"2fr"},{l:"Classes",w:".6fr"}]}
@@ -67572,7 +67884,7 @@ export default function App(){
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "knowledgelayer":return !KNOWLEDGE_LAYER_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
-      case "ontologies":    return <OntologyView onToast={showToast} onNav={handleNav}/>;
+      case "ontologies":    return <OntologyView onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "context":       return <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;
       case "observability": return <QualityView onToast={showToast}/>;

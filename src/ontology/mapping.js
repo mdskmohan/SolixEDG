@@ -42,6 +42,18 @@ const compatible = (prop, colType) => {
 export const KINDS = { dataset: "Dataset", table: "Catalog table", field: "Field", join: "Join", metric: "Metric" };
 export const mappingsOf = (ont) => ont.mappings || [];
 export const datasetOf = (ont, classId) => mappingsOf(ont).find((m) => (m.kind === "dataset" || m.kind === "table") && m.classId === classId);
+// A class can be realised by several tables (Customer in the CRM and in the ERP).
+// Each source yields its own instances; nothing is merged.
+export const sourcesOf = (ont, classId) => mappingsOf(ont).filter((m) => (m.kind === "dataset" || m.kind === "table") && m.classId === classId);
+export const sourceTable = (m, ctx) => m.kind === "table" ? m.target.table : ((ctx.entities || []).find((e) => e.id === m.target.entityId) || {}).table;
+// Picking a catalog table: if a semantic-model dataset already sits on it, map the
+// dataset (its fields and joins come with it); otherwise map the table itself.
+export function sourceFor(ctx, table, assetId) {
+  const e = (ctx.entities || []).find((x) => x.table === table);
+  if (e) return { kind: "dataset", target: { entityId: e.id, keys: keysOf(e) } };
+  const pk = ((ctx.schemaOf && ctx.schemaOf(table)) || []).filter((x) => x.pk).map((x) => x.name);
+  return { kind: "table", target: { assetId: assetId != null ? assetId : null, table, keys: pk } };
+}
 const cls = (ont, id) => (ont.classes || []).find((c) => c.id === id);
 const propOf = (ont, classId, propId) => ((cls(ont, classId) || {}).props || []).find((p) => p.id === propId);
 
@@ -97,15 +109,31 @@ export function suggestMappings(ont, ctx) {
     } else out.push({ key: `gap:${c.id}`, kind: "gap", classId: c.id, title: `${c.name} has no data`, sub: "No dataset or catalog table matches", conf: 0, why: "Nothing found" });
   });
 
+  // 1b · more sources for a class that already has one: a catalog table named
+  // exactly after the class or one of its synonyms.
+  (ont.classes || []).forEach((c) => {
+    const srcs = sourcesOf(ont, c.id); if (!srcs.length) return;
+    const have = new Set(srcs.map((m) => sourceTable(m, ctx)));
+    const names = [c.name, ...(c.synonyms || [])].map(norm);
+    (ctx.assets || []).forEach((a) => {
+      if (have.has(a.name) || !names.includes(stem(a.name))) return;
+      const src = sourceFor(ctx, a.name, a.id);
+      out.push({ key: `src:${c.id}:${a.name}`, kind: src.kind, classId: c.id, target: src.target, additional: true,
+        title: `${c.name} ← ${a.name}`, sub: `Additional source · ${a.db || a.name}${src.target.keys && src.target.keys.length ? ` · key ${src.target.keys.join(" + ")}` : ""}`,
+        ...envelope(0.82, `Table ${a.name} is named after ${c.name}; its rows become ${c.name} instances alongside ${[...have].join(", ")}`, [a.db || ""].filter(Boolean)) });
+    });
+  });
+
   // 2 · field → property (for mapped datasets)
   maps.filter((m) => m.kind === "dataset" || m.kind === "table").forEach((dm) => {
     const c = cls(ont, dm.classId); if (!c) return;
     const e = entOf(dm); const table = e ? e.table : dm.target.table;
     const columns = (ctx.schemaOf && ctx.schemaOf(table)) || [];
     const fields = e ? [...(ctx.dims || []), ...(ctx.facts || [])].filter((f) => f.entity === e.id) : [];
-    const usedCols = new Set(maps.filter((m) => m.kind === "field" && m.classId === c.id).map((m) => m.target.column));
+    // Per source: a property can be mapped once in each table that realises the class.
+    const usedCols = new Set(maps.filter((m) => m.kind === "field" && m.classId === c.id && m.target.table === table).map((m) => m.target.column));
     (c.props || []).forEach((p) => {
-      if (maps.some((m) => m.kind === "field" && m.classId === c.id && m.propId === p.id)) return;
+      if (maps.some((m) => m.kind === "field" && m.classId === c.id && m.propId === p.id && (m.target.table === table || !m.target.table))) return;
       let best = null;
       columns.forEach((cl) => {
         const f = fields.find((x) => x.column === cl.name);
@@ -122,7 +150,7 @@ export function suggestMappings(ont, ctx) {
         if (pr.nullPct != null) ev.push(`${pr.nullPct}% null${pr.distinctCount ? ` · ${pr.distinctCount} distinct` : ""}`);
         if (!best || s > best.s) best = { s, cl, f, ev };
       });
-      if (best && best.s >= 0.5) out.push({ key: `fd:${c.id}:${p.id}`, kind: "field", classId: c.id, propId: p.id,
+      if (best && best.s >= 0.5) out.push({ key: `fd:${c.id}:${p.id}:${table}`, kind: "field", classId: c.id, propId: p.id,
         target: { entityId: e ? e.id : null, table, column: best.cl.name, fieldId: best.f ? best.f.id : null },
         title: `${c.name}.${p.name} ← ${table}.${best.cl.name}`, sub: `${p.datatype || "string"} ← ${best.cl.type}${best.f ? ` · field ${best.f.name}` : ""}`,
         ...envelope(best.s, best.ev[0], best.ev) });
@@ -132,11 +160,11 @@ export function suggestMappings(ont, ctx) {
   // 3 · join → relationship
   (ont.rels || []).forEach((r) => {
     if (maps.some((m) => m.kind === "join" && m.relId === r.id)) return;
-    const A = datasetOf(ont, r.from), B = datasetOf(ont, r.to);
-    if (!A || !B || A.kind !== "dataset" || B.kind !== "dataset") return;
-    const ea = A.target.entityId, eb = B.target.entityId;
-    const fwd = (ctx.joins || []).filter((j) => j.from === ea && j.to === eb);
-    const rev = (ctx.joins || []).filter((j) => j.from === eb && j.to === ea);
+    const As = sourcesOf(ont, r.from).filter((m) => m.kind === "dataset").map((m) => m.target.entityId);
+    const Bs = sourcesOf(ont, r.to).filter((m) => m.kind === "dataset").map((m) => m.target.entityId);
+    if (!As.length || !Bs.length) return;
+    const fwd = (ctx.joins || []).filter((j) => As.includes(j.from) && Bs.includes(j.to));
+    const rev = (ctx.joins || []).filter((j) => Bs.includes(j.from) && As.includes(j.to));
     const ca = cls(ont, r.from), cb = cls(ont, r.to);
     // A role-playing join whose role names the relationship wins.
     const pick = fwd.find((j) => j.role && norm(r.name).includes(norm(j.role))) || fwd[0] || rev[0];
@@ -177,7 +205,8 @@ export function coverage(ont, ctx = {}) {
   const rels = ont.rels || [];
   const mappedC = classes.filter((c) => datasetOf(ont, c.id));
   const mappedP = props.filter(({ c, p }) => maps.some((m) => m.kind === "field" && m.classId === c.id && m.propId === p.id));
-  const mappedR = rels.filter((r) => maps.some((m) => m.kind === "join" && m.relId === r.id));
+    const mappedR = rels.filter((r) => maps.some((m) => m.kind === "join" && m.relId === r.id));
+  const srcCount = (id) => sourcesOf(ont, id).length;
   const mEnts = new Set(maps.filter((m) => m.kind === "dataset").map((m) => m.target.entityId));
   const reachable = (ctx.metrics || []).filter((m) => mEnts.has(m.entity));
   const mappedM = reachable.filter((m) => maps.some((x) => x.kind === "metric" && x.target.metricId === m.id));
@@ -190,7 +219,7 @@ export function coverage(ont, ctx = {}) {
     perClass: classes.map((c) => {
       const ps = c.props || [];
       const ds = datasetOf(ont, c.id);
-      return { classId: c.id, name: c.name, dataset: ds ? (ds.kind === "table" ? ds.target.table : ds.target.entityId) : null, datasetKind: ds ? ds.kind : null,
+      return { classId: c.id, name: c.name, dataset: ds ? (ds.kind === "table" ? ds.target.table : ds.target.entityId) : null, datasetKind: ds ? ds.kind : null, sources: srcCount(c.id),
         props: { mapped: ps.filter((p) => maps.some((m) => m.kind === "field" && m.classId === c.id && m.propId === p.id)).length, total: ps.length },
         rels: { mapped: rels.filter((r) => r.from === c.id && maps.some((m) => m.kind === "join" && m.relId === r.id)).length, total: rels.filter((r) => r.from === c.id).length },
         metrics: maps.filter((m) => m.kind === "metric" && m.classId === c.id).length };
