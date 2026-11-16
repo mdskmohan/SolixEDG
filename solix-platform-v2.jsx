@@ -40462,7 +40462,8 @@ const OntSourceRow = ({m, onRemove, onAsset, broken, compact}) => {
 // its properties and its mappings are created together. A class with no table
 // (an abstract parent such as Party) starts blank. Editing shows the class's data
 // sources and a Column dropdown on every property.
-const OntClassDrawer = ({o, cls, onClose, onToast, onAsset}) => {
+const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
+  const ap = apply || ((f)=>ontPatch(o.id, f));
   const { roleCfg } = useRole();
   const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
   const isNew = !cls || !cls.id;
@@ -40515,7 +40516,7 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset}) => {
       c = {...c, props:[...c.props, ...props]};
       m2 = [s0, ...props.map(p=>mkField(s0, p.id, p.column))];
     }
-    ontPatch(o.id, x=>({...x,
+    ap(x=>({...x,
       classes: x.classes.some(y=>y.id===c.id) ? x.classes.map(y=>y.id===c.id?c:y) : [...x.classes, c],
       mappings: [...MAP.mappingsOf(x).filter(m=>!(m.classId===c.id && ["dataset","table","field"].includes(m.kind))), ...m2]}));
     onToast&&onToast(isNew?`${c.name} added${mode==="catalog"?` from ${pickTable} · ${c.props.length} properties mapped`:""}`:`${c.name} saved`,"success"); onClose();
@@ -40529,11 +40530,11 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset}) => {
     const s0 = {id:ONT.uid("map"), kind:sf.kind, classId:ex.id, target:sf.target, status:"approved", by:me, at:at(), prov:{by:"human"}};
     const cols = (SCHEMA[pickTable]||[]).filter(x=>pickCols[x.name]);
     const fields = (ex.props||[]).map(p=>{ const c = cols.find(x=>x.name===p.column || slPretty(x.name).toLowerCase()===String(p.name).toLowerCase()); return c ? {...mkField(s0, p.id, c.name), classId:ex.id} : null; }).filter(Boolean);
-    ontPatch(o.id, x=>({...x, mappings:[...MAP.mappingsOf(x), s0, ...fields]}));
+    ap(x=>({...x, mappings:[...MAP.mappingsOf(x), s0, ...fields]}));
     onToast&&onToast(`${pickTable} added as a data source of ${ex.name} · ${fields.length} propert${fields.length===1?"y":"ies"} mapped`,"success"); onClose();
   };
   const remove = () => {
-    ontPatch(o.id, x=>({...x, classes:x.classes.filter(y=>y.id!==d.id).map(y=>y.parent===d.id?{...y,parent:null}:y),
+    ap(x=>({...x, classes:x.classes.filter(y=>y.id!==d.id).map(y=>y.parent===d.id?{...y,parent:null}:y),
       rels:x.rels.filter(r=>r.from!==d.id&&r.to!==d.id), constraints:x.constraints.filter(k=>k.classId!==d.id),
       mappings:MAP.mappingsOf(x).filter(m=>m.classId!==d.id)}));
     onToast&&onToast(`${d.name} removed`,"success"); onClose();
@@ -40785,7 +40786,8 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) =
   );
 };
 
-const OntRelDrawer = ({o, rel, onClose, onToast}) => {
+const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
+  const ap = apply || ((f)=>ontPatch(o.id, f));
   const isNew = !rel || !rel.id;
   const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
   const opts = o.classes.map(c=>({v:c.id,l:c.name}));
@@ -40801,13 +40803,13 @@ const OntRelDrawer = ({o, rel, onClose, onToast}) => {
     if(!d.from||!d.to||!d.name.trim()){ onToast&&onToast("Pick both classes and name the relationship","error"); return; }
     const r = {...d, name:d.name.trim().toLowerCase()};
     const jm = joinId ? [{id:ONT.uid("map"), kind:"join", classId:r.from, relId:r.id, target:{joinId}, status:"approved", by:"you", at:new Date().toISOString(), prov:{by:"human"}}] : [];
-    ontPatch(o.id, x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y),
+    ap(x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y),
       mappings:[...MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===r.id)), ...jm]}));
     onToast&&onToast("Relationship saved","success"); onClose();
   };
   return (
     <OntDrawerShell title={isNew?"New relationship":`${(ontClass(o,d.from)||{}).name} ${d.name} ${(ontClass(o,d.to)||{}).name}`} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add relationship":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
         <div style={{flex:1}}><OntField label="Source class"><SLSelect value={d.from} onChange={e=>setD({...d,from:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
@@ -40827,7 +40829,8 @@ const OntRelDrawer = ({o, rel, onClose, onToast}) => {
     </OntDrawerShell>
   );
 };
-const OntConstraintDrawer = ({o, con, onClose, onToast}) => {
+const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
+  const ap = apply || ((f)=>ontPatch(o.id, f));
   const isNew = !con || !con.id;
   const [d, setD] = useState(()=>({classId:"", prop:"", kind:"required", value:"", severity:"violation", desc:"", ...(con||{})}));
   const c = ontClass(o, d.classId);
@@ -40836,12 +40839,12 @@ const OntConstraintDrawer = ({o, con, onClose, onToast}) => {
     if(!d.classId){ onToast&&onToast("Pick a class","error"); return; }
     if(needsValue && !String(d.value).trim()){ onToast&&onToast("Give the constraint a value","error"); return; }
     const k = {...d, id:d.id||ONT.uid("k")};
-    ontPatch(o.id, x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
+    ap(x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
     onToast&&onToast("Constraint saved","success"); onClose();
   };
   return (
     <OntDrawerShell title={isNew?"New constraint":"Constraint"} width={540} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Constraint removed","success"); onClose(); }}>Remove</Btn></span>}
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Constraint removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add constraint":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value,prop:""})} placeholder="Select a class" options={o.classes.map(x=>({v:x.id,l:x.name}))}/></OntField></div>
@@ -41294,13 +41297,14 @@ const MapDot = ({state}) => { const c = state==="full"?T.green:state==="partial"
 const MapProv = ({m}) => m.prov && m.prov.by==="ai"
   ? <SmaiChip conf={m.prov.conf||0.8} why={`Accepted AI suggestion · ${m.prov.why||""}`}/>
   : <span style={{fontSize:10,color:T.textMuted,whiteSpace:"nowrap"}}>by {m.by}</span>;
-const MapBar = ({label, c}) => (
+const MapBar = ({label, c}) => { const none = !c.total;
+  return (
   <div style={{flex:1,minWidth:150,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"11px 13px"}}>
     <div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:11,color:T.textMuted,flex:1}}>{label}</span>
-      <span style={{fontSize:16,fontWeight:800,color:c.pct===100?T.green:c.pct>=50?T.text:T.amber}}>{c.pct}%</span></div>
-    <div style={{height:5,background:T.bgElevated,borderRadius:3,margin:"7px 0 5px",overflow:"hidden"}}><div style={{width:`${c.pct}%`,height:"100%",background:c.pct===100?T.green:T.accent}}/></div>
-    <div style={{fontSize:10.5,color:T.textMuted}}>{c.mapped} of {c.total} mapped</div>
-  </div>);
+      <span style={{fontSize:16,fontWeight:800,color:none?T.textMuted:c.pct===100?T.green:c.pct>=50?T.text:T.amber}}>{none?"—":`${c.pct}%`}</span></div>
+    <div style={{height:5,background:T.bgElevated,borderRadius:3,margin:"7px 0 5px",overflow:"hidden"}}><div style={{width:`${none?0:c.pct}%`,height:"100%",background:c.pct===100?T.green:T.accent}}/></div>
+    <div style={{fontSize:10.5,color:T.textMuted}}>{none?"None yet":`${c.mapped} of ${c.total}`}</div>
+  </div>); };
 
 const OntMappingsTab = ({o, onToast, onNav, initialClass, onAsset}) => {
   const oai = useOai();
@@ -41571,6 +41575,198 @@ const OntDetailsDrawer = ({o, onClose, onToast}) => {
   );
 };
 
+// ── Ontology editor: create, and edit in bulk ──
+// One section-rail flow for both: Details → Classes → Relationships → Constraints →
+// Review. Everything is edited on a draft copy; nothing is written until Create /
+// Save, so a user can build or rework a whole ontology in one sitting. The class,
+// relationship and constraint editors are the same drawers the tabs use, pointed
+// at the draft through `apply`.
+const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
+  const isEdit = !!o;
+  const [domains] = useDomains();
+  const people = STEWARDS_LIST.map(x=>x.name);
+  const [sec, setSec] = useState("details");
+  const [d, setD] = useState(()=> isEdit
+    ? {name:o.name, desc:o.desc||"", domain:o.domain||"", owner:o.owner||"", steward:o.steward||"", prefix:o.prefix, ns:o.namespace, prefixTouched:true}
+    : {name:"", desc:"", domain:"", owner:"", steward:"", prefix:"", ns:"", prefixTouched:false});
+  const [draft, setDraft] = useState(()=> JSON.parse(JSON.stringify(isEdit
+    ? {id:o.id, name:o.name, classes:o.classes||[], rels:o.rels||[], constraints:o.constraints||[], mappings:o.mappings||[]}
+    : {id:"ont_draft", name:"", classes:[], rels:[], constraints:[], mappings:[]})));
+  const apply = (fn) => setDraft(p => typeof fn==="function" ? fn(p) : {...p, ...fn});
+  const [classEdit, setClassEdit] = useState(null);
+  const [relEdit, setRelEdit] = useState(null);
+  const [conEdit, setConEdit] = useState(null);
+  const [picked, setPicked] = useState({});
+  const [q, setQ] = useState("");
+  useEffect(()=>{ setPicked({}); setQ(""); },[sec]);
+
+  const prefix = d.prefixTouched ? d.prefix : ontPrefixOf(d.name);
+  const nsUri = d.ns || (prefix ? `https://ontology.jnj.com/${prefix}#` : "");
+  const others = ontLoad().ontologies.filter(x=>!isEdit || x.id!==o.id);
+  const nameTaken = others.some(x=>x.name.trim().toLowerCase()===d.name.trim().toLowerCase());
+  const prefixTaken = !isEdit && others.some(x=>x.prefix===prefix);
+  const err = !d.name.trim() ? "Enter an ontology name" : nameTaken ? "An ontology with this name exists" : !d.domain ? "Select a data domain"
+    : !d.owner ? "Select an owner" : !isEdit && !/^[a-z][a-z0-9]{0,9}$/.test(prefix) ? "Prefix: 1–10 lowercase letters or digits, starting with a letter" : prefixTaken ? "Prefix is in use" : null;
+  const SECTIONS = [{k:"details",l:"Details"},{k:"classes",l:`Classes · ${draft.classes.length}`},{k:"rels",l:`Relationships · ${draft.rels.length}`},
+    {k:"constraints",l:`Constraints · ${draft.constraints.length}`},{k:"review",l:"Review"}];
+  const order = SECTIONS.map(s=>s.k), idx = order.indexOf(sec);
+  const go = (k) => { if(k!=="details" && err){ onToast&&onToast(err,"error"); setSec("details"); return; } setSec(k); };
+  const view = {...draft, name:d.name};      // what the editors see
+  const nm = (id) => (draft.classes.find(c=>c.id===id)||{}).name || "—";
+  const ids = Object.keys(picked).filter(k=>picked[k]);
+  const ctx = mapCtx();
+
+  // Bulk actions on the selected rows of the current step.
+  const removeClasses = (list) => apply(x=>({...x, classes:x.classes.filter(c=>!list.includes(c.id)).map(c=>list.includes(c.parent)?{...c,parent:null}:c),
+    rels:x.rels.filter(r=>!list.includes(r.from)&&!list.includes(r.to)), constraints:x.constraints.filter(k=>!list.includes(k.classId)),
+    mappings:x.mappings.filter(m=>!list.includes(m.classId))}));
+  const bulk = (fn, label) => { fn(ids); setPicked({}); onToast&&onToast(`${label} · ${ids.length}`,"success"); };
+
+  const save = () => {
+    if(err){ onToast&&onToast(err,"error"); setSec("details"); return; }
+    const owners = [d.owner, ...((isEdit && o.owners)||[]).filter(x=>x!==d.owner)];
+    const stewards = d.steward ? [d.steward, ...((isEdit && o.stewards)||[]).filter(x=>x!==d.steward)] : ((isEdit && o.stewards)||[d.owner]);
+    const body = {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards,
+      classes:draft.classes, rels:draft.rels, constraints:draft.constraints,
+      mappings:draft.mappings.filter(m=>m.kind==="metric" || draft.classes.some(c=>c.id===m.classId))};
+    if(isEdit){ ontPatch(o.id, body); onToast&&onToast(`${body.name} saved`,"success"); onSaved(o.id); return; }
+    const id = "ont_"+Date.now().toString(36);
+    ontSet(s=>({...s, ontologies:[...s.ontologies, {id, prefix, namespace:nsUri, status:"Draft", created:new Date().toISOString().slice(0,10),
+      source:{kind:"native"}, versions:[], ...body, mappings:body.mappings.map(m=>({...m}))}]}));
+    onToast&&onToast(`${body.name} created · ${body.classes.length} classes · ${body.rels.length} relationships · ${body.constraints.length} constraints`,"success");
+    onSaved(id);
+  };
+
+  const Req = ({children}) => <>{children}<span style={{color:T.rose}}> *</span></>;
+  const KV = ({rows}) => (
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      {rows.map(([k,v],i)=>(
+        <div key={k} style={{display:"grid",gridTemplateColumns:"170px 1fr",gap:12,padding:"10px 14px",borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none"}}>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:T.text,fontWeight:500}}>{v}</span></div>))}
+    </div>);
+  const Check = ({id}) => <input type="checkbox" checked={!!picked[id]} onClick={e=>e.stopPropagation()} onChange={e=>setPicked(p=>({...p,[id]:e.target.checked}))}/>;
+  const AllCheck = ({items}) => <input type="checkbox" checked={items.length>0 && items.every(x=>picked[x])} onChange={e=>setPicked(Object.fromEntries(items.map(x=>[x, e.target.checked])))}/>;
+  const toolbar = ({addLabel, onAdd, disabled, bulkUi}) => (
+    <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+      <div style={{width:260}}><Input2 placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+      {ids.length>0 && <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 10px",background:T.accentDim,border:`1px solid ${T.accent}35`,borderRadius:8}}>
+        <span style={{fontSize:11.5,fontWeight:600,color:T.text}}>{ids.length} selected</span>{bulkUi}</div>}
+      <span style={{flex:1}}/>
+      <Btn variant="primary" icon={Ic.plus(10)} onClick={onAdd} disabled={disabled}>{addLabel}</Btn>
+    </div>);
+  const match = (s) => !q || s.toLowerCase().includes(q.toLowerCase());
+  const clsRows = draft.classes.slice().sort((a,b)=>a.name.localeCompare(b.name))
+    .filter(c=>match(`${c.name} ${c.desc||""} ${(c.props||[]).map(p=>p.name).join(" ")} ${MAP.sourcesOf(draft,c.id).map(m=>MAP.sourceTable(m, ctx)).join(" ")}`));
+  const relRows = draft.rels.filter(r=>match(`${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`));
+  const conRows = draft.constraints.filter(k=>match(`${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`));
+  // Links to data are summarised in one line; the rest is listed.
+  const changes = (()=>{ if(!isEdit) return [];
+    const all = ONT.diff(ONT.snapshot(o), ONT.snapshot({...o, name:d.name, desc:d.desc, classes:draft.classes, rels:draft.rels, constraints:draft.constraints, mappings:draft.mappings}));
+    const links = all.filter(l=>/ mapping /.test(l.text));
+    return [...all.filter(l=>!/ mapping /.test(l.text)), ...(links.length?[{kind:"changed", text:`${links.length} link${links.length===1?"":"s"} to data updated`}]:[])]; })();
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:1040,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?`Edit ${o.name}`:"New Ontology"}</div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{width:210,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bg,padding:"12px 0"}}>
+            {SECTIONS.map((s,i)=>{ const on = sec===s.k; const done = i<idx && !(s.k==="details" && err); return (
+              <button key={s.k} onClick={()=>go(s.k)}
+                style={{width:"100%",textAlign:"left",padding:"10px 16px",background:on?T.bgActive:"transparent",border:"none",borderLeft:`2px solid ${on?T.accent:"transparent"}`,cursor:"pointer",display:"flex",alignItems:"center",gap:9}}>
+                <span style={{width:20,height:20,borderRadius:"50%",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                  background:done?T.green:on?T.accent:T.bgElevated,color:done||on?"#fff":T.textMuted,border:done||on?"none":`1px solid ${T.border}`}}>{done?"✓":i+1}</span>
+                <span style={{fontSize:12,fontWeight:on?700:600,color:on?T.text:T.textSub}}>{s.l}</span>
+              </button>); })}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
+            {sec==="details" && <div style={{maxWidth:620}}>
+              <OntField label={<Req>Ontology name</Req>}><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Enterprise Commerce"/>
+                {nameTaken && <div style={{fontSize:11,color:T.rose,marginTop:4}}>An ontology with this name exists</div>}</OntField>
+              <OntField label="Description"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What this ontology covers"/></OntField>
+              <OntField label={<Req>Data domain</Req>}><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} placeholder="Select a data domain" options={domains.map(x=>({v:x.name,l:x.displayName||x.name}))}/></OntField>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}><OntField label={<Req>Owner</Req>}><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={people}/></OntField></div>
+                <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Same as owner" options={people}/></OntField></div>
+              </div>
+              <div style={{marginTop:6,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:10}}>Namespace</div>
+                {isEdit ? <div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{o.prefix}: {o.namespace}</div> :
+                <div style={{display:"flex",gap:12}}>
+                  <div style={{width:150}}><OntField label={<Req>Prefix</Req>}><Input2 value={prefix} onChange={e=>setD({...d,prefix:e.target.value.toLowerCase(),prefixTouched:true,ns:""})} placeholder="com"/></OntField></div>
+                  <div style={{flex:1}}><OntField label="Namespace URI"><Input2 value={nsUri} onChange={e=>setD({...d,ns:e.target.value})} placeholder="https://ontology.jnj.com/com#"/></OntField></div>
+                </div>}
+              </div>
+            </div>}
+
+            {sec==="classes" && <>
+              {toolbar({addLabel:"Add class", onAdd:()=>setClassEdit("new"), disabled:false, bulkUi:<>
+                <div style={{width:180}}><SLSelect value="" placeholder="Set parent class" onChange={e=>{ const v = e.target.value; bulk(l=>apply(x=>({...x, classes:x.classes.map(c=>l.includes(c.id)&&c.id!==v?{...c,parent:v||null}:c)})), "Parent class set"); }}
+                  options={[{v:"",l:"No parent"}, ...draft.classes.map(c=>({v:c.id,l:c.name}))]}/></div>
+                <Btn small ghost onClick={()=>bulk(removeClasses, "Classes removed")}>Delete</Btn></>})}
+              <OntTable empty={q?"No classes match":"No classes yet · add one from a catalog table or blank"} onRow={r=>setClassEdit(r.c)}
+                cols={[{l:<AllCheck items={clsRows.map(c=>c.id)}/>,w:"28px"},{l:"Class",w:"1.2fr"},{l:"Parent class"},{l:"Data sources",w:"1.2fr"},{l:"Properties",w:".7fr"},{l:"Definition",w:"2fr"}]}
+                rows={clsRows.map(c=>({key:c.id, c, cells:[<Check id={c.id}/>, c.name, c.parent?nm(c.parent):"—",
+                  MAP.sourcesOf(draft,c.id).length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.sourcesOf(draft,c.id).map(m=>MAP.sourceTable(m, ctx)).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
+                  String((c.props||[]).length), c.desc||"—"]}))}/>
+            </>}
+
+            {sec==="rels" && <>
+              {toolbar({addLabel:"Add relationship", onAdd:()=>setRelEdit("new"), disabled:draft.classes.length<2, bulkUi:<>
+                <div style={{width:170}}><SLSelect value="" placeholder="Set cardinality" onChange={e=>{ const v = e.target.value; if(!v) return; bulk(l=>apply(x=>({...x, rels:x.rels.map(r=>l.includes(r.id)?{...r,cardinality:v}:r)})), "Cardinality set"); }}
+                  options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l}))}/></div>
+                <Btn small ghost onClick={()=>bulk(l=>apply(x=>({...x, rels:x.rels.filter(r=>!l.includes(r.id)), mappings:x.mappings.filter(m=>!(m.kind==="join" && l.includes(m.relId)))})), "Relationships removed")}>Delete</Btn></>})}
+              <OntTable empty={draft.classes.length<2?"Add at least two classes first":q?"No relationships match":"No relationships yet"} onRow={r=>setRelEdit(r.r)}
+                cols={[{l:<AllCheck items={relRows.map(r=>r.id)}/>,w:"28px"},{l:"Source class"},{l:"Relationship"},{l:"Target class"},{l:"Inverse"},{l:"Cardinality"}]}
+                rows={relRows.map(r=>({key:r.id, r, cells:[<Check id={r.id}/>, nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||"—"]}))}/>
+            </>}
+
+            {sec==="constraints" && <>
+              {toolbar({addLabel:"Add constraint", onAdd:()=>setConEdit("new"), disabled:!draft.classes.length, bulkUi:<>
+                <div style={{width:150}}><SLSelect value="" placeholder="Set severity" onChange={e=>{ const v = e.target.value; if(!v) return; bulk(l=>apply(x=>({...x, constraints:x.constraints.map(k=>l.includes(k.id)?{...k,severity:v}:k)})), "Severity set"); }}
+                  options={[{v:"violation",l:"Violation"},{v:"warning",l:"Warning"}]}/></div>
+                <Btn small ghost onClick={()=>bulk(l=>apply(x=>({...x, constraints:x.constraints.filter(k=>!l.includes(k.id))})), "Constraints removed")}>Delete</Btn></>})}
+              <OntTable empty={!draft.classes.length?"Add a class first":q?"No constraints match":"No constraints yet"} onRow={r=>setConEdit(r.k)}
+                cols={[{l:<AllCheck items={conRows.map(k=>k.id)}/>,w:"28px"},{l:"Class"},{l:"Property"},{l:"Constraint type"},{l:"Value",w:"1.3fr"},{l:"Severity",w:".7fr"}]}
+                rows={conRows.map(k=>({key:k.id, k, cells:[<Check id={k.id}/>, nm(k.classId), k.prop||"Entire class", ONT.CONSTRAINT_KINDS[k.kind], k.value||"—", k.severity==="warning"?"Warning":"Violation"]}))}/>
+            </>}
+
+            {sec==="review" && <div style={{maxWidth:680}}>
+              <KV rows={[["Ontology name", d.name||"—"], ["Description", d.desc||"—"], ["Data domain", ((domains.find(x=>x.name===d.domain)||{}).displayName)||d.domain||"—"],
+                ["Owner", d.owner||"—"], ["Steward", d.steward||d.owner||"—"], ["Namespace", isEdit?`${o.prefix}: ${o.namespace}`:(prefix?`${prefix}: ${nsUri}`:"—")],
+                ["Classes", String(draft.classes.length)], ["Relationships", String(draft.rels.length)], ["Constraints", String(draft.constraints.length)],
+                ["Classes with a data source", `${draft.classes.filter(c=>MAP.sourcesOf(draft,c.id).length).length} of ${draft.classes.length}`],
+                ["Status", isEdit ? (changes.length ? "Unpublished changes" : "No changes") : "Draft"]]}/>
+              {isEdit && changes.length>0 && <div style={{marginTop:14}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:6}}>Changes · {changes.length}</div>
+                <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:260,overflowY:"auto"}}>
+                  {changes.map((l,i)=><div key={i} style={{display:"flex",gap:9,padding:"7px 12px",borderBottom:i<changes.length-1?`1px solid ${T.border}`:"none",fontSize:11.5,color:T.textSub}}>
+                    <span style={{width:62,fontSize:10,fontWeight:700,textTransform:"uppercase",color:l.kind==="added"?T.green:l.kind==="removed"?T.rose:T.blue}}>{l.kind}</span>{l.text}</div>)}
+                </div></div>}
+            </div>}
+          </div>
+        </div>
+        <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9,background:T.bg}}>
+          <span style={{fontSize:11.5,color:err?T.textMuted:T.green,flex:1}}>{err || (sec==="review" ? "Ready" : "")}</span>
+          <Btn ghost onClick={onClose}>Cancel</Btn>
+          {idx>0 && <Btn ghost onClick={()=>setSec(order[idx-1])}>Back</Btn>}
+          {sec!=="review" && <Btn ghost={isEdit} variant={isEdit?undefined:"primary"} onClick={()=>go(order[idx+1])}>Next</Btn>}
+          {(isEdit || sec==="review") && <Btn variant="primary" disabled={!!err} onClick={save}>{isEdit?"Save changes":"Create ontology"}</Btn>}
+        </div>
+      </div>
+      <div onClick={e=>e.stopPropagation()}>
+        {classEdit && <OntClassDrawer key={classEdit==="new"?"new":classEdit.id} o={view} cls={classEdit==="new"?null:classEdit} apply={apply} onClose={()=>setClassEdit(null)} onToast={onToast} onAsset={onAsset}/>}
+        {relEdit && <OntRelDrawer key={relEdit==="new"?"new":relEdit.id} o={view} rel={relEdit==="new"?null:relEdit} apply={apply} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
+        {conEdit && <OntConstraintDrawer key={conEdit==="new"?"new":conEdit.id} o={view} con={conEdit==="new"?null:conEdit} apply={apply} onClose={()=>setConEdit(null)} onToast={onToast}/>}
+      </div>
+    </div>
+  );
+};
+
 // ── The screen ──
 const OntologyView = ({onToast, onNav, onAsset}) => {
   const st = useOnt();
@@ -41595,6 +41791,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [wiz, setWiz] = useState(null);   // "new" | "edit"
   const [listQ, setListQ] = useState("");
   const [relView, setRelView] = useState("diagram");   // Relationships tab: diagram | list
   useEffect(()=>{ setListQ(""); },[tab, selId]);
@@ -41606,6 +41803,8 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
     {o && relEdit && <OntRelDrawer key={relEdit==="new"?"new":relEdit.id} o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
     {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
     {o && editOpen && <OntDetailsDrawer o={o} onClose={()=>setEditOpen(false)} onToast={onToast}/>}
+    {wiz && <OntEditorWizard o={wiz==="edit"?o:null} onClose={()=>setWiz(null)} onToast={onToast} onAsset={onAsset}
+      onSaved={(id)=>{ setWiz(null); setSelId(id); if(wiz==="new") setTab("overview"); }}/>}
   </>;
 
   if(!o){
@@ -41623,7 +41822,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
             <div style={{flex:1}}><Input2 placeholder="Search ontologies…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <button onClick={()=>setNewOpen({mode:""})}
+            <button onClick={()=>setWiz("new")}
               style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
               {Ic.plus(10)} New Ontology</button>
           </div>
@@ -41676,7 +41875,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
     {key:"constraints",label:`Constraints · ${o.constraints.length}`},
     ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
-    {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Source"}];
+    {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Configuration"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
   const doPublish = () => { const r = ONT.publish(o, me, pubNote);
     if(!r.ok){ onToast&&onToast(r.error,"error"); return; }
@@ -41704,7 +41903,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
                 onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
               {menuOpen && (
                 <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
-                  {[{icon:"🖊️",label:"Edit Details",sub:"Name, description, data domain, owner",action:()=>{setMenuOpen(false);setEditOpen(true);}},
+                  {[{icon:"🖊️",label:"Edit Details",sub:"Details, classes, relationships and constraints",action:()=>{setMenuOpen(false);setWiz("edit");}},
                     {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setStyleOpen(true);setMenuOpen(false);}},
                     {icon:"🚀",label:"Publish",sub:(o.versions||[]).length && !ONT.isDirty(o) ? `No changes since v${o.publishedN}` : `Publish as v${((o.versions||[])[0]||{n:0}).n+1}`,
                       disabled:(o.versions||[]).length>0 && !ONT.isDirty(o), action:()=>{setMenuOpen(false);setPubOpen(true);}},
@@ -41803,7 +42002,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
         {tab==="rels" && <>
           {/* One tab, two views: the diagram (as in Semantic Models) and the list. */}
           <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
-            <Tabs2 pill tabs={[{key:"diagram",label:"Diagram"},{key:"list",label:"List"}]} active={relView} onChange={setRelView}/>
+            <SegTabs tabs={[{key:"diagram",label:"Diagram"},{key:"list",label:"List"}]} active={relView} onChange={setRelView}/>
             {relView==="list" && <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>}
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
           {relView==="diagram" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAsset={onAsset}/>}
@@ -41833,7 +42032,12 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
             <SegTabs tabs={[{key:"owl",label:"OWL (Turtle)"},{key:"shacl",label:"SHACL"}]} active={srcTab} onChange={setSrcTab}/>
             <span style={{flex:1}}/>
-            <Btn small onClick={()=>download(`${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`, srcTab==="owl"?ONT.toTurtle(o):ONT.toShacl(o))}>Download .ttl</Btn>
+            <button title={`Download ${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`} aria-label="Download"
+              onClick={()=>download(`${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`, srcTab==="owl"?ONT.toTurtle(o):ONT.toShacl(o))}
+              style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </button>
           </div>
           <pre style={{margin:0,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace",maxHeight:560,overflow:"auto"}}>
             {srcTab==="owl" ? ONT.toTurtle(o) : (ONT.toShacl(o).split("\n").filter(Boolean).length>4 ? ONT.toShacl(o) : "# No constraints yet")}</pre>
