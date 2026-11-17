@@ -14,6 +14,8 @@ import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
 import * as KG from "./src/kg/engine.js";
+import * as PM3 from "./src/pm3/engine.js";
+import * as PM3SEED from "./src/pm3/seed.js";
 import { IMPORT_SAMPLES as ONT_IMPORT_SAMPLES, IMPORT_SOURCES as ONT_IMPORT_SOURCES } from "./src/ontology/standards.js";
 import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
@@ -5553,6 +5555,7 @@ const GROUPS = [
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
     {key:"policymanager2", icon:"shield",        label:"Policy Manager 2"},
+    {key:"policymanager3", icon:"shield",        label:"Policy Manager 3"},
     {key:"tags",           icon:"tag",           label:"Classifications"},
   ]},
   {section:"Build",items:[
@@ -5574,7 +5577,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags","aipipelines"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags","aipipelines"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -17047,6 +17050,716 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
             <Btn variant={confirm.danger?"danger":"primary"} onClick={()=>{ const f=confirm.onYes; setConfirm(null); f(); }}>{confirm.yesLabel}</Btn>
           </div>
         </div></>}
+    </div>
+  );
+};
+
+// ═══ Policy Manager 3 ═══════════════════════════════════════════════════════
+// Check · Act · Prove. Policies check metadata continuously (no scans);
+// Retention & Holds act on data NATIVELY in each source (src/pm3/engine.js
+// generates the task / trigger / lifecycle rule); Regulations prove it, one
+// score each. State persists in localStorage; Reset restores the seed.
+const PM3_KEY = "solix-edg.prototype.pm3.v1";
+const pm3Load = () => { try { const x = JSON.parse(localStorage.getItem(PM3_KEY)||"null"); if(x && x.version===1) return x; } catch(e) {} return PM3SEED.seedState(); };
+let _pm3 = pm3Load();
+const _pm3Subs = new Set();
+const pm3Set = (fn) => { _pm3 = typeof fn==="function" ? fn(_pm3) : fn; try { localStorage.setItem(PM3_KEY, JSON.stringify(_pm3)); } catch(e) {} _pm3Subs.forEach(f=>f()); };
+const usePm3 = () => { const [,force] = useState(0); useEffect(()=>{ const fn=()=>force(n=>n+1); _pm3Subs.add(fn); return ()=>{_pm3Subs.delete(fn);}; },[]); return _pm3; };
+const pm3Upd = (coll, id, fn) => pm3Set(s=>({...s, [coll]:s[coll].map(x=>x.id===id?fn(x):x)}));
+const pm3Today = () => new Date().toISOString().slice(0,10);
+const pm3AddDays = (d, n) => { const x = new Date(d+"T00:00:00Z"); x.setUTCDate(x.getUTCDate()+n); return x.toISOString().slice(0,10); };
+const pm3Id = (p) => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2,5)}`;
+
+const PM3_DATA_TYPES = new Set(["Table","View","Iceberg Table","Object","Blob","Bucket","Container","Folder"]);
+let _pm3Assets = null;
+const pm3Assets = () => { if(_pm3Assets) return _pm3Assets; const seen = new Set();
+  _pm3Assets = ASSETS.filter(a=>PM3_DATA_TYPES.has(a.type) && !seen.has(a.name) && seen.add(a.name)); return _pm3Assets; };
+const pm3Asset = (n) => pm3Assets().find(a=>a.name===n);
+const PM3_PII_RE = /(^|_)(email|phone|ssn|first_name|last_name|full_name|date_of_birth|dob|address|ip_address|mrn)(_|$)/;
+const pm3Cols = (name) => (SCHEMA[name]&&SCHEMA[name].length) ? SCHEMA[name] : (ASSET_COLUMNS[name]||[]).map(n=>({name:n, pii:PM3_PII_RE.test(n)}));
+const pm3Qty = (e) => `${PM3.fmtCount(e.n)} ${e.n===1?String(e.unit).replace(/s$/,""):e.unit}`;
+const pm3Owner = (a) => (a && ((a.owners||[]).filter(Boolean)[0] || a.owner)) || "—";
+const pm3CanOwn = (a, me, admin) => admin || (a && ((a.owners||[a.owner]).includes(me)));
+const pm3Tags = () => [...new Set(pm3Assets().flatMap(a=>PM3.classesOf(a, pm3Cols(a.name))).concat(["PII","PHI","finance"]))].sort((x,y)=>x.localeCompare(y));
+
+// Everything derived from state + live catalog, computed once per change.
+const pm3Derive = (s) => {
+  const assets = pm3Assets(), base = {assets, columnsOf:pm3Cols};
+  const schedules = s.schedules.map(x=>{ const t = PM3.targetsOf(x, base).map(a=>a.name);
+    const approvals = x.approvals==="all" ? Object.fromEntries(t.map(n=>[n,"approved"])) : (x.approvals||{});
+    return {...x, _targets:t, approvals}; });
+  const holds = s.holds.map(h=>({...h, _targets:PM3.targetsOf(h, base).map(a=>a.name)}));
+  const L0 = {schedules, holds};
+  schedules.forEach(x=>{ x.batches = (x.batches||[]).map(b=>b.items!=="due" ? b : {...b, items:x._targets
+    .filter(n=>x.approvals[n]==="approved" && !PM3.lifecycleOf(n, L0).paused)
+    .map(n=>({asset:n, ...PM3.dueEstimate(x, pm3Asset(n))})).filter(i=>i.n>0)}); });
+  const retained = new Set(schedules.filter(x=>x.status==="Active").flatMap(x=>x._targets.filter(n=>x.approvals[n]==="approved")));
+  const ctx = {...base, maskedOf:n=>PM3SEED.MASKED.includes(n), retainedOf:n=>retained.has(n), exceptions:s.exceptions||{}, today:pm3Today()};
+  const evals = {}; s.policies.forEach(p=>{ evals[p.id] = PM3.evaluatePolicy(p, ctx); });
+  const S = {policies:s.policies, schedules, holds, evidence:s.evidence, evalOf:p=>p.status==="Active" ? evals[p.id] : {open:0, findings:[]}};
+  const regs = s.regulations.map(r=>{ const cat = PM3SEED.CATALOGUE.find(c=>c.id===r.id)||{articles:[]};
+    const reg = {...cat, ...r, articles:cat.articles.map(a=>({...a, items:(r.articles||{})[a.id]||[]}))};
+    return {...reg, score:PM3.regulationScore(reg, S)}; });
+  const usedIn = (kind, id) => regs.flatMap(r=>r.articles.filter(a=>a.items.some(i=>i.kind===kind&&i.id===id)).map(a=>({reg:r, art:a})));
+  return {assets, ctx, schedules, holds, evals, S, regs, retained, usedIn};
+};
+
+// ── primitives ──────────────────────────────────────────────────────────────
+const PM3_TONES = {ok:()=>[T.green,"rgba(22,163,74,.10)"], warn:()=>[T.amber,T.amberDim], bad:()=>[T.rose,T.roseDim], info:()=>[T.blue,T.blueDim], muted:()=>[T.textSub,T.bgElevated], violet:()=>[T.violet,T.violetDim]};
+const Pm3Pill = ({tone="muted", children, title}) => { const [c,bg] = (PM3_TONES[tone]||PM3_TONES.muted)();
+  return <span title={title} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:bg,color:c,border:`1px solid ${c}33`,whiteSpace:"nowrap"}}>{children}</span>; };
+const pm3StatusTone = (st) => ({Active:"ok", Draft:"muted", Off:"muted", Paused:"warn", "Awaiting approval":"warn", "Release requested":"warn", Released:"muted"}[st]||"muted");
+const pm3SevTone = (sv) => ({High:"bad", Medium:"warn", Low:"muted"}[sv]||"muted");
+const Pm3Src = ({a, sub}) => { if(!a) return <span style={{color:T.textMuted}}>—</span>;
+  return <span style={{display:"inline-flex",alignItems:"center",gap:7,minWidth:0}}><ServiceIcon service={a.service} size={16}/>
+    <span style={{minWidth:0}}><span style={{display:"block",fontSize:12,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
+      {sub!==false && <span style={{display:"block",fontSize:10.5,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(PM3.SOURCES[a.service]||{l:a.connectionLabel||a.service}).l} · {a.type}</span>}</span></span>; };
+const Pm3Code = ({code, lang}) => { const [copied, setCopied] = useState(false);
+  return <div style={{position:"relative",background:T.isDark?"#0b0b0f":"#0f172a",borderRadius:8,border:`1px solid ${T.border}`}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+      <span style={{fontSize:10,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",color:"#94a3b8"}}>{lang}</span>
+      <button onClick={()=>{ try { navigator.clipboard.writeText(code); } catch(e) {} setCopied(true); setTimeout(()=>setCopied(false),1400); }}
+        style={{background:"transparent",border:"1px solid rgba(255,255,255,.15)",borderRadius:5,color:"#cbd5e1",fontSize:10.5,padding:"2px 8px",cursor:"pointer"}}>{copied?"Copied":"Copy"}</button>
+    </div>
+    <pre style={{margin:0,padding:"10px 12px",fontFamily:"'Geist Mono',monospace",fontSize:11,lineHeight:1.55,color:"#e2e8f0",overflowX:"auto",whiteSpace:"pre"}}>{code}</pre>
+  </div>; };
+const Pm3Drawer = ({open, title, sub, onClose, footer, children, width=600}) => { if(!open) return null;
+  return <div style={{position:"fixed",inset:0,zIndex:1200,display:"flex"}}>
+    <div onClick={onClose} style={{flex:1,background:"rgba(0,0,0,.35)"}}/>
+    <div className="slideInRight" style={{width,maxWidth:"100vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.25)"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"flex-start",gap:12}}>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>
+        <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(14)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 20px",display:"flex",flexDirection:"column",gap:18}}>{children}</div>
+      {footer && <div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,alignItems:"center"}}>{footer}</div>}
+    </div>
+  </div>; };
+const Pm3Field = ({l, children, hint, err}) => <div style={{display:"flex",flexDirection:"column",gap:5}}>
+  <span style={{fontSize:11.5,fontWeight:600,color:T.textSub}}>{l}</span>{children}
+  {err ? <span style={{fontSize:11,color:T.rose}}>{err}</span> : hint ? <span style={{fontSize:11,color:T.textMuted}}>{hint}</span> : null}</div>;
+const pm3IS = () => ({width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,outline:"none",fontFamily:"inherit"});
+const Pm3Input = (p) => <input {...p} style={{...pm3IS(), ...(p.style||{})}}/>;
+const Pm3Select = ({value, onChange, options, placeholder, style}) => <select value={value} onChange={e=>onChange(e.target.value)} style={{...pm3IS(), ...(style||{})}}>
+  {placeholder!==undefined && <option value="">{placeholder}</option>}
+  {options.map(o=>typeof o==="string" ? <option key={o} value={o}>{o}</option> : <option key={o.v} value={o.v}>{o.l}</option>)}</select>;
+const Pm3Chips = ({options, value, onChange}) => <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+  {options.map(o=>{ const v = typeof o==="string"?o:o.v, l = typeof o==="string"?o:o.l, on = value.includes(v);
+    return <button key={v} type="button" onClick={()=>onChange(on?value.filter(x=>x!==v):[...value,v])}
+      style={{padding:"3px 10px",borderRadius:99,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",background:on?T.accentDim:T.bgElevated,color:on?T.accent:T.textSub,border:`1px solid ${on?T.accent+"55":T.border}`}}>{l}</button>; })}</div>;
+const Pm3Box = ({title, action, children, pad=true}) => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+  {title && <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${T.border}`}}>
+    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{title}</span>{action}</div>}
+  <div style={pad?{padding:14}:null}>{children}</div></div>;
+const Pm3Table = ({cols, rows, onRow, empty="None", expand}) => <div style={{overflowX:"auto"}}>
+  {rows.length===0 ? <div style={{padding:"28px 16px",textAlign:"center",fontSize:12,color:T.textMuted}}>{empty}</div> :
+  <table style={{width:"100%",borderCollapse:"collapse"}}>
+    <thead><tr style={{background:T.bgElevated}}>{cols.map(c=><th key={c.k} style={{padding:"8px 12px",fontSize:10.5,fontWeight:600,color:T.textMuted,textAlign:"left",textTransform:"uppercase",letterSpacing:".06em",whiteSpace:"nowrap",borderBottom:`1px solid ${T.border}`,width:c.w}}>{c.l}</th>)}</tr></thead>
+    <tbody>{rows.map((r,i)=><React.Fragment key={r._key||i}>
+      <tr className={onRow?"row-hover":""} onClick={()=>onRow&&onRow(r)} style={{borderBottom:`1px solid ${T.border}`}}>
+        {cols.map(c=><td key={c.k} style={{padding:"9px 12px",fontSize:12,color:T.text,verticalAlign:"middle"}}>{c.r?c.r(r):r[c.k]}</td>)}</tr>
+      {expand && expand(r) && <tr style={{borderBottom:`1px solid ${T.border}`}}><td colSpan={cols.length} style={{padding:"4px 12px 12px",background:T.bgElevated}}>{expand(r)}</td></tr>}
+    </React.Fragment>)}</tbody></table>}</div>;
+const Pm3Kv = ({k, v}) => <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
+  <span style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>{k}</span>
+  <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</span></div>;
+const Pm3Confirm = ({c, onClose}) => <Modal open={!!c} onClose={onClose} title={c?c.title:""} width={440}>
+  {c && <><div style={{fontSize:12.5,color:T.textSub,marginBottom:18}}>{c.body}</div>
+    <div style={{display:"flex",justifyContent:"flex-end",gap:8}}><Btn ghost onClick={onClose}>Cancel</Btn>
+      <Btn variant={c.danger?"danger":"primary"} onClick={()=>{ c.run(); onClose(); }}>{c.ok}</Btn></div></>}</Modal>;
+const pm3Scope = (ap) => <span style={{display:"inline-flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
+  {ap.mode==="object" ? (ap.objects||[]).map(o=><span key={o} style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text}}>{o}</span>) :
+   <>{(ap.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,color:T.text}}><GovIcon kind="tag"/>{t}</span>)}
+     {(ap.domains||[]).map(d=><span key={d} style={{fontSize:11.5,color:T.textSub}}>{d} domain</span>)}
+     {(ap.services||[]).map(v=><span key={v} style={{fontSize:11.5,color:T.textSub}}>{(PM3.SOURCES[v]||{l:v}).l}</span>)}
+     {!(ap.tags||[]).length && !(ap.domains||[]).length && !(ap.services||[]).length && <span style={{fontSize:11.5,color:T.textSub}}>All data</span>}</>}</span>;
+
+// ═══ POLICIES (check) ═══
+const PM3_FIELD_OPTS = Object.entries(PM3.FIELDS).map(([v,f])=>({v,l:f.l}));
+const Pm3PolicyDrawer = ({open, p, D, me, onClose, onSaved}) => {
+  const blank = {name:"", desc:"", owner:me, status:"Active", severity:"Medium", appliesTo:{mode:"class", tags:[], domains:[], services:[]}, checks:[{id:"n1", field:"owner", op:"set"}], template:""};
+  const [d, setD] = useState(blank);
+  useEffect(()=>{ if(open) setD(p ? JSON.parse(JSON.stringify(p)) : blank); },[open, p&&p.id]);
+  if(!open) return null;
+  const set = (k,v) => setD(x=>({...x,[k]:v}));
+  const ap = (k,v) => setD(x=>({...x, appliesTo:{...x.appliesTo,[k]:v}}));
+  const fromTemplate = (key) => { const t = PM3SEED.TEMPLATES.find(x=>x.key===key); if(!t) return set("template","");
+    setD(x=>({...x, template:key, name:t.name, desc:t.desc, severity:t.severity, appliesTo:{mode:"class", tags:[], domains:[], services:[], ...JSON.parse(JSON.stringify(t.appliesTo))},
+      checks:t.checks.map((c,i)=>({id:`n${i+1}`, ...c}))})); };
+  const setCheck = (i, patch) => setD(x=>({...x, checks:x.checks.map((c,j)=>j===i?{...c,...patch}:c)}));
+  const preview = PM3.evaluatePolicy({...d, id:"preview"}, D.ctx);
+  const domains = [...new Set(D.assets.map(a=>a.domain).filter(Boolean))].sort();
+  const err = !d.name.trim() ? "Name is required" : !d.checks.length ? "Add at least one check" : null;
+  const save = () => { const id = p ? p.id : pm3Id("pol");
+    const out = {...d, id, updated:pm3Today(), checks:d.checks.map((c,i)=>({...c, id:c.id&&c.id.startsWith(id)?c.id:`${id}-c${i+1}-${Math.random().toString(36).slice(2,5)}`}))};
+    pm3Set(s=>({...s, policies: p ? s.policies.map(x=>x.id===id?out:x) : [out, ...s.policies]})); onSaved(out); };
+  return <Pm3Drawer open title={p?"Edit policy":"New policy"} onClose={onClose}
+    footer={<><span style={{flex:1,fontSize:11.5,color:T.textMuted}}>{preview.assets.length} assets · {preview.open} findings on save</span>
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} title={err||""} onClick={save}>{p?"Save":"Create policy"}</Btn></>}>
+    {!p && <Pm3Field l="Start from"><Pm3Select value={d.template} onChange={fromTemplate} placeholder="Blank policy" options={PM3SEED.TEMPLATES.map(t=>({v:t.key,l:t.name}))}/></Pm3Field>}
+    <Pm3Field l="Name"><Pm3Input value={d.name} onChange={e=>set("name",e.target.value)}/></Pm3Field>
+    <Pm3Field l="Description"><textarea value={d.desc} onChange={e=>set("desc",e.target.value)} rows={2} style={{...pm3IS(),resize:"vertical"}}/></Pm3Field>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+      <Pm3Field l="Owner"><Pm3Select value={d.owner} onChange={v=>set("owner",v)} options={STEWARDS_LIST.map(x=>x.name)}/></Pm3Field>
+      <Pm3Field l="Severity"><Pm3Select value={d.severity} onChange={v=>set("severity",v)} options={["High","Medium","Low"]}/></Pm3Field>
+      <Pm3Field l="Status"><Pm3Select value={d.status} onChange={v=>set("status",v)} options={["Active","Draft","Off"]}/></Pm3Field>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Applies to</span>
+      <Pm3Field l="Classification"><Pm3Chips options={pm3Tags()} value={d.appliesTo.tags||[]} onChange={v=>ap("tags",v)}/></Pm3Field>
+      <Pm3Field l="Domain"><Pm3Chips options={domains} value={d.appliesTo.domains||[]} onChange={v=>ap("domains",v)}/></Pm3Field>
+      <Pm3Field l="Source"><Pm3Chips options={Object.entries(PM3.SOURCES).map(([v,x])=>({v,l:x.l}))} value={d.appliesTo.services||[]} onChange={v=>ap("services",v)}/></Pm3Field>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Checks</span>
+      {d.checks.map((c,i)=>{ const f = PM3.FIELDS[c.field]||{kind:"presence"}; const ops = PM3.OPS[f.kind];
+        return <div key={c.id||i} style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr auto",gap:8,alignItems:"center"}}>
+          <Pm3Select value={c.field} onChange={v=>{ const k = PM3.FIELDS[v].kind; setCheck(i,{field:v, op:PM3.OPS[k][0].v, value:k==="enum"?PM3.FIELDS[v].values[0]:k==="number"?80:undefined}); }} options={PM3_FIELD_OPTS}/>
+          <Pm3Select value={c.op} onChange={v=>setCheck(i,{op:v})} options={ops.map(o=>({v:o.v,l:o.l}))}/>
+          {f.kind==="enum" ? <Pm3Select value={c.value} onChange={v=>setCheck(i,{value:v})} options={f.values}/> :
+           f.kind==="number" ? <Pm3Input type="number" value={c.value} onChange={e=>setCheck(i,{value:e.target.value})}/> : <span/>}
+          <button onClick={()=>setD(x=>({...x, checks:x.checks.filter((_,j)=>j!==i)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+        </div>; })}
+      <div><Btn small ghost icon={Ic.plus(11)} onClick={()=>setD(x=>({...x, checks:[...x.checks, {id:`n${x.checks.length+1}${Math.random().toString(36).slice(2,4)}`, field:"description", op:"set"}]}))}>Add check</Btn></div>
+    </div>
+  </Pm3Drawer>;
+};
+
+const Pm3PolicyDetail = ({p, D, me, admin, onEdit, open, onToast, onAsset}) => {
+  const [fil, setFil] = useState("Open");
+  const [cf, setCf] = useState(null);
+  const ev = D.evals[p.id];
+  const canEdit = admin || p.owner===me;
+  const rows = ev.findings.filter(f=>fil==="All"||f.status===fil).map(f=>({...f,_key:f.key}));
+  const used = D.usedIn("policy", p.id);
+  const setEx = (key, on) => pm3Set(s=>{ const ex = {...(s.exceptions||{})}; if(on) ex[key] = {by:me, until:pm3AddDays(pm3Today(),90)}; else delete ex[key]; return {...s, exceptions:ex}; });
+  return <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) 280px",gap:16,alignItems:"start"}}>
+    <div style={{display:"flex",flexDirection:"column",gap:14,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:18,fontWeight:700,color:T.text}}>{p.name}</span><Pm3Pill tone={pm3StatusTone(p.status)}>{p.status}</Pm3Pill>
+        <span style={{flex:1}}/>
+        {canEdit && <Btn small ghost icon={Ic.edit(11)} onClick={onEdit}>Edit</Btn>}
+        {canEdit && <Btn small ghost onClick={()=>{ pm3Upd("policies", p.id, x=>({...x, status:x.status==="Active"?"Off":"Active", updated:pm3Today()})); onToast(p.status==="Active"?"Policy turned off":"Policy active"); }}>{p.status==="Active"?"Turn off":"Activate"}</Btn>}
+        {canEdit && p.status!=="Active" && <Btn small variant="danger" icon={Ic.trash(11)} onClick={()=>setCf({title:"Delete policy", body:`${p.name} and its findings are removed. Regulation articles that use it lose it.`, ok:"Delete", danger:true,
+          run:()=>{ pm3Set(s=>({...s, policies:s.policies.filter(x=>x.id!==p.id), regulations:s.regulations.map(r=>({...r, articles:Object.fromEntries(Object.entries(r.articles).map(([k,v])=>[k,v.filter(i=>!(i.kind==="policy"&&i.id===p.id))]))}))})); open(null); onToast("Policy deleted"); }})}>Delete</Btn>}
+      </div>
+      {p.desc && <div style={{fontSize:12.5,color:T.textSub}}>{p.desc}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+        <Metric label="Assets checked" value={String(ev.assets.length)}/>
+        <Metric label="Open findings" value={String(p.status==="Active"?ev.open:0)} color={ev.open&&p.status==="Active"?T.rose:T.green}/>
+        <Metric label="Pass rate" value={`${ev.passRate}%`}/>
+        <Metric label="Exceptions" value={String(ev.findings.filter(f=>f.status==="Exception").length)}/>
+      </div>
+      <Pm3Box title={`Checks · ${p.checks.length}`} pad={false}>
+        {p.checks.map((c,i)=>{ const pc = ev.perCheck[c.id]||{pass:0,fail:0}; const tot = pc.pass+pc.fail;
+          return <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+            <span style={{flex:1,fontSize:12.5,fontWeight:600,color:T.text}}>{PM3.checkLabel(c)}</span>
+            <span style={{width:120,height:5,borderRadius:3,background:T.bgHover,overflow:"hidden"}}><span style={{display:"block",height:"100%",width:`${tot?Math.round(pc.pass/tot*100):100}%`,background:pc.fail?T.amber:T.green}}/></span>
+            <span style={{width:90,fontSize:11.5,color:pc.fail?T.rose:T.textMuted,textAlign:"right"}}>{pc.fail?`${pc.fail} failing`:"All pass"}</span>
+          </div>; })}
+      </Pm3Box>
+      <Pm3Box title="Findings" action={<SegTabs tabs={["Open","Exception","All"]} active={fil} onChange={setFil}/>} pad={false}>
+        <Pm3Table empty={p.status==="Active"?"No findings":"Policy is not active"} rows={p.status==="Active"?rows:[]} cols={[
+          {k:"asset", l:"Asset", r:f=><Pm3Src a={pm3Asset(f.asset)}/>},
+          {k:"check", l:"Check", r:f=>PM3.checkLabel(p.checks.find(c=>c.id===f.checkId)||{field:f.checkId})},
+          {k:"sev", l:"Severity", r:f=><Pm3Pill tone={pm3SevTone(f.severity)}>{f.severity}</Pm3Pill>},
+          {k:"owner", l:"Owner", r:f=>f.owner||"—"},
+          {k:"status", l:"Status", r:f=>f.status==="Exception"?<Pm3Pill tone="violet" title={`Until ${f.until}`}>Exception · {f.until}</Pm3Pill>:<Pm3Pill tone="bad">Open</Pm3Pill>},
+          {k:"act", l:"", r:f=><span style={{display:"flex",gap:6,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+            {onAsset && <Btn small ghost onClick={()=>{ const a = pm3Asset(f.asset); a&&onAsset(a); }}>Open</Btn>}
+            {canEdit && (f.status==="Exception" ? <Btn small ghost onClick={()=>{ setEx(f.key,false); onToast("Exception revoked"); }}>Revoke</Btn>
+              : <Btn small ghost onClick={()=>{ setEx(f.key,true); onToast("Exception granted for 90 days"); }}>Exception 90d</Btn>)}</span>}]}/>
+      </Pm3Box>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <Pm3Box title="Details"><div style={{display:"flex",flexDirection:"column",gap:12}}>
+        <Pm3Kv k="Applies to" v={pm3Scope(p.appliesTo)}/><Pm3Kv k="Owner" v={p.owner}/><Pm3Kv k="Severity" v={p.severity}/>
+        <Pm3Kv k="Evaluation" v="On every catalog change"/><Pm3Kv k="Template" v={(PM3SEED.TEMPLATES.find(t=>t.key===p.template)||{name:"None"}).name}/>
+        <Pm3Kv k="Updated" v={p.updated||"—"}/></div></Pm3Box>
+      <Pm3Box title={`Counts for · ${used.length}`}>{used.length===0 ? <span style={{fontSize:12,color:T.textMuted}}>Not mapped to a regulation</span> :
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{used.map(u=><button key={u.reg.id+u.art.id} onClick={()=>open("regulation",u.reg.id)} style={{textAlign:"left",background:"transparent",border:"none",cursor:"pointer",padding:0,fontSize:12,color:T.text}}>
+          <b>{u.reg.name}</b> <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{u.art.ref}</span> {u.art.title}</button>)}</div>}</Pm3Box>
+    </div>
+    <Pm3Confirm c={cf} onClose={()=>setCf(null)}/>
+  </div>;
+};
+
+const Pm3PoliciesTab = ({s, D, open, onNew}) => {
+  const [view, setView] = useState("Policies");
+  const active = s.policies.filter(p=>p.status==="Active");
+  const all = active.flatMap(p=>D.evals[p.id].findings.map(f=>({...f, _key:f.key, pol:p})));
+  const open_ = all.filter(f=>f.status==="Open");
+  const covered = new Set(active.flatMap(p=>D.evals[p.id].assets.map(a=>a.name)));
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+      <Metric label="Active policies" value={String(active.length)} sub={`${s.policies.length} in total`}/>
+      <Metric label="Open findings" value={String(open_.length)} color={open_.length?T.rose:T.green} sub={`${open_.filter(f=>f.severity==="High").length} high`}/>
+      <Metric label="Assets checked" value={String(covered.size)} sub="Evaluated on every catalog change"/>
+      <Metric label="Exceptions" value={String(all.length-open_.length)}/>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <SegTabs tabs={["Policies","Findings"]} active={view} onChange={setView}/><span style={{flex:1}}/>
+      <Btn variant="primary" icon={Ic.plus(12)} onClick={onNew}>New policy</Btn>
+    </div>
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      {view==="Policies" ? <Pm3Table rows={s.policies.map(p=>({...p,_key:p.id}))} onRow={p=>open("policy",p.id)} cols={[
+        {k:"name", l:"Policy", r:p=><div><div style={{fontWeight:600}}>{p.name}</div><div style={{fontSize:11,color:T.textMuted}}>{p.desc}</div></div>},
+        {k:"ap", l:"Applies to", r:p=>pm3Scope(p.appliesTo)},
+        {k:"checks", l:"Checks", r:p=>p.checks.length},
+        {k:"assets", l:"Assets", r:p=>D.evals[p.id].assets.length},
+        {k:"find", l:"Findings", r:p=>p.status!=="Active"?<span style={{color:T.textMuted}}>—</span>:D.evals[p.id].open?<Pm3Pill tone="bad">{D.evals[p.id].open} open</Pm3Pill>:<Pm3Pill tone="ok">Passing</Pm3Pill>},
+        {k:"owner", l:"Owner"},
+        {k:"status", l:"Status", r:p=><Pm3Pill tone={pm3StatusTone(p.status)}>{p.status}</Pm3Pill>}]}/>
+      : <Pm3Table rows={all} onRow={f=>open("policy",f.policyId)} empty="No findings" cols={[
+        {k:"asset", l:"Asset", r:f=><Pm3Src a={pm3Asset(f.asset)}/>},
+        {k:"pol", l:"Policy", r:f=>f.pol.name},
+        {k:"check", l:"Check", r:f=>PM3.checkLabel(f.pol.checks.find(c=>c.id===f.checkId)||{field:f.checkId})},
+        {k:"sev", l:"Severity", r:f=><Pm3Pill tone={pm3SevTone(f.severity)}>{f.severity}</Pm3Pill>},
+        {k:"owner", l:"Owner"},
+        {k:"status", l:"Status", r:f=>f.status==="Exception"?<Pm3Pill tone="violet">Exception</Pm3Pill>:<Pm3Pill tone="bad">Open</Pm3Pill>}]}/>}
+    </div>
+  </div>;
+};
+
+// ═══ RETENTION & HOLDS (act, natively in the source) ═══
+const pm3Mechanism = (a, kind) => a.type==="Iceberg Table" ? (kind==="hold"?"Iceberg tagged snapshot":"Iceberg row delete + snapshot expiry") : (PM3.SOURCES[a.service]||{})[kind];
+const pm3Floors = (D, schedId) => D.usedIn("retention", schedId).filter(u=>u.art.req&&u.art.req.minDays);
+const pm3SchedStatus = (x) => { const waiting = x._targets.filter(n=>x.approvals[n]!=="approved").length;
+  return x.status==="Active" && waiting ? {l:`${waiting} awaiting owner`, tone:"warn"} : {l:x.status, tone:pm3StatusTone(x.status)}; };
+
+const Pm3ScheduleDrawer = ({open, x, D, me, onClose, onSaved}) => {
+  const blank = {name:"", recordClass:"", owner:me, appliesTo:{mode:"class", tags:[], services:[], objects:[]}, keep:{n:3, unit:"years"}, trigger:"created", action:"delete", review:true, dateCols:{}};
+  const [d, setD] = useState(blank);
+  useEffect(()=>{ if(open) setD(x ? JSON.parse(JSON.stringify({...x, _targets:undefined, batches:undefined, runs:undefined})) : blank); },[open, x&&x.id]);
+  if(!open) return null;
+  const set = (k,v) => setD(z=>({...z,[k]:v}));
+  const ap = (k,v) => setD(z=>({...z, appliesTo:{...z.appliesTo,[k]:v}}));
+  const targets = PM3.targetsOf(d, D.ctx);
+  const capable = D.assets.filter(PM3.lifecycleCapable);
+  const floors = x ? pm3Floors(D, x.id).filter(u=>PM3.periodDays(d.keep)<u.art.req.minDays) : [];
+  const err = !d.name.trim() ? "Name is required" : !(+d.keep.n>0) ? "Period must be above zero" : !targets.length ? "Applies to no supported object" : null;
+  const save = () => { const id = x ? x.id : pm3Id("rs");
+    const ruleChanged = !x || JSON.stringify([x.appliesTo,x.keep,x.trigger,x.review]) !== JSON.stringify([d.appliesTo,d.keep,d.trigger,d.review]);
+    const approvals = ruleChanged ? Object.fromEntries(targets.filter(a=>pm3CanOwn(a,me,false)).map(a=>[a.name,"approved"])) : x.approvals;
+    const allOk = targets.every(a=>approvals[a.name]==="approved");
+    const status = x && !ruleChanged ? x.status : allOk ? "Active" : "Awaiting approval";
+    const out = {...(x?_pm3.schedules.find(z=>z.id===id):{batches:[], runs:[]}), ...d, id, approvals, status, ...(status==="Active"&&!(x&&x.activatedAt)?{activatedAt:pm3Today()}:{})};
+    pm3Set(s=>({...s, schedules: x ? s.schedules.map(z=>z.id===id?out:z) : [out, ...s.schedules]}));
+    if(ruleChanged) [...new Set(targets.filter(a=>approvals[a.name]!=="approved").map(pm3Owner))].forEach(o=>pushNotif({category:"Policy", type:"policy", title:`Approve retention · ${d.name}`, body:`${o}: keep ${PM3.periodLabel(d.keep)}, then delete — waiting for your approval`, nav:"policymanager3"}));
+    onSaved(out, ruleChanged && !allOk); };
+  return <Pm3Drawer open width={680} title={x?"Edit retention schedule":"New retention schedule"} onClose={onClose}
+    footer={<><span style={{flex:1,fontSize:11.5,color:T.textMuted}}>{targets.length} objects · owners approve before anything runs</span>
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} title={err||""} onClick={save}>{x?"Save":"Create schedule"}</Btn></>}>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <Pm3Field l="Name"><Pm3Input value={d.name} onChange={e=>set("name",e.target.value)}/></Pm3Field>
+      <Pm3Field l="Record class"><Pm3Input value={d.recordClass} onChange={e=>set("recordClass",e.target.value)} placeholder="e.g. Customer records"/></Pm3Field>
+    </div>
+    <Pm3Field l="Owner"><Pm3Select value={d.owner} onChange={v=>set("owner",v)} options={STEWARDS_LIST.map(z=>z.name)}/></Pm3Field>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>Applies to</span>
+        <SegTabs tabs={[{key:"class",label:"By classification"},{key:"object",label:"Specific objects"}]} active={d.appliesTo.mode} onChange={v=>ap("mode",v)}/></div>
+      {d.appliesTo.mode==="class" ? <>
+        <Pm3Field l="Classification"><Pm3Chips options={pm3Tags()} value={d.appliesTo.tags||[]} onChange={v=>ap("tags",v)}/></Pm3Field>
+        <Pm3Field l="Source (optional)"><Pm3Chips options={Object.entries(PM3.SOURCES).map(([v,z])=>({v,l:z.l}))} value={d.appliesTo.services||[]} onChange={v=>ap("services",v)}/></Pm3Field>
+      </> : <Pm3Field l="Objects"><Pm3Chips options={capable.map(a=>a.name)} value={d.appliesTo.objects||[]} onChange={v=>ap("objects",v)}/></Pm3Field>}
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Rule</span>
+      <div style={{display:"grid",gridTemplateColumns:"90px 120px 1fr",gap:12,alignItems:"end"}}>
+        <Pm3Field l="Keep for"><Pm3Input type="number" min="1" value={d.keep.n} onChange={e=>set("keep",{...d.keep,n:e.target.value})}/></Pm3Field>
+        <Pm3Field l="Unit"><Pm3Select value={d.keep.unit} onChange={v=>set("keep",{...d.keep,unit:v})} options={["days","months","years"]}/></Pm3Field>
+        <Pm3Field l="Counted from"><Pm3Select value={d.trigger} onChange={v=>set("trigger",v)} options={Object.entries(PM3.TRIGGERS).map(([v,t])=>({v,l:t.l}))}/></Pm3Field>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Pm3Field l="At end of period"><Pm3Select value={d.action} onChange={v=>set("action",v)} options={[{v:"delete",l:"Delete in source"}]}/></Pm3Field>
+        <Pm3Field l="Disposition review"><Pm3Select value={d.review?"yes":"no"} onChange={v=>set("review",v==="yes")} options={[{v:"yes",l:"Owner confirms each batch"},{v:"no",l:"Delete automatically"}]}/></Pm3Field>
+      </div>
+      {floors.map(u=><div key={u.reg.id+u.art.id} style={{fontSize:11.5,color:T.rose}}>Below {u.reg.name} {u.art.ref} minimum of {Math.round(u.art.req.minDays/365)} years</div>)}
+    </div>
+    <Pm3Box title={`Objects · ${targets.length}`} pad={false}>
+      <Pm3Table rows={targets.map(a=>({...a,_key:a.name}))} empty="No supported object matches" cols={[
+        {k:"o", l:"Object", r:a=><Pm3Src a={a}/>},
+        {k:"m", l:"Runs as", r:a=><span style={{fontSize:11.5,color:T.textSub}}>{pm3Mechanism(a,"retention")}</span>},
+        {k:"c", l:"Date column", r:a=>PM3.isStore(a)&&a.type!=="Iceberg Table" ? <span style={{fontSize:11.5,color:T.textMuted}}>Object {d.trigger==="modified"?"modified":"created"} time</span> :
+          <Pm3Select style={{padding:"4px 8px",fontSize:11.5}} value={d.dateCols[a.name]||PM3.pickDateColumn(pm3Cols(a.name), d.trigger)||""} onChange={v=>set("dateCols",{...d.dateCols,[a.name]:v})} options={pm3Cols(a.name).map(c=>c.name)}/>},
+        {k:"n", l:"Note", r:a=>{ const L = PM3.lifecycleOf(a.name, D.S);
+          return L.paused ? <Pm3Pill tone="violet">On hold</Pm3Pill> : L.held ? <Pm3Pill tone="violet">Held rows excluded</Pm3Pill> :
+            L.winner && (!x || L.winner.id!==x.id) && PM3.periodDays(L.winner.keep) > PM3.periodDays(d.keep) ? <Pm3Pill tone="info">{L.winner.name} keeps longer</Pm3Pill> : <span style={{color:T.textMuted}}>—</span>; }},
+        {k:"ow", l:"Approver", r:a=>pm3Owner(a)}]}/>
+    </Pm3Box>
+  </Pm3Drawer>;
+};
+
+const Pm3ScheduleDetail = ({x, D, me, admin, onEdit, open, onToast, onAsset}) => {
+  const [sub, setSub] = useState("objects");
+  const [exp, setExp] = useState(null);
+  const [cf, setCf] = useState(null);
+  const canEdit = admin || x.owner===me;
+  const st = pm3SchedStatus(x);
+  const pending = (x.batches||[]).filter(b=>b.status==="Awaiting review");
+  const decide = (name, v) => pm3Set(s=>({...s, schedules:s.schedules.map(z=>{ if(z.id!==x.id) return z;
+    const approvals = {...x.approvals, [name]:v}; const all = x._targets.every(n=>approvals[n]==="approved");
+    return {...z, approvals, ...(all&&z.status==="Awaiting approval"?{status:"Active", activatedAt:pm3Today()}:{})}; })}));
+  const stage = () => { const items = x._targets.filter(n=>x.approvals[n]==="approved" && !PM3.lifecycleOf(n, D.S).paused).map(n=>({asset:n, ...PM3.dueEstimate(x, pm3Asset(n))})).filter(i=>i.n>0);
+    pm3Upd("schedules", x.id, z=>({...z, batches:[{id:pm3Id("b"), at:pm3Today(), status:"Awaiting review", items}, ...(z.batches||[]).filter(b=>b.items!=="due")]})); setSub("review"); onToast(`${items.length} objects staged for review`); };
+  const approveBatch = (b) => pm3Upd("schedules", x.id, z=>({...z,
+    batches:(z.batches||[]).map(bb=>bb.id===b.id?{...b, status:"Approved", decidedBy:me, decidedAt:pm3Today()}:bb),
+    runs:[...b.items.map(i=>{ const a = pm3Asset(i.asset); return {at:pm3Today(), asset:i.asset, n:i.n, unit:i.unit, result:PM3.isStore(a)&&a.type!=="Iceberg Table"?`Expired by ${pm3Mechanism(a,"retention")}`:`Deleted by ${pm3Mechanism(a,"retention")}`, by:me}; }), ...(z.runs||[])]}));
+  const batchSet = (b, patch) => pm3Upd("schedules", x.id, z=>({...z, batches:(z.batches||[]).map(bb=>bb.id===b.id?{...b, ...patch}:bb)}));
+  const floors = pm3Floors(D, x.id);
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <span style={{fontSize:18,fontWeight:700,color:T.text}}>{x.name}</span><Pm3Pill tone={st.tone}>{st.l}</Pm3Pill>
+      {pending.length>0 && <Pm3Pill tone="warn">Review due</Pm3Pill>}
+      <span style={{flex:1}}/>
+      {canEdit && <Btn small ghost icon={Ic.edit(11)} onClick={onEdit}>Edit</Btn>}
+      {canEdit && x.status!=="Awaiting approval" && <Btn small ghost onClick={()=>{ pm3Upd("schedules", x.id, z=>({...z, status:z.status==="Paused"?"Active":"Paused"})); onToast(x.status==="Paused"?"Schedule resumed":"Schedule paused in every source"); }}>{x.status==="Paused"?"Resume":"Pause"}</Btn>}
+      {canEdit && x.status!=="Active" && <Btn small variant="danger" icon={Ic.trash(11)} onClick={()=>setCf({title:"Delete schedule", body:`EDG removes the ${x._targets.length} native jobs and rules it created. Data already deleted stays deleted.`, ok:"Delete", danger:true,
+        run:()=>{ pm3Set(s=>({...s, schedules:s.schedules.filter(z=>z.id!==x.id), regulations:s.regulations.map(r=>({...r, articles:Object.fromEntries(Object.entries(r.articles).map(([k,v])=>[k,v.filter(i=>!(i.kind==="retention"&&i.id===x.id))]))}))})); open(null); onToast("Schedule deleted"); }})}>Delete</Btn>}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,minmax(0,1fr))",gap:12,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:14}}>
+      <Pm3Kv k="Record class" v={x.recordClass||"—"}/><Pm3Kv k="Keep for" v={PM3.periodLabel(x.keep)}/><Pm3Kv k="Counted from" v={PM3.TRIGGERS[x.trigger].l}/>
+      <Pm3Kv k="At end of period" v={x.review?"Delete after review":"Delete automatically"}/><Pm3Kv k="Applies to" v={pm3Scope(x.appliesTo)}/><Pm3Kv k="Owner" v={x.owner}/>
+    </div>
+    {floors.length>0 && <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{floors.map(u=>{ const ok = PM3.periodDays(x.keep)>=u.art.req.minDays;
+      return <Pm3Pill key={u.reg.id+u.art.id} tone={ok?"ok":"bad"}>{u.reg.name} {u.art.ref} · minimum {Math.round(u.art.req.minDays/365)} years {ok?"met":"not met"}</Pm3Pill>; })}</div>}
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <SegTabs tabs={[{key:"objects",label:`Objects · ${x._targets.length}`},{key:"review",label:`Disposition review${pending.length?` · ${pending.length}`:""}`},{key:"runs",label:`Runs · ${(x.runs||[]).length}`}]} active={sub} onChange={setSub}/>
+      <span style={{flex:1}}/>{canEdit && x.status==="Active" && x.review && <Btn small ghost onClick={stage}>Stage batch now</Btn>}
+    </div>
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      {sub==="objects" && <Pm3Table rows={x._targets.map(n=>({...pm3Asset(n), _key:n}))} onRow={a=>setExp(exp===a.name?null:a.name)}
+        expand={a=>{ if(exp!==a.name) return null; const L = PM3.lifecycleOf(a.name, D.S);
+          const g = PM3.retentionCode(x, a, {dateCol:x.dateCols[a.name]||PM3.pickDateColumn(pm3Cols(a.name), x.trigger)||"<date_column>", exclusions:PM3.holdExclusions(a, L.holds)});
+          return g ? <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6}}><span style={{fontSize:11,color:T.textMuted}}>{g.mechanism} · written by EDG into {(PM3.SOURCES[a.service]||{}).l}</span><Pm3Code code={g.code} lang={g.lang}/></div> : null; }}
+        cols={[
+          {k:"o", l:"Object", r:a=><Pm3Src a={a}/>},
+          {k:"m", l:"Runs as", r:a=><span style={{fontSize:11.5,color:T.textSub}}>{pm3Mechanism(a,"retention")}</span>},
+          {k:"c", l:"Date column", r:a=>PM3.isStore(a)&&a.type!=="Iceberg Table" ? <span style={{fontSize:11.5,color:T.textMuted}}>Object time</span> : (x.dateCols[a.name]||PM3.pickDateColumn(pm3Cols(a.name), x.trigger)) ? <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{x.dateCols[a.name]||PM3.pickDateColumn(pm3Cols(a.name), x.trigger)}</span> : <Pm3Pill tone="warn">Not set</Pm3Pill>},
+          {k:"d", l:"Past period", r:a=>{ const e = PM3.dueEstimate(x, a); return <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{pm3Qty(e)}</span>; }},
+          {k:"l", l:"Lifecycle", r:a=>{ const L = PM3.lifecycleOf(a.name, D.S); const h = L.holds[0];
+            return L.paused ? <Pm3Pill tone="violet" title={h.matter}>Paused · {h.matterId}</Pm3Pill> : L.held ? <Pm3Pill tone="violet" title={h.matter}>Held rows excluded · {h.matterId}</Pm3Pill> :
+              L.winner && L.winner.id!==x.id && PM3.periodDays(L.winner.keep)>=PM3.periodDays(x.keep) ? <Pm3Pill tone="info">{L.winner.name} keeps longer</Pm3Pill> : x.status==="Active"&&x.approvals[a.name]==="approved" ? <Pm3Pill tone="ok">Governs</Pm3Pill> : <span style={{color:T.textMuted}}>—</span>; }},
+          {k:"ap", l:"Owner approval", r:a=>{ const v = x.approvals[a.name]; const can = pm3CanOwn(a, me, admin);
+            return v==="approved" ? <Pm3Pill tone="ok">Approved</Pm3Pill> : <span style={{display:"inline-flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+              <Pm3Pill tone={v==="rejected"?"bad":"warn"}>{v==="rejected"?"Rejected":"Awaiting"} · {pm3Owner(a)}</Pm3Pill>
+              {can && <><Btn small onClick={()=>{ decide(a.name,"approved"); onToast(`Approved · ${a.name}`); }}>Approve</Btn>{v!=="rejected"&&<Btn small ghost onClick={()=>{ decide(a.name,"rejected"); onToast(`Rejected · ${a.name}`); }}>Reject</Btn>}</>}</span>; }},
+          {k:"x", l:"", w:24, r:a=><span style={{color:T.textMuted,display:"flex",transform:exp===a.name?"rotate(90deg)":"none"}}>{Ic.chevRight(11)}</span>}]}/>}
+      {sub==="review" && ((x.batches||[]).length===0 ? <div style={{padding:28,textAlign:"center",fontSize:12,color:T.textMuted}}>{x.review?"No batches":"Deletes automatically, no review"}</div> :
+        (x.batches||[]).map(b=><div key={b.id} style={{borderBottom:`1px solid ${T.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px"}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Batch · {b.at}</span>
+            <Pm3Pill tone={b.status==="Awaiting review"?"warn":b.status==="Approved"?"ok":"muted"}>{b.status}{b.decidedBy?` · ${b.decidedBy}`:""}</Pm3Pill>
+            <span style={{fontSize:11.5,color:T.textMuted}}>{b.items.length} objects · {PM3.fmtCount(b.items.filter(i=>i.unit==="rows").reduce((n,i)=>n+i.n,0))} rows · {b.items.filter(i=>i.unit==="objects").reduce((n,i)=>n+i.n,0)} files</span>
+            <span style={{flex:1}}/>
+            {b.status==="Awaiting review" && canEdit && <><Btn small ghost onClick={()=>{ batchSet(b,{status:"Extended 90 days", decidedBy:me}); onToast("Batch held back 90 days"); }}>Extend 90 days</Btn>
+              <Btn small variant="primary" onClick={()=>{ approveBatch(b); onToast(`Deletion approved · ${b.items.length} objects`); }}>Approve deletion</Btn></>}
+          </div>
+          <Pm3Table rows={b.items.map(i=>({...i,_key:i.asset}))} empty="Nothing due" cols={[
+            {k:"o", l:"Object", r:i=><Pm3Src a={pm3Asset(i.asset)}/>},
+            {k:"n", l:"Due", r:i=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{pm3Qty(i)}</span>},
+            {k:"h", l:"Held", r:i=>PM3.lifecycleOf(i.asset, D.S).held ? <Pm3Pill tone="violet">Held rows excluded</Pm3Pill> : <span style={{color:T.textMuted}}>—</span>},
+            {k:"x", l:"", r:i=>b.status==="Awaiting review"&&canEdit ? <span onClick={e=>e.stopPropagation()}><Btn small ghost onClick={()=>batchSet(b,{items:b.items.filter(z=>z.asset!==i.asset)})}>Exclude</Btn></span> : null}]}/>
+        </div>))}
+      {sub==="runs" && <Pm3Table rows={(x.runs||[]).map((r,i)=>({...r,_key:i}))} empty="No runs yet" cols={[
+        {k:"at", l:"Date"}, {k:"o", l:"Object", r:r=><Pm3Src a={pm3Asset(r.asset)||{name:r.asset, service:"", type:"Folder"}}/>},
+        {k:"n", l:"Removed", r:r=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{pm3Qty(r)}</span>},
+        {k:"result", l:"Result"}, {k:"by", l:"Approved by"}]}/>}
+    </div>
+    <Pm3Confirm c={cf} onClose={()=>setCf(null)}/>
+  </div>;
+};
+
+const Pm3HoldDrawer = ({open, D, me, onClose, onSaved}) => {
+  const blank = {matter:"", matterId:"", type:"Legal", owner:me, appliesTo:{mode:"object", tags:[], objects:[]}, criteria:{}};
+  const [d, setD] = useState(blank);
+  useEffect(()=>{ if(open) setD(blank); },[open]);
+  if(!open) return null;
+  const set = (k,v) => setD(z=>({...z,[k]:v}));
+  const ap = (k,v) => setD(z=>({...z, appliesTo:{...z.appliesTo,[k]:v}}));
+  const targets = PM3.targetsOf(d, D.ctx);
+  const capable = D.assets.filter(PM3.lifecycleCapable);
+  const crit = (n, patch) => setD(z=>({...z, criteria:{...z.criteria, [n]:{...(z.criteria[n]||{op:"="}), ...patch}}}));
+  const err = !d.matter.trim() ? "Matter is required" : !d.matterId.trim() ? "Matter ID is required" : !targets.length ? "Applies to no supported object" : null;
+  const save = () => { const id = pm3Id("lh");
+    const out = {...d, id, status:"Active", since:pm3Today(), notices:{}, criteria:Object.fromEntries(Object.entries(d.criteria).filter(([,c])=>c&&c.col&&String(c.val||"").trim()))};
+    pm3Set(s=>({...s, holds:[out, ...s.holds]}));
+    [...new Set(targets.map(pm3Owner))].forEach(o=>pushNotif({category:"Policy", type:"policy", title:`Legal hold · ${d.matterId}`, body:`${o}: data you own is on hold for ${d.matter}. Do not delete or change it.`, nav:"policymanager3"}));
+    onSaved(out); };
+  return <Pm3Drawer open width={680} title="New legal hold" onClose={onClose}
+    footer={<><span style={{flex:1,fontSize:11.5,color:T.textMuted}}>Takes effect at once · {targets.length} objects · owners notified</span>
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} title={err||""} onClick={save}>Place hold</Btn></>}>
+    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12}}>
+      <Pm3Field l="Matter"><Pm3Input value={d.matter} onChange={e=>set("matter",e.target.value)} placeholder="e.g. Smith v. J&J"/></Pm3Field>
+      <Pm3Field l="Matter ID"><Pm3Input value={d.matterId} onChange={e=>set("matterId",e.target.value)} placeholder="MATTER-2026-020"/></Pm3Field>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+      <Pm3Field l="Hold type"><Pm3Select value={d.type} onChange={v=>set("type",v)} options={["Legal","Tax","Regulatory","Other"]}/></Pm3Field>
+      <Pm3Field l="Legal owner"><Pm3Select value={d.owner} onChange={v=>set("owner",v)} options={STEWARDS_LIST.map(z=>z.name)}/></Pm3Field>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:12.5,fontWeight:700,color:T.text,flex:1}}>Applies to</span>
+        <SegTabs tabs={[{key:"object",label:"Specific objects"},{key:"class",label:"By classification"}]} active={d.appliesTo.mode} onChange={v=>ap("mode",v)}/></div>
+      {d.appliesTo.mode==="class" ? <Pm3Field l="Classification"><Pm3Chips options={pm3Tags()} value={d.appliesTo.tags||[]} onChange={v=>ap("tags",v)}/></Pm3Field>
+        : <Pm3Field l="Objects"><Pm3Chips options={capable.map(a=>a.name)} value={d.appliesTo.objects||[]} onChange={v=>ap("objects",v)}/></Pm3Field>}
+    </div>
+    <Pm3Box title={`Objects · ${targets.length}`} pad={false}>
+      <Pm3Table rows={targets.map(a=>({...a,_key:a.name}))} empty="No supported object matches" cols={[
+        {k:"o", l:"Object", r:a=><Pm3Src a={a}/>},
+        {k:"m", l:"Runs as", r:a=><span style={{fontSize:11.5,color:T.textSub}}>{pm3Mechanism(a,"hold")}</span>},
+        {k:"c", l:"Hold", r:a=>PM3.isStore(a)&&a.type!=="Iceberg Table" ? <span style={{fontSize:11.5,color:T.textMuted}}>Entire object</span> :
+          <span style={{display:"flex",gap:6,alignItems:"center"}}>
+            <Pm3Select style={{padding:"4px 6px",fontSize:11.5,width:130}} value={(d.criteria[a.name]||{}).col||""} onChange={v=>crit(a.name,{col:v})} placeholder="Entire object" options={pm3Cols(a.name).map(c=>c.name)}/>
+            {(d.criteria[a.name]||{}).col && <><Pm3Select style={{padding:"4px 6px",fontSize:11.5,width:60}} value={(d.criteria[a.name]||{}).op||"="} onChange={v=>crit(a.name,{op:v})} options={["=","<>",">","<",">=","<="]}/>
+              <Pm3Input style={{padding:"4px 6px",fontSize:11.5,width:100}} value={(d.criteria[a.name]||{}).val||""} onChange={e=>crit(a.name,{val:e.target.value})} placeholder="Value"/></>}</span>},
+        {k:"e", l:"Effect on retention", r:a=>{ const sc = D.schedules.filter(z=>z.status!=="Draft"&&z._targets.includes(a.name));
+          return sc.length ? <span style={{fontSize:11.5,color:T.textSub}}>{(d.criteria[a.name]||{}).col?"Excluded from":"Pauses"} {sc.map(z=>z.name).join(", ")}</span> : <span style={{color:T.textMuted}}>—</span>; }}]}/>
+    </Pm3Box>
+  </Pm3Drawer>;
+};
+
+const Pm3HoldDetail = ({h, D, me, admin, open, onToast}) => {
+  const [exp, setExp] = useState(null);
+  const canAct = admin || h.owner===me;
+  const crit = (n) => { const c = (h.criteria||{})[n]; return c&&c.col ? `${c.col} ${c.op||"="} ${c.val}` : "Entire object"; };
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+      <span style={{fontSize:18,fontWeight:700,color:T.text}}>{h.matter}</span><Pm3Pill tone={h.status==="Active"?"violet":pm3StatusTone(h.status)}>{h.status==="Active"?"On hold":h.status}</Pm3Pill>
+      <span style={{flex:1}}/>
+      {h.status==="Active" && canAct && <Btn small ghost onClick={()=>{ pm3Upd("holds", h.id, z=>({...z, status:"Release requested", releaseReq:{by:me, at:pm3Today()}})); onToast("Release requested · a second person must confirm"); }}>Request release</Btn>}
+      {h.status==="Release requested" && <>
+        <Btn small ghost onClick={()=>{ pm3Upd("holds", h.id, z=>({...z, status:"Active", releaseReq:null})); onToast("Release request withdrawn"); }}>Keep hold</Btn>
+        <Btn small variant="primary" disabled={h.releaseReq&&h.releaseReq.by===me} title={h.releaseReq&&h.releaseReq.by===me?"A second person must confirm":""}
+          onClick={()=>{ pm3Upd("holds", h.id, z=>({...z, status:"Released", releasedAt:pm3Today(), releasedBy:me})); onToast("Hold released · paused schedules resume"); }}>Confirm release</Btn></>}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(6,minmax(0,1fr))",gap:12,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:14}}>
+      <Pm3Kv k="Matter ID" v={<span style={{fontFamily:"'Geist Mono',monospace"}}>{h.matterId}</span>}/><Pm3Kv k="Type" v={h.type}/><Pm3Kv k="Legal owner" v={h.owner}/>
+      <Pm3Kv k="Since" v={h.since}/><Pm3Kv k="Applies to" v={pm3Scope(h.appliesTo)}/>
+      <Pm3Kv k={h.status==="Released"?"Released":h.status==="Release requested"?"Release requested":"Objects"} v={h.status==="Released"?`${h.releasedAt} · ${h.releasedBy}`:h.status==="Release requested"?`${h.releaseReq.at} · ${h.releaseReq.by}`:h._targets.length}/>
+    </div>
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      <Pm3Table rows={h._targets.map(n=>({...pm3Asset(n),_key:n}))} onRow={a=>setExp(exp===a.name?null:a.name)} empty="No objects"
+        expand={a=>{ if(exp!==a.name) return null; const g = PM3.holdCode(h, a);
+          return g ? <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6}}><span style={{fontSize:11,color:T.textMuted}}>{g.mechanism} · {h.status==="Released"?"removed from":"applied in"} {(PM3.SOURCES[a.service]||{}).l}</span><Pm3Code code={g.code} lang={g.lang}/></div> : null; }}
+        cols={[
+          {k:"o", l:"Object", r:a=><Pm3Src a={a}/>},
+          {k:"m", l:"Runs as", r:a=><span style={{fontSize:11.5,color:T.textSub}}>{pm3Mechanism(a,"hold")}</span>},
+          {k:"c", l:"Held", r:a=><span style={{fontFamily:crit(a.name)==="Entire object"?"inherit":"'Geist Mono',monospace",fontSize:11.5}}>{crit(a.name)}</span>},
+          {k:"e", l:"Effect on retention", r:a=>{ const sc = D.schedules.filter(z=>z.status!=="Draft"&&z._targets.includes(a.name));
+            return h.status==="Released" ? <span style={{color:T.textMuted}}>—</span> : sc.length ? <span style={{fontSize:11.5,color:T.textSub}}>{crit(a.name)==="Entire object"?"Pauses":"Excluded from"} {sc.map(z=>z.name).join(", ")}</span> : <span style={{color:T.textMuted}}>No schedule</span>; }},
+          {k:"n", l:"Owner notice", r:a=>{ const ack = (h.notices||{})[a.name];
+            return ack ? <Pm3Pill tone="ok">Acknowledged · {ack}</Pm3Pill> : <span style={{display:"inline-flex",gap:6,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+              <Pm3Pill tone="warn">Awaiting · {pm3Owner(a)}</Pm3Pill>
+              {h.status!=="Released" && pm3CanOwn(a, me, admin) && <Btn small onClick={()=>{ pm3Upd("holds", h.id, z=>({...z, notices:{...(z.notices||{}), [a.name]:pm3Today()}})); onToast("Hold acknowledged"); }}>Acknowledge</Btn>}</span>; }},
+          {k:"x", l:"", w:24, r:a=><span style={{color:T.textMuted,display:"flex",transform:exp===a.name?"rotate(90deg)":"none"}}>{Ic.chevRight(11)}</span>}]}/>
+    </div>
+  </div>;
+};
+
+const Pm3LifecycleTab = ({s, D, sub, setSub, open, onNewSchedule, onNewHold}) => {
+  const active = D.schedules.filter(x=>x.status==="Active");
+  const retained = D.retained.size;
+  const review = D.schedules.reduce((n,x)=>n+(x.batches||[]).filter(b=>b.status==="Awaiting review").length,0);
+  const liveHolds = D.holds.filter(h=>h.status!=="Released");
+  const held = new Set(liveHolds.flatMap(h=>h._targets)).size;
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+      <Metric label="Active schedules" value={String(active.length)} sub={`${D.schedules.length} in total`}/>
+      <Metric label="Objects under retention" value={String(retained)} sub="Executed in the source"/>
+      <Metric label="Batches awaiting review" value={String(review)} color={review?T.amber:undefined}/>
+      <Metric label="Objects on hold" value={String(held)} sub={`${liveHolds.length} active matters`} color={held?T.violet:undefined}/>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <SegTabs tabs={[{key:"schedules",label:"Retention schedules"},{key:"holds",label:"Legal holds"}]} active={sub} onChange={setSub}/><span style={{flex:1}}/>
+      {sub==="schedules" ? <Btn variant="primary" icon={Ic.plus(12)} onClick={onNewSchedule}>New schedule</Btn> : <Btn variant="primary" icon={Ic.plus(12)} onClick={onNewHold}>New legal hold</Btn>}
+    </div>
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      {sub==="schedules" ? <Pm3Table rows={D.schedules.map(x=>({...x,_key:x.id}))} onRow={x=>open("retention",x.id)} empty="No schedules" cols={[
+        {k:"n", l:"Schedule", r:x=><div><div style={{fontWeight:600}}>{x.name}</div><div style={{fontSize:11,color:T.textMuted}}>{x.recordClass}</div></div>},
+        {k:"ap", l:"Applies to", r:x=>pm3Scope(x.appliesTo)},
+        {k:"k", l:"Keep for", r:x=><span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5}}>{PM3.periodLabel(x.keep)}</span>},
+        {k:"t", l:"Counted from", r:x=>PM3.TRIGGERS[x.trigger].l},
+        {k:"a", l:"At end", r:x=><span style={{whiteSpace:"nowrap"}}>{x.review?"Delete after review":"Delete"}</span>},
+        {k:"o", l:"Objects", r:x=><span style={{display:"inline-flex",alignItems:"center",gap:6}}>{x._targets.length}
+          <span style={{display:"inline-flex",gap:2}}>{[...new Set(x._targets.map(n=>pm3Asset(n).service))].map(v=><ServiceIcon key={v} service={v} size={13}/>)}</span></span>},
+        {k:"s", l:"Status", r:x=>{ const st = pm3SchedStatus(x); return <span style={{display:"inline-flex",gap:5}}><Pm3Pill tone={st.tone}>{st.l}</Pm3Pill>{(x.batches||[]).some(b=>b.status==="Awaiting review")&&<Pm3Pill tone="warn">Review due</Pm3Pill>}</span>; }}]}/>
+      : <Pm3Table rows={D.holds.map(h=>({...h,_key:h.id}))} onRow={h=>open("hold",h.id)} empty="No legal holds" cols={[
+        {k:"m", l:"Matter", r:h=><div><div style={{fontWeight:600}}>{h.matter}</div><div style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{h.matterId}</div></div>},
+        {k:"type", l:"Type"},
+        {k:"ap", l:"Applies to", r:h=>pm3Scope(h.appliesTo)},
+        {k:"o", l:"Objects", r:h=>h._targets.length},
+        {k:"since", l:"Since"},
+        {k:"owner", l:"Legal owner"},
+        {k:"s", l:"Status", r:h=><Pm3Pill tone={h.status==="Active"?"violet":pm3StatusTone(h.status)}>{h.status==="Active"?"On hold":h.status}</Pm3Pill>}]}/>}
+    </div>
+  </div>;
+};
+
+// ═══ REGULATIONS (prove) ═══
+const PM3_KIND = {policy:"Policy", retention:"Retention", hold:"Legal hold", evidence:"Evidence"};
+const pm3ItemName = (it, s) => { const list = {policy:s.policies, retention:s.schedules, hold:s.holds, evidence:s.evidence}[it.kind]||[];
+  const o = list.find(x=>x.id===it.id); return o ? (o.name||o.matter||o.title) : "Missing"; };
+
+const Pm3EvidenceDrawer = ({ev, me, onClose, onToast}) => {
+  const [ans, setAns] = useState([]);
+  useEffect(()=>{ if(ev) setAns(ev.questions.map(()=> "")); },[ev&&ev.id]);
+  if(!ev) return null;
+  const err = ans.some(a=>!String(a).trim()) ? "Answer every question" : null;
+  return <Pm3Drawer open title={ev.title} sub={`${ev.every} · due ${ev.due} · reviewer ${ev.reviewer}`} onClose={onClose}
+    footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} title={err||""} onClick={()=>{
+      pm3Upd("evidence", ev.id, z=>({...z, submissions:[{at:pm3Today(), by:me, answers:ans, status:"Submitted"}, ...(z.submissions||[])]}));
+      pushNotif({category:"Policy", type:"policy", title:`Evidence to review · ${ev.title}`, body:`${me} submitted evidence — ${ev.reviewer} to review`, nav:"policymanager3"});
+      onToast(`Submitted to ${ev.reviewer}`); onClose(); }}>Submit</Btn></>}>
+    {ev.questions.map((q,i)=><Pm3Field key={i} l={q.q}>
+      {q.type==="yesno" ? <Pm3Select value={ans[i]||""} onChange={v=>setAns(a=>a.map((x,j)=>j===i?v:x))} placeholder="Select" options={["Yes","No"]}/> :
+       q.type==="number" ? <Pm3Input type="number" value={ans[i]||""} onChange={e=>setAns(a=>a.map((x,j)=>j===i?e.target.value:x))}/> :
+       <textarea rows={3} value={ans[i]||""} onChange={e=>setAns(a=>a.map((x,j)=>j===i?e.target.value:x))} style={{...pm3IS(),resize:"vertical"}}/>}</Pm3Field>)}
+    {(ev.submissions||[]).length>0 && <Pm3Box title="History" pad={false}><Pm3Table rows={ev.submissions.map((x,i)=>({...x,_key:i}))} cols={[{k:"at",l:"Date"},{k:"by",l:"By"},{k:"status",l:"Status"},{k:"decidedBy",l:"Reviewer",r:x=>x.decidedBy||"—"}]}/></Pm3Box>}
+  </Pm3Drawer>;
+};
+
+const Pm3AdoptDrawer = ({open, s, D, me, onClose, onDone}) => {
+  const avail = PM3SEED.CATALOGUE.filter(c=>!s.regulations.some(r=>r.id===c.id));
+  const [id, setId] = useState("");
+  const [pick, setPick] = useState({});
+  useEffect(()=>{ if(open){ setId((avail[0]||{}).id||""); } },[open]);
+  const cat = PM3SEED.CATALOGUE.find(c=>c.id===id);
+  const plan = (cat ? cat.articles : []).map(a=>{ const r = a.req;
+    if(r.kind==="policy"){ const ex = s.policies.find(p=>p.template===r.template); const t = PM3SEED.TEMPLATES.find(x=>x.key===r.template);
+      return {a, act: ex ? {kind:"policy", reuse:ex.id, l:`Reuse policy · ${ex.name}`} : {kind:"policy", create:r.template, l:`Create policy · ${t.name}`}}; }
+    if(r.kind==="retention"){ const ex = D.schedules.find(x=>x.appliesTo.mode==="class" && (x.appliesTo.tags||[]).includes(r.tag) && (!r.minDays || PM3.periodDays(x.keep)>=r.minDays));
+      return {a, act: ex ? {kind:"retention", reuse:ex.id, l:`Reuse schedule · ${ex.name}`} : null}; }
+    if(r.kind==="evidence") return {a, act:{kind:"evidence", create:true, l:`Create evidence request · ${r.title} · ${r.every}`}};
+    return {a, act:null}; });
+  useEffect(()=>{ setPick(Object.fromEntries(plan.map(p=>[p.a.id, !!p.act]))); },[id]);
+  if(!open) return null;
+  const adopt = () => pm3Set(st=>{ const policies = [...st.policies], evidence = [...st.evidence], arts = {};
+    plan.forEach(({a, act})=>{ if(!act || !pick[a.id]) return; let itemId = act.reuse;
+      if(act.kind==="policy" && act.create){ const made = policies.find(p=>p.template===act.create);
+        if(made) itemId = made.id; else { const t = PM3SEED.TEMPLATES.find(x=>x.key===act.create); itemId = pm3Id("pol");
+          policies.unshift({id:itemId, template:t.key, name:t.name, desc:t.desc, appliesTo:JSON.parse(JSON.stringify(t.appliesTo)), severity:t.severity, checks:t.checks.map((c,i)=>({id:`${itemId}-c${i+1}`, ...c})), owner:me, status:"Active", updated:pm3Today()}); } }
+      if(act.kind==="evidence"){ itemId = pm3Id("ev"); evidence.unshift({id:itemId, title:a.req.title, every:a.req.every, assignee:me, reviewer:"lisa.ray", due:pm3AddDays(pm3Today(), a.req.every==="Quarterly"?90:365),
+        questions:[{q:"Completed for the period?", type:"yesno"}, {q:"Notes and exceptions", type:"text"}], submissions:[]}); }
+      arts[a.id] = [{kind:act.kind, id:itemId}]; });
+    return {...st, policies, evidence, regulations:[...st.regulations, {id, adopted:pm3Today(), articles:arts}]}; });
+  return <Pm3Drawer open width={640} title="Adopt regulation" onClose={onClose}
+    footer={<><Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!cat} onClick={()=>{ adopt(); onDone(id); }}>Adopt {cat?cat.name:""}</Btn></>}>
+    {avail.length===0 ? <span style={{fontSize:12,color:T.textMuted}}>Every regulation in the catalogue is adopted</span> : <>
+      <Pm3Field l="Regulation"><Pm3Select value={id} onChange={setId} options={avail.map(c=>({v:c.id,l:`${c.name} · ${c.full}`}))}/></Pm3Field>
+      <Pm3Box title={`Articles · ${plan.length}`} pad={false}>
+        {plan.map(({a, act},i)=><label key={a.id} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"10px 14px",borderTop:i?`1px solid ${T.border}`:"none",cursor:act?"pointer":"default"}}>
+          <input type="checkbox" disabled={!act} checked={!!pick[a.id]} onChange={e=>setPick(p=>({...p,[a.id]:e.target.checked}))} style={{marginTop:3}}/>
+          <span style={{flex:1}}><span style={{display:"block",fontSize:12.5,fontWeight:600,color:T.text}}><span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub,marginRight:6}}>{a.ref}</span>{a.title}</span>
+            <span style={{display:"block",fontSize:11.5,color:act?T.textSub:T.amber,marginTop:2}}>{act ? act.l : `No ${a.req.kind==="retention"?`schedule over ${a.req.tag}${a.req.minDays?` for ${Math.round(a.req.minDays/365)}+ years`:""}`:"match"} yet · map later`}</span></span>
+        </label>)}
+      </Pm3Box></>}
+  </Pm3Drawer>;
+};
+
+const Pm3RegulationDetail = ({reg, s, D, me, admin, open, onToast, onEvidence}) => {
+  const [adding, setAdding] = useState(null);
+  const [cf, setCf] = useState(null);
+  const sc = reg.score;
+  const opts = [...s.policies.map(p=>({v:`policy|${p.id}`, l:`Policy · ${p.name}`})), ...s.schedules.map(x=>({v:`retention|${x.id}`, l:`Retention · ${x.name}`})),
+    ...s.holds.filter(h=>h.status!=="Released").map(h=>({v:`hold|${h.id}`, l:`Legal hold · ${h.matter}`})), ...s.evidence.map(e=>({v:`evidence|${e.id}`, l:`Evidence · ${e.title}`}))];
+  const mapItem = (artId, v, on) => { const [kind, id] = v.split("|");
+    pm3Set(st=>({...st, regulations:st.regulations.map(r=>{ if(r.id!==reg.id) return r; const cur = (r.articles||{})[artId]||[];
+      const next = on ? (cur.some(i=>i.kind===kind&&i.id===id) ? cur : [...cur, {kind, id}]) : cur.filter(i=>!(i.kind===kind&&i.id===id));
+      return {...r, articles:{...r.articles, [artId]:next}}; })})); };
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
+    <div style={{display:"flex",alignItems:"center",gap:14,flexWrap:"wrap",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:16}}>
+      <div style={{flex:1,minWidth:220}}><div style={{fontSize:18,fontWeight:700,color:T.text}}>{reg.name}</div><div style={{fontSize:12,color:T.textMuted}}>{reg.full} · {reg.region} · adopted {reg.adopted}</div></div>
+      <div style={{textAlign:"right"}}><div style={{fontSize:28,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc.pct>=80?T.green:sc.pct>=50?T.amber:T.rose}}>{sc.pct}%</div>
+        <div style={{fontSize:11,color:T.textMuted}}>{sc.met} of {sc.total} articles met</div></div>
+      <div style={{display:"flex",gap:6}}><Pm3Pill tone="ok">{sc.met} met</Pm3Pill><Pm3Pill tone="bad">{sc.gaps} gaps</Pm3Pill>{sc.unmapped>0&&<Pm3Pill tone="warn">{sc.unmapped} not mapped</Pm3Pill>}</div>
+      {admin && <Btn small variant="danger" onClick={()=>setCf({title:`Remove ${reg.name}`, body:"Its mappings and score are removed. Policies, schedules and evidence stay.", ok:"Remove", danger:true,
+        run:()=>{ pm3Set(st=>({...st, regulations:st.regulations.filter(r=>r.id!==reg.id)})); open(null); onToast(`${reg.name} removed`); }})}>Remove</Btn>}
+    </div>
+    {reg.articles.map(a=>{ const as = PM3.articleStatus(a, D.S);
+      return <div key={a.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.border}`}}>
+          <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.textSub,minWidth:120}}>{a.ref}</span>
+          <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{a.title}</span>
+          {a.req.minDays && <span style={{fontSize:11,color:T.textMuted}}>Minimum {Math.round(a.req.minDays/365)} years</span>}
+          <Pm3Pill tone={as.state==="met"?"ok":as.state==="gap"?"bad":"warn"}>{as.state==="met"?"Met":as.state==="gap"?"Gap":"Not mapped"}</Pm3Pill>
+          {admin && (adding===a.id ? <Pm3Select style={{width:260,padding:"4px 8px",fontSize:11.5}} value="" placeholder="Map…" onChange={v=>{ if(v) mapItem(a.id, v, true); setAdding(null); }} options={opts}/>
+            : <Btn small ghost icon={Ic.plus(10)} onClick={()=>setAdding(a.id)}>Map</Btn>)}
+        </div>
+        {as.items.map(it=>{ const ev = it.kind==="evidence" ? s.evidence.find(e=>e.id===it.id) : null; const last = ev && (ev.submissions||[])[0];
+          return <div key={it.kind+it.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px 8px 144px",borderTop:`1px solid ${T.border}`}}>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",width:78}}>{PM3_KIND[it.kind]}</span>
+            <button onClick={()=>it.kind==="evidence" ? onEvidence(ev) : open(it.kind, it.id)} style={{flex:1,textAlign:"left",background:"transparent",border:"none",cursor:"pointer",padding:0,fontSize:12.5,fontWeight:600,color:T.text}}>{pm3ItemName(it, s)}</button>
+            <Pm3Pill tone={it.ok?"ok":"bad"}>{it.l}</Pm3Pill>
+            {ev && (!last || last.status!=="Submitted") && (admin || ev.assignee===me) && <Btn small ghost onClick={()=>onEvidence(ev)}>Submit evidence</Btn>}
+            {ev && last && last.status==="Submitted" && (admin || ev.reviewer===me) && <>
+              <Btn small onClick={()=>{ pm3Upd("evidence", ev.id, z=>({...z, submissions:[{...last, status:"Accepted", decidedBy:me}, ...z.submissions.slice(1)], due:pm3AddDays(pm3Today(), z.every==="Quarterly"?90:365)})); onToast("Evidence accepted"); }}>Accept</Btn>
+              <Btn small ghost onClick={()=>{ pm3Upd("evidence", ev.id, z=>({...z, submissions:[{...last, status:"Returned", decidedBy:me}, ...z.submissions.slice(1)]})); onToast(`Returned to ${ev.assignee}`); }}>Return</Btn></>}
+            {admin && <button title="Unmap" onClick={()=>mapItem(a.id, `${it.kind}|${it.id}`, false)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button>}
+          </div>; })}
+      </div>; })}
+    <Pm3Confirm c={cf} onClose={()=>setCf(null)}/>
+  </div>;
+};
+
+const Pm3RegulationsTab = ({D, open, onAdopt}) => <div style={{display:"flex",flexDirection:"column",gap:14}}>
+  <div style={{display:"flex",alignItems:"center"}}><span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(12)} onClick={onAdopt}>Adopt regulation</Btn></div>
+  <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+    <Pm3Table rows={D.regs.map(r=>({...r,_key:r.id}))} onRow={r=>open("regulation",r.id)} empty="No regulations adopted" cols={[
+      {k:"n", l:"Regulation", r:r=><div><div style={{fontWeight:600}}>{r.name}</div><div style={{fontSize:11,color:T.textMuted}}>{r.full}</div></div>},
+      {k:"region", l:"Region"},
+      {k:"sc", l:"Score", w:220, r:r=><span style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{flex:1,height:6,borderRadius:3,background:T.bgHover,overflow:"hidden"}}><span style={{display:"block",height:"100%",width:`${r.score.pct}%`,background:r.score.pct>=80?T.green:r.score.pct>=50?T.amber:T.rose}}/></span>
+        <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,fontWeight:700,width:38,textAlign:"right"}}>{r.score.pct}%</span></span>},
+      {k:"m", l:"Articles met", r:r=>`${r.score.met} of ${r.score.total}`},
+      {k:"g", l:"Gaps", r:r=>r.score.gaps+r.score.unmapped ? <Pm3Pill tone="bad">{r.score.gaps+r.score.unmapped}</Pm3Pill> : <Pm3Pill tone="ok">None</Pm3Pill>},
+      {k:"a", l:"Adopted", r:r=>r.adopted}]}/>
+  </div>
+</div>;
+
+// ═══ the screen ═══
+const PolicyManager3View = ({onToast, onNav, onAsset}) => {
+  const s = usePm3();
+  const {role, roleCfg} = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"maya.chen@jnj").split("@")[0];
+  const admin = role==="admin";
+  const D = useMemo(()=>pm3Derive(s),[s]);
+  const [tab, setTab] = useState("policies");
+  const [lsub, setLsub] = useState("schedules");
+  const [sel, setSel] = useState(null);
+  const [drawer, setDrawer] = useState(null); // {kind, item}
+  const [evd, setEvd] = useState(null);
+  const open = (kind, id) => { if(!kind){ setSel(null); return; }
+    if(kind==="policy") setTab("policies"); if(kind==="retention"){ setTab("lifecycle"); setLsub("schedules"); } if(kind==="hold"){ setTab("lifecycle"); setLsub("holds"); } if(kind==="regulation") setTab("regulations");
+    setSel({kind, id}); };
+  const toast = (m) => onToast && onToast(m, "success");
+  const selObj = sel && (sel.kind==="policy" ? s.policies.find(p=>p.id===sel.id) : sel.kind==="retention" ? D.schedules.find(x=>x.id===sel.id) : sel.kind==="hold" ? D.holds.find(h=>h.id===sel.id) : D.regs.find(r=>r.id===sel.id));
+  const TABS = [{key:"policies",label:"Policies"},{key:"lifecycle",label:"Retention & Holds"},{key:"regulations",label:"Regulations"}];
+  const tabLabel = TABS.find(t=>t.key===tab).label;
+  const crumbs = [{label:"Policy Manager 3", onClick:()=>setSel(null)}, {label:tabLabel, onClick:selObj?()=>setSel(null):undefined}, ...(selObj?[{label:selObj.name||selObj.matter}]:[])];
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={crumbs} actions={admin ? <Btn small ghost onClick={()=>{ pm3Set(PM3SEED.seedState()); setSel(null); toast("Policy Manager 3 reset to sample data"); }}>Reset sample data</Btn> : null}/>
+      <div style={{padding:"20px 28px 0",flexShrink:0}}><Tabs2 tabs={TABS} active={tab} onChange={k=>{ setTab(k); setSel(null); }}/></div>
+      <div style={{flex:1,overflowY:"auto",padding:"4px 28px 28px"}}>
+        {selObj && <button onClick={()=>setSel(null)} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",fontSize:12,padding:0,marginBottom:12,display:"inline-flex",alignItems:"center",gap:4}}>
+          <span style={{display:"flex",transform:"rotate(180deg)"}}>{Ic.chevRight(10)}</span>{tabLabel}</button>}
+        {!selObj && tab==="policies" && <Pm3PoliciesTab s={s} D={D} open={open} onNew={()=>setDrawer({kind:"policy"})}/>}
+        {!selObj && tab==="lifecycle" && <Pm3LifecycleTab s={s} D={D} sub={lsub} setSub={setLsub} open={open} onNewSchedule={()=>setDrawer({kind:"retention"})} onNewHold={()=>setDrawer({kind:"hold"})}/>}
+        {!selObj && tab==="regulations" && <Pm3RegulationsTab D={D} open={open} onAdopt={()=>setDrawer({kind:"adopt"})}/>}
+        {selObj && sel.kind==="policy" && <Pm3PolicyDetail p={selObj} D={D} me={me} admin={admin} open={open} onToast={toast} onAsset={onAsset} onEdit={()=>setDrawer({kind:"policy", item:selObj})}/>}
+        {selObj && sel.kind==="retention" && <Pm3ScheduleDetail x={selObj} D={D} me={me} admin={admin} open={open} onToast={toast} onAsset={onAsset} onEdit={()=>setDrawer({kind:"retention", item:selObj})}/>}
+        {selObj && sel.kind==="hold" && <Pm3HoldDetail h={selObj} D={D} me={me} admin={admin} open={open} onToast={toast}/>}
+        {selObj && sel.kind==="regulation" && <Pm3RegulationDetail reg={selObj} s={s} D={D} me={me} admin={admin} open={open} onToast={toast} onEvidence={setEvd}/>}
+      </div>
+      <Pm3PolicyDrawer open={drawer&&drawer.kind==="policy"} p={drawer&&drawer.item} D={D} me={me} onClose={()=>setDrawer(null)}
+        onSaved={p=>{ setDrawer(null); open("policy", p.id); toast(drawer.item?"Policy saved · re-evaluated":"Policy created · evaluated against the catalog"); }}/>
+      <Pm3ScheduleDrawer open={drawer&&drawer.kind==="retention"} x={drawer&&drawer.item} D={D} me={me} onClose={()=>setDrawer(null)}
+        onSaved={(x, waiting)=>{ setDrawer(null); open("retention", x.id); toast(waiting?"Saved · sent to object owners for approval":"Schedule saved"); }}/>
+      <Pm3HoldDrawer open={drawer&&drawer.kind==="hold"} D={D} me={me} onClose={()=>setDrawer(null)}
+        onSaved={h=>{ setDrawer(null); open("hold", h.id); toast(`Hold placed · ${h.matterId}`); }}/>
+      <Pm3AdoptDrawer open={drawer&&drawer.kind==="adopt"} s={s} D={D} me={me} onClose={()=>setDrawer(null)}
+        onDone={id=>{ setDrawer(null); open("regulation", id); toast("Regulation adopted"); }}/>
+      <Pm3EvidenceDrawer ev={evd} me={me} onClose={()=>setEvd(null)} onToast={toast}/>
     </div>
   );
 };
@@ -47779,7 +48492,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags","aipipelines"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -47792,7 +48505,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","tags","aipipelines"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","tags","aipipelines"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -68529,6 +69242,7 @@ export default function App(){
       case "quality":       return <QualityView onToast={showToast}/>;
       case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav} deepLinkPolicyId={deepLinkPolicyId}/>;
       case "policymanager2": return <PolicyManager2View onToast={showToast} onNav={handleNav}/>;
+      case "policymanager3": return <PolicyManager3View onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
