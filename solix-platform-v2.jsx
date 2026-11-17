@@ -15643,103 +15643,168 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
 
   // ═════ FRAMEWORK DETAIL — the original regulation drill-in ═════
   // ═════ FRAMEWORK OVERVIEW — compliance observability for one framework ═════
+  // Answers: how compliant are we, is it improving, what's at risk, who must act.
+  // Every open item (finding, missing approval, late form, draft policy, unmapped
+  // article) counts as one "issue", so the page never needs rule-type vocabulary.
+  const fwIssues = fw => {
+    const today = pm2Today();
+    const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
+    const out = [];
+    allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name)).forEach(f=>out.push({owner:f.asset.owner||"Unassigned", asset:f.asset, sev:f.rule.severity||"Medium", overdue:false}));
+    linked.filter(p=>p.status==="Active").forEach(p=>{
+      evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw,t.rule)).forEach(t=>{ const s=pm2TargetStatus(p.id,t.rule.id,t.asset.name);
+        if(s!=="approved") out.push({owner:s==="rejected"?p.owner:(t.asset.owner||"Unassigned"), asset:t.asset, sev:"Medium", overdue:false}); });
+      p.rules.filter(r=>r.type==="attestation").forEach(r=>{ const s=pm2AttState(p,r);
+        if(["due","overdue","rejected"].includes(s.state)) out.push({owner:pm2Assignee(p,r), sev:"Medium", overdue:s.state==="overdue"||(s.due&&s.due<today)});
+        if(s.state==="review") out.push({owner:pm2Reviewer(p,r), sev:"Low", overdue:false}); });
+    });
+    linked.filter(p=>p.status==="Draft"||p.status==="Rejected").forEach(p=>out.push({owner:p.owner, sev:"Low", overdue:false}));
+    linked.filter(p=>p.status==="In review").forEach(p=>out.push({owner:pendingReqOf(p)?.approver||ap.activation.approver, sev:"Low", overdue:false}));
+    fw.arts.forEach((a,i)=>{ if(!a.out&&!polsForArt(fw,i).length) out.push({owner:"Unassigned", sev:"High", overdue:false}); });
+    return out;
+  };
+  // Readiness history: a weekly sample back-fill, then a snapshot after every scan, then today.
+  const fwHistory = (fw, cur) => {
+    const h = [...String(fw.id)].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0, 7);
+    const drop = 6 + h%14; const steps = [1, .7, .45, .2];
+    const back = steps.map((k,j)=>({d:pm2AddDays(pm2Today(), -7*(4-j)), pct:Math.max(0, Math.min(100, Math.round(cur - drop*k + ((h>>j)%3) - 1)))}));
+    const rec = ((st.fwHist||{})[fw.id]||[]).filter(x=>x.d<pm2Today());
+    return [...back.filter(b=>!rec.some(r=>r.d===b.d)), ...rec, {d:pm2Today(), pct:cur}].sort((a,b)=>a.d.localeCompare(b.d));
+  };
   const renderFwOverview = fw => {
     const inIdx = fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
-    const s = fwScore(fw); const sc = scoreColor(s);
-    const states = inIdx.map(i=>({i, st:artState(fw,i)}));
+    const s = fwScore(fw); const sc = scoreColor(s); const met = inIdx.filter(i=>artState(fw,i)==="met").length;
+    const hist = fwHistory(fw, s); const was = hist[0].pct; const delta = s - was;
+    const issues = fwIssues(fw); const overdue = issues.filter(x=>x.overdue).length;
+    const inScope = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers));
+    const risky = new Set(issues.filter(x=>x.asset).map(x=>x.asset.name)); const atRisk = inScope.filter(a=>risky.has(a.name));
+    const unscanned = fwUnscanned(fw); const covPct = inScope.length ? Math.round((inScope.length-unscanned.length)/inScope.length*100) : 100;
     const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
-    const active = linked.filter(p=>p.status==="Active");
-    // Findings within this framework
-    const finds = allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name));
-    const sev = k => finds.filter(f=>(f.rule.severity||"Medium")===k).length;
-    // Enforcement targets within this framework
-    const tgts = active.flatMap(p=>evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw,t.rule)).map(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)));
-    const enfRun = tgts.filter(x=>x==="approved").length, enfRej = tgts.filter(x=>x==="rejected").length, enfWait = tgts.length-enfRun-enfRej;
-    // Evidence forms
-    const ev = active.flatMap(p=>p.rules.filter(r=>r.type==="attestation").map(r=>pm2AttState(p,r).state));
-    const evCur = ev.filter(x=>x==="current"||x==="soon").length, evDue = ev.filter(x=>x==="due"||x==="overdue"||x==="rejected").length, evRev = ev.filter(x=>x==="review").length;
-    // Scan coverage
-    const inScope = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)); const unscanned = fwUnscanned(fw);
-    const covPct = inScope.length ? Math.round((inScope.length-unscanned.length)/inScope.length*100) : 100;
     const fwScans = scans.filter(x=>(x.policyIds||[]).some(id=>linked.some(p=>p.id===id)));
     const lastRun = fwScans.map(x=>(x.runs||[])[0]).filter(Boolean).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)))[0];
-    // Article status distribution, in severity order
-    const dist = ["met",...ART_ORDER.filter(k=>k!=="met")].map(k=>({k, n:states.filter(x=>x.st===k).length})).filter(x=>x.n);
-    const gaps = states.filter(x=>x.st!=="met").sort((a,b)=>ART_ORDER.indexOf(a.st)-ART_ORDER.indexOf(b.st));
+    // Who needs to act
+    const byOwner = Object.values(issues.reduce((m,x)=>{ const k=x.owner||"Unassigned"; m[k]=m[k]||{o:k,n:0,od:0,hi:0}; m[k].n++; if(x.overdue) m[k].od++; if(x.sev==="High"||x.sev==="Critical") m[k].hi++; return m; },{})).sort((a,b)=>b.od-a.od||b.n-a.n);
+    // Where the risk is
+    const group = key => Object.entries(atRisk.reduce((m,a)=>{ (key(a)||[]).forEach(k=>{ m[k]=(m[k]||0)+1; }); return m; },{})).sort((a,b)=>b[1]-a[1]);
+    const byDomain = group(a=>[a.domain||"No domain"]);
+    const byClass = group(a=>pm2Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)));
+    // Needs attention
+    const gaps = inIdx.map(i=>({i, st:artState(fw,i)})).filter(x=>x.st!=="met").sort((a,b)=>ART_ORDER.indexOf(a.st)-ART_ORDER.indexOf(b.st));
     const reason = i => { const pols = polsForArt(fw,i); if(!pols.length) return "No policy mapped";
       const hs = pols.map(p=>({p, h:polHealth(p,fw,linkOf(p,fw,i))})); const w = hs.find(x=>x.h.state===artState(fw,i))||hs[0]; return `${w.p.name} · ${w.h.label}`; };
-    // Assets with the most open findings
-    const byAsset = Object.values(finds.reduce((m,f)=>{ const k=f.asset.name; m[k]=m[k]||{a:f.asset, n:0}; m[k].n++; return m; },{})).sort((a,b)=>b.n-a.n).slice(0,5);
-    const openArt = i => { setFwTab("articles"); setExpArt(x=>({...x,[fw.id+i]:true})); };
+    const stLabel = k => ({findings:"Failing", rejected:"Rejected", uncovered:"No policy", norules:"No rules", unscanned:"Not checked", draft:"Draft", review:"Awaiting approval", pending:"Awaiting approval", review2:"In review", evidence:"Due"}[k]||ART_META[k].l);
+    // Coming up (next 30 days)
+    const today = pm2Today(), horizon = pm2AddDays(today, 30);
+    const upcoming = [
+      ...linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation").map(r=>({p,r,s:pm2AttState(p,r)}))
+        .filter(x=>x.s.due && x.s.due<=horizon && x.s.state!=="review").map(x=>({d:x.s.due, what:x.r.name, who:pm2Assignee(x.p,x.r), late:x.s.due<today}))),
+      ...allFindings.filter(f=>f.exc?.status==="accepted"&&f.exc.until&&f.exc.until<=horizon&&f.refs.some(r=>r.fw===fw.name)).map(f=>({d:f.exc.until, what:`Exception ends · ${f.asset.name}`, who:f.pol.owner, late:f.exc.until<today})),
+    ].sort((a,b)=>a.d.localeCompare(b.d)).slice(0,6);
+    // What changed
+    const changes = [
+      ...linked.flatMap(p=>(p.history||[]).map(h=>({d:h.when, who:h.who, what:`${p.name} · ${h.what}`}))),
+      ...fwScans.flatMap(x=>(x.runs||[]).slice(0,1).map(r=>({d:String(r.ts).slice(0,10), who:r.by||"Schedule", what:`${x.name} ran · ${r.findings} findings${r.newFindings?` (+${r.newFindings} new)`:""}`}))),
+    ].sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,6);
+
     const label = {fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"};
     const card = {background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10};
+    const head = (t, right) => <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}><span style={{...label,flex:1}}>{t}</span>{right}</div>;
+    const empty = t => <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>{t}</div>;
     const tile = (title, big, color, sub, go) => (
       <div onClick={go} style={{...card,padding:"14px 16px",cursor:go?"pointer":"default",minWidth:0}}
         onMouseEnter={e=>{ if(go) e.currentTarget.style.borderColor=T.accent; }} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
         <div style={{...label,marginBottom:6}}>{title}</div>
-        <div style={{fontSize:24,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:color||T.text,lineHeight:1.1}}>{big}</div>
+        <div style={{fontSize:26,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:color||T.text,lineHeight:1.1}}>{big}</div>
         <div style={{fontSize:11.5,color:T.textSub,marginTop:6,lineHeight:1.5}}>{sub}</div>
       </div>);
-    const dot = (c) => <span style={{width:7,height:7,borderRadius:"50%",background:c,display:"inline-block",flexShrink:0}}/>;
+    const bars = (rows, total) => rows.length===0 ? empty("Nothing at risk") : rows.slice(0,5).map(([k,n])=>
+      <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 16px"}}>
+        <span style={{width:110,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k}</span>
+        <span style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><span style={{display:"block",height:"100%",width:`${Math.round(n/Math.max(1,total)*100)}%`,background:T.rose}}/></span>
+        <span style={{width:24,textAlign:"right",fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{n}</span></div>);
+    // Trend chart (inline SVG, drawn to one scale)
+    const W=520, H=150, P={l:30,r:12,t:12,b:24};
+    const xs = i => P.l + (hist.length<2?0:i*(W-P.l-P.r)/(hist.length-1)); const ys = v => P.t + (100-v)*(H-P.t-P.b)/100;
+    const line = hist.map((h,i)=>`${i?"L":"M"}${xs(i).toFixed(1)},${ys(h.pct).toFixed(1)}`).join(" ");
+    const area = `${line} L${xs(hist.length-1).toFixed(1)},${ys(0)} L${xs(0).toFixed(1)},${ys(0)} Z`;
+    const fmtD = d => { const x=new Date(d+"T00:00:00Z"); return x.toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}); };
     const m = regMeta(fw.id);
-    const lbl = k => ({evidence:"Sign-off due", review2:"Sign-off in review", pending:"Waiting for table owner"}[k]||ART_META[k].l);
     return (<>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
         <span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>
         <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}30`}}>{readinessLabel(s)}</span>
         <span style={{fontSize:12,color:T.textMuted}}>{[m.fullName||fw.fullName, m.jurisdiction||fw.jurisdiction].filter(Boolean).join(" · ")}</span>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,minmax(0,1fr))",gap:12,marginBottom:16}}>
-        {tile("Readiness", `${s}%`, sc, <>{states.filter(x=>x.st==="met").length} of {inIdx.length} articles met
-          <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",marginTop:6}}><div style={{width:`${s}%`,height:"100%",background:sc}}/></div></>)}
-        {tile("Open findings", finds.length, finds.length?T.rose:T.green, finds.length?`${sev("High")} high · ${sev("Medium")} medium · ${sev("Low")} low`:"None open", finds.length?()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}:null)}
-        {tile("Retention & holds", tgts.length?`${enfRun}/${tgts.length}`:"—", enfRej?T.rose:enfWait?T.amber:T.green, tgts.length?`tables running · ${enfWait} waiting for owner approval${enfRej?` · ${enfRej} rejected`:""}`:"None in this framework", enfWait?()=>onNav&&onNav("stewardship"):null)}
-        {tile("Sign-offs", ev.length?`${evCur}/${ev.length}`:"—", evDue?T.violet:evRev?T.amber:T.green, ev.length?`up to date · ${evDue} due · ${evRev} in review`:"None required")}
-        {tile("Scan coverage", `${covPct}%`, unscanned.length?T.amber:T.green, <>{inScope.length-unscanned.length} of {inScope.length} assets scanned<br/>{lastRun?`Last run ${lastRun.ts}`:"Never run"}</>, ()=>{setTab("scans");setSelFw(null);})}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
+        {tile("Readiness", `${s}%`, sc, <>{met} of {inIdx.length} articles met · <span style={{color:delta>0?T.green:delta<0?T.rose:T.textMuted,fontWeight:700}}>{delta>0?"+":""}{delta} pts</span> in 30 days</>)}
+        {tile("Open issues", issues.length, issues.length?T.rose:T.green, issues.length?`${overdue} overdue · ${byOwner.length} ${byOwner.length===1?"person":"people"} to act`:"Nothing open", issues.length?()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}:null)}
+        {tile("Assets at risk", `${atRisk.length}/${inScope.length}`, atRisk.length?T.amber:T.green, `in-scope assets with an open issue`)}
+        {tile("Coverage", `${covPct}%`, unscanned.length?T.amber:T.green, <>{inScope.length-unscanned.length} of {inScope.length} assets checked · {lastRun?`last ${lastRun.ts}`:"never run"}</>, ()=>{setTab("scans");setSelFw(null);})}
       </div>
-      <div style={{...card,padding:"14px 16px",marginBottom:16}}>
-        <div style={{display:"flex",alignItems:"center",marginBottom:10}}><span style={{...label,flex:1}}>Articles by status</span>
-          <button onClick={()=>setFwTab("articles")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>All articles →</button></div>
-        <div style={{display:"flex",height:10,borderRadius:5,overflow:"hidden",background:T.bgElevated,marginBottom:10}}>
-          {dist.map(d=><div key={d.k} title={`${lbl(d.k)}: ${d.n}`} style={{width:`${d.n/inIdx.length*100}%`,background:ART_META[d.k].c}}/>)}
-        </div>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{dist.map(d=><span key={d.k} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{dot(ART_META[d.k].c)}{lbl(d.k)} <b style={{color:T.text}}>{d.n}</b></span>)}</div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start"}}>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start",marginBottom:16}}>
         <div style={{...card,overflow:"hidden"}}>
-          <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center"}}><span style={{...label,flex:1}}>Needs attention · {gaps.length}</span></div>
-          {gaps.length===0 ? <div style={{padding:"18px 16px",fontSize:12.5,color:T.green}}>Every article is met</div> :
-            gaps.map(({i,st:k})=><div key={i} onClick={()=>openArt(i)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textSub,minWidth:92}}>{fw.arts[i].ref}</span>
-              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{fw.arts[i].t}</div>
-                <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reason(i)}</div></div>
-              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{lbl(k)}</span>
+          {head("Readiness over time", <span style={{fontSize:11,color:T.textMuted}}>{fmtD(hist[0].d)} – today</span>)}
+          <div style={{padding:"8px 12px 4px"}}>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block"}} role="img" aria-label={`Readiness from ${was}% to ${s}%`}>
+              {[0,50,100].map(v=><g key={v}><line x1={P.l} x2={W-P.r} y1={ys(v)} y2={ys(v)} stroke={T.border} strokeWidth="1"/>
+                <text x={P.l-6} y={ys(v)+3.5} textAnchor="end" fontSize="10" fill={T.textMuted}>{v}%</text></g>)}
+              <path d={area} fill={sc} opacity=".10"/>
+              <path d={line} fill="none" stroke={sc} strokeWidth="2" strokeLinejoin="round"/>
+              {hist.map((h,i)=><circle key={i} cx={xs(i)} cy={ys(h.pct)} r={i===hist.length-1?4:2.5} fill={i===hist.length-1?sc:T.bgSurface} stroke={sc} strokeWidth="1.5"><title>{`${fmtD(h.d)}: ${h.pct}%`}</title></circle>)}
+              {hist.map((h,i)=>(i===0||i===hist.length-1||hist.length<=6)&&<text key={"t"+i} x={xs(i)} y={H-6} textAnchor={i===0?"start":i===hist.length-1?"end":"middle"} fontSize="10" fill={T.textMuted}>{i===hist.length-1?"Today":fmtD(h.d)}</text>)}
+            </svg>
+          </div>
+        </div>
+        <div style={{...card,overflow:"hidden"}}>
+          {head("Who needs to act", <span style={{fontSize:11,color:T.textMuted}}>issues · overdue</span>)}
+          {byOwner.length===0 ? empty("No one has open issues") : byOwner.slice(0,6).map(x=>
+            <div key={x.o} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 16px",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:T.textSub,flexShrink:0}}>{x.o==="Unassigned"?"?":x.o[0].toUpperCase()}</span>
+              <span style={{flex:1,fontSize:12.5,color:x.o==="Unassigned"?T.textMuted:T.text}}>{x.o}</span>
+              {x.hi>0&&<span style={{fontSize:10.5,fontWeight:700,color:T.rose}}>{x.hi} high</span>}
+              <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:22,textAlign:"right"}}>{x.n}</span>
+              <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:x.od?T.rose:T.textMuted,minWidth:22,textAlign:"right"}}>{x.od}</span>
             </div>)}
         </div>
-        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:16,minWidth:0}}>
           <div style={{...card,overflow:"hidden"}}>
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}><span style={label}>Policies · {linked.length}</span></div>
-            {linked.length===0 ? <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>No policies mapped</div> :
-              linked.map(p=>{ const h=polHealth(p,fw); const c=(ART_META[h.state]||{c:T.textMuted}).c;
-                return <div key={p.id} onClick={()=>openPolicy(p.id, fw.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  {srcBox(p)}<span style={{flex:1,minWidth:0,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
-                  <span style={{fontSize:10.5,fontWeight:600,color:c,whiteSpace:"nowrap"}}>{h.label}</span></div>; })}
+            {head(`Needs attention · ${gaps.length}`, <button onClick={()=>setFwTab("articles")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>All articles →</button>)}
+            {gaps.length===0 ? <div style={{padding:"14px 16px",fontSize:12.5,color:T.green}}>Every article is met</div> :
+              gaps.map(({i,st:k})=><div key={i} onClick={()=>{ setFwTab("articles"); setExpArt(x=>({...x,[fw.id+i]:true})); }} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textSub,minWidth:92}}>{fw.arts[i].ref}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{fw.arts[i].t}</div>
+                  <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reason(i)}</div></div>
+                <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{stLabel(k)}</span>
+              </div>)}
           </div>
           <div style={{...card,overflow:"hidden"}}>
-            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}><span style={label}>Assets with most findings</span></div>
-            {byAsset.length===0 ? <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>No open findings</div> :
-              byAsset.map(x=><div key={x.a.name} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:`1px solid ${T.border}`}}>
-                <span style={{flex:1,fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{x.a.name}</span>
-                <span style={{fontSize:11,color:T.textMuted}}>{x.a.owner||"—"}</span>
-                <span style={{fontSize:11,fontWeight:700,color:T.rose,minWidth:24,textAlign:"right"}}>{x.n}</span></div>)}
+            {head("What changed")}
+            {changes.length===0 ? empty("No recent changes") : changes.map((c,j)=><div key={j} style={{display:"flex",gap:12,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,alignItems:"baseline"}}>
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",minWidth:78}}>{c.d}</span>
+              <span style={{flex:1,fontSize:12,color:T.text,minWidth:0}}>{c.what}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{c.who}</span></div>)}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:16,minWidth:0}}>
+          <div style={{...card,overflow:"hidden",paddingBottom:6}}>
+            {head("Where the risk is", <span style={{fontSize:11,color:T.textMuted}}>assets at risk</span>)}
+            <div style={{...label,padding:"10px 16px 2px"}}>By domain</div>{bars(byDomain, atRisk.length)}
+            <div style={{...label,padding:"10px 16px 2px"}}>By data type</div>{bars(byClass.map(([k,n])=>[(PM2_CLASS_META[k]||{}).label||k,n]), atRisk.length)}
+          </div>
+          <div style={{...card,overflow:"hidden"}}>
+            {head("Coming up · next 30 days")}
+            {upcoming.length===0 ? empty("Nothing due") : upcoming.map((u,j)=><div key={j} style={{display:"flex",gap:12,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,alignItems:"baseline"}}>
+              <span style={{fontSize:11,fontWeight:700,color:u.late?T.rose:T.textSub,fontFamily:"'Geist Mono',monospace",minWidth:78}}>{u.late?"Overdue":fmtD(u.d)}</span>
+              <span style={{flex:1,fontSize:12,color:T.text,minWidth:0}}>{u.what}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{u.who}</span></div>)}
           </div>
         </div>
       </div>
     </>);
   };
-
 
   const renderFwDetail = () => {
     const fw = pm2Fw(selFw); if(!fw) return renderFrameworks();
@@ -17185,6 +17250,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       const ts=`${pm2Today()} ${new Date().toTimeString().slice(0,5)}`;
       const run={id:`srun-${sc.id}-${Date.now()}`, ts, trigger:"Manual", by:me, duration:`${1+Math.floor(Math.random()*3)}m ${10+Math.floor(Math.random()*49)}s`, ...x, newFindings:Math.max(0,x.findings-(prev?.findings??0)), status:"success"};
       updScan(sc.id, y=>({...y, runs:[run, ...(y.runs||[])]}));
+      // Readiness snapshot per adopted framework, for the trend on each framework overview
+      setTimeout(()=>{ const snap={}; adoptedFws.forEach(f=>{ snap[f.id]=fwScore(f); }); pm2Set(s2=>({...s2, fwHist:Object.fromEntries(Object.keys(snap).map(id=>[id, [...((s2.fwHist||{})[id]||[]).filter(h=>h.d!==pm2Today()), {d:pm2Today(), pct:snap[id]}]]))})); },0);
       setTimeout(pm2RequestTargets,0); setRunningScan(null);
       onToast(`${cur.name} — ${x.findings} findings on ${x.assets} objects${x.targets?` · ${x.targets} enforcement targets`:""}`,"success");
     }, 1800);
