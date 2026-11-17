@@ -40640,6 +40640,7 @@ const OntClassNode = ({data}) => {
             <span style={{fontSize:12.5,fontWeight:700,color:"#0f172a"}}>{data.name}</span>
             {data.metricCount>0 && <span title="Metrics that measure it" style={{fontSize:9.5,fontWeight:700,color:"#4338ca",background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.33)",borderRadius:8,padding:"1px 7px"}}>{data.metricCount}</span>}
           </div>
+          {data.count && <div style={{fontSize:11,fontWeight:700,color:"#16a34a",marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{data.count}</div>}
           {data.parent && <div style={{fontSize:9.5,color:"#7c3aed",marginTop:3}}>kind of {data.parent}</div>}
           <div style={{fontSize:9.5,color:data.sources?"#94a3b8":"#d97706",marginTop:2,fontFamily:"ui-monospace,monospace"}}>{data.sources || "No data source"}</div>
           {(data.cols||[]).length>0 && (
@@ -40659,7 +40660,7 @@ const OntClassNode = ({data}) => {
 const ONT_NODE_TYPES = {ontClass: OntClassNode};
 const ONT_COL_ROLE = {key:{l:"Key",c:"#7c3aed"}, mapped:{l:"Mapped property",c:"#16a34a"}, unmapped:{l:"Unmapped property",c:"#d97706"}};
 
-const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) => {
+const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset, counts, panel}) => {
   const [rf, setRf] = useState(null);
   const ctx = mapCtx();
   const maps = MAP.mappingsOf(o);
@@ -40703,8 +40704,8 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) =
       sources:srcs.map(m=>MAP.sourceTable(m, ctx)).filter(Boolean).join(", "),
       cols:rows.slice(0,6), moreCols:Math.max(0, rows.length-6),
       metricCount:maps.filter(m=>m.kind==="metric" && m.classId===c.id).length,
-      kindColor:srcs.length ? ontColour(o) : "#94a3b8", focused:selected===c.id}};
-  }),[cls, maps, layout, selected]);
+      kindColor:srcs.length ? ontColour(o) : "#94a3b8", focused:selected===c.id, count:counts?counts[c.id]:null}};
+  }),[cls, maps, layout, selected, counts]);
   const edges = useMemo(()=>{
     const seen = {};
     const relEdges = o.rels.map(r=>{
@@ -40759,7 +40760,7 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) =
           </ReactFlow>}
         </div>
         <div style={{width:300,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",overflowY:"auto"}}>
-          {!sel ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b",lineHeight:1.65}}>
+{panel ? panel(sel) : <>          {!sel ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b",lineHeight:1.65}}>
               <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:8}}>{cls.length} classes · {o.rels.length} relationship{o.rels.length===1?"":"s"}</div>
               Select a class for its data sources, properties and relationships.
             </div>
@@ -40785,7 +40786,7 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset}) =
                   return <div key={r.id} style={{padding:"8px 10px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6,fontSize:11.5,color:"#0f172a"}}>
                     {r.from===sel.id ? `${r.name} → ${other?other.name:"—"}` : `${r.inverse||"← "+r.name} ${other?other.name:"—"}`}
                     <span style={{color:"#94a3b8",fontSize:10.5}}> · {(ONT.CARDINALITY[r.cardinality]||"—")}</span></div>; })}</>}
-            </div>}
+            </div>}</>}
         </div>
       </div>
     </div>
@@ -41900,34 +41901,134 @@ const KgEdgeList = ({full, id, onFocus}) => {
     </div>);
 };
 
+// Connections of one node, grouped into plain sections instead of raw edge types.
+const KG_SECTIONS = [
+  {k:"lives",   l:"Where it lives",    types:["realised_by","stored_in","contains"]},
+  {k:"meaning", l:"Business meaning",  types:["relates","is_a","defines","described_by"]},
+  {k:"gov",     l:"Governance",        types:["in_domain","owned_by","tagged"]},
+  {k:"lineage", l:"Lineage and joins", types:["feeds","depends_on","joins"]},
+  {k:"metrics", l:"Metrics and models",types:["uses","computed_from","measures"]},
+];
+const KgSections = ({g, id, showDerived, onFocus}) => {
+  const byId = new Map(g.nodes.map(n=>[n.id,n]));
+  const es = g.edges.filter(e=>(e.from===id||e.to===id) && (showDerived||!e.derived));
+  const verb = (e, out) => { const l = (KG.EDGE_TYPES[e.type]||{l:e.type}).l;
+    if(out) return l;
+    return ({contains:"part of", realised_by:"realises", stored_in:"stores", relates:`${e.label||"related"} (from)`, is_a:"has kind", defines:"defined in",
+      described_by:"describes", in_domain:"contains", owned_by:"owns", tagged:"applied to", feeds:"fed by", depends_on:"needed by", joins:"joined from",
+      uses:"used by", computed_from:"used in", measures:"measured by"})[e.type] || l; };
+  if(!es.length) return <div style={{fontSize:12,color:T.textMuted}}>No connections</div>;
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+      {KG_SECTIONS.map(sec=>{ const rows = es.filter(e=>sec.types.includes(e.type)); if(!rows.length) return null;
+        const LIMIT = 8; return (
+        <Card2 key={sec.k}><div style={{padding:"12px 14px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:8}}>{sec.l} · {rows.length}</div>
+          {rows.slice(0,LIMIT).map(e=>{ const out = e.from===id; const other = byId.get(out?e.to:e.from); if(!other) return null; return (
+            <div key={e.id} onClick={()=>onFocus&&onFocus(other.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",cursor:onFocus?"pointer":"default"}}>
+              <span style={{fontSize:11,color:e.derived?T.violet:T.textMuted,width:96,flexShrink:0}}>{verb(e,out)}{out&&e.label?` · ${e.label}`:""}</span>
+              <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{other.label}</span>
+              {e.derived && <span title={(KG.RULES[e.rule]||{}).d} style={{fontSize:9.5,fontWeight:700,color:T.violet}}>Derived</span>}
+              <KgTypeChip type={other.type}/>
+            </div>); })}
+          {rows.length>LIMIT && <div style={{fontSize:11,color:T.textMuted,marginTop:4}}>+{rows.length-LIMIT} more</div>}
+        </div></Card2>); })}
+    </div>);
+};
+
 const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
   const kg = useKg(); useOnt();
   const [tab, setTab] = useState("overview");
   const [q, setQ] = useState("");
   const [focus, setFocus] = useState(null);
-  const [depth, setDepth] = useState("1");
   const [showDerived, setShowDerived] = useState(true);
-  const [ontId, setOntId] = useState((ontLoad().ontologies[0]||{}).id||"");
+  const [showDiagram, setShowDiagram] = useState(false);
+  const onts = ontLoad().ontologies;
+  const [ontId, setOntId] = useState((onts[0]||{}).id||"");
   const [clsSel, setClsSel] = useState(null);
   const g = kgGraph();
   const S = g.stats;
-  const onts = ontLoad().ontologies;
-  const o = onts.find(x=>x.id===ontId);
-  const eg = o ? KG.buildEntityGraph(o, {entities:_slState.entities, joins:_slState.rels, assets:ASSETS, schemaOf:t=>SCHEMA[t]||[], profileOf:(t,c)=>COL_PROFILES[c]||{}}) : null;
-  const entTotal = onts.reduce((n,x)=>n+(KG.buildEntityGraph(x, {entities:_slState.entities, joins:_slState.rels, assets:ASSETS, schemaOf:t=>SCHEMA[t]||[], profileOf:(t,c)=>COL_PROFILES[c]||{}}).stats.entities||0),0);
+  const ectx = {entities:_slState.entities, joins:_slState.rels, assets:ASSETS, schemaOf:t=>SCHEMA[t]||[], profileOf:(t,c)=>COL_PROFILES[c]||{}};
+  const egs = Object.fromEntries(onts.map(x=>[x.id, KG.buildEntityGraph(x, ectx)]));
+  const o = onts.find(x=>x.id===ontId), eg = o ? egs[o.id] : null;
+  const allClasses = onts.reduce((n,x)=>n+x.classes.length,0);
+  const connected = onts.reduce((n,x)=>n+egs[x.id].stats.withData,0);
+  const entTotal = onts.reduce((n,x)=>n+(egs[x.id].stats.entities||0),0);
+  const linkedTables = new Set(onts.flatMap(x=>MAP.mappingsOf(x).filter(m=>m.kind==="dataset"||m.kind==="table").map(m=>MAP.sourceTable(m, mapCtx())))).size;
   const results = q ? KG.search(g, q, 40) : [];
-  const nb = focus ? KG.neighbourhood(g, focus, {depth:Number(depth), derived:showDerived}) : null;
   const fNode = focus ? g.nodes.find(n=>n.id===focus) : null;
-  const TABS = [{key:"overview",label:"Overview"},{key:"explorer",label:"Explorer"},{key:"entities",label:"Entities"},{key:"settings",label:"Settings"}];
-  const Bar = ({rows, total}) => (
-    <div style={{display:"flex",flexDirection:"column",gap:6}}>
-      {rows.map(([k,l,n,c])=>(
-        <div key={k} style={{display:"flex",alignItems:"center",gap:10,fontSize:12}}>
-          <span style={{width:150,color:T.textSub}}>{l}</span>
-          <div style={{flex:1,height:6,background:T.bgElevated,borderRadius:3,overflow:"hidden"}}><div style={{width:`${Math.max(2,Math.round(n/total*100))}%`,height:"100%",background:c||T.accent}}/></div>
-          <span style={{width:60,textAlign:"right",fontFamily:"'Geist Mono',monospace",color:T.text}}>{n.toLocaleString("en-US")}</span>
-        </div>))}
-    </div>);
+  const TABS = [{key:"overview",label:"Overview"},{key:"business",label:"Business view"},{key:"explore",label:"Explore"},{key:"settings",label:"Settings"}];
+  const lastBuilt = [kg.lastBuilt, _kgAuto].filter(Boolean).sort((a,b)=>b.at.localeCompare(a.at))[0];
+  const openOnt = (id) => { setOntId(id); setClsSel(null); setTab("business"); };
+
+  // Everything the graph knows about one class, in business terms.
+  const classProfile = (c) => {
+    const cl = eg.classes.find(x=>x.classId===c.id) || {sources:[]};
+    const cid = `class:${o.id}:${c.id}`;
+    const maps = MAP.mappingsOf(o);
+    const tables = cl.sources.map(s=>s.table);
+    const tableEdges = (type) => g.edges.filter(e=>e.type===type && tables.some(t=>e.from===`asset:${t}`));
+    const domains = [...new Set(tableEdges("in_domain").map(e=>e.to.replace(/^domain:/,"")))];
+    const owners = [...new Set(tableEdges("owned_by").map(e=>e.to.replace(/^user:/,"")))];
+    const tags = [...new Set([...tableEdges("tagged").map(e=>e.to.replace(/^tag:/,"")), ...g.edges.filter(e=>e.from===cid && e.type==="tagged").map(e=>e.to.replace(/^tag:/,""))])];
+    const metrics = _slState.metrics.filter(m=>cl.sources.some(s=>s.entityId && s.entityId===m.entity));
+    const term = c.termId ? _gtState.find(t=>t.id===c.termId) : null;
+    const samples = eg.samples[c.id] || [];
+    const label = (id) => (Object.values(eg.samples).flat().find(x=>x.id===id)||{label:id}).label;
+    const Sec = ({t, children}) => <div style={{padding:"12px 16px",borderTop:"1px solid #e2e8f0"}}>
+      <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:7}}>{t}</div>{children}</div>;
+    const Row = ({k, v, c:col}) => <div style={{display:"flex",gap:8,fontSize:11.5,marginBottom:4}}><span style={{color:"#64748b",width:96,flexShrink:0}}>{k}</span><span style={{color:col||"#0f172a",flex:1,minWidth:0}}>{v}</span></div>;
+    return (
+      <div>
+        <div style={{padding:"16px 16px 12px"}}>
+          <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{c.name}</div>
+          <div style={{fontSize:11.5,color:"#475569",lineHeight:1.5,marginTop:3}}>{c.desc||"No definition"}</div>
+          <div style={{fontSize:22,fontWeight:800,color:cl.total?"#0f172a":"#94a3b8",fontFamily:"'Geist Mono',monospace",marginTop:10}}>{cl.total?KG.fmtCount(cl.total):"0"}</div>
+          <div style={{fontSize:11,color:"#64748b"}}>entities</div>
+        </div>
+        <Sec t="Comes from">
+          {cl.sources.length===0 ? <div style={{fontSize:11.5,color:"#d97706"}}>No data source · add a catalog table to the class</div> :
+            cl.sources.map(s=><div key={s.table} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,marginBottom:5}}>
+              <span style={{fontFamily:"ui-monospace,monospace",color:"#0f172a",flex:1}}>{s.table}</span>
+              <span style={{color:"#64748b"}}>{KG.fmtCount(s.rows)} · key {s.keys.join("+")||"—"}</span>
+              <OntCatalogLink table={s.table} onAsset={onAsset}/></div>)}
+        </Sec>
+        {(c.props||[]).length>0 && <Sec t="Properties">
+          {c.props.map(p=>{ const fm = maps.filter(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id);
+            const pii = fm.some(m=>((SCHEMA[m.target.table]||[]).find(x=>x.name===m.target.column)||{}).pii);
+            const missing = fm.filter(m=>!(SCHEMA[m.target.table]||[]).some(x=>x.name===m.target.column));
+            return <Row key={p.id} k={p.name} c={!fm.length||missing.length?"#d97706":"#0f172a"} v={<>{fm.length?fm.map(m=>`${m.target.table}.${m.target.column}`).join(", "):"Not linked to a column"}
+              {missing.length>0 && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#d97706"}}>column missing</span>}
+              {pii && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#e11d48"}}>PII</span>}</>}/>; })}
+        </Sec>}
+        <Sec t="Relationships">
+          {o.rels.filter(r=>r.from===c.id||r.to===c.id).length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None</div> :
+            o.rels.filter(r=>r.from===c.id||r.to===c.id).map(r=>{ const out = r.from===c.id; const other = ontClass(o, out?r.to:r.from);
+              const linked = maps.some(m=>m.kind==="join" && m.relId===r.id);
+              return <Row key={r.id} k={out?r.name:(r.inverse||`← ${r.name}`)} v={<>{other?other.name:"—"} <span style={{fontSize:10.5,color:linked?"#16a34a":"#d97706"}}>{linked?"· linked":"· no join"}</span></>}/>; })}
+          {c.parent && <Row k="is a" v={(ontClass(o,c.parent)||{}).name}/>}
+        </Sec>
+        <Sec t="Governance">
+          <Row k="Domain" v={domains.join(", ")||"—"}/><Row k="Owners" v={owners.join(", ")||"—"}/>
+          <Row k="Classified" v={tags.length?tags.join(", "):"—"} c={tags.includes("PII")?"#e11d48":undefined}/>
+          <Row k="Glossary term" v={term?term.term:"—"}/>
+        </Sec>
+        <Sec t={`Metrics · ${metrics.length}`}>
+          {metrics.length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None computed on its data</div> :
+            metrics.slice(0,6).map(m=><Row key={m.id} k={m.name} v={(_slState.models.find(x=>x.id===m.model)||{}).name||"—"}/>)}
+        </Sec>
+        <Sec t="Sample records">
+          {samples.length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>No records</div> : samples.slice(0,3).map(s=>{
+            const links = eg.links.filter(l=>l.from===s.id).map(l=>`${l.name} ${label(l.to)}`);
+            return <div key={s.id} style={{padding:"7px 9px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
+              <div style={{fontSize:11.5,fontWeight:700,color:"#0f172a"}}>{s.label}</div>
+              <div style={{fontSize:10.5,color:"#475569",marginTop:2}}>{Object.entries(s.props).slice(0,4).map(([k,v])=>`${k}: ${v}`).join(" · ")}</div>
+              {links.map((t,i)=><div key={i} style={{fontSize:10.5,color:"#7c3aed",marginTop:2}}>{t}</div>)}
+            </div>; })}
+        </Sec>
+      </div>);
+  };
+
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
       <Topbar breadcrumb={[{label:"Knowledge Graphs"}]}/>
@@ -41936,46 +42037,70 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
 
         {tab==="overview" && <>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
-            <Metric label="Nodes" value={S.nodes.toLocaleString("en-US")} sub={`${Object.keys(S.byNodeType).length} types`} color={T.accent}/>
-            <Metric label="Edges" value={S.edges.toLocaleString("en-US")} sub={`${Object.keys(S.byEdgeType).length} types`} color={T.blue}/>
-            <Metric label="Derived facts" value={S.derived.toLocaleString("en-US")} sub="from inference rules" color={T.violet}/>
-            <Metric label="Entities" value={KG.fmtCount(entTotal)} sub={`across ${onts.length} ontolog${onts.length===1?"y":"ies"}`} color={T.green}/>
+            <Metric label="Business concepts" value={String(allClasses)} sub={`classes in ${onts.length} ontolog${onts.length===1?"y":"ies"}`} color={T.violet}/>
+            <Metric label="Connected to data" value={`${connected} / ${allClasses}`} sub="classes with a data source" color={connected===allClasses?T.green:T.amber}/>
+            <Metric label="Entities" value={KG.fmtCount(entTotal)} sub="records the classes describe" color={T.green}/>
+            <Metric label="Linked data assets" value={String(linkedTables)} sub="tables behind the classes" color={T.blue}/>
           </div>
-          <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <span style={{width:10,height:10,borderRadius:"50%",background:T.green,flexShrink:0}}/>
-            <div style={{flex:1,minWidth:240}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text}}>Built automatically</div>
-              <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>
-                {(()=>{ const lb = [kg.lastBuilt, _kgAuto].filter(Boolean).sort((a,b)=>b.at.localeCompare(a.at))[0];
-                  return lb ? `Last built ${new Date(lb.at).toLocaleString()} · ${lb.why}` : "Built on open from the current catalog, glossary, semantic models and ontologies"; })()}
-                {" · "}{({change:"Rebuilds when a source changes", hourly:"Rebuilds hourly", daily:"Rebuilds daily"})[kg.settings.schedule]}</div>
+          <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+              <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>How the graph is built</span>
+              <span style={{width:8,height:8,borderRadius:"50%",background:T.green}}/>
+              <span style={{fontSize:11.5,color:T.textMuted}}>{lastBuilt?`Built ${new Date(lastBuilt.at).toLocaleString()}`:"Built automatically"} · {({change:"rebuilds when a source changes", hourly:"rebuilds hourly", daily:"rebuilds daily"})[kg.settings.schedule]}</span>
+              <Btn small onClick={()=>{ kgRebuild(); onToast&&onToast("Knowledge graph rebuilt","success"); }}>Rebuild now</Btn>
             </div>
-            <Btn onClick={()=>{ kgRebuild(); onToast&&onToast("Knowledge graph rebuilt","success"); }}>Rebuild now</Btn>
+            <div style={{display:"flex",alignItems:"stretch",gap:8,flexWrap:"wrap"}}>
+              {[["Catalog", `${ASSETS.length} assets`, `${S.byNodeType.column||0} columns · lineage`, "catalog"],
+                ["Glossary", `${_gtState.length} terms`, "meanings", "glossary"],
+                ["Semantic models", `${_slState.models.length} models`, `${_slState.metrics.length} metrics · ${_slState.rels.length} joins`, "semanticlayer"],
+                ["Ontologies", `${allClasses} classes`, `${onts.reduce((n,x)=>n+x.rels.length,0)} relationships`, "ontologies"],
+                ["Knowledge graph", `${KG.fmtCount(entTotal)} entities`, `${connected} of ${allClasses} classes connected`, null]].map(([t,a,b,nav],i,arr)=>(
+                <React.Fragment key={t}>
+                  <div onClick={nav?()=>onNav&&onNav(nav):undefined} style={{flex:1,minWidth:140,padding:"10px 12px",borderRadius:9,cursor:nav?"pointer":"default",
+                    background:nav?T.bgElevated:T.accentDim,border:`1px solid ${nav?T.border:T.accent+"40"}`}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em"}}>{t}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginTop:3}}>{a}</div>
+                    <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{b}</div>
+                  </div>
+                  {i<arr.length-1 && <div style={{display:"flex",alignItems:"center",color:T.textMuted}}>→</div>}
+                </React.Fragment>))}
+            </div>
           </div></Card2>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
-            <Card2><div style={{padding:"14px 16px"}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Nodes by type</div>
-              <Bar total={S.nodes} rows={Object.entries(S.byNodeType).sort((a,b)=>b[1]-a[1]).map(([k,n])=>[k,(KG.NODE_TYPES[k]||{l:k}).l,n,(KG.NODE_TYPES[k]||{}).c])}/>
-            </div></Card2>
-            <Card2><div style={{padding:"14px 16px"}}>
-              <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Edges by type</div>
-              <Bar total={S.edges} rows={Object.entries(S.byEdgeType).sort((a,b)=>b[1]-a[1]).map(([k,n])=>[k,(KG.EDGE_TYPES[k]||{l:k}).l,n,T.blue])}/>
-            </div></Card2>
+          <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ontologies</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
+            {onts.map(x=>{ const st = egs[x.id].stats; const pct = st.classes?Math.round(st.withData/st.classes*100):0; return (
+              <div key={x.id} onClick={()=>openOnt(x.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <span style={{width:24,height:24,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${ontColour(x)}18`,color:ontColour(x)}}>{ontIcon(x)}</span>
+                  <span style={{fontSize:14,fontWeight:700,color:T.text,flex:1}}>{x.name}</span><span style={{fontSize:11,color:T.textMuted}}>{x.domain}</span></div>
+                <div style={{display:"flex",gap:18,marginBottom:10}}>
+                  {[["Entities",KG.fmtCount(st.entities)],["Classes",`${st.withData} / ${st.classes}`],["Relationships",`${st.linked} / ${st.relationships}`]].map(([k,v])=>(
+                    <div key={k}><div style={{fontSize:16,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div></div>))}
+                </div>
+                <div style={{height:5,background:T.bgElevated,borderRadius:3,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?T.green:T.accent}}/></div>
+                <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{pct}% of classes connected to data</div>
+              </div>); })}
           </div>
-          <Card2><div style={{padding:"14px 16px"}}>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:4}}>Derived facts</div>
-            <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Added by inference rules · shown dashed · never stored as if someone entered them</div>
-            <OntTable empty="No inference rules on" cols={[{l:"Rule",w:"1.1fr"},{l:"What it does",w:"2.4fr"},{l:"Facts",w:".5fr"},{l:"Status",w:".6fr"}]}
-              rows={Object.entries(KG.RULES).map(([k,r])=>({key:k, cells:[r.l, r.d, String(S.byRule[k]||0), kg.settings.rules[k]?<span style={{color:T.green}}>On</span>:<span style={{color:T.textMuted}}>Off</span>]}))}/>
-          </div></Card2>
         </>}
 
-        {tab==="explorer" && <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+        {tab==="business" && <>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+            <div style={{width:260}}><SLSelect value={ontId} onChange={e=>{setOntId(e.target.value); setClsSel(null);}} options={onts.map(x=>({v:x.id,l:x.name}))}/></div>
+            {eg && <span style={{fontSize:11.5,color:T.textMuted}}>{KG.fmtCount(eg.stats.entities)} entities · {eg.stats.withData} of {eg.stats.classes} classes connected to data · {eg.stats.linked} of {eg.stats.relationships} relationships linked</span>}
+          </div>
+          {o && <OntRelCanvas o={o} selected={clsSel} onSelect={setClsSel} onAsset={onAsset}
+            counts={Object.fromEntries(eg.classes.map(c=>[c.classId, c.total?`${KG.fmtCount(c.total)} entities`:null]))}
+            panel={(sel)=> sel ? classProfile(sel) : <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b"}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:6}}>{o.name}</div>Select a class</div>}/>}
+        </>}
+
+        {tab==="explore" && <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
           <div style={{width:300,flexShrink:0}}>
             <Input2 placeholder="Search tables, columns, terms, classes, metrics…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
-            <div style={{marginTop:10,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:560,overflowY:"auto"}}>
-              {!q && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>Search for a node to explore its connections</div>}
-              {q && results.length===0 && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>No nodes match</div>}
+            <div style={{marginTop:10,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:600,overflowY:"auto"}}>
+              {!q && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>Search for anything EDG knows</div>}
+              {q && results.length===0 && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>No matches</div>}
               {results.map((n,i)=>(
                 <button key={n.id} onClick={()=>setFocus(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:focus===n.id?T.bgActive:"transparent",border:"none",borderBottom:i<results.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",textAlign:"left"}}>
                   <KgTypeChip type={n.type}/><span style={{fontSize:12,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</span>
@@ -41983,63 +42108,40 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
             </div>
           </div>
           <div style={{flex:1,minWidth:0}}>
-            {!fNode ? <div style={{padding:"80px 0",textAlign:"center",fontSize:12.5,color:T.textMuted,border:`1px dashed ${T.border}`,borderRadius:10}}>Select a node</div> : <>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
-                <KgTypeChip type={fNode.type}/><span style={{fontSize:15,fontWeight:700,color:T.text}}>{fNode.label}</span>
+            {!fNode ? <div style={{padding:"80px 0",textAlign:"center",fontSize:12.5,color:T.textMuted,border:`1px dashed ${T.border}`,borderRadius:10}}>Select a result</div> : <>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+                <KgTypeChip type={fNode.type}/><span style={{fontSize:16,fontWeight:700,color:T.text}}>{fNode.label}</span>
                 {fNode.type==="asset" && ASSETS.find(a=>a.name===fNode.label) && onAsset && <button onClick={()=>onAsset(ASSETS.find(a=>a.name===fNode.label))} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in catalog ↗</button>}
+                {fNode.type==="class" && <button onClick={()=>{ setOntId(fNode.ontology); setClsSel(fNode.classId); setTab("business"); }} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in business view ↗</button>}
                 <span style={{flex:1}}/>
                 <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
+                <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={showDiagram?"diagram":"list"} onChange={k=>setShowDiagram(k==="diagram")}/>
               </div>
-              <KgCanvas graph={nb} focus={focus} onFocus={setFocus}/>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"14px 0 6px"}}>Connections · {g.edges.filter(e=>(e.from===focus||e.to===focus)&&(showDerived||!e.derived)).length}</div>
-              <KgEdgeList full={{nodes:g.nodes, edges:g.edges.filter(e=>showDerived||!e.derived)}} id={focus} onFocus={setFocus}/>
+              {showDiagram ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus}/>
+                : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
             </>}
           </div>
         </div>}
 
-        {tab==="entities" && <>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-            <span style={{fontSize:12,color:T.textMuted}}>Ontology</span>
-            <div style={{width:260}}><SLSelect value={ontId} onChange={e=>{setOntId(e.target.value); setClsSel(null);}} options={onts.map(x=>({v:x.id,l:x.name}))}/></div>
-            {eg && <span style={{fontSize:11.5,color:T.textMuted}}>{eg.stats.withData} of {eg.stats.classes} classes have data · {KG.fmtCount(eg.stats.entities)} entities · {eg.stats.linked} of {eg.stats.relationships} relationships linked</span>}
-          </div>
-          {eg && <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
-            <div style={{flex:1,minWidth:0}}>
-              <OntTable empty="No classes" onRow={r=>setClsSel(r.key)}
-                cols={[{l:"Class",w:"1.1fr"},{l:"Data sources",w:"1.6fr"},{l:"Entities",w:".7fr"}]}
-                rows={eg.classes.map(c=>({key:c.classId, cells:[<span style={{fontWeight:clsSel===c.classId?800:600}}>{c.name}</span>,
-                  c.sources.length ? c.sources.map(s=>`${s.table} · ${KG.fmtCount(s.rows)}`).join(", ") : <span style={{color:T.amber}}>No data source</span>,
-                  c.total ? KG.fmtCount(c.total) : "—"]}))}/>
+        {tab==="settings" && <div style={{maxWidth:820}}>
+          <AIDCard title="Rebuild">
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:280}}><SLSelect value={kg.settings.schedule} onChange={e=>kgSet(s=>({...s, settings:{...s.settings, schedule:e.target.value}}))}
+                options={[{v:"change",l:"When a source changes"},{v:"hourly",l:"Hourly"},{v:"daily",l:"Daily"}]}/></div>
+              <Btn small onClick={()=>{ kgRebuild(); onToast&&onToast("Knowledge graph rebuilt","success"); }}>Rebuild now</Btn>
             </div>
-            <div style={{width:420,flexShrink:0}}>
-              {!clsSel ? <div style={{padding:"60px 0",textAlign:"center",fontSize:12.5,color:T.textMuted,border:`1px dashed ${T.border}`,borderRadius:10}}>Select a class to preview its entities</div> : (()=>{
-                const c = eg.classes.find(x=>x.classId===clsSel); const ss = eg.samples[clsSel]||[];
-                const egLabel = (id) => (Object.values(eg.samples).flat().find(x=>x.id===id)||{label:id}).label;
-                return <Card2><div style={{padding:"14px 16px"}}>
-                  <div style={{fontSize:14,fontWeight:700,color:T.text}}>{c.name}</div>
-                  <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>{c.total?`${KG.fmtCount(c.total)} entities`:"No entities"} · sample · personal data masked</div>
-                  {ss.length===0 ? <div style={{fontSize:12,color:T.amber}}>Add a data source to this class to create its entities</div> : ss.map(s=>{
-                    const out = eg.links.filter(l=>l.from===s.id), inn = eg.links.filter(l=>l.to===s.id);
-                    return <div key={s.id} style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,marginBottom:7}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                        <span style={{fontSize:12,fontWeight:700,color:T.text}}>{s.label}</span><span style={{fontSize:10.5,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{s.source}</span></div>
-                      {Object.entries(s.props).map(([k,v])=><div key={k} style={{display:"flex",gap:8,fontSize:11.5}}><span style={{color:T.textMuted,width:120}}>{k}</span><span style={{color:T.text,fontFamily:"ui-monospace,monospace"}}>{v}</span></div>)}
-                      {[...out.map(l=>`${l.name} → ${egLabel(l.to)}`), ...inn.map(l=>`← ${l.name} · ${egLabel(l.from)}`)].map((t,i)=>
-                        <div key={i} style={{fontSize:11,color:T.violet,marginTop:3}}>{t}</div>)}
-                    </div>; })}
-                </div></Card2>; })()}
-            </div>
-          </div>}
-        </>}
-
-        {tab==="settings" && <div style={{maxWidth:760}}>
+          </AIDCard>
           <AIDCard title="Inference rules">
-            {Object.entries(KG.RULES).map(([k,r])=><AIDRow key={k} l={r.l} d={r.d} on={kg.settings.rules[k]!==false}
+            {Object.entries(KG.RULES).map(([k,r])=><AIDRow key={k} l={`${r.l} · ${S.byRule[k]||0} facts`} d={r.d} on={kg.settings.rules[k]!==false}
               set={v=>{ kgSet(s=>({...s, settings:{...s.settings, rules:{...s.settings.rules, [k]:v}}})); kgRebuild(`${r.l} turned ${v?"on":"off"}`); }}/>)}
           </AIDCard>
-          <AIDCard title="Rebuild">
-            <div style={{width:280}}><SLSelect value={kg.settings.schedule} onChange={e=>kgSet(s=>({...s, settings:{...s.settings, schedule:e.target.value}}))}
-              options={[{v:"change",l:"When a source changes"},{v:"hourly",l:"Hourly"},{v:"daily",l:"Daily"}]}/></div>
+          <AIDCard title="Graph statistics">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
+              {[["Nodes", S.byNodeType, KG.NODE_TYPES, S.nodes],["Edges", S.byEdgeType, KG.EDGE_TYPES, S.edges]].map(([t,counts,meta,total])=>(
+                <div key={t}><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:6}}>{t} · {total.toLocaleString("en-US")}</div>
+                  {Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([k,n])=><div key={k} style={{display:"flex",fontSize:11.5,padding:"2px 0"}}>
+                    <span style={{flex:1,color:T.textSub}}>{(meta[k]||{l:k}).l}</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{n.toLocaleString("en-US")}</span></div>)}</div>))}
+            </div>
           </AIDCard>
           <AIDCard title="Export">
             <AIDRow l="Include derived facts" on={kg.settings.exportDerived} set={v=>kgSet(s=>({...s, settings:{...s.settings, exportDerived:v}}))}/>
@@ -42054,29 +42156,27 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
   );
 };
 
-// Knowledge Graph tab on a catalog asset: its neighbourhood in the graph.
+// Knowledge Graph tab on a catalog asset: what it connects to, in plain sections.
 const KgAssetTab = ({asset, onAsset}) => {
   useKg(); useOnt();
   const [focus, setFocus] = useState(`asset:${asset.name}`);
   const [showDerived, setShowDerived] = useState(true);
+  const [showDiagram, setShowDiagram] = useState(false);
   useEffect(()=>{ setFocus(`asset:${asset.name}`); },[asset.name]);
   const g = kgGraph();
-  const has = g.nodes.some(n=>n.id===focus);
-  const nb = has ? KG.neighbourhood(g, focus, {depth:1, derived:showDerived}) : null;
   const fNode = g.nodes.find(n=>n.id===focus);
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
         {fNode && <><KgTypeChip type={fNode.type}/><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fNode.label}</span></>}
         {focus!==`asset:${asset.name}` && <button onClick={()=>setFocus(`asset:${asset.name}`)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Back to {asset.name}</button>}
         <span style={{flex:1}}/>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
+        <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={showDiagram?"diagram":"list"} onChange={k=>setShowDiagram(k==="diagram")}/>
       </div>
-      {!has ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not in the knowledge graph</div> : <>
-        <KgCanvas graph={nb} focus={focus} onFocus={setFocus} height={460}/>
-        <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"14px 0 6px"}}>Connections</div>
-        <KgEdgeList full={{nodes:g.nodes, edges:g.edges.filter(e=>showDerived||!e.derived)}} id={focus} onFocus={setFocus}/>
-      </>}
+      {!fNode ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not in the knowledge graph</div>
+        : showDiagram ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus} height={460}/>
+        : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
     </div>
   );
 };
