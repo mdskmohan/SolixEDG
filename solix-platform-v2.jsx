@@ -4838,370 +4838,417 @@ const useNotifs = () => {
   useEffect(()=>{ const fn=()=>force(n=>n+1); _notifSubs.add(fn); return ()=>_notifSubs.delete(fn); },[]);
   return [_notifState, notifSet];
 };
-const pushNotif = (entry) => { _notifIdSeq += 1; const n={id:_notifIdSeq, unread:true, time:"just now", asset:null, forMe:true, ...entry}; notifSet(prev=>[n, ...prev]); _collabDeliver(n); };
+const pushNotif = (entry) => { _notifIdSeq += 1; const n={id:_notifIdSeq, unread:true, time:"just now", asset:null, forMe:true, ...entry}; notifSet(prev=>[n, ...prev]); _naDeliver(n); };
 
-// ── Slack & Microsoft Teams — collaboration delivery channels ──────────────────
-// Same event engine as the bell: every pushNotif() is also delivered to each
-// connected app. Two paths per app:
-//   • Channel post — admin routing (Settings › Channels): first matching route
-//     (menu + domain) wins, otherwise the default channel.
-//   • Direct message — each user's per-event preference (Settings › Notifications),
-//     sent to the asset's owners & stewards, matched to app users by email.
-// Messages carry metadata only (title, subject, link) — never sample values.
-// 5-minute duplicate collapse per app + target + title, same as in-app.
-const COLLAB_APPS = {
-  slack:{key:"slack", label:"Slack", orgLabel:"Workspace", org:"jnj-data.slack.com", connectLabel:"Connect with Slack",
-    channels:["#data-governance","#data-quality-alerts","#fin-data-gov","#commerce-data","#data-eng-oncall","#privacy-legal"],
-    unmatched:["tom.vance@jnj.com"]},
-  teams:{key:"teams", label:"Microsoft Teams", orgLabel:"Tenant", org:"jnj.onmicrosoft.com", connectLabel:"Connect with Microsoft",
-    channels:["Data Governance › General","Data Governance › Quality","Finance › Data","Commerce › Data","Data Engineering › On-call","Legal › Privacy"],
-    unmatched:[]},
+// ── Notification alerts — OpenMetadata parity ─────────────────────────────────
+// Mirrors OpenMetadata's Event Subscription model (Settings › Notifications › Alerts):
+//   Name · Description · Source (one) · Filters (Include toggle, AND/OR) · Destinations.
+// Slack / MS Teams / G Chat are configured exactly as in OpenMetadata:
+//   • External destination: "Slack Webhook URL" / "MS Teams Destination (HTTP POST URL)"
+//     + optional "Display Name" + "Test Connection".
+//   • Internal destination (Admins, Followers, Owners, Teams, Users, Assignees) with a
+//     delivery type; Slack / MS Teams / G Chat / Webhook resolve to each team's
+//     Subscription endpoint (Settings › Teams & Users › team › Subscription).
+//     Recipients without an endpoint for that type are skipped (as in OpenMetadata).
+//   • "Notify Downstream" + "Downstream Depth" (default 1) on internal destinations.
+// Delivery is one-way (webhooks) — no bot, buttons or slash commands.
+const NA_SOURCES = [
+  {g:"General",             items:["All"]},
+  {g:"Data assets",         items:["Table","Dashboard","Chart","Dashboard Data Model","Pipeline","Topic","ML Model","Database","Database Schema","Data Product"]},
+  {g:"Service connections", items:["Ingestion Pipeline","Database Service","Dashboard Service","Pipeline Service","Messaging Service","Storage Service","ML Model Service","Metadata Service"]},
+  {g:"Governance",          items:["Glossary","Glossary Term","Tag","Tag Category","Domain","User"]},
+  {g:"Collaboration",       items:["Conversation","Task","Announcement"]},
+];
+const NA_EVENT_TYPES = ["Entity Created","Entity Updated","Entity Fields Changed","Entity No Change","Entity Soft Deleted","Entity Deleted","Entity Restored","Thread Created","Thread Updated","Post Created","Post Updated","Task Created","Task Updated","Task Resolved","Task Closed","Logical Test Case Added","Suggestion Created","Suggestion Updated","Suggestion Accepted","Suggestion Rejected","Suggestion Deleted","User Login","User Logout","Entity Lineage Added","Entity Lineage Deleted","Entity Lineage Updated"];
+const NA_GENERAL_EVENTS = ["Entity Created","Entity Updated","Entity Fields Changed","Entity Soft Deleted","Entity Deleted","Entity Restored"];
+const NA_NO_VALUE = ["General Metadata Events","Filter By Updater Is Bot"];
+const naFiltersFor = (src)=>{
+  if(src==="Announcement") return [];
+  if(src==="Task"||src==="Conversation") return ["Mentioned Name"];
+  let f=["Owner Name","Entity Specific Name","Event Type","Updater Name","Domain","General Metadata Events","Filter By Updater Is Bot"];
+  if(src==="User") f=f.filter(x=>x!=="Owner Name"&&x!=="General Metadata Events");
+  if(src==="All") f=[...f,"Entity ID"];
+  return f;
 };
-const COLLAB_DOMAINS = ["Commerce","Finance","Product","Platform","Procurement","Marketing","ML"];
-const _collabInit = ()=>({connected:false, org:"", connectedBy:"", connectedAt:"", defaultChannel:"", dm:true, routes:[]});
-// Connection settings persist (a real install is stored server-side); the message log does not.
-const _COLLAB_KEY = "edg.collab.v1";
-const _collabLoad = ()=>{ try{ const v=JSON.parse(localStorage.getItem(_COLLAB_KEY)||"null"); return v&&v.slack&&v.teams?v:null; }catch(e){ return null; } };
-const _collabSaved = _collabLoad();
-let _collab = {slack:{..._collabInit(),...(_collabSaved?.slack||{})}, teams:{..._collabInit(),...(_collabSaved?.teams||{})}, log:[]};
-let _chPrefs = _collabSaved?.prefs||{slack:{}, teams:{}}; // personal DM preference per event; missing = on
-let _collabSeq = 0;
-const _collabSubs = new Set();
-const _collabNotify = ()=>{ try{ localStorage.setItem(_COLLAB_KEY, JSON.stringify({slack:_collab.slack, teams:_collab.teams, prefs:_chPrefs})); }catch(e){} _collabSubs.forEach(f=>f()); };
-const collabSet = (ch,patch)=>{ _collab={..._collab,[ch]:{..._collab[ch],...patch}}; _collabNotify(); };
-const chPrefSet = (ch,ev,on)=>{ _chPrefs={..._chPrefs,[ch]:{..._chPrefs[ch],[ev]:on}}; _collabNotify(); };
-const chPrefSetMenu = (ch,menuKey,on)=>{ const g=NOTIF_CATALOG.find(x=>x.key===menuKey); if(!g)return; const next={..._chPrefs[ch]}; g.events.forEach(e=>{next[e.ev]=on;}); _chPrefs={..._chPrefs,[ch]:next}; _collabNotify(); };
-const useCollab = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_collabSubs.add(fn);return()=>{_collabSubs.delete(fn);};},[]); return {..._collab, prefs:_chPrefs}; };
-const _NOTIF_CAT_MENU = {Policy:"policy",Classifications:"tags",Glossary:"glossary",Domains:"domains","Data Products":"dataproducts",Catalog:"catalog",Quality:"catalog",Connections:"integrations"};
-const _NOTIF_NAV_MENU = {glossary:"glossary",policymanager:"policy",catalog:"catalog",quality:"catalog",tags:"tags",domains:"domains",dataproducts:"dataproducts"};
-const notifMenuOf = (n)=>NOTIF_EV_MENU[n.event]||_NOTIF_CAT_MENU[n.category]||_NOTIF_NAV_MENU[n.nav]||null;
-const _collabAsset = (name)=>(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===name);
-const _collabResp = (name)=>{ const a=_collabAsset(name); if(!a) return []; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return [...new Set([...own,...stw])]; };
-const _collabLog = (e)=>{
-  // A distinct approval request is never collapsed into an earlier one with the same title.
-  const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000&&(!e.req||(x.req&&x.req.src===e.req.src&&x.req.id===e.req.id)));
-  if(dup&&e.kind!=="user") return false;
-  _collabSeq+=1; _collab={..._collab, log:[{id:_collabSeq,...e}, ..._collab.log].slice(0,60)}; return true;
+const naInternalFor = (src)=>["Admins","Followers","Owners","Teams","Users",...(src==="Task"?["Assignees"]:[])];
+const NA_EXTERNAL = ["Email","Slack","MS Teams","G Chat","Webhook"];
+const NA_DELIVERY = ["Email","Slack","MS Teams","G Chat","Webhook"];
+const NA_SUB_TYPES = ["Slack","MS Teams","G Chat","Webhook"];
+const NA_URL_LABEL = {"Slack":"Slack Webhook URL","MS Teams":"MS Teams Destination (HTTP POST URL)","G Chat":"G Chat Webhook URL","Webhook":"Endpoint URL"};
+const NA_URL_HINT = {"Slack":"https://hooks.slack.com/services/…","MS Teams":"https://…logic.azure.com/workflows/…","G Chat":"https://chat.googleapis.com/v1/spaces/…","Webhook":"https://…"};
+const naUrlCheck = (type,url)=>{
+  const u=String(url||"").trim();
+  if(!u) return `${NA_URL_LABEL[type]} is required`;
+  if(!/^https:\/\//i.test(u)) return "URL must start with https://";
+  if(type==="Slack"&&!/^https:\/\/hooks\.slack\.com\/services\//i.test(u)) return "Not a Slack incoming webhook URL";
+  if(type==="MS Teams"&&!/(logic\.azure\.com|powerplatform\.com|webhook\.office\.com)/i.test(u)) return "Not a Microsoft Teams workflow webhook URL";
+  if(type==="G Chat"&&!/^https:\/\/chat\.googleapis\.com\//i.test(u)) return "Not a Google Chat webhook URL";
+  return null;
 };
-const _collabDeliver = (n)=>{
-  const menu=notifMenuOf(n); const dom=n.asset?(_collabAsset(n.asset)?.domain||""):""; const at=Date.now();
-  let changed=false;
-  ["slack","teams"].forEach(ch=>{
-    const c=_collab[ch]; if(!c.connected) return;
-    const r=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom));
-    const chan=r?.channel||c.defaultChannel;
-    if(chan&&!n.dmOnly) changed=_collabLog({ch,kind:"channel",target:chan,via:r?"Route":"Default channel",title:n.title,body:n.body,at})||changed;
-    const g=NOTIF_CATALOG.find(x=>x.key===menu);
-    const dmOn = n.event ? _chPrefs[ch][n.event]!==false : (g ? g.events.some(e=>_chPrefs[ch][e.ev]!==false) : true);
-    if(c.dm&&dmOn){
-      const unmatched=COLLAB_APPS[ch].unmatched.map(m=>m.split("@")[0]);
-      const who=(Array.isArray(n.to)?n.to:(n.asset?_collabResp(n.asset):[])).filter(u=>!unmatched.includes(u));
-      const target=who.length?who.map(u=>"@"+u).join(", "):"Recipient";
-      changed=_collabLog({ch,kind:"dm",target,via:"Direct message",title:n.title,body:n.body,at})||changed;
-    }
-  });
-  if(changed) _collabNotify();
-};
-const collabTest = (ch)=>{ const c=_collab[ch]; const target=c.defaultChannel||COLLAB_APPS[ch].channels[0]; _collabLog({ch,kind:"channel",target,via:"Test",title:"Test message · Solix EDG",body:`Connected to ${COLLAB_APPS[ch].label}. Notifications routed here will appear like this.`,at:Date.now()}); _collabNotify(); };
-const _agoShort = (at)=>{ const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:`${Math.round(m/60)}h ago`; };
+const naMask = (url)=>{ const u=String(url||""); try{ const x=new URL(u); return x.host+(x.pathname.length>12?x.pathname.slice(0,12)+"…":x.pathname); }catch(e){ return u.slice(0,28); } };
 
-// ── Inbound: people using EDG from Slack / Teams ─────────────────────────────
-//   • Paste an EDG link  → link preview (metadata only: owner, steward, status, quality, tags)
-//   • /edg search <text> → assets + glossary terms, only visible to the sender
-//   • @EDG <question> or /edg ask <question> → the Copilot (aiAsk), run with the
-//     SENDER's role. Answers are only visible to the sender, so a channel never
-//     shows something another member's role would mask.
-const collabLink = (kind,id)=>`${typeof location!=="undefined"?location.origin:"https://edg"}/${kind}/${encodeURIComponent(id)}`;
-const _collabStrip = (t)=>String(t||"").replace(/\*\*/g,"").replace(/\*/g,"");
-const _collabUnfurl = (text)=>{
-  const m=String(text).match(/https?:\/\/\S+?\/(catalog|glossary)\/([^\s/?#]+)/); if(!m) return null;
-  const id=decodeURIComponent(m[2]);
-  if(m[1]==="catalog"){
-    const a=_collabAsset(id);
-    if(!a) return {title:`Not found · ${id}`, body:"No catalog asset with that name"};
-    return {title:a.name, body:[a.type,a.domain,a.db].filter(Boolean).join(" · "),
-      kv:[["Owner",(a.owners||[a.owner]).filter(Boolean).join(", ")||"—"],["Steward",(a.stewards||[a.steward]).filter(Boolean).join(", ")||"—"],["Status",a.cert||"—"],["Quality",a.quality!=null?String(a.quality):"—"],["Tags",(a.tags||[]).join(", ")||"—"]]};
+// Store: alerts + team subscriptions persist (they are configuration); recent events are capped.
+const _NA_KEY = "edg.notifAlerts.v1";
+const _naLoad = ()=>{ try{ const v=JSON.parse(localStorage.getItem(_NA_KEY)||"null"); return v&&Array.isArray(v.alerts)?v:null; }catch(e){ return null; } };
+let _na = _naLoad() || {alerts:[], subs:{}};
+const _naSubs = new Set();
+const _naNotify = ()=>{ try{ localStorage.setItem(_NA_KEY, JSON.stringify(_na)); }catch(e){} _naSubs.forEach(f=>f()); };
+const naSet = (patch)=>{ _na={..._na,...(typeof patch==="function"?patch(_na):patch)}; _naNotify(); };
+const useNA = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_naSubs.add(fn);return()=>{_naSubs.delete(fn);};},[]); return _na; };
+const naSaveAlert = (a)=>naSet(s=>({alerts:s.alerts.some(x=>x.id===a.id)?s.alerts.map(x=>x.id===a.id?{...x,...a}:x):[...s.alerts,{events:[],...a}]}));
+const naDeleteAlert = (id)=>naSet(s=>({alerts:s.alerts.filter(x=>x.id!==id)}));
+const naSetSub = (team,sub)=>naSet(s=>({subs:{...s.subs,[team]:sub}}));
+
+// Event → OpenMetadata source / event type.
+const _naAsset = (name)=>(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===name);
+const _NA_TYPE_SRC = {Table:"Table",View:"Table","Materialized View":"Table",Dashboard:"Dashboard",Chart:"Chart","Data Model":"Dashboard Data Model",Pipeline:"Pipeline",Topic:"Topic","ML Model":"ML Model",Database:"Database",Schema:"Database Schema","Data Product":"Data Product"};
+const naSourceOf = (n)=>{
+  const a=n.asset?_naAsset(n.asset):null;
+  if(a) return _NA_TYPE_SRC[a.type]||"Table";
+  if(/request|approval|submitted|review/i.test(n.title||"")) return "Task";
+  return {glossary:"Glossary Term",tags:"Tag",domains:"Domain",dataproducts:"Data Product",catalog:"Table",quality:"Table"}[n.nav]||null;
+};
+const naEventTypeOf = (n)=>{
+  const t=n.title||"";
+  if(/deleted/i.test(t)) return "Entity Deleted";
+  if(/request|approval requested|submitted/i.test(t)) return "Task Created";
+  if(/^(approved|rejected|enforcement (approved|rejected)|legal hold released|records released|deletion request rejected|status change rejected|unhold rejected|partial unhold rejected)/i.test(t)) return "Task Resolved";
+  return "Entity Updated";
+};
+const naFilterHit = (f,n,ctx)=>{
+  const v=String(f.value||"").toLowerCase();
+  switch(f.type){
+    case "Owner Name": return ctx.owners.some(o=>o.toLowerCase()===v);
+    case "Entity Specific Name": return !!v&&((ctx.name||"").toLowerCase()===v||(n.title||"").toLowerCase().includes(v));
+    case "Event Type": return ctx.eventType===f.value;
+    case "Updater Name": return !!v&&(n.body||"").toLowerCase().includes(v);
+    case "Domain": return (ctx.domain||"").toLowerCase()===v;
+    case "General Metadata Events": return NA_GENERAL_EVENTS.includes(ctx.eventType);
+    case "Filter By Updater Is Bot": return false;
+    case "Entity ID": return String(ctx.id||"")===String(f.value||"");
+    case "Mentioned Name": return !!v&&(n.body||"").toLowerCase().includes(v);
+    default: return false;
   }
-  const t=(typeof _gtState!=="undefined"?_gtState:[]).find(x=>(x.term||"").toLowerCase()===id.toLowerCase()||String(x.id)===id);
-  if(!t) return {title:`Not found · ${id}`, body:"No glossary term with that name"};
-  const def=_collabStrip(t.definition||t.description||"");
-  return {title:t.term, body:def.length>180?def.slice(0,180)+"…":def,
-    kv:[["Owner",t.owner||"—"],["Steward",t.steward||"—"],["Status",t.cert||t.status||"—"],["Domain",t.domain||"—"]]};
 };
-const _collabSearch = (q)=>{
-  const s=q.toLowerCase().trim(); if(!s) return {title:"Search", body:"Usage: /edg search <text>", ephemeral:true};
-  const assets=(typeof ASSETS!=="undefined"?ASSETS:[]).filter(a=>a.name.toLowerCase().includes(s)||(a.description||"").toLowerCase().includes(s)||(a.tags||[]).some(x=>String(x).toLowerCase().includes(s))).slice(0,5);
-  const terms=(typeof _gtState!=="undefined"?_gtState:[]).filter(t=>(t.term||"").toLowerCase().includes(s)||(t.abbr||"").toLowerCase()===s).slice(0,3);
-  const lines=[...assets.map(a=>({t:a.name,sub:[a.type,a.domain,a.cert].filter(Boolean).join(" · ")})),...terms.map(t=>({t:t.term,sub:["Glossary term",t.domain,t.cert||t.status].filter(Boolean).join(" · ")}))];
-  return {title:`${lines.length} result${lines.length===1?"":"s"} for "${q.trim()}"`, lines, ephemeral:true, open:"Open search in EDG"};
+const naMatches = (al,n,ctx)=>{
+  if(al.enabled===false) return false;
+  if(al.source!=="All"&&al.source!==ctx.source) return false;
+  const fs=(al.filters||[]).filter(f=>f.type&&(NA_NO_VALUE.includes(f.type)||String(f.value||"").trim()));
+  if(!fs.length) return true;
+  const r=fs.map(f=>f.include===false?!naFilterHit(f,n,ctx):naFilterHit(f,n,ctx));
+  return al.join==="OR"?r.some(Boolean):r.every(Boolean);
 };
-const _collabAsk = (q,role)=>{
-  if(!q.trim()) return {title:"Ask the Copilot", body:"Usage: @EDG <question>", ephemeral:true};
-  let ans; try{ ans=aiAsk(q,{role,scope:"auto",asset:null}); }catch(err){ return {title:"The Copilot could not answer", body:String((err&&err.message)||err), ephemeral:true}; }
-  const texts=[], lines=[]; let kv=null;
-  (ans.blocks||[]).forEach(b=>{
-    if(b.kind==="text") texts.push(_collabStrip(b.text));
-    else if(b.kind==="kv") kv=(b.rows||[]).map(r=>Array.isArray(r)?[r[0],_collabStrip(r[1])]:[r.k||r.label,_collabStrip(r.v||r.value)]);
-    else if(b.kind==="refusal") texts.push(_collabStrip(b.reason));
-    else if(b.kind==="data") texts.push("Answered with data — open it in the Copilot to see the result.");
-    else if(Array.isArray(b.rows)) b.rows.slice(0,5).forEach(r=>lines.push({t:r.name||r.term||r.asset||r.title||r.policy||String((r&&r[0])||""),sub:b.label||""}));
+const _naMembers = ()=>(typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[]);
+const _naHandle = (m)=>m.email.split("@")[0];
+const _naDownstreamOwners = (name,depth)=>{
+  const topo=typeof LINEAGE_TOPO!=="undefined"?LINEAGE_TOPO:{};
+  const start=Object.keys(topo).find(k=>topo[k]&&topo[k].label===name); if(!start) return [];
+  const seen=new Set([start]); let frontier=[start]; const out=[];
+  for(let d=0; d<Math.max(1,depth||1); d++){
+    const next=[]; frontier.forEach(id=>(topo[id]?.downstream||[]).forEach(x=>{ if(!seen.has(x)){ seen.add(x); next.push(x); } }));
+    next.forEach(id=>{ const a=_naAsset(topo[id]?.label); if(a) out.push(...(a.owners||[a.owner]).filter(Boolean)); });
+    frontier=next; if(!next.length) break;
+  }
+  return out;
+};
+// Resolve one destination into delivery attempts: {status, dest, to, detail}.
+const naResolve = (d,n,ctx)=>{
+  if(d.category==="external"){
+    if(d.target==="Email") return String(d.emails||"").split(/[,\s]+/).filter(Boolean).map(e=>({status:"Successful",dest:"Email",to:e}));
+    const bad=naUrlCheck(d.target,d.endpoint);
+    return [{status:bad?"Failed":"Successful",dest:d.target,to:d.displayName||naMask(d.endpoint),detail:bad||""}];
+  }
+  // internal: users and/or teams for this category
+  let users=[], teams=[];
+  if(d.target==="Admins") users=_naMembers().filter(m=>m.status==="Active"&&(m.roles||[]).includes("Admin")).map(_naHandle);
+  if(d.target==="Owners"||d.target==="Assignees") users=[...ctx.owners,...(d.notifyDownstream&&ctx.name?_naDownstreamOwners(ctx.name,d.downstreamDepth):[])];
+  if(d.target==="Users") users=d.receivers||[];
+  if(d.target==="Teams") teams=d.receivers||[];
+  if(d.target==="Followers") return [{status:"Failed",dest:d.type,to:"Followers",detail:"No followers on this asset"}];
+  users=[...new Set(users)]; const out=[];
+  if(d.type==="Email"){
+    users.forEach(u=>{ const m=_naMembers().find(x=>_naHandle(x)===u); out.push(m?{status:"Successful",dest:"Email",to:m.email}:{status:"Failed",dest:"Email",to:u,detail:"No email on profile"}); });
+    teams.forEach(t=>out.push({status:"Failed",dest:"Email",to:t,detail:"No email on team"}));
+    return out;
+  }
+  // Slack / MS Teams / G Chat / Webhook → the recipient's Subscription endpoint of that type.
+  teams.forEach(t=>{ const s=_na.subs[t]; out.push(s&&s.type===d.type&&s.endpoint?{status:"Successful",dest:d.type,to:`${t} · ${naMask(s.endpoint)}`}:{status:"Failed",dest:d.type,to:t,detail:`No ${d.type} subscription on team`}); });
+  users.forEach(u=>out.push({status:"Failed",dest:d.type,to:u,detail:`No ${d.type} subscription on user`}));
+  return out;
+};
+const _naDeliver = (n)=>{
+  if(!_na.alerts.length) return;
+  const a=n.asset?_naAsset(n.asset):null;
+  const ctx={source:naSourceOf(n), eventType:naEventTypeOf(n), name:a?a.name:(n.asset||""), id:a?a.id:"", domain:a?a.domain:"",
+    owners:a?[...new Set([...(a.owners||[a.owner]),...(a.stewards||[])].filter(Boolean))]:(Array.isArray(n.to)?n.to:[])};
+  let hit=false;
+  const alerts=_na.alerts.map(al=>{
+    if(!naMatches(al,n,ctx)) return al;
+    hit=true;
+    const at=Date.now();
+    const evs=(al.destinations||[]).flatMap(d=>naResolve(d,n,ctx)).map(x=>({...x,at,title:n.title,eventType:ctx.eventType}));
+    return {...al,events:[...evs,...(al.events||[])].slice(0,40)};
   });
-  return {title:_collabStrip(ans.headline||"Answer"), body:texts.slice(0,3).join("\n"), kv, lines:lines.slice(0,6), ephemeral:true,
-    sources:(ans.trace||[]).map(t=>t.name).filter(Boolean).slice(0,4), open:"Open in Copilot"};
-};
-const COLLAB_HELP = {title:"Solix EDG commands", ephemeral:true, lines:[
-  {t:"/edg search <text>",sub:"Assets and glossary terms"},
-  {t:"@EDG <question>  ·  /edg ask <question>",sub:"Ask the Copilot"},
-  {t:"Paste an EDG link",sub:"Preview an asset or term"}]};
-// A message sent in the connected app's default channel by `me` (role = their EDG role).
-const collabPost = (ch,text,me,role)=>{
-  const t=String(text||"").trim(); if(!t) return;
-  const c=_collab[ch]; const chan=c.defaultChannel||COLLAB_APPS[ch].channels[0];
-  let reply=null;
-  if(/^\/edg\s+search\b/i.test(t)) reply=_collabSearch(t.replace(/^\/edg\s+search\s*/i,""));
-  else if(/^\/edg\s+ask\b/i.test(t)) reply=_collabAsk(t.replace(/^\/edg\s+ask\s*/i,""),role);
-  else if(/^\/edg\b/i.test(t)) reply=COLLAB_HELP;
-  else if(/(^|\s)@EDG\b/i.test(t)) reply=_collabAsk(t.replace(/@EDG\b/ig,"").trim(),role);
-  else reply=_collabUnfurl(t);
-  _collabLog({ch,kind:"user",target:chan,via:"Message",author:me,text:t,reply,at:Date.now()});
-  _collabNotify();
+  if(hit) naSet({alerts});
 };
 
-// One message, rendered the way each app shows it (Slack message / Teams card).
-const CollabChatBody = ({isSlack,m,children})=>(
-  <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
-    {m.title&&<div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{m.title}</div>}
-    {m.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8,whiteSpace:"pre-line"}}>{m.body}</div>}
-    {m.kv&&m.kv.length>0&&<div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"3px 12px",fontSize:11.5,marginBottom:8}}>
-      {m.kv.map(([k,v],i)=><React.Fragment key={i}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,fontWeight:500}}>{v}</span></React.Fragment>)}
-    </div>}
-    {m.lines&&m.lines.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
-      {m.lines.map((l,i)=><div key={i} style={{fontSize:12}}><span style={{fontWeight:600,color:T.text}}>{l.t}</span>{l.sub&&<span style={{color:T.textMuted}}> · {l.sub}</span>}</div>)}
-    </div>}
-    {m.sources&&m.sources.length>0&&<div style={{fontSize:10.5,color:T.textMuted,marginBottom:8}}>Tools · {m.sources.join(", ")}</div>}
-    {children}
-  </div>
+// ── UI ──
+const naIn = ()=>({width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"});
+const NaLbl = ({children,req})=><div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>{children}{req&&<span style={{color:T.rose}}> *</span>}</div>;
+const NaSw = ({on,onClick,label})=>(
+  <span onClick={onClick} style={{display:"inline-flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11.5,color:T.textSub,userSelect:"none"}}>
+    <span style={{width:30,height:17,borderRadius:9,background:on?T.accent:T.border,position:"relative",display:"inline-block",transition:"background .2s"}}>
+      <span style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
+    </span>{label}
+  </span>
 );
-const CollabChatBot = ({isSlack,at,ephemeral,children})=>(
-  <div style={{display:"flex",gap:10}}>
-    <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>S</div>
-    <div style={{flex:1,minWidth:0}}>
-      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Solix EDG</span>
-        <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.bgHover,color:T.textMuted,letterSpacing:".04em"}}>{isSlack?"APP":"BOT"}</span>
-        <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(at)}</span>
-        {ephemeral&&<span style={{fontSize:10.5,color:T.textMuted}}>· Only visible to you</span>}
-      </div>
-      {children}
-    </div>
-  </div>
-);
-const ChatMsgPreview = ({ch,entry,onDecide})=>{
-  const isSlack = ch==="slack";
-  const d = entry.decided; const ok = d&&d.verdict==="approved";
-  const chatBtn = (label,primary,onClick)=>(
-    <button key={label} onClick={onClick} style={{fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${primary?T.accent:T.border}`,color:primary?"#fff":T.text,background:primary?T.accent:T.bgSurface,cursor:"pointer"}}>{label}</button>
-  );
-  const openBtn = (label)=><span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>{label||"Open in EDG"}</span>;
-  if(entry.kind==="user"){
-    const initials=String(entry.author||"?").split(".").map(x=>x[0]||"").join("").toUpperCase().slice(0,2);
-    return (
-      <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,display:"flex",flexDirection:"column",gap:10}}>
-        <div style={{display:"flex",gap:10}}>
-          <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.bgHover,color:T.textSub,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{initials}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{entry.author}</span>
-              <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(entry.at)}</span>
-            </div>
-            <div style={{fontSize:12.5,color:T.text,wordBreak:"break-word"}}>{entry.text}</div>
-          </div>
-        </div>
-        {entry.reply&&<div style={{marginLeft:40,paddingLeft:10,borderLeft:`2px solid ${T.border}`}}>
-          <CollabChatBot isSlack={isSlack} at={entry.at} ephemeral={entry.reply.ephemeral}>
-            <CollabChatBody isSlack={isSlack} m={entry.reply}>{entry.reply.title&&!/^Not found/.test(entry.reply.title)&&openBtn(entry.reply.open)}</CollabChatBody>
-          </CollabChatBot>
-        </div>}
-      </div>
-    );
-  }
+const naBlank = ()=>({id:"na-"+Date.now(), name:"", description:"", source:"", filters:[], join:"AND", destinations:[], enabled:true});
+
+// Test Connection — same check OpenMetadata runs before saving (simulated send).
+const NaTest = ({type,endpoint})=>{
+  const [st,setSt]=useState(null);
   return (
-    <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
-      <CollabChatBot isSlack={isSlack} at={entry.at}>
-        <CollabChatBody isSlack={isSlack} m={{title:entry.title,body:entry.body}}>
-          {d&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:ok?"#16a34a":T.rose,marginBottom:8}}>
-            {ok?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:Ic.x(10)}
-            {ok?"Approved":d.verdict==="rejected"?"Rejected":d.verdict==="withdrawn"?"Withdrawn":"Closed"} by @{d.by} · {d.via==="EDG"?"in EDG":`via ${d.via}`}
-          </div>}
-          {entry.denied&&!d&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>Only the approver, owners and stewards can decide this.</div>}
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-            {entry.req&&!d&&onDecide&&[chatBtn(entry.req.approve,true,()=>onDecide(entry,"approved")),chatBtn("Reject",false,()=>onDecide(entry,"rejected"))]}
-            {openBtn()}
-          </div>
-        </CollabChatBody>
-      </CollabChatBot>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <button onClick={()=>{ const bad=naUrlCheck(type,endpoint); setSt(bad?{ok:false,msg:bad}:{ok:true,msg:type==="MS Teams"?"Test message sent as an Adaptive Card":"Test message sent"}); }}
+        style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Test Connection</button>
+      {st&&<span style={{fontSize:11.5,color:st.ok?"#16a34a":T.rose}}>{st.msg}</span>}
     </div>
   );
 };
 
-// Settings › Channels drawer for Slack / Microsoft Teams (app connection, not a webhook).
-const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
-  const st = useCollab(); const c = st[ch]; const app = COLLAB_APPS[ch];
-  const {role:cdRole, roleCfg:cdRoleCfg} = useRole();
-  const cdMe = ((cdRoleCfg&&cdRoleCfg.email)||"you@jnj").split("@")[0];
-  const onDecide = (entry,verdict)=>{ const r=collabDecide(entry.id,verdict,cdMe,cdRole==="Admin"||cdRole==="admin"); if(r) onToast(r.msg,r.ok?"success":"info"); };
-  const [draft,setDraft] = useState("");
-  const sendDraft = ()=>{ if(!draft.trim()) return; collabPost(ch,draft,cdMe,cdRole); setDraft(""); };
-  const [tab,setTab] = useState("workspace");
-  const [connecting,setConnecting] = useState(false);
-  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
-  const lbl = {display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6};
-  const connect = ()=>{ setConnecting(true); setTimeout(()=>{ setConnecting(false); collabSet(ch,{connected:true,org:app.org,connectedBy:"alex.rivera",connectedAt:"Nov 17, 2026",defaultChannel:app.channels[0]}); onToast(`${app.label} connected`,"success"); },1100); };
-  const setRoute = (i,patch)=>collabSet(ch,{routes:c.routes.map((r,j)=>j===i?{...r,...patch}:r)});
-  const menuLabel = (k)=>NOTIF_CATALOG.find(g=>g.key===k)?.menu||k;
-  const members = typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[];
-  const log = st.log.filter(e=>e.ch===ch);
-  const TABS = [["workspace",app.orgLabel],["routing","Routing"],["users","Users"],["activity",`Activity${log.length?` · ${log.length}`:""}`]];
+const NaDestination = ({d,source,onChange,onRemove})=>{
+  const set=(p)=>onChange({...d,...p});
+  const teamNames=(typeof TEAMS_INIT!=="undefined"?TEAMS_INIT:[]).map(t=>t.name);
+  const users=_naMembers().map(_naHandle);
+  const isInt=d.category==="internal";
+  const pick=(list)=>(
+    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+      {list.map(x=>{ const on=(d.receivers||[]).includes(x); return (
+        <button key={x} onClick={()=>set({receivers:on?(d.receivers||[]).filter(y=>y!==x):[...(d.receivers||[]),x]})}
+          style={{fontSize:11.5,padding:"4px 10px",borderRadius:99,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:"transparent",color:on?T.accent:T.textSub,cursor:"pointer"}}>{x}</button>
+      );})}
+    </div>
+  );
+  return (
+    <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:12,background:T.bgSurface,display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 28px",gap:8,alignItems:"center"}}>
+        <select value={d.category} onChange={e=>set({category:e.target.value,target:e.target.value==="internal"?"Owners":"Slack",type:"Email",receivers:[],endpoint:"",displayName:""})} style={naIn()}>
+          <option value="internal">Internal</option><option value="external">External</option>
+        </select>
+        <select value={d.target} onChange={e=>set({target:e.target.value,receivers:[],endpoint:"",displayName:""})} style={naIn()}>
+          {(isInt?naInternalFor(source):NA_EXTERNAL).map(x=><option key={x} value={x}>{x}</option>)}
+        </select>
+        <button onClick={onRemove} title="Remove destination" style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+      </div>
+      {isInt&&<>
+        <div><NaLbl req>Type</NaLbl>
+          <select value={d.type} onChange={e=>set({type:e.target.value})} style={naIn()}>{NA_DELIVERY.map(x=><option key={x} value={x}>{x}</option>)}</select></div>
+        {d.target==="Teams"&&<div><NaLbl req>Teams</NaLbl>{pick(teamNames)}</div>}
+        {d.target==="Users"&&<div><NaLbl req>Users</NaLbl>{pick(users)}</div>}
+        <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <NaSw on={!!d.notifyDownstream} onClick={()=>set({notifyDownstream:!d.notifyDownstream,downstreamDepth:!d.notifyDownstream?1:undefined})} label="Notify Downstream"/>
+          {d.notifyDownstream&&<span style={{display:"inline-flex",alignItems:"center",gap:8,fontSize:11.5,color:T.textSub}}>Downstream Depth<span style={{color:T.rose}}>*</span>
+            <input type="number" min={1} value={d.downstreamDepth||1} onChange={e=>set({downstreamDepth:Math.max(1,Number(e.target.value)||1)})} style={{...naIn(),width:64}}/></span>}
+        </div>
+      </>}
+      {!isInt&&d.target==="Email"&&<div><NaLbl req>Email Addresses</NaLbl>
+        <input value={d.emails||""} onChange={e=>set({emails:e.target.value})} placeholder="name@company.com, team@company.com" style={naIn()}/></div>}
+      {!isInt&&d.target!=="Email"&&<>
+        <div><NaLbl req>{NA_URL_LABEL[d.target]}</NaLbl>
+          <input value={d.endpoint||""} onChange={e=>set({endpoint:e.target.value})} placeholder={NA_URL_HINT[d.target]} style={{...naIn(),fontFamily:"'Geist Mono',monospace",fontSize:12}}/></div>
+        {d.target!=="Webhook"&&<div><NaLbl>Display Name</NaLbl>
+          <input value={d.displayName||""} onChange={e=>set({displayName:e.target.value})} placeholder="e.g. Data Quality Alerts" style={naIn()}/></div>}
+        {d.target==="Webhook"&&<>
+          <div><NaLbl>Authentication</NaLbl>
+            <select value={d.auth||"None"} onChange={e=>set({auth:e.target.value})} style={naIn()}>
+              <option value="None">None</option><option value="Bearer">Bearer (HMAC signature)</option><option value="OAuth2">OAuth2 Client Credentials</option>
+            </select></div>
+          {d.auth==="Bearer"&&<div><NaLbl req>Secret Key</NaLbl><input type="password" value={d.secretKey||""} onChange={e=>set({secretKey:e.target.value})} style={naIn()}/></div>}
+          {d.auth==="OAuth2"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[["tokenUrl","Token URL",true],["clientId","Client ID",true],["clientSecret","Client Secret",true],["scope","Scope",false]].map(([k,l,r])=>(
+              <div key={k}><NaLbl req={r}>{l}</NaLbl><input type={k==="clientSecret"?"password":"text"} value={d[k]||""} onChange={e=>set({[k]:e.target.value})} style={naIn()}/></div>))}
+          </div>}
+          <div><NaLbl>Headers</NaLbl>
+            {(d.headers||[]).map((h,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 28px",gap:8,marginBottom:6}}>
+                <input value={h.k} placeholder="Key" onChange={e=>set({headers:d.headers.map((x,j)=>j===i?{...x,k:e.target.value}:x)})} style={naIn()}/>
+                <input value={h.v} placeholder="Value" onChange={e=>set({headers:d.headers.map((x,j)=>j===i?{...x,v:e.target.value}:x)})} style={naIn()}/>
+                <button onClick={()=>set({headers:d.headers.filter((_,j)=>j!==i)})} style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+              </div>))}
+            <button onClick={()=>set({headers:[...(d.headers||[]),{k:"",v:""}]})} style={{fontSize:11.5,padding:"4px 10px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,cursor:"pointer"}}>+ Add Header</button>
+          </div>
+        </>}
+        <NaTest type={d.target} endpoint={d.endpoint}/>
+      </>}
+    </div>
+  );
+};
+
+// Add / edit drawer — the OpenMetadata notification alert form.
+const NaAlertDrawer = ({initial,onClose,onToast})=>{
+  const [a,setA]=useState(initial);
+  const [tab,setTab]=useState("configuration");
+  const live=useNA().alerts.find(x=>x.id===a.id);
+  const set=(p)=>setA(x=>({...x,...p}));
+  const filterTypes=naFiltersFor(a.source);
+  const errors=[];
+  if(!a.name.trim()) errors.push("Name is required");
+  if(!a.source) errors.push("Source is required");
+  if(!a.destinations.length) errors.push("Add at least one destination");
+  a.destinations.forEach(d=>{
+    if(d.category==="external"&&d.target!=="Email"){ const b=naUrlCheck(d.target,d.endpoint); if(b) errors.push(b); }
+    if(d.category==="external"&&d.target==="Email"&&!String(d.emails||"").trim()) errors.push("Email Addresses are required");
+    if(d.category==="internal"&&(d.target==="Teams"||d.target==="Users")&&!(d.receivers||[]).length) errors.push(`Select at least one of ${d.target}`);
+  });
+  const save=()=>{ if(errors.length){ onToast(errors[0],"error"); return; } naSaveAlert({...a,name:a.name.trim()}); onToast(`${a.name.trim()} saved`,"success"); onClose(); };
+  const fVal=(f,i)=>{
+    const upd=(v)=>set({filters:a.filters.map((x,j)=>j===i?{...x,value:v}:x)});
+    if(NA_NO_VALUE.includes(f.type)) return <span style={{fontSize:11.5,color:T.textMuted,alignSelf:"center"}}>—</span>;
+    if(f.type==="Event Type") return <select value={f.value||""} onChange={e=>upd(e.target.value)} style={naIn()}><option value="">Select</option>{NA_EVENT_TYPES.map(x=><option key={x}>{x}</option>)}</select>;
+    if(f.type==="Domain") return <select value={f.value||""} onChange={e=>upd(e.target.value)} style={naIn()}><option value="">Select</option>{["Commerce","Finance","Product","Platform","Procurement","Marketing","ML"].map(x=><option key={x}>{x}</option>)}</select>;
+    if(f.type==="Owner Name"||f.type==="Updater Name"||f.type==="Mentioned Name") return <select value={f.value||""} onChange={e=>upd(e.target.value)} style={naIn()}><option value="">Select</option>{_naMembers().map(_naHandle).map(x=><option key={x}>{x}</option>)}</select>;
+    return <input value={f.value||""} onChange={e=>upd(e.target.value)} placeholder={f.type==="Entity ID"?"Entity ID":"Name"} style={naIn()}/>;
+  };
   return (
     <>
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={onClose}/>
-      <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:560,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
-        <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:34,height:34,borderRadius:9,background:bg,border:`1.5px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"center",color}}>{icon}</div>
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{app.label}</div>
-              <div style={{fontSize:11,color:T.textMuted}}>{c.connected?`Connected · ${c.org}`:"Not connected"}</div>
-            </div>
-          </div>
+      <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:600,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+        <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{live?a.name||"Alert":"Add Notification"}</div>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
         </div>
-
-        {!c.connected ? (
-          <div style={{flex:1,overflowY:"auto",padding:22,display:"flex",flexDirection:"column",gap:16}}>
-            <div>
-              <div style={lbl}>Permissions requested</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {["Post messages to channels","Send direct messages","Read channel list","Look up users by email"].map(p=>(
-                  <div key={p} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={T.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{p}
+        {live&&<div style={{display:"flex",padding:"0 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          {[["configuration","Configuration"],["events",`Recent Events${(live.events||[]).length?` · ${live.events.length}`:""}`]].map(([k,l])=>(
+            <button key={k} onClick={()=>setTab(k)} style={{padding:"10px 12px",fontSize:12,fontWeight:tab===k?700:500,background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted,cursor:"pointer"}}>{l}</button>))}
+        </div>}
+        <div style={{flex:1,overflowY:"auto",padding:22,display:"flex",flexDirection:"column",gap:18}}>
+          {tab==="events"&&live?(
+            (live.events||[]).length===0?<div style={{fontSize:12,color:T.textMuted}}>No events yet</div>:
+            <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              {live.events.map((e,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"84px 1fr",gap:10,padding:"9px 12px",borderTop:i?`1px solid ${T.border}`:"none",fontSize:12}}>
+                  <span style={{fontWeight:700,color:e.status==="Successful"?"#16a34a":T.rose}}>{e.status}</span>
+                  <div style={{minWidth:0}}>
+                    <div style={{color:T.text,fontWeight:600}}>{e.title}</div>
+                    <div style={{color:T.textMuted,fontSize:11.5}}>{e.eventType} · {e.dest} → {e.to}{e.detail?` · ${e.detail}`:""} · {_naAgo(e.at)}</div>
                   </div>
-                ))}
-              </div>
+                </div>))}
             </div>
-            <button onClick={connect} disabled={connecting} style={{padding:"10px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:connecting?"default":"pointer",opacity:connecting?.75:1}}>
-              {connecting?"Connecting…":app.connectLabel}
-            </button>
-          </div>
-        ) : (<>
-          <div style={{display:"flex",gap:0,padding:"0 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-            {TABS.map(([k,l])=>(
-              <button key={k} onClick={()=>setTab(k)} style={{padding:"10px 12px",fontSize:12,fontWeight:tab===k?700:500,cursor:"pointer",background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted}}>{l}</button>
-            ))}
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:22}}>
-            {tab==="workspace"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {[[app.orgLabel,c.org],["Status","Connected"],["Connected by",c.connectedBy],["Connected on",c.connectedAt]].map(([k,v])=>(
-                  <div key={k} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>{k}</div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</div>
-                  </div>
-                ))}
+          ):(<>
+            <div><NaLbl req>Name</NaLbl><input value={a.name} onChange={e=>set({name:e.target.value})} style={naIn()}/></div>
+            <div><NaLbl>Description</NaLbl><textarea value={a.description} onChange={e=>set({description:e.target.value})} rows={2} style={{...naIn(),resize:"vertical"}}/></div>
+            <div><NaLbl req>Source</NaLbl>
+              <select value={a.source} onChange={e=>{ const src=e.target.value; set({source:src,filters:[],destinations:a.destinations.map(d=>d.target==="Assignees"&&src!=="Task"?{...d,target:"Owners"}:d)}); }} style={naIn()}>
+                <option value="">Select a source</option>
+                {NA_SOURCES.map(g=><optgroup key={g.g} label={g.g}>{g.items.map(x=><option key={x} value={x}>{x}</option>)}</optgroup>)}
+              </select></div>
+            {a.source&&<div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                <span style={{fontSize:11.5,fontWeight:600,color:T.textSub}}>Filters</span>
+                {a.filters.length>1&&<select value={a.join} onChange={e=>set({join:e.target.value})} style={{...naIn(),width:90,padding:"4px 8px"}}><option value="AND">AND</option><option value="OR">OR</option></select>}
               </div>
-              <div>
-                <label style={lbl}>Default channel</label>
-                <select value={c.defaultChannel} onChange={e=>collabSet(ch,{defaultChannel:e.target.value})} style={sel}>
-                  <option value="">None</option>
-                  {app.channels.map(x=><option key={x} value={x}>{x}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                <div>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Direct messages</div>
-                  <div style={{fontSize:11,color:T.textMuted}}>Owners & stewards · per-user preferences</div>
-                </div>
-                <div onClick={()=>collabSet(ch,{dm:!c.dm})} style={{width:34,height:19,borderRadius:10,background:c.dm?T.accent:T.border,cursor:"pointer",position:"relative",flexShrink:0}}>
-                  <div style={{position:"absolute",top:2,left:c.dm?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>{collabTest(ch);setTab("activity");onToast("Test message sent","success");}} style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer"}}>Send Test Message</button>
-                <button onClick={()=>{collabSet(ch,_collabInit());onToast(`${app.label} disconnected`,"success");}} style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Disconnect</button>
-              </div>
+              {a.filters.map((f,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto 28px",gap:8,alignItems:"center",marginBottom:8}}>
+                  <select value={f.type} onChange={e=>set({filters:a.filters.map((x,j)=>j===i?{...x,type:e.target.value,value:""}:x)})} style={naIn()}>{filterTypes.map(x=><option key={x}>{x}</option>)}</select>
+                  {fVal(f,i)}
+                  <NaSw on={f.include!==false} onClick={()=>set({filters:a.filters.map((x,j)=>j===i?{...x,include:x.include===false}:x)})} label="Include"/>
+                  <button onClick={()=>set({filters:a.filters.filter((_,j)=>j!==i)})} style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+                </div>))}
+              {filterTypes.length>0
+                ?<button onClick={()=>set({filters:[...a.filters,{type:filterTypes[0],value:"",include:true}]})} style={{fontSize:11.5,padding:"5px 11px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,cursor:"pointer"}}>+ Add Filter</button>
+                :<div style={{fontSize:11.5,color:T.textMuted}}>No filters for {a.source}</div>}
             </div>}
-
-            {tab==="routing"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 28px",gap:8,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>
-                <span>Menu</span><span>Domain</span><span>Channel</span><span/>
+            <div>
+              <NaLbl req>Destination</NaLbl>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {a.destinations.map((d,i)=><NaDestination key={d.id} d={d} source={a.source} onChange={nd=>set({destinations:a.destinations.map((x,j)=>j===i?nd:x)})} onRemove={()=>set({destinations:a.destinations.filter((_,j)=>j!==i)})}/>)}
               </div>
-              {c.routes.map((r,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 28px",gap:8,alignItems:"center"}}>
-                  <select value={r.menu} onChange={e=>setRoute(i,{menu:e.target.value})} style={sel}>
-                    <option value="">All menus</option>
-                    {NOTIF_CATALOG.map(g=><option key={g.key} value={g.key}>{g.menu}</option>)}
-                  </select>
-                  <select value={r.domain} onChange={e=>setRoute(i,{domain:e.target.value})} style={sel}>
-                    <option value="">Any domain</option>
-                    {COLLAB_DOMAINS.map(d=><option key={d} value={d}>{d}</option>)}
-                  </select>
-                  <select value={r.channel} onChange={e=>setRoute(i,{channel:e.target.value})} style={sel}>
-                    {app.channels.map(x=><option key={x} value={x}>{x}</option>)}
-                  </select>
-                  <button onClick={()=>collabSet(ch,{routes:c.routes.filter((_,j)=>j!==i)})} title="Remove route" style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
-                </div>
-              ))}
-              {c.routes.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No routes · all notifications go to {c.defaultChannel||"no channel"}</div>}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
-                <button onClick={()=>collabSet(ch,{routes:[...c.routes,{menu:"",domain:"",channel:app.channels[0]}]})} style={{padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add route</button>
-                <span style={{fontSize:11,color:T.textMuted}}>First match wins · otherwise {c.defaultChannel||"none"}</span>
-              </div>
-            </div>}
-
-            {tab==="users"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <div style={{fontSize:12,color:T.textSub,marginBottom:4}}><b style={{color:T.text}}>{members.filter(m=>!app.unmatched.includes(m.email)).length} of {members.length}</b> matched by email</div>
-              {members.map(m=>{ const ok=!app.unmatched.includes(m.email); return (
-                <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
-                  <div style={{width:26,height:26,borderRadius:7,background:T.bgHover,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.textSub}}>{m.avatar}</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{m.name}</div>
-                    <div style={{fontSize:11,color:T.textMuted}}>{m.email}</div>
-                  </div>
-                  <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,color:ok?"#16a34a":T.textMuted}}>{ok?"Matched":`Not in ${app.orgLabel.toLowerCase()}`}</span>
-                </div>
-              );})}
-            </div>}
-
-            {tab==="activity"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                <div style={{display:"flex",gap:8}}>
-                  <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendDraft();}} placeholder={`Message ${c.defaultChannel||app.channels[0]} as @${cdMe}`}
-                    style={{flex:1,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>
-                  <button onClick={sendDraft} disabled={!draft.trim()} style={{padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:draft.trim()?"pointer":"default",opacity:draft.trim()?1:.6}}>Send</button>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {[["/edg search customer","/edg search customer"],["@EDG who owns orders?","@EDG who owns orders?"],["Asset link",collabLink("catalog","orders")],["/edg help","/edg help"]].map(([l,v])=>(
-                    <button key={l} onClick={()=>setDraft(v)} style={{fontSize:11,padding:"3px 9px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,cursor:"pointer"}}>{l}</button>
-                  ))}
-                </div>
-              </div>
-              {log.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No messages yet</div>}
-              {log.map(e=>(
-                <div key={e.id}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:11,color:T.textMuted}}>
-                    <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.kind==="user"?"Conversation":e.via}</span>
-                  </div>
-                  <ChatMsgPreview ch={ch} entry={e} onDecide={onDecide}/>
-                </div>
-              ))}
-            </div>}
-          </div>
-          <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
-            <button onClick={onClose} style={{padding:"9px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Done</button>
-          </div>
-        </>)}
+              <button onClick={()=>set({destinations:[...a.destinations,{id:"d-"+Date.now(),category:"external",target:"Slack",type:"Email",receivers:[],endpoint:"",displayName:""}]})}
+                style={{marginTop:10,fontSize:11.5,padding:"5px 11px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,cursor:"pointer"}}>+ Add Destination</button>
+            </div>
+          </>)}
+        </div>
+        <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
+          <button onClick={onClose} style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          {tab==="configuration"&&<button onClick={save} style={{padding:"9px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Save</button>}
+        </div>
       </div>
     </>
+  );
+};
+const _naAgo = (at)=>{ const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:`${Math.round(m/60)}h ago`; };
+const naDestLabel = (d)=>d.category==="external"?(d.target==="Email"?"Email":`${d.target}${d.displayName?` · ${d.displayName}`:""}`):`${d.target}${d.target==="Teams"||d.target==="Users"?` (${(d.receivers||[]).length})`:""} · ${d.type}`;
+
+// Settings › Notifications — Alerts (admin) | Preferences (personal, in-app)
+const NotifSettingsTabs = ({onToast})=>{
+  const [tab,setTab]=useState("alerts");
+  return (
+    <div>
+      <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,marginBottom:16}}>
+        {[["alerts","Alerts"],["preferences","Preferences"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setTab(k)} style={{padding:"9px 14px",fontSize:12.5,fontWeight:tab===k?700:500,background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted,cursor:"pointer"}}>{l}</button>))}
+      </div>
+      {tab==="alerts"?<NotifAlertsSettings onToast={onToast}/>:<NotifPrefsSettings/>}
+    </div>
+  );
+};
+// Settings › Notifications › Alerts
+const NotifAlertsSettings = ({onToast})=>{
+  const st=useNA();
+  const [open,setOpen]=useState(null);
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub}}>Alerts <span style={{color:T.textMuted,fontWeight:400}}>({st.alerts.length})</span></div>
+        <button onClick={()=>setOpen(naBlank())} style={{padding:"7px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Add Notification</button>
+      </div>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+        <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.6fr 70px 60px",gap:10,padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",borderBottom:`1px solid ${T.border}`}}>
+          <span>Name</span><span>Source</span><span>Destinations</span><span>Status</span><span/>
+        </div>
+        {st.alerts.length===0&&<div style={{padding:"18px 14px",fontSize:12,color:T.textMuted}}>No alerts</div>}
+        {st.alerts.map(al=>(
+          <div key={al.id} style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.6fr 70px 60px",gap:10,padding:"10px 14px",borderTop:`1px solid ${T.border}`,alignItems:"center",fontSize:12.5}}>
+            <span onClick={()=>setOpen(JSON.parse(JSON.stringify(al)))} style={{fontWeight:600,color:T.text,cursor:"pointer"}}>{al.name}</span>
+            <span style={{color:T.textSub}}>{al.source}</span>
+            <span style={{color:T.textSub,fontSize:12}}>{(al.destinations||[]).map(naDestLabel).join(", ")}</span>
+            <NaSw on={al.enabled!==false} onClick={()=>naSaveAlert({id:al.id,enabled:al.enabled===false})} label=""/>
+            <span style={{display:"flex",gap:6}}>
+              <button title="Edit" onClick={()=>setOpen(JSON.parse(JSON.stringify(al)))} style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.edit(11)}</button>
+              <button title="Delete" onClick={()=>{naDeleteAlert(al.id);onToast(`${al.name} deleted`,"success");}} style={{width:26,height:26,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.trash?Ic.trash(11):Ic.x(10)}</button>
+            </span>
+          </div>))}
+      </div>
+      {open&&<NaAlertDrawer key={open.id} initial={open} onClose={()=>setOpen(null)} onToast={onToast}/>}
+    </div>
+  );
+};
+
+// Settings › Teams & Users › team — "Subscription" (Webhook + Endpoint), as in OpenMetadata.
+const TeamSubscription = ({team})=>{
+  const st=useNA(); const cur=st.subs[team]||null;
+  const [edit,setEdit]=useState(false);
+  const [type,setType]=useState(cur?.type||"Slack");
+  const [endpoint,setEndpoint]=useState(cur?.endpoint||"");
+  const [err,setErr]=useState("");
+  const confirm=()=>{ const b=endpoint.trim()?naUrlCheck(type,endpoint):null; if(b){ setErr(b); return; } naSetSub(team,endpoint.trim()?{type,endpoint:endpoint.trim()}:null); setErr(""); setEdit(false); };
+  return (
+    <div style={{marginTop:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
+        <span style={{color:T.textMuted}}>Subscription</span>
+        {!edit&&<span style={{color:T.text,fontWeight:500}}>{cur?`${cur.type} · ${naMask(cur.endpoint)}`:"None"}</span>}
+        {!edit&&<button title="Edit subscription" onClick={()=>{setType(cur?.type||"Slack");setEndpoint(cur?.endpoint||"");setEdit(true);}} style={{width:24,height:24,borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.edit(10)}</button>}
+      </div>
+      {edit&&<div style={{marginTop:8,display:"flex",flexDirection:"column",gap:8,padding:12,border:`1px solid ${T.border}`,borderRadius:9,background:T.bgElevated}}>
+        <div><NaLbl>Webhook</NaLbl><select value={type} onChange={e=>{setType(e.target.value);setErr("");}} style={naIn()}>{NA_SUB_TYPES.map(x=><option key={x}>{x}</option>)}</select></div>
+        <div><NaLbl>Endpoint</NaLbl><input value={endpoint} onChange={e=>{setEndpoint(e.target.value);setErr("");}} placeholder={NA_URL_HINT[type]} style={{...naIn(),fontFamily:"'Geist Mono',monospace",fontSize:12}}/></div>
+        {err&&<div style={{fontSize:11.5,color:T.rose}}>{err}</div>}
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={()=>{setEdit(false);setErr("");}} style={{padding:"6px 12px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
+          <button onClick={confirm} style={{padding:"6px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Confirm</button>
+        </div>
+      </div>}
+    </div>
   );
 };
 
@@ -5209,79 +5256,52 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
 // Per-category in-app mute toggles + honest channel status. Wired to the shared _notifPrefs store.
 const NotifPrefsSettings = ()=>{
   const prefs = useNotifPrefs();
-  const co = useCollab();
   const [open,setOpen] = useState({});
   const toggleOpen = (k)=>setOpen(o=>({...o,[k]:!o[k]}));
-  // Delivery columns: In-app always; Slack / Teams once connected (direct messages to you).
-  const COLS = [{k:"inapp",l:"In-app"}, ...["slack","teams"].filter(ch=>co[ch].connected).map(ch=>({k:ch,l:ch==="slack"?"Slack":"Teams"}))];
-  const isOn = (col,ev)=>col==="inapp"?prefs[ev]!==false:co.prefs[col][ev]!==false;
-  const setEv = (col,ev,on)=>col==="inapp"?npSet(ev,on):chPrefSet(col,ev,on);
-  const setMenu = (col,key,on)=>col==="inapp"?npSetMenu(key,on):chPrefSetMenu(col,key,on);
-  const Sw = ({on,partial,onClick,big,title})=>{ const w=big?34:30,h=big?19:17,d=big?15:13; return (
-    <div onClick={onClick} title={title} style={{width:w,height:h,borderRadius:h/2,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0,opacity:partial?0.8:1}}>
-      <div style={{position:"absolute",top:2,left:on?w-d-2:2,width:d,height:d,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
-    </div>); };
-  const cell = {width:56,display:"flex",justifyContent:"center",flexShrink:0};
-  const chStatus = (ch)=>co[ch].connected?`Connected · ${co[ch].org}`:"Not connected";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:22}}>
-      {/* Alerts — menu groups (collapsed) with a master toggle per delivery column; expand to tune individual events */}
+      {/* In-app alerts — menu groups (collapsed) with a master toggle; expand to tune individual events */}
       <div>
-        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>Alerts</div>
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Only for objects you own or steward. {COLS.length>1?`${COLS.slice(1).map(c=>c.l).join(" and ")} = direct messages to you.`:"Connect Slack or Microsoft Teams in Settings › Channels for direct messages."}</div>
-        <div style={{display:"flex",alignItems:"center",padding:"0 14px 6px"}}>
-          <span style={{flex:1}}/>
-          {COLS.map(c=><span key={c.k} style={{...cell,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em"}}>{c.l}</span>)}
-        </div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>In-app alerts</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Toggle a whole menu, or expand it to tune individual events. You only receive alerts for assets you own or steward; these switches mute event types on top of that. Slack, Microsoft Teams and email go out through Alerts.</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {NOTIF_CATALOG.map(g=>{
             const total = g.events.length;
             const onCount = g.events.filter(e=>prefs[e.ev]!==false).length;
-            const allOn = onCount===total; const isOpen = !!open[g.key];
+            const anyOn = onCount>0; const allOn = onCount===total; const isOpen = !!open[g.key];
             return (
               <div key={g.key} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                {/* Group header — menu-level master control per column */}
+                {/* Group header — menu-level master control */}
                 <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px"}}>
                   <button onClick={()=>toggleOpen(g.key)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",padding:0,width:14,flexShrink:0}}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:isOpen?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                   <span onClick={()=>toggleOpen(g.key)} style={{flex:1,fontSize:13,fontWeight:600,color:T.text,cursor:"pointer"}}>{g.menu}</span>
-                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}>{allOn?`All ${total}`:onCount===0?"Off":`${onCount} of ${total}`}</span>
-                  {COLS.map(c=>{ const n=g.events.filter(e=>isOn(c.k,e.ev)).length; const any=n>0; return (
-                    <span key={c.k} style={cell}><Sw big on={any} partial={any&&n<total} onClick={()=>setMenu(c.k,g.key,!any)} title={`${c.l}: ${any?"turn all off":"turn all on"}`}/></span>
-                  );})}
+                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}>{allOn?`All ${total}`:!anyOn?"Off":`${onCount} of ${total}`}</span>
+                  <div onClick={()=>npSetMenu(g.key,!anyOn)} title={anyOn?"Turn all off":"Turn all on"} style={{width:34,height:19,borderRadius:10,background:anyOn?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0,opacity:allOn||!anyOn?1:0.8}}>
+                    <div style={{position:"absolute",top:2,left:anyOn?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+                  </div>
                 </div>
                 {/* Per-event toggles (progressive disclosure — the attribute level) */}
                 {isOpen&&<div style={{borderTop:`1px solid ${T.border}`,padding:"3px 14px 8px 38px"}}>
-                  {g.events.map(e=>(
-                    <div key={e.ev} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0"}}>
-                      <span style={{flex:1,fontSize:12,color:isOn("inapp",e.ev)?T.textSub:T.textMuted}}>{e.label}</span>
-                      {COLS.map(c=>{ const on=isOn(c.k,e.ev); return <span key={c.k} style={cell}><Sw on={on} onClick={()=>setEv(c.k,e.ev,!on)} title={c.l}/></span>; })}
+                  {g.events.map(e=>{const on=prefs[e.ev]!==false;return(
+                    <div key={e.ev} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0"}}>
+                      <span style={{fontSize:12,color:on?T.textSub:T.textMuted}}>{e.label}</span>
+                      <div onClick={()=>npSet(e.ev,!on)} style={{width:30,height:17,borderRadius:9,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                        <div style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+                      </div>
                     </div>
-                  ))}
+                  );})}
                 </div>}
               </div>
             );
           })}
         </div>
       </div>
-      {/* Channels — status of each delivery channel */}
-      <div>
-        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Delivery channels</div>
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[["In-app","Active",true],["Email","Coming soon",false],["Slack",chStatus("slack"),co.slack.connected],["Microsoft Teams",chStatus("teams"),co.teams.connected]].map(([c,st,live])=>(
-            <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,opacity:live?1:0.7}}>
-              <span style={{fontSize:13,fontWeight:500,color:live?T.text:T.textMuted}}>{c}</span>
-              {live
-                ? <span style={{fontSize:11,color:"#16a34a",fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}><span style={{width:6,height:6,borderRadius:"50%",background:"#16a34a"}}/>{st}</span>
-                : <span style={{fontSize:10.5,color:T.textMuted,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:5,padding:"2px 8px",fontWeight:600}}>{st}</span>}
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 };
+
 
 const DOCS = [
   {cat:"Getting Started",icon:"🚀",items:[
@@ -20677,11 +20697,7 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
   const [internal,setInternal]=useState(["Owners"]);
   const [external,setExternal]=useState([]);
   const [extTarget,setExtTarget]=useState("");
-  const co=useCollab();
-  const [chatChan,setChatChan]=useState({});
   if(!open) return null;
-  const isChat=(id)=>id==="slack"||id==="teams";
-  const chanOf=(id)=>chatChan[id]||co[id].defaultChannel||COLLAB_APPS[id].channels[0];
   const steps=["Source","Filters","Triggers","Destinations"];
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const canNext = step===0?(!!name.trim()&&!!source): step===2?triggers.length>0: step===3?(internal.length>0||external.length>0):true;
@@ -20739,19 +20755,8 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
           <div><Lbl>Internal destinations</Lbl>
             <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{ALERT_DEST_INTERNAL.map(d=><Pill key={d} active={internal.includes(d)} onClick={()=>toggle(internal,setInternal,d)}>{d}</Pill>)}</div></div>
           <div><Lbl>External destinations</Lbl>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>{ALERT_DEST_EXTERNAL.map(d=>isChat(d.id)&&!co[d.id].connected
-              ? <span key={d.id} title="Connect in Settings › Channels" style={{padding:"6px 13px",borderRadius:99,fontSize:12,color:T.textMuted,background:T.bgElevated,border:`1px dashed ${T.border}`,cursor:"not-allowed"}}>{d.label} · Not connected</span>
-              : <Pill key={d.id} active={external.includes(d.id)} onClick={()=>toggle(external,setExternal,d.id)}>{d.label}</Pill>)}</div>
-            {external.filter(isChat).map(id=>(
-              <div key={id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-                <span style={{width:70,fontSize:11.5,fontWeight:600,color:T.textSub}}>{id==="slack"?"Slack":"MS Teams"}</span>
-                <select value={chanOf(id)} onChange={e=>setChatChan(c=>({...c,[id]:e.target.value}))}
-                  style={{flex:1,padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>
-                  {COLLAB_APPS[id].channels.map(x=><option key={x} value={x}>{x}</option>)}
-                </select>
-              </div>
-            ))}
-            {external.some(id=>!isChat(id))&&<input value={extTarget} onChange={e=>setExtTarget(e.target.value)} placeholder="email address or webhook URL"
+            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>{ALERT_DEST_EXTERNAL.map(d=><Pill key={d.id} active={external.includes(d.id)} onClick={()=>toggle(external,setExternal,d.id)}>{d.label}</Pill>)}</div>
+            {external.length>0&&<input value={extTarget} onChange={e=>setExtTarget(e.target.value)} placeholder="endpoint (email address, channel, or webhook URL)"
               style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>}
           </div>
         </div>}
@@ -20763,8 +20768,8 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
         {step<3
           ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
           : <Btn small disabled={!canNext} onClick={()=>{
-              const chan=[...internal,...external.map(e=>isChat(e)?`${e==="slack"?"Slack":"MS Teams"} ${chanOf(e)}`:(extTarget||ALERT_DEST_EXTERNAL.find(x=>x.id===e)?.label||e))];
-              onCreate({rule:name.trim(),source,channel:(chan.join(", ")||"Owners"),triggers:triggers.length,status:"Active",severity:triggers.includes("testFailed")?"Critical":"High"});
+              const chan=[...internal,...external.map(e=>ALERT_DEST_EXTERNAL.find(x=>x.id===e)?.label||e)];
+              onCreate({rule:name.trim(),source,channel:(extTarget||chan.join(", ")||"Owners"),triggers:triggers.length,status:"Active",severity:triggers.includes("testFailed")?"Critical":"High"});
             }}>Create alert</Btn>}
       </div>
     </Modal>
@@ -52737,6 +52742,7 @@ const TeamsSection = ({onToast}) => {
                   style={{width:"100%",padding:"7px 10px",background:T.bgElevated,border:`1.5px solid ${T.accent}`,borderRadius:7,color:T.textMuted,fontSize:11.5,outline:"none",resize:"vertical",fontFamily:"inherit",boxSizing:"border-box"}}/>
               : <div style={{fontSize:12,color:T.textMuted}}>{currentTeam.desc}</div>
             }
+            <TeamSubscription team={currentTeam.name}/>
           </div>
 
           {/* Members */}
@@ -54085,14 +54091,11 @@ const useEnfApprovals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()
 const enfApprovalFor = (policyId,ruleId) => _enfReqs.filter(r=>r.policyId===policyId&&r.ruleId===ruleId).slice(-1)[0]||null;
 
 // ── One decision engine for request-backed work items ─────────────────────────
-// The Workspace inbox AND the Slack / Teams buttons call decideRequest(), so a
-// decision is identical wherever it is made. Resolving the request removes the
-// inbox item (items are derived from pending requests) and every chat message
-// for that request is updated to show who decided, and where.
+// The Workspace inbox calls decideRequest() for every covered request type, so a
+// decision runs the same code path whichever item it comes from. Resolving the
+// request removes the inbox item (items are derived from pending requests).
 // Covered: status (term/domain/policy/cert) · deletion (term/domain) ·
 // enforcement (incl. legal-hold release) · role (asset owner/steward, platform role).
-// Not covered from chat: tag requests (need the Classifications context) and
-// Policy Manager 2 requests (separation-of-duties rules) — those stay in EDG.
 const REQ_SOURCES = {
   status:{find:id=>_statusReqs.find(r=>r.id===id), set:u=>srSet(u), kinds:["term","domain","policy","cert"]},
   delete:{find:id=>_deleteReqs.find(r=>r.id===id), set:u=>drSet(u), kinds:["term","domain"]},
@@ -54101,17 +54104,6 @@ const REQ_SOURCES = {
 };
 const _reqMark = (src,id,status,by,via)=>REQ_SOURCES[src].set(prev=>prev.map(r=>r.id===id?{...r,status,decidedBy:by,decidedVia:via}:r));
 const reqSubject = (src,r)=>src==="enf"?(r.table||"asset"):src==="role"?(r.kind==="rbac"?r.requestedBy:r.asset):r.name;
-const reqTitle = (src,r)=>{
-  const s=reqSubject(src,r);
-  if(src==="status") return `Approve status change · ${s} → ${r.requestedStatus}`;
-  if(src==="delete") return `Approve deletion · ${s} (${r.kind})`;
-  if(src==="enf") return r.action==="Unhold"?`Approve release of legal hold · ${s}`:r.action==="Partial Unhold"?`Approve partial unhold · ${s}`:`Approve ${r.action} · ${s}`;
-  return r.kind==="rbac"?`Platform role request · ${r.requestedBy} → ${r.targetRole}`:`Role request · ${r.requestedBy} as ${r.role} of ${s}`;
-};
-const reqApproveLabel = (src,r)=>src==="enf"&&(r.action==="Unhold"||r.action==="Partial Unhold")?"Approve release":src==="delete"?"Approve deletion":src==="role"&&r.kind==="rbac"?"Grant role":"Approve";
-const reqMenu = (src,r)=>src==="enf"?"policy":src==="role"?"catalog":r.kind==="term"?"glossary":r.kind==="domain"?"domains":r.kind==="policy"?"policy":"catalog";
-const reqApprovers = (src,r)=>{ if(src==="role"&&r.kind==="rbac") return (typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[]).filter(m=>m.status==="Active"&&(m.roles||[]).includes("Admin")).map(m=>m.email.split("@")[0]); const named=[r.approver,r.steward,r.owner].filter(Boolean); if(named.length) return [...new Set(named)]; const a=reqSubject(src,r); return typeof _collabResp==="function"?_collabResp(a):[]; };
-const canDecideRequest = (src,r,me,isAdmin)=>isAdmin||reqApprovers(src,r).includes(me);
 
 // Returns the confirmation text (the same text the inbox shows).
 const decideRequest = (src,r,verdict,me,via="EDG")=>{
@@ -54167,58 +54159,6 @@ const decideRequest = (src,r,verdict,me,via="EDG")=>{
   return "";
 };
 
-// ── Chat round-trip: new pending request → buttons on the Slack / Teams message;
-// decided anywhere → every message for it shows the outcome. Requests that exist
-// before an app is connected are not back-filled (only new events are sent).
-const _collabSeenReqs = new Set();
-const _collabReqList = ()=>[
-  ..._statusReqs.filter(r=>REQ_SOURCES.status.kinds.includes(r.kind)).map(r=>({src:"status",r})),
-  ..._deleteReqs.filter(r=>REQ_SOURCES.delete.kinds.includes(r.kind)).map(r=>({src:"delete",r})),
-  ..._enfReqs.filter(r=>!String(r.policyId||"").startsWith("pm2:")).map(r=>({src:"enf",r})),
-  ..._roleReqs.map(r=>({src:"role",r})),
-];
-const _collabSync = ()=>{
-  let changed=false; const at=Date.now();
-  _collabReqList().forEach(({src,r})=>{
-    const key=src+":"+r.id;
-    if(r.status==="pending"&&!_collabSeenReqs.has(key)){
-      _collabSeenReqs.add(key);
-      const subject=reqSubject(src,r); const req={src,id:r.id,approve:reqApproveLabel(src,r)};
-      ["slack","teams"].forEach(ch=>{
-        const c=_collab[ch]; if(!c.connected) return;
-        // The event's own message (sent moments ago by pushNotif) gets the buttons…
-        const recent=_collab.log.filter(e=>e.ch===ch&&!e.req&&at-e.at<3000&&subject&&(e.title||"").includes(subject));
-        if(recent.length){ _collab={..._collab,log:_collab.log.map(e=>recent.includes(e)?{...e,req}:e)}; changed=true; return; }
-        // …otherwise post an approval card: channel (routing) + DM to the approvers.
-        const menu=reqMenu(src,r); const dom=src==="enf"||(src==="role"&&r.kind!=="rbac")?(_collabAsset(subject)?.domain||""):"";
-        const route=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom));
-        const chan=route?.channel||c.defaultChannel; const title=reqTitle(src,r); const body=r.note||r.reason||`Requested by ${r.requestedBy}`;
-        if(chan) changed=_collabLog({ch,kind:"channel",target:chan,via:route?"Route":"Default channel",title,body,at,req})||changed;
-        if(c.dm){ const who=reqApprovers(src,r); changed=_collabLog({ch,kind:"dm",target:who.length?who.map(u=>"@"+u).join(", "):"Approver",via:"Direct message",title,body,at,req})||changed; }
-      });
-    }
-    if(r.status!=="pending"&&_collab.log.some(e=>e.req&&e.req.src===src&&e.req.id===r.id&&!e.decided)){
-      const decided={verdict:r.status,by:r.decidedBy||"EDG",via:r.decidedVia||"EDG"};
-      _collab={..._collab,log:_collab.log.map(e=>e.req&&e.req.src===src&&e.req.id===r.id&&!e.decided?{...e,decided,denied:false}:e)};
-      changed=true;
-    }
-  });
-  if(changed) _collabNotify();
-};
-const _collabSyncSoon = ()=>setTimeout(_collabSync,0);
-_collabReqList().forEach(({src,r})=>_collabSeenReqs.add(src+":"+r.id)); // existing requests are not re-sent
-[_srSubs,_drSubs,_erSubs,_rrSubs].forEach(s=>s.add(_collabSyncSoon));
-
-// A button pressed in Slack / Teams. `me` is the EDG user matched to the chat user.
-const collabDecide = (entryId,verdict,me,isAdmin)=>{
-  const e=_collab.log.find(x=>x.id===entryId); if(!e||!e.req) return null;
-  const r=REQ_SOURCES[e.req.src].find(e.req.id);
-  if(!r||r.status!=="pending"){ _collabSync(); return {ok:false,msg:"Already decided"}; }
-  if(!canDecideRequest(e.req.src,r,me,isAdmin)){ _collab={..._collab,log:_collab.log.map(x=>x.id===entryId?{...x,denied:true}:x)}; _collabNotify(); return {ok:false,msg:"Only the approver, owners and stewards can decide"}; }
-  const msg=decideRequest(e.req.src,r,verdict,me,COLLAB_APPS[e.ch].label);
-  _collabSync();
-  return {ok:true,msg};
-};
 
 // ── Custom Properties (two-layer) ──
 // Layer 1: DEFINITIONS — an admin adds a typed field to an object TYPE (Asset/Tag/Domain) once,
@@ -59863,7 +59803,6 @@ const SettingsView = ({onToast})=>{
   const [channelPanelOpen, setChannelPanelOpen] = useState(null); // null | "email" | "slack" | "teams"
   const [channelTestState, setChannelTestState] = useState("idle"); // idle | testing | success
   const [emailChCfg, setEmailChCfg] = useState({configured:true, senderName:"Solix EDG", senderEmail:"noreply@jnj.com", provider:"smtp", host:"smtp.jnj.com", port:"587", username:"", password:"", apiKey:""});
-  const collabSt = useCollab(); // Slack / Teams connection state (shared store)
 
   // ── Regulatory Frameworks state (hoisted to avoid hook-in-conditional-IIFE crash) ──
   const [fwSearch,      setFwSearch]      = useState("");
@@ -59914,7 +59853,7 @@ const SettingsView = ({onToast})=>{
       {key:"api",          icon:"apikey",  label:"API Keys",              desc:"Programmatic access"},
       {key:"bg_jobs",      icon:"refresh", label:"Background Jobs",       desc:"Search indexing, archival & maintenance"},
       {key:"audit",        icon:"audit",   label:"Audit Logs",            desc:"Activity history"},
-      {key:"channels",     icon:"notif",   label:"Channels",              desc:"Email, Slack & Teams delivery"},
+      {key:"channels",     icon:"notif",   label:"Email",                 desc:"SMTP for account emails & alerts"},
       {key:"billing",      icon:"invoice", label:"Billing",               desc:"Plan & usage"},
     ]},
   ];
@@ -61468,8 +61407,8 @@ const SettingsView = ({onToast})=>{
             {section==="ai"&&<AISettingsSection onToast={onToast}/>}
 
             {section==="notifications"&&<>
-              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which alerts reach you, in-app and in Slack or Microsoft Teams."/>
-              <NotifPrefsSettings/>
+              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Alerts deliver events to Email, Slack, Microsoft Teams, Google Chat and webhooks. Preferences tune your in-app alerts."/>
+              <NotifSettingsTabs onToast={onToast}/>
             </>}
 
             {/* ══ PREFERENCES ══ */}
@@ -61717,22 +61656,12 @@ const SettingsView = ({onToast})=>{
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M3 7l9 6 9-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   summary: emailChCfg.configured ? `Configured · ${emailChCfg.senderEmail}` : "Not configured — password resets & alerts can't be delivered",
                   desc:"SMTP or API-based provider for password resets, invites & notification emails."},
-                {key:"slack", label:"Slack", cfg:{configured:collabSt.slack.connected},
-                  color:"#22c55e", bg:"rgba(34,197,94,.1)", border:"rgba(34,197,94,.25)",
-                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/></svg>,
-                  summary: collabSt.slack.connected ? `Connected · ${collabSt.slack.org} · ${collabSt.slack.routes.length} route${collabSt.slack.routes.length===1?"":"s"} · default ${collabSt.slack.defaultChannel||"none"}` : "Not connected",
-                  desc:"Channel posts and direct messages for governance notifications."},
-                {key:"teams", label:"Microsoft Teams", cfg:{configured:collabSt.teams.connected},
-                  color:"#6366f1", bg:"rgba(99,102,241,.1)", border:"rgba(99,102,241,.25)",
-                  icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M14.5 20c0-2.8 1.7-5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
-                  summary: collabSt.teams.connected ? `Connected · ${collabSt.teams.org} · ${collabSt.teams.routes.length} route${collabSt.teams.routes.length===1?"":"s"} · default ${collabSt.teams.defaultChannel||"none"}` : "Not connected",
-                  desc:"Channel posts and direct messages for governance notifications."},
               ];
               const active = CHANNELS.find(c=>c.key===channelPanelOpen);
               const setActiveCfg = (patch) => { if(channelPanelOpen==="email") setEmailChCfg(p=>({...p,...patch})); };
               return (
                 <>
-                  <SettSH icon={Ic.notif(16)} title="Channels" desc="Configure where the system delivers outbound messages — password resets, invites, and policy or quality alerts. Email is required for account emails; Slack and Teams are optional for team alerts."/>
+                  <SettSH icon={Ic.notif(16)} title="Email" desc="SMTP or API provider for password resets, invites and email alerts."/>
                   <div style={{display:"flex",flexDirection:"column",gap:10}}>
                     {CHANNELS.map(ch=>(
                       <div key={ch.key} style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:T.bgSurface,border:`1.5px solid ${ch.cfg.configured?ch.color:T.border}`,borderRadius:12,transition:"border-color .2s"}}>
@@ -61758,10 +61687,6 @@ const SettingsView = ({onToast})=>{
                       </div>
                     ))}
                   </div>
-
-                  {/* Slack / Teams — app connection drawer */}
-                  {(channelPanelOpen==="slack"||channelPanelOpen==="teams")&&
-                    <CollabChannelDrawer ch={channelPanelOpen} icon={active.icon} color={active.color} bg={active.bg} border={active.border} onClose={()=>setChannelPanelOpen(null)} onToast={onToast}/>}
 
                   {/* Email config right slide-in panel */}
                   {channelPanelOpen==="email"&&(
