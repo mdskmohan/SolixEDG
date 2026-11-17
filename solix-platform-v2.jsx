@@ -5955,8 +5955,6 @@ const GROUPS = [
     {key:"policymanager2", icon:"shield",        label:"Policy Manager 2"},
     {key:"tags",           icon:"tag",           label:"Classifications"},
   ]},
-  {section:"Build",items:[
-  ]},
   {section:"Knowledge",items:[
     // Knowledge Layer hidden 2026-11-10: restore by un-commenting and flipping KNOWLEDGE_LAYER_ENABLED
     // {key:"knowledgelayer", icon:"knowledge",     label:"Knowledge Layer"},
@@ -15218,6 +15216,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
 
   const [tab, setTab]         = useState("policies");
   const [selFw, setSelFw]     = useState(null);
+  const [fwTab, setFwTab]     = useState("overview");
+  useEffect(()=>{ setFwTab("overview"); },[selFw]);
   const [selPol, setSelPol]   = useState(()=>_pm2Deep?_pm2Deep.policy:null);
   const [pdTab, setPdTab]     = useState(()=>_pm2Deep?.tab||"overview");
   useEffect(()=>{ if(_pm2Deep){ const d=_pm2Deep; _pm2Deep=null; if(d.folder) setExpCat(x=>({...x,[d.folder]:true})); } },[]);
@@ -15642,6 +15642,104 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
   };
 
   // ═════ FRAMEWORK DETAIL — the original regulation drill-in ═════
+  // ═════ FRAMEWORK OVERVIEW — compliance observability for one framework ═════
+  const renderFwOverview = fw => {
+    const inIdx = fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
+    const s = fwScore(fw); const sc = scoreColor(s);
+    const states = inIdx.map(i=>({i, st:artState(fw,i)}));
+    const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
+    const active = linked.filter(p=>p.status==="Active");
+    // Findings within this framework
+    const finds = allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name));
+    const sev = k => finds.filter(f=>(f.rule.severity||"Medium")===k).length;
+    // Enforcement targets within this framework
+    const tgts = active.flatMap(p=>evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw,t.rule)).map(t=>pm2TargetStatus(p.id,t.rule.id,t.asset.name)));
+    const enfRun = tgts.filter(x=>x==="approved").length, enfRej = tgts.filter(x=>x==="rejected").length, enfWait = tgts.length-enfRun-enfRej;
+    // Evidence forms
+    const ev = active.flatMap(p=>p.rules.filter(r=>r.type==="attestation").map(r=>pm2AttState(p,r).state));
+    const evCur = ev.filter(x=>x==="current"||x==="soon").length, evDue = ev.filter(x=>x==="due"||x==="overdue"||x==="rejected").length, evRev = ev.filter(x=>x==="review").length;
+    // Scan coverage
+    const inScope = PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)); const unscanned = fwUnscanned(fw);
+    const covPct = inScope.length ? Math.round((inScope.length-unscanned.length)/inScope.length*100) : 100;
+    const fwScans = scans.filter(x=>(x.policyIds||[]).some(id=>linked.some(p=>p.id===id)));
+    const lastRun = fwScans.map(x=>(x.runs||[])[0]).filter(Boolean).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)))[0];
+    // Article status distribution, in severity order
+    const dist = ["met",...ART_ORDER.filter(k=>k!=="met")].map(k=>({k, n:states.filter(x=>x.st===k).length})).filter(x=>x.n);
+    const gaps = states.filter(x=>x.st!=="met").sort((a,b)=>ART_ORDER.indexOf(a.st)-ART_ORDER.indexOf(b.st));
+    const reason = i => { const pols = polsForArt(fw,i); if(!pols.length) return "No policy mapped";
+      const hs = pols.map(p=>({p, h:polHealth(p,fw,linkOf(p,fw,i))})); const w = hs.find(x=>x.h.state===artState(fw,i))||hs[0]; return `${w.p.name} · ${w.h.label}`; };
+    // Assets with the most open findings
+    const byAsset = Object.values(finds.reduce((m,f)=>{ const k=f.asset.name; m[k]=m[k]||{a:f.asset, n:0}; m[k].n++; return m; },{})).sort((a,b)=>b.n-a.n).slice(0,5);
+    const openArt = i => { setFwTab("articles"); setExpArt(x=>({...x,[fw.id+i]:true})); };
+    const label = {fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"};
+    const card = {background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10};
+    const tile = (title, big, color, sub, go) => (
+      <div onClick={go} style={{...card,padding:"14px 16px",cursor:go?"pointer":"default",minWidth:0}}
+        onMouseEnter={e=>{ if(go) e.currentTarget.style.borderColor=T.accent; }} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+        <div style={{...label,marginBottom:6}}>{title}</div>
+        <div style={{fontSize:24,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:color||T.text,lineHeight:1.1}}>{big}</div>
+        <div style={{fontSize:11.5,color:T.textSub,marginTop:6,lineHeight:1.5}}>{sub}</div>
+      </div>);
+    const dot = (c) => <span style={{width:7,height:7,borderRadius:"50%",background:c,display:"inline-block",flexShrink:0}}/>;
+    const m = regMeta(fw.id);
+    return (<>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
+        <span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>
+        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}30`}}>{readinessLabel(s)}</span>
+        <span style={{fontSize:12,color:T.textMuted}}>{[m.fullName||fw.fullName, m.jurisdiction||fw.jurisdiction].filter(Boolean).join(" · ")}</span>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,minmax(0,1fr))",gap:12,marginBottom:16}}>
+        {tile("Readiness", `${s}%`, sc, <>{states.filter(x=>x.st==="met").length} of {inIdx.length} articles met
+          <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",marginTop:6}}><div style={{width:`${s}%`,height:"100%",background:sc}}/></div></>)}
+        {tile("Open findings", finds.length, finds.length?T.rose:T.green, finds.length?`${sev("High")} high · ${sev("Medium")} medium · ${sev("Low")} low`:"None open", finds.length?()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}:null)}
+        {tile("Enforcement", tgts.length?`${enfRun}/${tgts.length}`:"—", enfRej?T.rose:enfWait?T.amber:T.green, tgts.length?`running · ${enfWait} awaiting owner${enfRej?` · ${enfRej} rejected`:""}`:"No enforcement rules", enfWait?()=>onNav&&onNav("stewardship"):null)}
+        {tile("Evidence", ev.length?`${evCur}/${ev.length}`:"—", evDue?T.violet:evRev?T.amber:T.green, ev.length?`current · ${evDue} due · ${evRev} in review`:"No evidence rules")}
+        {tile("Scan coverage", `${covPct}%`, unscanned.length?T.amber:T.green, <>{inScope.length-unscanned.length} of {inScope.length} assets scanned<br/>{lastRun?`Last run ${lastRun.ts}`:"Never run"}</>, ()=>{setTab("scans");setSelFw(null);})}
+      </div>
+      <div style={{...card,padding:"14px 16px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",marginBottom:10}}><span style={{...label,flex:1}}>Articles by status</span>
+          <button onClick={()=>setFwTab("articles")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>All articles →</button></div>
+        <div style={{display:"flex",height:10,borderRadius:5,overflow:"hidden",background:T.bgElevated,marginBottom:10}}>
+          {dist.map(d=><div key={d.k} title={`${ART_META[d.k].l}: ${d.n}`} style={{width:`${d.n/inIdx.length*100}%`,background:ART_META[d.k].c}}/>)}
+        </div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{dist.map(d=><span key={d.k} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{dot(ART_META[d.k].c)}{ART_META[d.k].l} <b style={{color:T.text}}>{d.n}</b></span>)}</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start"}}>
+        <div style={{...card,overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center"}}><span style={{...label,flex:1}}>Needs attention · {gaps.length}</span></div>
+          {gaps.length===0 ? <div style={{padding:"18px 16px",fontSize:12.5,color:T.green}}>Every article is met</div> :
+            gaps.map(({i,st:k})=><div key={i} onClick={()=>openArt(i)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textSub,minWidth:92}}>{fw.arts[i].ref}</span>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{fw.arts[i].t}</div>
+                <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reason(i)}</div></div>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{ART_META[k].l}</span>
+            </div>)}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div style={{...card,overflow:"hidden"}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}><span style={label}>Policies · {linked.length}</span></div>
+            {linked.length===0 ? <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>No policies mapped</div> :
+              linked.map(p=>{ const h=polHealth(p,fw); const c=(ART_META[h.state]||{c:T.textMuted}).c;
+                return <div key={p.id} onClick={()=>openPolicy(p.id, fw.id)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  {srcBox(p)}<span style={{flex:1,minWidth:0,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                  <span style={{fontSize:10.5,fontWeight:600,color:c,whiteSpace:"nowrap"}}>{h.label}</span></div>; })}
+          </div>
+          <div style={{...card,overflow:"hidden"}}>
+            <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`}}><span style={label}>Assets with most findings</span></div>
+            {byAsset.length===0 ? <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>No open findings</div> :
+              byAsset.map(x=><div key={x.a.name} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",borderBottom:`1px solid ${T.border}`}}>
+                <span style={{flex:1,fontSize:12,fontFamily:"'Geist Mono',monospace",color:T.text}}>{x.a.name}</span>
+                <span style={{fontSize:11,color:T.textMuted}}>{x.a.owner||"—"}</span>
+                <span style={{fontSize:11,fontWeight:700,color:T.rose,minWidth:24,textAlign:"right"}}>{x.n}</span></div>)}
+          </div>
+        </div>
+      </div>
+    </>);
+  };
+
+
   const renderFwDetail = () => {
     const fw = pm2Fw(selFw); if(!fw) return renderFrameworks();
     const m = regMeta(fw.id); const adopted = !!st.adopted[fw.id]; const s = fwScore(fw); const sc = scoreColor(s); const tc = fwTypeColor(fw.type);
@@ -15664,58 +15762,8 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           </div>
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
-          <div style={{background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:12,padding:"20px 22px",marginBottom:20}}>
-            <div style={{display:"flex",alignItems:"flex-start",gap:16}}>
-              <div style={{width:48,height:48,borderRadius:11,background:`${tc}15`,border:`1.5px solid ${tc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke={tc} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg></div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:6}}>
-                  <span style={{fontSize:20,fontWeight:800,letterSpacing:"-0.5px",color:T.text}}>{fw.name}</span>
-                  <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${tc}15`,color:tc,border:`1px solid ${tc}30`}}>{fw.custom?"Custom":fw.type}</span>
-                  <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:adopted?`${sc}15`:T.bgElevated,color:adopted?sc:T.textMuted,border:`1px solid ${adopted?sc+"30":T.border}`}}>{adopted?readinessLabel(s):"Not adopted"}</span>
-                </div>
-                <div style={{fontSize:13,color:T.textSub,lineHeight:1.5,marginBottom:14}}>{m.fullName||fw.fullName}</div>
-                {adopted&&<><div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
-                  <div style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${s}%`,height:"100%",background:sc,borderRadius:3}}/></div>
-                  <span style={{fontSize:13,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,flexShrink:0}}>{s}%</span></div>
-                  <div style={{fontSize:10.5,color:T.textMuted,marginBottom:14}}>Data governance readiness — {inIdx.filter(i=>artState(fw,i)==="met").length} of {inIdx.length} in-scope articles met. Not a {fw.name} certification{outIdx.length?` — excludes ${outIdx.length} article${outIdx.length>1?"s":""} outside EDG's scope`:""}.</div></>}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:10}}>
-                  {meta.map(([l,v])=>(<div key={l} style={{padding:"8px 12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`}}>
-                    <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:4}}>{l}</div><div style={{fontSize:12,color:T.text,fontWeight:500}}>{v||"—"}</div></div>))}
-                </div>
-                <div style={{marginTop:12}}>
-                  <div style={{fontSize:9.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data it applies to</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}>{fw.covers.map(classChip)}<span style={{fontSize:11,color:T.textMuted}}>· {PM2_ASSETS.filter(a=>pm2InScope(a,fw.covers)).length} assets in scope today</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-          {adopted&&(()=>{
-            const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
-            const noPol = inIdx.filter(i=>artState(fw,i)==="uncovered");
-            const drafts = linked.filter(p=>p.status==="Draft"||p.status==="Rejected");
-            const review = linked.filter(p=>p.status==="In review");
-            const tables = linked.filter(p=>p.status==="Active").reduce((n,p)=>n+evalOf(p).targets.filter(t=>pm2AssetInFw(t.asset,p,fw)&&pm2TargetStatus(p.id,t.rule.id,t.asset.name)!=="approved").length,0);
-            const forms = linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm2AttState(p,r).state)).map(r=>({p,r})));
-            const inRev = linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&pm2AttState(p,r).state==="review").map(r=>({p,r})));
-            const finds = allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name)).length;
-            const line = (n, text, go, c) => n>0 && <div key={text} onClick={go} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:9,cursor:"pointer",marginBottom:6}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-              <span style={{minWidth:24,fontSize:13,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:c}}>{n}</span><span style={{flex:1,fontSize:12.5,color:T.text}}>{text}</span>{Ic.chevRight(12)}</div>;
-            const items = [
-              line(fwUnscanned(fw).length, `in-scope asset${fwUnscanned(fw).length>1?"s are":" is"} not covered by any scan`, ()=>{setTab("scans");setSelFw(null);}, T.amber),
-              line(noPol.length, `article${noPol.length>1?"s have":" has"} no policy — ${fw.custom?"create or map one below":"review the framework's policies to switch one on"}`, ()=>fw.custom?null:startAdopt(fw.id,2), T.rose),
-              line(drafts.length, `polic${drafts.length>1?"ies are drafts":"y is a draft"} — the owner submits ${drafts.length>1?"them":"it"}`, ()=>openPolicy(drafts[0].id), T.textSub),
-              line(review.length, `polic${review.length>1?"ies wait":"y waits"} for approval by ${ap.activation.approver}`, ()=>onNav&&onNav("stewardship"), T.amber),
-              line(tables, `table${tables>1?"s wait":" waits"} for its owner to approve enforcement`, ()=>onNav&&onNav("stewardship"), T.amber),
-              line(forms.length, `evidence form${forms.length>1?"s are":" is"} due — ${forms.map(x=>pm2Assignee(x.p,x.r)).filter((v,i,a)=>a.indexOf(v)===i).join(", ")} fills ${forms.length>1?"them":"it"} in`, ()=>openPolicy(forms[0].p.id, fw.id, "activity"), typeColor("attestation")),
-              line(inRev.length, `submitted form${inRev.length>1?"s wait":" waits"} for review`, ()=>openPolicy(inRev[0].p.id, fw.id, "activity"), T.amber),
-              line(finds, `open finding${finds>1?"s":""} — stewards fix them or request exceptions`, ()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}, T.rose),
-            ].filter(Boolean);
-            return <div style={{marginBottom:20}}>
-              <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>What's left to reach Met</div>
-              {items.length?items:<div style={{fontSize:12.5,color:T.green,padding:"10px 14px",background:`${T.green}0c`,border:`1px solid ${T.green}30`,borderRadius:9}}>Nothing — every in-scope article is met.</div>}
-            </div>; })()}
+          <div style={{display:"flex",gap:2,borderBottom:`1px solid ${T.border}`,marginBottom:18}}>{[["overview","Overview"],["articles",`Articles · ${fw.arts.filter(a=>!a.out).length}`]].map(([k,l])=><button key={k} onClick={()=>setFwTab(k)} style={{padding:"8px 14px",background:"none",border:"none",borderBottom:`2px solid ${fwTab===k?T.accent:"transparent"}`,color:fwTab===k?T.text:T.textMuted,fontSize:13,fontWeight:fwTab===k?600:500,cursor:"pointer"}}>{l}</button>)}</div>
+          {fwTab==="overview" ? renderFwOverview(fw) : <>
           <div>
             <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:10}}><span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Scope — articles ({inIdx.length})</span><span style={{fontSize:11,color:T.textMuted}}>Each article → the policies that satisfy it → the rules that count. Open an article to add a policy or a rule.</span></div>
             {inIdx.map(i=>{
@@ -15802,6 +15850,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
                 <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>{a.ask} Belongs to {a.out} — confirm with the team that owns it, not this platform.</div>
               </div>); })}
           </div>}
+          </>}
         </div>
       </div>
     );
