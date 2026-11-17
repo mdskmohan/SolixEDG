@@ -22,7 +22,14 @@ export const NODE_TYPES = {
   term:    { l: "Glossary term",   c: "#0d9488" },
   tag:     { l: "Classification",  c: "#e11d48" },
   domain:  { l: "Domain",          c: "#7c3aed" },
-  user:    { l: "Owner",           c: "#d97706" },
+  user:    { l: "User",            c: "#d97706" },
+  team:    { l: "Team",            c: "#ea580c" },
+  product: { l: "Data product",    c: "#0ea5e9" },
+  policy:  { l: "Policy",          c: "#be123c" },
+  test:    { l: "Quality test",    c: "#65a30d" },
+  service: { l: "Connection",      c: "#475569" },
+  database:{ l: "Database",        c: "#57534e" },
+  schema:  { l: "Schema",          c: "#78716c" },
   model:   { l: "Semantic model",  c: "#0891b2" },
   metric:  { l: "Metric",          c: "#16a34a" },
   ontology:{ l: "Ontology",        c: "#9333ea" },
@@ -36,6 +43,11 @@ export const EDGE_TYPES = {
   described_by: { l: "described by" },
   in_domain:    { l: "belongs to" },
   owned_by:     { l: "owned by" },
+  stewarded_by: { l: "stewarded by" },
+  member_of:    { l: "member of" },
+  part_of:      { l: "part of" },
+  governed_by:  { l: "governed by" },
+  tested_by:    { l: "tested by" },
   uses:         { l: "uses" },
   computed_from:{ l: "computed from" },
   joins:        { l: "joins" },
@@ -55,7 +67,8 @@ export const RULES = {
 
 const nid = { asset: (n) => `asset:${n}`, column: (t, c) => `column:${t}.${c}`, term: (id) => `term:${id}`, tag: (n) => `tag:${n}`,
   domain: (n) => `domain:${n}`, user: (n) => `user:${n}`, model: (id) => `model:${id}`, metric: (id) => `metric:${id}`,
-  ontology: (id) => `ontology:${id}`, class: (o, c) => `class:${o}:${c}` };
+  ontology: (id) => `ontology:${id}`, class: (o, c) => `class:${o}:${c}`, team: (n) => `team:${n}`, product: (id) => `product:${id}`,
+  policy: (id) => `policy:${id}`, test: (id) => `test:${id}`, service: (n) => `service:${n}`, database: (s, d) => `database:${s}/${d}`, schema: (s, d, x) => `schema:${s}/${d}/${x}` };
 export { nid as nodeId };
 
 export function buildMetadataGraph(input, opts = {}) {
@@ -77,7 +90,18 @@ export function buildMetadataGraph(input, opts = {}) {
     node(nid.asset(a.name), "asset", a.name, { assetType: a.type, assetId: a.id, domain: a.domain, db: a.db });
     if (a.domain) { node(nid.domain(a.domain), "domain", a.domain); edge(nid.asset(a.name), nid.domain(a.domain), "in_domain"); }
     (a.owners || (a.owner ? [a.owner] : [])).filter(Boolean).forEach((o) => { node(nid.user(o), "user", o); edge(nid.asset(a.name), nid.user(o), "owned_by"); });
+    (a.stewards || (a.steward ? [a.steward] : [])).filter(Boolean).forEach((o) => { node(nid.user(o), "user", o); edge(nid.asset(a.name), nid.user(o), "stewarded_by"); });
     (a.tags || []).forEach((t) => { node(nid.tag(t), "tag", t); edge(nid.asset(a.name), nid.tag(t), "tagged"); });
+    // where it lives: connection → database → schema → asset (from the "db / schema / name" path)
+    const path = String(a.db || "").split("/").map((x) => x.trim()).filter(Boolean);
+    if (a.service || a.connectionLabel) {
+      const sv = node(nid.service(a.connectionLabel || a.service), "service", a.connectionLabel || a.service);
+      if (path.length >= 3) {
+        const d = node(nid.database(sv, path[0]), "database", path[0]); edge(sv, d, "contains");
+        const sc = node(nid.schema(sv, path[0], path[1]), "schema", `${path[0]}.${path[1]}`); edge(d, sc, "contains");
+        edge(sc, nid.asset(a.name), "contains");
+      } else edge(sv, nid.asset(a.name), "contains");
+    }
     schemaOf(a.name).forEach((c) => {
       node(nid.column(a.name, c.name), "column", `${a.name}.${c.name}`, { table: a.name, column: c.name, dataType: c.type });
       edge(nid.asset(a.name), nid.column(a.name, c.name), "contains");
@@ -86,9 +110,37 @@ export function buildMetadataGraph(input, opts = {}) {
   });
   // lineage (asset level)
   (input.lineage || []).forEach((l) => { if (byName.has(l.from) && byName.has(l.to)) edge(nid.asset(l.from), nid.asset(l.to), "feeds"); });
+  // people: users belong to teams
+  (input.teams || []).forEach((t) => {
+    node(nid.team(t.name), "team", t.name);
+    (t.members || []).forEach((u) => { node(nid.user(u), "user", u); edge(nid.user(u), nid.team(t.name), "member_of"); });
+  });
+  const assetFor = (name) => { if (!name) return null; if (byName.has(name)) return name; const last = String(name).split(".").pop(); return byName.has(last) ? last : null; };
+  // data products: the assets they bundle, their domain and owners
+  (input.products || []).forEach((p) => {
+    node(nid.product(p.id), "product", p.name);
+    if (p.domain) { node(nid.domain(p.domain), "domain", p.domain); edge(nid.product(p.id), nid.domain(p.domain), "in_domain"); }
+    (p.owners || []).forEach((o) => { node(nid.user(o), "user", o); edge(nid.product(p.id), nid.user(o), "owned_by"); });
+    (p.assets || []).forEach((n) => { const a = assetFor(n); if (a) edge(nid.asset(a), nid.product(p.id), "part_of"); });
+  });
+  // policies: the assets they name and the domains in their scope
+  (input.policies || []).forEach((p) => {
+    node(nid.policy(p.id), "policy", p.name);
+    (p.assets || []).forEach((n) => { const a = assetFor(n); if (a) edge(nid.asset(a), nid.policy(p.id), "governed_by"); });
+    (p.domains || []).forEach((d) => { if (nodes.has(nid.domain(d))) edge(nid.domain(d), nid.policy(p.id), "governed_by"); });
+    (p.owners || []).forEach((o) => { node(nid.user(o), "user", o); edge(nid.policy(p.id), nid.user(o), "owned_by"); });
+  });
+  // data quality tests on assets and columns
+  (input.tests || []).forEach((t) => {
+    const a = assetFor(t.table); if (!a) return;
+    node(nid.test(t.id), "test", t.name, { status: t.status });
+    const col = t.column ? nid.column(a, t.column) : null;
+    edge(col && nodes.has(col) ? col : nid.asset(a), nid.test(t.id), "tested_by");
+  });
   // glossary
   (input.terms || []).forEach((t) => {
     node(nid.term(t.id), "term", t.name, { termType: t.termType });
+    (t.owners || []).forEach((o) => { node(nid.user(o), "user", o); edge(nid.term(t.id), nid.user(o), "owned_by"); });
     (t.linkedAssets || []).forEach((la) => { if (byName.has(la.name)) edge(nid.asset(la.name), nid.term(t.id), "described_by"); });
   });
   // semantic models: model → assets it uses; metrics computed from columns; joins between assets

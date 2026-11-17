@@ -3817,7 +3817,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             {/* Deprecation banner */}
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
-              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
+              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -3855,6 +3855,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             )}
             {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
             {/* Activity tab is hidden for now (Sprint 7); its content stays so it can be switched back on from the tab list above. */}
+            {termTab==="kg"&&<KgObjectTab ids={[`term:${term.id}`]} name={term.term}/>}
             {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
             {termTab==="auditlog"&&(
               <div style={{maxWidth:900}}>
@@ -29610,6 +29611,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               {key:"overview",label:"Overview"},
               {key:"assets",label:`Assets (${productAssets.length})`},
               {key:"ports",label:"Ports"},
+              {key:"kg",label:"Knowledge Graph"},
               {key:"activity",label:"Audit Logs"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
@@ -29825,6 +29827,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
 
 
             {/* PORTS TAB */}
+            {productTab==="kg"&&<KgObjectTab ids={[`product:${selectedProduct.id}`]} name={selectedProduct.displayName||selectedProduct.name} onAsset={onAsset}/>}
             {productTab==="ports"&&(
               <PortsTab pd={pd} allAssets={ASSETS}
                 onPatch={patch=>setProducts(prev=>prev.map(p=>p.id===pd.id?{...p,...patch}:p))}/>
@@ -30094,6 +30097,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               {key:"documentation",label:"Overview"},
               {key:"dataproducts",label:`Data Products (${domainProducts.length})`},
               {key:"assets",label:`Assets (${domainAssets.length})`},
+              {key:"kg",label:"Knowledge Graph"},
               {key:"activity",label:"Audit Logs"},
             ]} active={domainTab} onChange={setDomainTab}/>
           </div>
@@ -30280,6 +30284,7 @@ const DomainsView = ({onAsset, onNav, onToast, deepLinkDomainId}) => {
               </div>
             )}
 
+            {domainTab==="kg"&&<KgObjectTab ids={[`domain:${selectedDomain.name}`]} name={selectedDomain.displayName||selectedDomain.name} onAsset={onAsset}/>}
             {domainTab==="assets"&&(
               <div>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16,flexWrap:"wrap"}}>
@@ -31758,6 +31763,7 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
               {key:"overview",   label:"Overview"},
               {key:"assets",     label:`Assets (${productAssets.length})`},
               {key:"ports",      label:"Ports"},
+              {key:"kg",         label:"Knowledge Graph"},
               {key:"activity",   label:"Audit Logs"},
             ]} active={productTab} onChange={setProductTab}/>
           </div>
@@ -31970,6 +31976,7 @@ const DataProductsView = ({onAsset, onNav, onToast}) => {
             )}
 
             {/* ── PORTS TAB ── */}
+            {productTab==="kg"&&<KgObjectTab ids={[`product:${selectedProduct.id}`]} name={selectedProduct.displayName||selectedProduct.name} onAsset={onAsset}/>}
             {productTab==="ports"&&(
               <PortsTab pd={pd} allAssets={ASSETS}
                 onPatch={patch=>setProducts(prev=>prev.map(p=>p.id===pd.id?{...p,...patch}:p))}/>
@@ -38237,6 +38244,7 @@ const ProfileView = ({onToast}) => {
         <Tabs2 tabs={[
           {key:"profile",  label:"Profile"},
           {key:"assets",   label:`Assets${myAssets.length>0?` (${myAssets.length})`:""}`, badge:null},
+          {key:"kg",       label:"Knowledge Graph"},
           {key:"auditlog", label:"Audit Log"},
         ]} active={tab} onChange={setTab}/>
 
@@ -38386,6 +38394,7 @@ const ProfileView = ({onToast}) => {
           </div>
         )}
 
+        {tab==="kg"&&<KgObjectTab ids={[`user:${(cfg.email||"").split("@")[0]}`]} name={cfg.name}/>}
         {tab==="assets"&&(()=>{
           if(myAssets.length===0) return <div style={{padding:"48px",textAlign:"center",color:T.textMuted,fontSize:13}}>No assets owned by you.</div>;
           const qColor = q=>q>=80?T.green:q>=60?T.amber:T.rose;
@@ -42312,9 +42321,14 @@ const kgLineage = () => {
 // Everything the metadata graph is built from, read live.
 const kgInputs = () => ({
   assets: ASSETS, schemaOf: t=>SCHEMA[t]||[], lineage: kgLineage(),
-  terms: _gtState.map(t=>({id:t.id, name:t.term, termType:t.termType, linkedAssets:t.linkedAssets||[]})),
+  terms: _gtState.map(t=>({id:t.id, name:t.term, termType:t.termType, linkedAssets:t.linkedAssets||[], owners:t.owners||(t.owner?[t.owner]:[])})),
   semantic: {models:_slState.models, entities:_slState.entities, rels:_slState.rels, metrics:_slState.metrics},
   ontologies: ontLoad().ontologies,
+  teams: TEAMS_INIT.map(t=>({name:t.name, members:TEAMS_DATA.filter(u=>u.team===t.name).map(u=>u.email.split("@")[0])})),
+  products: _dpState.map(p=>({id:p.id, name:p.displayName||p.name, domain:p.domain, owners:p.owners||[], assets:(p.assetIds||[]).map(id=>(ASSETS.find(a=>a.id===id)||{}).name).filter(Boolean)})),
+  policies: _policiesStore.map(p=>({id:p.id, name:p.name, owners:p.owner?[p.owner]:[], domains:(p.scope&&p.scope.domains)||[],
+    assets:(p.links||[]).map(l=>(l.assetId && (ASSETS.find(a=>a.id===l.assetId)||{}).name) || l.target).filter(Boolean)})),
+  tests: _dqtcSnap.map(t=>({id:t.id, name:t.name, table:t.table, column:t.col, status:t.status})),
 });
 
 // The ontology as one graph sees it: only the classes it includes.
@@ -42331,7 +42345,7 @@ const kgChecks = (g, eg) => { const o = kgOntView(g); return o && eg ? KGOPS.qua
 // Metadata graph: one projection, rebuilt when its fingerprint moves.
 let _kgGraph = null, _kgGraphKey = null, _kgSigSeen = null, _kgAutoPending = false;
 const kgSig = () => [ASSETS.length, _gtState.length, _gtState.map(t=>(t.linkedAssets||[]).length).join(""), _slState.models.length, _slState.entities.length,
-  _slState.rels.length, _slState.metrics.length, JSON.stringify(ontLoad().ontologies).length].join("|");
+  _slState.rels.length, _slState.metrics.length, JSON.stringify(ontLoad().ontologies).length, _dpState.map(p=>(p.assetIds||[]).length).join(""), _policiesStore.length, _dqtcSnap.length].join("|");
 const kgGraph = (force) => {
   const meta = _kgs ? _kgs.graphs.find(x=>x.kind==="metadata") : null;
   const rules = meta ? meta.rules : KG_ALL_RULES();
@@ -42498,8 +42512,10 @@ const KgCanvas = ({graph, focus, onFocus, height=520}) => {
 // Connections of one node, grouped into plain sections.
 const KG_SECTIONS = [
   {k:"lives",   l:"Where it lives",    types:["realised_by","stored_in","contains"]},
+  {k:"people",  l:"People",            types:["owned_by","stewarded_by","member_of"]},
   {k:"meaning", l:"Business meaning",  types:["relates","is_a","defines","described_by"]},
-  {k:"gov",     l:"Governance",        types:["in_domain","owned_by","tagged"]},
+  {k:"gov",     l:"Governance",        types:["in_domain","tagged","governed_by","part_of"]},
+  {k:"quality", l:"Quality",           types:["tested_by"]},
   {k:"lineage", l:"Lineage and joins", types:["feeds","depends_on","joins"]},
   {k:"metrics", l:"Metrics and models",types:["uses","computed_from","measures"]},
 ];
@@ -42509,12 +42525,15 @@ const KgSections = ({g, id, showDerived, onFocus}) => {
   const verb = (e, out) => { const l = (KG.EDGE_TYPES[e.type]||{l:e.type}).l;
     if(out) return l;
     return ({contains:"part of", realised_by:"realises", stored_in:"stores", relates:`${e.label||"related"} (from)`, is_a:"has kind", defines:"defined in",
-      described_by:"describes", in_domain:"contains", owned_by:"owns", tagged:"applied to", feeds:"fed by", depends_on:"needed by", joins:"joined from",
+      described_by:"describes", in_domain:"contains", owned_by:"owns", stewarded_by:"stewards", member_of:"has member", part_of:"includes",
+      governed_by:"governs", tested_by:"tests", tagged:"applied to", feeds:"fed by", depends_on:"needed by", joins:"joined from",
       uses:"used by", computed_from:"used in", measures:"measured by"})[e.type] || l; };
   if(!es.length) return <div style={{fontSize:12,color:T.textMuted}}>No connections</div>;
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
       {KG_SECTIONS.map(sec=>{ const rows = es.filter(e=>sec.types.includes(e.type)); if(!rows.length) return null;
+        // Rarer kinds of link first, so a team or a policy is not buried under 50 "owns".
+        const freq = {}; rows.forEach(e=>{ freq[e.type] = (freq[e.type]||0)+1; }); rows.sort((x,y)=>freq[x.type]-freq[y.type]);
         const LIMIT = 8; return (
         <Card2 key={sec.k}><div style={{padding:"12px 14px"}}>
           <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:8}}>{sec.l} · {rows.length}</div>
@@ -43240,29 +43259,34 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
 };
 
 // Knowledge Graph tab on a catalog asset: what it connects to, in plain sections.
-const KgAssetTab = ({asset, onAsset}) => {
+// The same view on any governed object: pass the node ids it may have, first match wins.
+const KgObjectTab = ({ids, name, onAsset}) => {
   useKgs(); useOnt();
-  const [focus, setFocus] = useState(`asset:${asset.name}`);
+  const g = kgGraph();
+  const home = (ids||[]).find(id=>g.nodes.some(n=>n.id===id)) || (ids||[])[0];
+  const [focus, setFocus] = useState(home);
   const [showDerived, setShowDerived] = useState(true);
   const [showDiagram, setShowDiagram] = useState(false);
-  useEffect(()=>{ setFocus(`asset:${asset.name}`); },[asset.name]);
-  const g = kgGraph();
+  useEffect(()=>{ setFocus(home); },[home]);
   const fNode = g.nodes.find(n=>n.id===focus);
+  const asset = fNode && fNode.type==="asset" && focus!==home ? ASSETS.find(a=>a.name===fNode.label) : null;
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
         {fNode && <><KgTypeChip type={fNode.type}/><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fNode.label}</span></>}
-        {focus!==`asset:${asset.name}` && <button onClick={()=>setFocus(`asset:${asset.name}`)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Back to {asset.name}</button>}
+        {asset && onAsset && <button onClick={()=>onAsset(asset)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in catalog ↗</button>}
+        {focus!==home && <button onClick={()=>setFocus(home)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Back to {name}</button>}
         <span style={{flex:1}}/>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
         <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={showDiagram?"diagram":"list"} onChange={k=>setShowDiagram(k==="diagram")}/>
       </div>
-      {!fNode ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not in the knowledge graph</div>
+      {!fNode ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No connections yet</div>
         : showDiagram ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus} height={460}/>
         : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
     </div>
   );
 };
+const KgAssetTab = ({asset, onAsset}) => <KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name} onAsset={onAsset}/>;
 
 // ── The screen ──
 const OntologyView = ({onToast, onNav, onAsset}) => {
@@ -63415,6 +63439,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       {key:'overview',   label:'Overview'},
                       {key:'assets',     label:'Linked Assets', count:linkedCount},
                       {key:'sources',    label:'Sources & Sync', count:tagConnIds.length},
+                      {key:'kg',         label:'Knowledge Graph'},
                       {key:'activity',   label:'Audit Logs',   count:tagActivity.length},
                     ].map(({key:t,label,count})=>(
                       <button key={t} onClick={()=>setDetailTab(t)}
@@ -63665,6 +63690,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                   )}
 
                   {/* ── SOURCES & SYNC TAB ── */}
+                  {detailTab==='kg'&&<KgObjectTab ids={[`tag:${selTag.name}`, `tag:${selTag.displayName||selTag.name}`]} name={selTag.displayName||selTag.name}/>}
                   {detailTab==='sources'&&(()=>{
                     const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
                     const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';

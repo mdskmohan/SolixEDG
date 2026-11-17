@@ -97,3 +97,22 @@ test("export: Turtle and JSON-LD carry nodes, edges and the derived marker", () 
   assert.ok(!/derived/.test(KG.toTurtle(g, { derived: false }).split("\n").slice(4).join("\n")));
   const j = JSON.parse(KG.toJsonLd(g)); assert.ok(j["@graph"].length === g.nodes.length + g.edges.length);
 });
+
+test("the graph links stewards, teams, products, policies, tests and where assets live", () => {
+  const inp = input();
+  inp.assets[0] = { ...inp.assets[0], stewards: ["dev.patel"], service: "snowflake", connectionLabel: "Snowflake DWH", db: "prod / COMMERCE / users" };
+  inp.teams = [{ name: "Governance", members: ["maya.chen"] }];
+  inp.products = [{ id: "dp1", name: "Customer 360", domain: "Commerce", owners: ["maya.chen"], assets: ["users"] }];
+  inp.policies = [{ id: "pol1", name: "PII policy", assets: ["users"], domains: ["Commerce"] }];
+  inp.tests = [{ id: "t1", name: "email not null", table: "platform.users", column: "email", status: "Success" }];
+  const g = KG.buildMetadataGraph(inp);
+  const has = (from, type, to) => g.edges.some((e) => e.from === from && e.type === type && e.to === to);
+  assert.ok(has("asset:users", "stewarded_by", "user:dev.patel"));
+  assert.ok(has("user:maya.chen", "member_of", "team:Governance"));
+  assert.ok(has("asset:users", "part_of", "product:dp1"));
+  assert.ok(has("asset:users", "governed_by", "policy:pol1"));
+  assert.ok(has("domain:Commerce", "governed_by", "policy:pol1"));
+  assert.ok(has("column:users.email", "tested_by", "test:t1"), "test on platform.users matches asset users by its last segment");
+  assert.ok(has("schema:service:Snowflake DWH/prod/COMMERCE", "contains", "asset:users"));
+  assert.ok(has("service:Snowflake DWH", "contains", "database:service:Snowflake DWH/prod"));
+});
