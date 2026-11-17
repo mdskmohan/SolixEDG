@@ -14,6 +14,7 @@ import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
 import * as KG from "./src/kg/engine.js";
+import * as KGOPS from "./src/kg/ops.js";
 import * as PM3 from "./src/pm3/engine.js";
 import * as PM3SEED from "./src/pm3/seed.js";
 import { IMPORT_SAMPLES as ONT_IMPORT_SAMPLES, IMPORT_SOURCES as ONT_IMPORT_SOURCES } from "./src/ontology/standards.js";
@@ -42743,16 +42744,18 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
 };
 
 // ═══ Knowledge Graphs ═══════════════════════════════════════════════════════
-// Built, never drawn. The metadata graph is projected from the catalog, lineage,
-// glossary, semantic models and ontologies (src/kg/engine.js); the entity graph
-// comes from each ontology's links to data. Nobody authors either: changing an
-// input and rebuilding is the whole workflow.
-const KG_KEY = "solix-edg.prototype.kg.v1";
-const KG_DEFAULT = {settings:{rules:Object.fromEntries(Object.keys(KG.RULES).map(k=>[k,true])), schedule:"change", exportDerived:true}, lastBuilt:null, builds:0};
-let _kg = (()=>{ try { const s = JSON.parse(localStorage.getItem(KG_KEY)||"null"); if(s && s.settings) return {...KG_DEFAULT, ...s, settings:{...KG_DEFAULT.settings, ...s.settings, rules:{...KG_DEFAULT.settings.rules, ...(s.settings.rules||{})}}}; } catch(e) {} return KG_DEFAULT; })();
-const _kgSubs = new Set();
-const kgSet = (fn) => { _kg = typeof fn==="function" ? fn(_kg) : fn; try { localStorage.setItem(KG_KEY, JSON.stringify(_kg)); } catch(e) {} _kgSubs.forEach(f=>f()); };
-const useKg = () => { const [,force] = useState(0); useEffect(()=>{ const fn=()=>force(n=>n+1); _kgSubs.add(fn); return ()=>{_kgSubs.delete(fn);}; },[]); return _kg; };
+// Knowledge graphs are governed objects, like semantic models and ontologies:
+// each has an owner, a schedule, a target store, a build history and quality
+// checks. Nobody draws one. An entity graph is built from an ontology's links to
+// data (src/kg/engine.js buildEntityGraph); the Enterprise Metadata Graph is
+// projected from the catalog, lineage, glossary, semantic models and ontologies
+// (buildMetadataGraph). Build runs and checks come from src/kg/ops.js. No MDM:
+// entities are mapped rows keyed by their table key, never matched or merged.
+const KGS_KEY = "solix-edg.prototype.kgs.v1";
+const KG_ALL_RULES = () => Object.fromEntries(Object.keys(KG.RULES).map(k=>[k,true]));
+const KG_SCHEDULES = {change:"When a source changes", hourly:"Hourly", daily:"Daily at 02:00", manual:"Manual only"};
+const KG_TARGETS = {edg:"EDG managed", neo4j:"Neo4j", neptune:"Amazon Neptune", fuseki:"Apache Jena Fuseki"};
+const kgEctx = () => ({entities:_slState.entities, joins:_slState.rels, assets:ASSETS, schemaOf:t=>SCHEMA[t]||[], profileOf:(t,c)=>COL_PROFILES[c]||{}});
 
 // Asset-level lineage, read once from the lineage graphs the Lineage tab draws.
 let _kgLineage = null;
@@ -42765,37 +42768,139 @@ const kgLineage = () => {
       const k = `${t.label}>${to.label}`; if(!seen.has(k)){ seen.add(k); out.push({from:t.label, to:to.label}); } })); });
   _kgLineage = out; return out;
 };
-// Everything the graph is built from, read live — so a rebuild always reflects now.
+// Everything the metadata graph is built from, read live.
 const kgInputs = () => ({
   assets: ASSETS, schemaOf: t=>SCHEMA[t]||[], lineage: kgLineage(),
   terms: _gtState.map(t=>({id:t.id, name:t.term, termType:t.termType, linkedAssets:t.linkedAssets||[]})),
   semantic: {models:_slState.models, entities:_slState.entities, rels:_slState.rels, metrics:_slState.metrics},
   ontologies: ontLoad().ontologies,
 });
-let _kgGraph = null, _kgGraphAt = 0, _kgSig = null, _kgAuto = null;
-// A cheap fingerprint of every source; when it moves, the graph rebuilds itself.
+
+// The ontology as one graph sees it: only the classes it includes.
+const kgOntView = (g) => {
+  const o = ontById(g.ontologyId); if(!o) return null;
+  if(!Array.isArray(g.classIds)) return o;
+  const keep = new Set(g.classIds);
+  return {...o, classes:o.classes.filter(c=>keep.has(c.id)), rels:o.rels.filter(r=>keep.has(r.from)&&keep.has(r.to)),
+    constraints:o.constraints.filter(k=>keep.has(k.classId)), mappings:(o.mappings||[]).filter(m=>m.kind==="metric"||keep.has(m.classId))};
+};
+const kgEntityGraph = (g, opts) => { const o = kgOntView(g); return o ? KG.buildEntityGraph(o, kgEctx(), {mask:g.mask!==false, ...(opts||{})}) : null; };
+const kgChecks = (g, eg) => { const o = kgOntView(g); return o && eg ? KGOPS.qualityChecks(o, eg, kgEctx()) : []; };
+
+// Metadata graph: one projection, rebuilt when its fingerprint moves.
+let _kgGraph = null, _kgGraphKey = null, _kgSigSeen = null, _kgAutoPending = false;
 const kgSig = () => [ASSETS.length, _gtState.length, _gtState.map(t=>(t.linkedAssets||[]).length).join(""), _slState.models.length, _slState.entities.length,
-  _slState.rels.length, _slState.metrics.length, JSON.stringify(ontLoad().ontologies).length, JSON.stringify(_kg.settings.rules)].join("|");
+  _slState.rels.length, _slState.metrics.length, JSON.stringify(ontLoad().ontologies).length].join("|");
 const kgGraph = (force) => {
-  const sig = kgSig();
-  const changed = _kgGraph && sig !== _kgSig && _kg.settings.schedule === "change";
-  if(force || !_kgGraph || _kgGraphAt !== _kg.builds || changed){
-    if(changed && !force && _kgGraphAt === _kg.builds) _kgAuto = {at:new Date().toISOString(), why:"A source changed"};
-    _kgGraph = KG.buildMetadataGraph(kgInputs(), {rules:_kg.settings.rules}); _kgGraphAt = _kg.builds; _kgSig = sig;
-  }
+  const meta = _kgs ? _kgs.graphs.find(x=>x.kind==="metadata") : null;
+  const rules = meta ? meta.rules : KG_ALL_RULES();
+  const sig = kgSig(), key = `${sig}#${JSON.stringify(rules)}#${meta?(meta.builds||[]).length:0}`;
+  if(_kgGraph && _kgSigSeen && sig!==_kgSigSeen && meta && meta.schedule==="change" && !meta.paused) _kgAutoPending = true;
+  if(force || !_kgGraph || key!==_kgGraphKey){ _kgGraph = KG.buildMetadataGraph(kgInputs(), {rules}); _kgGraphKey = key; _kgSigSeen = sig; }
   return _kgGraph;
 };
-const kgRebuild = (why) => { kgSet(s=>({...s, builds:s.builds+1, lastBuilt:{at:new Date().toISOString(), why:why||"Manual rebuild"}})); return kgGraph(true); };
+const kgMetaRun = (G, {n, at, trigger, by, target}) => { const S = G.stats; const derived = Object.values(S.byRule||{}).reduce((a,b)=>a+b,0);
+  return {n, at, trigger, by, status:"Succeeded", duration:8+Math.round(S.nodes/150), entities:S.nodes, links:S.edges, classes:0, errors:0, warnings:0, steps:[
+    {k:"read",l:"Read sources",status:"ok",detail:`${ASSETS.length} assets · ${_gtState.length} terms · ${_slState.models.length} models · ${ontLoad().ontologies.length} ontologies`},
+    {k:"nodes",l:"Create nodes",status:"ok",detail:`${S.nodes.toLocaleString("en-US")} nodes`},
+    {k:"edges",l:"Create edges",status:"ok",detail:`${S.edges.toLocaleString("en-US")} edges`},
+    {k:"infer",l:"Apply inference",status:"ok",detail:`${derived.toLocaleString("en-US")} derived facts`},
+    {k:"publish",l:"Publish to target",status:"ok",detail:KG_TARGETS[target]||"EDG managed"}]}; };
+
+// ── Store ──
+const kgSeed = () => {
+  const now = Date.now(), ago = (h) => new Date(now - h*3600e3).toISOString();
+  const metaG = KG.buildMetadataGraph(kgInputs(), {rules:KG_ALL_RULES()});
+  const meta = {id:"kg_meta", kind:"metadata", system:true, name:"Enterprise Metadata Graph", icon:"⬢", color:"#6366f1",
+    desc:"Every catalog asset, column, lineage edge, glossary term, semantic model, metric and ontology class, connected in one graph.",
+    domain:"Platform", owner:"maya.chen", steward:"dev.patel", owners:["maya.chen"], stewards:["dev.patel"], created:"2026-09-01",
+    schedule:"change", target:"edg", rules:KG_ALL_RULES(), exportDerived:true, paused:false,
+    builds:[[4,0.6,"Source changed","system"],[3,7,"Source changed","system"],[2,31,"Manual","maya.chen"],[1,190,"Created","maya.chen"]]
+      .map(([n,h,trigger,by])=>kgMetaRun(metaG,{n, at:ago(h), trigger, by, target:"edg"}))};
+  const com = {id:"kg_commerce", kind:"entity", name:"Commerce Knowledge Graph", icon:"◈", color:"#10b981", ontologyId:"ont_commerce", classIds:null,
+    desc:"Customers, orders, products and fulfilment as connected entities, built from the Enterprise Commerce ontology.",
+    domain:"Commerce", owner:"maya.chen", steward:"dev.patel", owners:["maya.chen"], stewards:["dev.patel"], created:"2026-10-20",
+    schedule:"daily", target:"edg", mask:true, paused:false, builds:[]};
+  const eg = kgEntityGraph(com), checks = kgChecks(com, eg);
+  const cur = KGOPS.runBuild(eg, checks, {n:6, at:ago(3), trigger:"Scheduled", target:"EDG managed"});
+  const clean = (b, extra) => ({...b, status:"Succeeded", errors:0, warnings:0, steps:b.steps.map(s=>({...s, status:"ok", detail:s.k==="read"?s.detail.replace(/ · \d+ column not found/,""):s.detail})), ...extra});
+  com.builds = [cur,
+    {...cur, n:5, at:ago(27)},
+    {...cur, n:4, at:ago(51), trigger:"Manual", by:"dev.patel"},
+    {...clean(cur), n:3, at:ago(75), status:"Failed", duration:41, entities:0, links:0, errors:1,
+      steps:cur.steps.map(s=>s.k==="publish"?{...s,status:"failed",detail:"Target store did not respond within 30s"}:{...s,status:"ok"})},
+    clean(cur, {n:2, at:ago(99)}), clean(cur, {n:1, at:ago(640), trigger:"Created", by:"maya.chen"})];
+  const sup = {id:"kg_supply", kind:"entity", name:"Supply Chain Knowledge Graph", icon:"⬡", color:"#f59e0b", ontologyId:"ont_supply", classIds:null,
+    desc:"Suppliers, purchase orders and shipments from the Supply Chain ontology.",
+    domain:"Procurement", owner:"sarah.kim", steward:"sarah.kim", owners:["sarah.kim"], stewards:["sarah.kim"], created:"2026-11-03",
+    schedule:"daily", target:"neptune", mask:true, paused:false, builds:[]};
+  return {graphs:[meta, com, sup]};
+};
+let _kgs = null;
+const kgsLoad = () => {
+  if(_kgs) return _kgs;
+  try { const s = JSON.parse(localStorage.getItem(KGS_KEY)||"null"); if(s && Array.isArray(s.graphs)) { _kgs = s; return _kgs; } } catch(e) {}
+  _kgs = kgSeed(); try { localStorage.setItem(KGS_KEY, JSON.stringify(_kgs)); } catch(e) {}
+  return _kgs;
+};
+const _kgsSubs = new Set();
+const kgsSet = (fn) => { _kgs = typeof fn==="function" ? fn(kgsLoad()) : fn; try { localStorage.setItem(KGS_KEY, JSON.stringify(_kgs)); } catch(e) {} _kgsSubs.forEach(f=>f()); };
+const kgsPatch = (id, p) => kgsSet(s=>({...s, graphs:s.graphs.map(g=>g.id!==id?g:{...g, ...(typeof p==="function"?p(g):p)})}));
+const useKgs = () => { const [,force] = useState(0); useEffect(()=>{ const fn=()=>force(n=>n+1); _kgsSubs.add(fn); return ()=>{_kgsSubs.delete(fn);}; },[]); return kgsLoad(); };
+const kgById = (id) => kgsLoad().graphs.find(g=>g.id===id);
+
+// Run a build: a running row first, the finished run a moment later.
+const _kgRunning = {};
+const kgBuild = (id, trigger, by, onDone) => {
+  const g = kgById(id); if(!g || _kgRunning[id]) return;
+  const n = ((g.builds||[])[0]||{n:0}).n + 1, at = new Date().toISOString();
+  _kgRunning[id] = {n, at, trigger, by, status:"Running", steps:(g.kind==="metadata"?["Read sources","Create nodes","Create edges","Apply inference","Publish to target"]:KGOPS.STEPS.map(s=>s.l)).map(l=>({l,status:"pending"}))};
+  _kgsSubs.forEach(f=>f());
+  setTimeout(()=>{
+    const cur = kgById(id); if(!cur){ delete _kgRunning[id]; return; }
+    let run;
+    if(cur.kind==="metadata"){ const G = KG.buildMetadataGraph(kgInputs(), {rules:cur.rules}); run = kgMetaRun(G, {n, at, trigger, by, target:cur.target}); }
+    else { const eg = kgEntityGraph(cur); run = KGOPS.runBuild(eg, kgChecks(cur, eg), {n, at, trigger, by, target:KG_TARGETS[cur.target]}); }
+    delete _kgRunning[id];
+    kgsPatch(id, x=>({builds:[run, ...(x.builds||[])].slice(0,40)}));
+    onDone && onDone(run);
+  }, 1400);
+};
 const kgDownload = (name, text, type) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type})); a.download = name; a.click(); };
+const kgAgo = (at) => { if(!at) return "—"; const m = Math.round((Date.now()-new Date(at).getTime())/60000);
+  return m<1?"just now":m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:m<2880?"yesterday":`${Math.round(m/1440)}d ago`; };
+const kgNext = (g) => g.paused ? "Paused" : ({change:"On source change", manual:"—", hourly:"Within the hour", daily:"Tomorrow 02:00"})[g.schedule]||"—";
+const kgSlug = (s) => String(s||"").toLowerCase().replace(/knowledge graph/,"").trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"graph";
+
+const KG_STATUS = {Active:{c:"#16a34a",l:"Active"}, Warnings:{c:"#d97706",l:"Active · warnings"}, Failed:{c:"#e11d48",l:"Failed"}, Paused:{c:"#64748b",l:"Paused"},
+  "Needs data":{c:"#d97706",l:"Needs data"}, "Not built":{c:"#64748b",l:"Not built"}, Running:{c:"#2563eb",l:"Building"}};
+const KgStatusChip = ({s}) => { const m = KG_STATUS[s]||KG_STATUS["Not built"];
+  return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:m.c+"12",color:m.c,border:`1px solid ${m.c}38`,whiteSpace:"nowrap"}}>
+    <span style={{animation:s==="Running"?"pulse2 1.2s infinite":undefined,width:6,height:6,borderRadius:"50%",background:m.c}}/>{m.l}</span>; };
+const KG_RUN = {Succeeded:"#16a34a", Warnings:"#d97706", Failed:"#e11d48", Running:"#2563eb"};
+const KgRunChip = ({s}) => { const c = KG_RUN[s]||"#64748b";
+  return <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:4,background:c+"12",color:c,border:`1px solid ${c}38`,whiteSpace:"nowrap"}}>{s}</span>; };
+const KG_STEP = {ok:["✓","#16a34a"], warning:["!","#d97706"], failed:["✕","#e11d48"], skipped:["–","#94a3b8"], pending:["·","#94a3b8"]};
+const KgKindChip = ({g}) => <span style={{fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>{g.kind==="metadata"?"Metadata graph":"Entity graph"}</span>;
 const KgTypeChip = ({type}) => { const t = KG.NODE_TYPES[type]||{l:type,c:T.textMuted};
   return <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:4,background:t.c+"14",color:t.c,border:`1px solid ${t.c}38`,whiteSpace:"nowrap"}}>{t.l}</span>; };
+const KG_SEV = {error:"#e11d48", warning:"#d97706", info:"#64748b"};
+const KgSevChip = ({s}) => <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:4,background:KG_SEV[s]+"12",color:KG_SEV[s],border:`1px solid ${KG_SEV[s]}38`}}>{KGOPS.SEVERITY[s]}</span>;
 
-// Neighbourhood canvas: the focus node in the middle, neighbours around it.
+// One summary of a graph, computed for the list and the profile.
+const kgSummary = (g) => {
+  const running = _kgRunning[g.id];
+  if(g.kind==="metadata"){ const G = kgGraph(); const S = G.stats;
+    return {status:running?"Running":KGOPS.statusOf(g, null), entities:S.nodes, entitiesL:"Nodes", b:S.edges, bL:"Edges",
+      c:Object.values(S.byRule||{}).reduce((a,x)=>a+x,0), cL:"Derived facts", issues:0, G}; }
+  const eg = kgEntityGraph(g); const checks = kgChecks(g, eg); const st = eg ? eg.stats : {};
+  return {status:running?"Running":KGOPS.statusOf(g, eg), entities:st.entities||0, entitiesL:"Entities", b:`${st.withData||0} / ${st.classes||0}`, bL:"Classes with data",
+    c:`${st.linked||0} / ${st.relationships||0}`, cL:"Relationships linked", issues:checks.length, errors:checks.filter(x=>x.severity==="error").length, eg, checks};
+};
+
+// Neighbourhood canvas: the focus in the middle, incoming left, outgoing right.
 const KgCanvas = ({graph, focus, onFocus, height=520}) => {
   const [rf, setRf] = useState(null);
-  // Readable at any size: neighbours are grouped by how they connect (contains
-  // column, feeds, classified as …); a group shows 5 and a "+N more" card. Only
-  // lines that touch the focus are drawn; the full list sits under the canvas.
   const view = useMemo(()=>{
     const byId = new Map(graph.nodes.map(n=>[n.id,n]));
     const groups = new Map();
@@ -42815,7 +42920,6 @@ const KgCanvas = ({graph, focus, onFocus, height=520}) => {
     return {focusNode:byId.get(focus), others:shown, edges:edgesOut};
   },[graph, focus]);
   const nodes = useMemo(()=>{
-    // Incoming connections on the left, outgoing on the right, 8 per column.
     const others = view.others;
     const dirOf = (id) => { const e = view.edges.find(x=>x.from===id||x.to===id); return e && e.from===focus ? "out" : "in"; };
     const side = {in:others.filter(n=>dirOf(n.id)==="in"), out:others.filter(n=>dirOf(n.id)==="out")};
@@ -42850,26 +42954,7 @@ const KgCanvas = ({graph, focus, onFocus, height=520}) => {
   );
 };
 
-// Edges of one node, grouped: what it is, how it connects, and what was derived.
-const KgEdgeList = ({full, id, onFocus}) => {
-  const es = full.edges.filter(e=>e.from===id||e.to===id);
-  const byId = new Map(full.nodes.map(n=>[n.id,n]));
-  if(!es.length) return <div style={{fontSize:12,color:T.textMuted}}>No connections</div>;
-  return (
-    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-      {es.slice(0,80).map((e,i)=>{ const out = e.from===id; const other = byId.get(out?e.to:e.from); if(!other) return null; return (
-        <div key={e.id} onClick={()=>onFocus&&onFocus(other.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 12px",borderBottom:i<es.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
-          onMouseEnter={x=>x.currentTarget.style.background=T.bgHover} onMouseLeave={x=>x.currentTarget.style.background="transparent"}>
-          <span style={{fontSize:11,color:e.derived?T.violet:T.textSub,width:140,flexShrink:0}}>{out?"":"← "}{(KG.EDGE_TYPES[e.type]||{l:e.type}).l}{e.label?` · ${e.label}`:""}</span>
-          <KgTypeChip type={other.type}/>
-          <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{other.label}</span>
-          {e.derived && <span title={KG.RULES[e.rule]?KG.RULES[e.rule].d:""} style={{fontSize:10,fontWeight:700,color:T.violet,whiteSpace:"nowrap"}}>Derived · {(KG.RULES[e.rule]||{l:e.rule}).l}</span>}
-        </div>); })}
-      {es.length>80 && <div style={{padding:"7px 12px",fontSize:11,color:T.textMuted}}>+{es.length-80} more</div>}
-    </div>);
-};
-
-// Connections of one node, grouped into plain sections instead of raw edge types.
+// Connections of one node, grouped into plain sections.
 const KG_SECTIONS = [
   {k:"lives",   l:"Where it lives",    types:["realised_by","stored_in","contains"]},
   {k:"meaning", l:"Business meaning",  types:["relates","is_a","defines","described_by"]},
@@ -42904,229 +42989,718 @@ const KgSections = ({g, id, showDerived, onFocus}) => {
     </div>);
 };
 
-const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
-  const kg = useKg(); useOnt();
-  const [tab, setTab] = useState("overview");
+// Explore: search everything the metadata graph knows, then a node's connections.
+const KgExplorer = ({g, initial, onAsset, onOpenClass}) => {
   const [q, setQ] = useState("");
-  const [focus, setFocus] = useState(null);
+  const [focus, setFocus] = useState(initial||null);
   const [showDerived, setShowDerived] = useState(true);
-  const [showDiagram, setShowDiagram] = useState(false);
-  const onts = ontLoad().ontologies;
-  const [ontId, setOntId] = useState((onts[0]||{}).id||"");
-  const [clsSel, setClsSel] = useState(null);
-  const g = kgGraph();
-  const S = g.stats;
-  const ectx = {entities:_slState.entities, joins:_slState.rels, assets:ASSETS, schemaOf:t=>SCHEMA[t]||[], profileOf:(t,c)=>COL_PROFILES[c]||{}};
-  const egs = Object.fromEntries(onts.map(x=>[x.id, KG.buildEntityGraph(x, ectx)]));
-  const o = onts.find(x=>x.id===ontId), eg = o ? egs[o.id] : null;
-  const allClasses = onts.reduce((n,x)=>n+x.classes.length,0);
-  const connected = onts.reduce((n,x)=>n+egs[x.id].stats.withData,0);
-  const entTotal = onts.reduce((n,x)=>n+(egs[x.id].stats.entities||0),0);
-  const linkedTables = new Set(onts.flatMap(x=>MAP.mappingsOf(x).filter(m=>m.kind==="dataset"||m.kind==="table").map(m=>MAP.sourceTable(m, mapCtx())))).size;
+  const [view, setView] = useState("list");
   const results = q ? KG.search(g, q, 40) : [];
   const fNode = focus ? g.nodes.find(n=>n.id===focus) : null;
-  const TABS = [{key:"overview",label:"Overview"},{key:"business",label:"Business view"},{key:"explore",label:"Explore"},{key:"settings",label:"Settings"}];
-  const lastBuilt = [kg.lastBuilt, _kgAuto].filter(Boolean).sort((a,b)=>b.at.localeCompare(a.at))[0];
-  const openOnt = (id) => { setOntId(id); setClsSel(null); setTab("business"); };
-
-  // Everything the graph knows about one class, in business terms.
-  const classProfile = (c) => {
-    const cl = eg.classes.find(x=>x.classId===c.id) || {sources:[]};
-    const cid = `class:${o.id}:${c.id}`;
-    const maps = MAP.mappingsOf(o);
-    const tables = cl.sources.map(s=>s.table);
-    const tableEdges = (type) => g.edges.filter(e=>e.type===type && tables.some(t=>e.from===`asset:${t}`));
-    const domains = [...new Set(tableEdges("in_domain").map(e=>e.to.replace(/^domain:/,"")))];
-    const owners = [...new Set(tableEdges("owned_by").map(e=>e.to.replace(/^user:/,"")))];
-    const tags = [...new Set([...tableEdges("tagged").map(e=>e.to.replace(/^tag:/,"")), ...g.edges.filter(e=>e.from===cid && e.type==="tagged").map(e=>e.to.replace(/^tag:/,""))])];
-    const metrics = _slState.metrics.filter(m=>cl.sources.some(s=>s.entityId && s.entityId===m.entity));
-    const term = c.termId ? _gtState.find(t=>t.id===c.termId) : null;
-    const samples = eg.samples[c.id] || [];
-    const label = (id) => (Object.values(eg.samples).flat().find(x=>x.id===id)||{label:id}).label;
-    const Sec = ({t, children}) => <div style={{padding:"12px 16px",borderTop:"1px solid #e2e8f0"}}>
-      <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:7}}>{t}</div>{children}</div>;
-    const Row = ({k, v, c:col}) => <div style={{display:"flex",gap:8,fontSize:11.5,marginBottom:4}}><span style={{color:"#64748b",width:96,flexShrink:0}}>{k}</span><span style={{color:col||"#0f172a",flex:1,minWidth:0}}>{v}</span></div>;
-    return (
-      <div>
-        <div style={{padding:"16px 16px 12px"}}>
-          <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{c.name}</div>
-          <div style={{fontSize:11.5,color:"#475569",lineHeight:1.5,marginTop:3}}>{c.desc||"No definition"}</div>
-          <div style={{fontSize:22,fontWeight:800,color:cl.total?"#0f172a":"#94a3b8",fontFamily:"'Geist Mono',monospace",marginTop:10}}>{cl.total?KG.fmtCount(cl.total):"0"}</div>
-          <div style={{fontSize:11,color:"#64748b"}}>entities</div>
+  const asset = fNode && fNode.type==="asset" ? ASSETS.find(a=>a.name===fNode.label) : null;
+  return (
+    <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+      <div style={{width:300,flexShrink:0}}>
+        <Input2 placeholder="Search tables, columns, terms, classes, metrics…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
+        <div style={{marginTop:10,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:600,overflowY:"auto"}}>
+          {!q && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>{g.nodes.length.toLocaleString("en-US")} nodes</div>}
+          {q && results.length===0 && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>No matches</div>}
+          {results.map((n,i)=>(
+            <button key={n.id} onClick={()=>setFocus(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:focus===n.id?T.bgActive:"transparent",border:"none",borderBottom:i<results.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",textAlign:"left"}}>
+              <KgTypeChip type={n.type}/><span style={{fontSize:12,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</span>
+            </button>))}
         </div>
-        <Sec t="Comes from">
-          {cl.sources.length===0 ? <div style={{fontSize:11.5,color:"#d97706"}}>No data source · add a catalog table to the class</div> :
-            cl.sources.map(s=><div key={s.table} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,marginBottom:5}}>
-              <span style={{fontFamily:"ui-monospace,monospace",color:"#0f172a",flex:1}}>{s.table}</span>
-              <span style={{color:"#64748b"}}>{KG.fmtCount(s.rows)} · key {s.keys.join("+")||"—"}</span>
-              <OntCatalogLink table={s.table} onAsset={onAsset}/></div>)}
-        </Sec>
-        {(c.props||[]).length>0 && <Sec t="Properties">
-          {c.props.map(p=>{ const fm = maps.filter(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id);
-            const pii = fm.some(m=>((SCHEMA[m.target.table]||[]).find(x=>x.name===m.target.column)||{}).pii);
-            const missing = fm.filter(m=>!(SCHEMA[m.target.table]||[]).some(x=>x.name===m.target.column));
-            return <Row key={p.id} k={p.name} c={!fm.length||missing.length?"#d97706":"#0f172a"} v={<>{fm.length?fm.map(m=>`${m.target.table}.${m.target.column}`).join(", "):"Not linked to a column"}
-              {missing.length>0 && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#d97706"}}>column missing</span>}
-              {pii && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#e11d48"}}>PII</span>}</>}/>; })}
-        </Sec>}
-        <Sec t="Relationships">
-          {o.rels.filter(r=>r.from===c.id||r.to===c.id).length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None</div> :
-            o.rels.filter(r=>r.from===c.id||r.to===c.id).map(r=>{ const out = r.from===c.id; const other = ontClass(o, out?r.to:r.from);
-              const linked = maps.some(m=>m.kind==="join" && m.relId===r.id);
-              return <Row key={r.id} k={out?r.name:(r.inverse||`← ${r.name}`)} v={<>{other?other.name:"—"} <span style={{fontSize:10.5,color:linked?"#16a34a":"#d97706"}}>{linked?"· linked":"· no join"}</span></>}/>; })}
-          {c.parent && <Row k="is a" v={(ontClass(o,c.parent)||{}).name}/>}
-        </Sec>
-        <Sec t="Governance">
-          <Row k="Domain" v={domains.join(", ")||"—"}/><Row k="Owners" v={owners.join(", ")||"—"}/>
-          <Row k="Classified" v={tags.length?tags.join(", "):"—"} c={tags.includes("PII")?"#e11d48":undefined}/>
-          <Row k="Glossary term" v={term?term.term:"—"}/>
-        </Sec>
-        <Sec t={`Metrics · ${metrics.length}`}>
-          {metrics.length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None computed on its data</div> :
-            metrics.slice(0,6).map(m=><Row key={m.id} k={m.name} v={(_slState.models.find(x=>x.id===m.model)||{}).name||"—"}/>)}
-        </Sec>
-        <Sec t="Sample records">
-          {samples.length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>No records</div> : samples.slice(0,3).map(s=>{
-            const links = eg.links.filter(l=>l.from===s.id).map(l=>`${l.name} ${label(l.to)}`);
-            return <div key={s.id} style={{padding:"7px 9px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,marginBottom:6}}>
-              <div style={{fontSize:11.5,fontWeight:700,color:"#0f172a"}}>{s.label}</div>
-              <div style={{fontSize:10.5,color:"#475569",marginTop:2}}>{Object.entries(s.props).slice(0,4).map(([k,v])=>`${k}: ${v}`).join(" · ")}</div>
-              {links.map((t,i)=><div key={i} style={{fontSize:10.5,color:"#7c3aed",marginTop:2}}>{t}</div>)}
-            </div>; })}
-        </Sec>
-      </div>);
+      </div>
+      <div style={{flex:1,minWidth:0}}>
+        {!fNode ? <div style={{padding:"80px 0",textAlign:"center",fontSize:12.5,color:T.textMuted,border:`1px dashed ${T.border}`,borderRadius:10}}>Select a node</div> : <>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+            <KgTypeChip type={fNode.type}/><span style={{fontSize:16,fontWeight:700,color:T.text}}>{fNode.label}</span>
+            {asset && onAsset && <button onClick={()=>onAsset(asset)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in catalog ↗</button>}
+            {fNode.type==="class" && onOpenClass && <button onClick={()=>onOpenClass(fNode)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in ontology ↗</button>}
+            <span style={{flex:1}}/>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
+            <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={view} onChange={setView}/>
+          </div>
+          {view==="diagram" ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus}/>
+            : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
+        </>}
+      </div>
+    </div>);
+};
+
+// Everything one class holds in an entity graph, for the Schema side panel.
+const kgClassPanel = ({o, eg, G, c, onAsset}) => {
+  const cl = eg.classes.find(x=>x.classId===c.id) || {sources:[]};
+  const cid = `class:${o.id}:${c.id}`;
+  const maps = MAP.mappingsOf(o);
+  const tables = cl.sources.map(s=>s.table);
+  const tableEdges = (type) => G.edges.filter(e=>e.type===type && tables.some(t=>e.from===`asset:${t}`));
+  const domains = [...new Set(tableEdges("in_domain").map(e=>e.to.replace(/^domain:/,"")))];
+  const owners = [...new Set(tableEdges("owned_by").map(e=>e.to.replace(/^user:/,"")))];
+  const tags = [...new Set([...tableEdges("tagged").map(e=>e.to.replace(/^tag:/,"")), ...G.edges.filter(e=>e.from===cid && e.type==="tagged").map(e=>e.to.replace(/^tag:/,""))])];
+  const metrics = _slState.metrics.filter(m=>cl.sources.some(s=>s.entityId && s.entityId===m.entity));
+  const term = c.termId ? _gtState.find(t=>t.id===c.termId) : null;
+  const Sec = ({t, children}) => <div style={{padding:"12px 16px",borderTop:"1px solid #e2e8f0"}}>
+    <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:7}}>{t}</div>{children}</div>;
+  const Row = ({k, v, c:col}) => <div style={{display:"flex",gap:8,fontSize:11.5,marginBottom:4}}><span style={{color:"#64748b",width:96,flexShrink:0}}>{k}</span><span style={{color:col||"#0f172a",flex:1,minWidth:0}}>{v}</span></div>;
+  return (
+    <div>
+      <div style={{padding:"16px 16px 12px"}}>
+        <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{c.name}</div>
+        <div style={{fontSize:11.5,color:"#475569",lineHeight:1.5,marginTop:3}}>{c.desc||"No definition"}</div>
+        <div style={{fontSize:22,fontWeight:800,color:cl.total?"#0f172a":"#94a3b8",fontFamily:"'Geist Mono',monospace",marginTop:10}}>{cl.total?KG.fmtCount(cl.total):"0"}</div>
+        <div style={{fontSize:11,color:"#64748b"}}>entities</div>
+      </div>
+      <Sec t="Data sources">
+        {cl.sources.length===0 ? <div style={{fontSize:11.5,color:"#d97706"}}>None</div> :
+          cl.sources.map(s=><div key={s.table} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5,marginBottom:5}}>
+            <span style={{fontFamily:"ui-monospace,monospace",color:"#0f172a",flex:1}}>{s.table}</span>
+            <span style={{color:"#64748b"}}>{KG.fmtCount(s.rows)} · key {s.keys.join("+")||"—"}</span>
+            <OntCatalogLink table={s.table} onAsset={onAsset}/></div>)}
+      </Sec>
+      {(c.props||[]).length>0 && <Sec t="Properties">
+        {c.props.map(p=>{ const fm = maps.filter(m=>m.kind==="field" && m.classId===c.id && m.propId===p.id);
+          const pii = fm.some(m=>((SCHEMA[m.target.table]||[]).find(x=>x.name===m.target.column)||{}).pii);
+          const missing = fm.filter(m=>!(SCHEMA[m.target.table]||[]).some(x=>x.name===m.target.column));
+          return <Row key={p.id} k={p.name} c={!fm.length||missing.length?"#d97706":"#0f172a"} v={<>{fm.length?fm.map(m=>`${m.target.table}.${m.target.column}`).join(", "):"No column"}
+            {missing.length>0 && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#d97706"}}>Column missing</span>}
+            {pii && <span style={{marginLeft:6,fontSize:9.5,fontWeight:700,color:"#e11d48"}}>PII</span>}</>}/>; })}
+      </Sec>}
+      <Sec t="Relationships">
+        {o.rels.filter(r=>r.from===c.id||r.to===c.id).length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None</div> :
+          o.rels.filter(r=>r.from===c.id||r.to===c.id).map(r=>{ const out = r.from===c.id; const other = ontClass(o, out?r.to:r.from);
+            const linked = maps.some(m=>m.kind==="join" && m.relId===r.id);
+            return <Row key={r.id} k={out?r.name:(r.inverse||`← ${r.name}`)} v={<>{other?other.name:"—"} <span style={{fontSize:10.5,color:linked?"#16a34a":"#d97706"}}>{linked?"· Linked":"· No join"}</span></>}/>; })}
+        {c.parent && <Row k="Kind of" v={(ontClass(o,c.parent)||{}).name}/>}
+      </Sec>
+      <Sec t="Governance">
+        <Row k="Data domain" v={domains.join(", ")||"—"}/><Row k="Owners" v={owners.join(", ")||"—"}/>
+        <Row k="Classification" v={tags.length?tags.join(", "):"—"} c={tags.includes("PII")?"#e11d48":undefined}/>
+        <Row k="Glossary term" v={term?term.term:"—"}/>
+      </Sec>
+      <Sec t={`Metrics · ${metrics.length}`}>
+        {metrics.length===0 ? <div style={{fontSize:11.5,color:"#64748b"}}>None</div> :
+          metrics.slice(0,6).map(m=><Row key={m.id} k={m.name} v={(_slState.models.find(x=>x.id===m.model)||{}).name||"—"}/>)}
+      </Sec>
+    </div>);
+};
+
+// ── Sidebar on the Overview ──
+const KgSidebar = ({g, sum}) => {
+  const [pane, setPane] = useState(null);
+  const owners = g.owners || (g.owner ? [g.owner] : []);
+  const stewards = g.stewards || (g.steward ? [g.steward] : []);
+  const USERS = STEWARDS_LIST.map(x=>x.name);
+  const toggle = (key, list, v) => { const next = list.includes(v) ? list.filter(x=>x!==v) : [...list, v];
+    kgsPatch(g.id, key==="owners" ? {owners:next, owner:next[0]||""} : {stewards:next, steward:next[0]||""}); };
+  const Sec = ({children, last}) => <div style={{padding:"16px",borderBottom:last?"none":`1px solid ${T.border}`}}>{children}</div>;
+  const o = g.ontologyId ? ontById(g.ontologyId) : null;
+  const last = (g.builds||[])[0];
+  return (
+    <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
+      <Sec>
+        <SLMetaLabel>Details</SLMetaLabel>
+        {[["Type",g.kind==="metadata"?"Metadata graph":"Entity graph"], ...(g.kind==="entity"?[["Ontology",o?o.name:"—"]]:[]), ["Data domain",g.domain||"—"],
+          ["Schedule",g.paused?"Paused":KG_SCHEDULES[g.schedule]], ["Target store",KG_TARGETS[g.target]], ["Last build",last?`#${last.n} · ${kgAgo(last.at)}`:"Never"],
+          ["Next build",kgNext(g)], ["Created",g.created||"—"]].map(([k,v])=>(
+          <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
+            <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
+            <span style={{fontSize:11.5,color:T.textSub,textAlign:"right"}}>{v}</span>
+          </div>))}
+      </Sec>
+      <Sec><SLMetaLabel>Status</SLMetaLabel><KgStatusChip s={sum.status}/></Sec>
+      <Sec>
+        <SLMetaLabel onEdit={()=>setPane(p=>p==="owners"?null:"owners")}>Owners</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {owners.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No owners assigned</span>}
+          {owners.map(x=><SLPersonChip key={x} name={x} color={T.accent}/>)}
+        </div>
+        <SLPicker open={pane==="owners"} items={USERS} selected={owners} placeholder="Search users…" onToggle={u=>toggle("owners", owners, u)} onDone={()=>setPane(null)}/>
+      </Sec>
+      <Sec last>
+        <SLMetaLabel onEdit={()=>setPane(p=>p==="stewards"?null:"stewards")}>Stewards</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {stewards.length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No stewards assigned</span>}
+          {stewards.map(x=><SLPersonChip key={x} name={x} color="#d97706"/>)}
+        </div>
+        <SLPicker open={pane==="stewards"} items={USERS} selected={stewards} placeholder="Search users…" accent="#d97706" onToggle={u=>toggle("stewards", stewards, u)} onDone={()=>setPane(null)}/>
+      </Sec>
+    </div>
+  );
+};
+
+// ── New / edit: one section-rail flow ──
+const KgEditorWizard = ({g, onClose, onSaved, onToast}) => {
+  useOnt();
+  const isEdit = !!g;
+  const { roleCfg } = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+  const [domains] = useDomains();
+  const people = STEWARDS_LIST.map(x=>x.name);
+  const onts = ontLoad().ontologies;
+  const [sec, setSec] = useState("details");
+  const [d, setD] = useState(()=> isEdit
+    ? {name:g.name, desc:g.desc||"", domain:g.domain||"", owner:g.owner||"", steward:g.steward||"", ontologyId:g.ontologyId||"", classIds:g.classIds,
+       schedule:g.schedule, target:g.target, mask:g.mask!==false, buildNow:false}
+    : {name:"", desc:"", domain:"", owner:"", steward:"", ontologyId:"", classIds:null, schedule:"daily", target:"edg", mask:true, buildNow:true});
+  const o = onts.find(x=>x.id===d.ontologyId);
+  const draft = {...(g||{}), id:(g&&g.id)||"kg_draft", kind:"entity", ontologyId:d.ontologyId, classIds:d.classIds, mask:d.mask};
+  const eg = o ? kgEntityGraph(draft) : null;
+  const checks = eg ? kgChecks(draft, eg) : [];
+  const others = kgsLoad().graphs.filter(x=>!isEdit || x.id!==g.id);
+  const taken = others.some(x=>x.name.trim().toLowerCase()===d.name.trim().toLowerCase());
+  const included = o ? (Array.isArray(d.classIds) ? d.classIds : o.classes.map(c=>c.id)) : [];
+  const errD = !d.name.trim() ? "Enter a name" : taken ? "A knowledge graph with this name exists" : !d.domain ? "Select a data domain" : !d.owner ? "Select an owner" : null;
+  const errS = !d.ontologyId ? "Select an ontology" : !included.length ? "Include at least one class" : null;
+  const err = errD || errS;
+  const SECTIONS = [{k:"details",l:"Details"},{k:"source",l:"Ontology & classes"},{k:"build",l:"Build settings"},{k:"review",l:"Review"}];
+  const order = SECTIONS.map(s=>s.k), idx = order.indexOf(sec);
+  const go = (k) => { const i = order.indexOf(k);
+    if(i>0 && errD){ onToast&&onToast(errD,"error"); setSec("details"); return; }
+    if(i>1 && errS){ onToast&&onToast(errS,"error"); setSec("source"); return; } setSec(k); };
+  const toggleClass = (id, on) => { const cur = new Set(included); on ? cur.add(id) : cur.delete(id);
+    setD({...d, classIds: o && cur.size===o.classes.length ? null : [...cur]}); };
+  const save = () => {
+    if(err){ onToast&&onToast(err,"error"); return; }
+    const owners = [d.owner, ...((isEdit && g.owners)||[]).filter(x=>x!==d.owner)];
+    const stewards = d.steward ? [d.steward, ...((isEdit && g.stewards)||[]).filter(x=>x!==d.steward)] : ((isEdit && g.stewards)||[d.owner]);
+    const body = {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards,
+      ontologyId:d.ontologyId, classIds:d.classIds, schedule:d.schedule, target:d.target, mask:d.mask};
+    if(isEdit){ kgsPatch(g.id, body); onToast&&onToast(`${body.name} saved`,"success"); if(d.buildNow) kgBuild(g.id, "Settings changed", me); onSaved(g.id); return; }
+    const id = "kg_"+Date.now().toString(36);
+    kgsSet(s=>({...s, graphs:[...s.graphs, {id, kind:"entity", icon:"◈", color:COLOR_PALETTE[s.graphs.length%COLOR_PALETTE.length], paused:false,
+      created:new Date().toISOString().slice(0,10), builds:[], ...body}]}));
+    onToast&&onToast(`${body.name} created`,"success");
+    if(d.buildNow) kgBuild(id, "Created", me, (r)=>onToast&&onToast(`${body.name} · build #${r.n} ${r.status==="Failed"?"failed":"finished"}`, r.status==="Failed"?"error":"success"));
+    onSaved(id);
   };
+  const Req = ({children}) => <>{children}<span style={{color:T.rose}}> *</span></>;
+  const KV = ({rows}) => (
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+      {rows.map(([k,v],i)=>(
+        <div key={k} style={{display:"grid",gridTemplateColumns:"190px 1fr",gap:12,padding:"10px 14px",borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none"}}>
+          <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:T.text,fontWeight:500}}>{v}</span></div>))}
+    </div>);
+  const full = o ? KG.buildEntityGraph(o, kgEctx()) : null;
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.45)"}} onClick={onClose}>
+      <div className="slideInRight" onClick={e=>e.stopPropagation()}
+        style={{position:"absolute",top:0,right:0,bottom:0,width:980,maxWidth:"97vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column",boxShadow:"-24px 0 64px rgba(0,0,0,.3)"}}>
+        <div style={{flexShrink:0,padding:"16px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{isEdit?`Edit ${g.name}`:"New Knowledge Graph"}</div>
+          <button onClick={onClose} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(15)}</button>
+        </div>
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{width:210,flexShrink:0,borderRight:`1px solid ${T.border}`,background:T.bg,padding:"12px 0"}}>
+            {SECTIONS.map((s,i)=>{ const on = sec===s.k; const done = i<idx && !(s.k==="details"&&errD) && !(s.k==="source"&&errS); return (
+              <button key={s.k} onClick={()=>go(s.k)}
+                style={{width:"100%",textAlign:"left",padding:"10px 16px",background:on?T.bgActive:"transparent",border:"none",borderLeft:`2px solid ${on?T.accent:"transparent"}`,cursor:"pointer",display:"flex",alignItems:"center",gap:9}}>
+                <span style={{width:20,height:20,borderRadius:"50%",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,
+                  background:done?T.green:on?T.accent:T.bgElevated,color:done||on?"#fff":T.textMuted,border:done||on?"none":`1px solid ${T.border}`}}>{done?"✓":i+1}</span>
+                <span style={{fontSize:12,fontWeight:on?700:600,color:on?T.text:T.textSub}}>{s.l}</span>
+              </button>); })}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"22px 26px"}}>
+            {sec==="details" && <div style={{maxWidth:620}}>
+              <OntField label={<Req>Name</Req>}><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Commerce Knowledge Graph"/>
+                {taken && <div style={{fontSize:11,color:T.rose,marginTop:4}}>A knowledge graph with this name exists</div>}</OntField>
+              <OntField label="Description"><Input2 multiline rows={3} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What this graph is for"/></OntField>
+              <OntField label={<Req>Data domain</Req>}><SLSelect value={d.domain} onChange={e=>setD({...d,domain:e.target.value})} placeholder="Select a data domain" options={domains.map(x=>({v:x.name,l:x.displayName||x.name}))}/></OntField>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}><OntField label={<Req>Owner</Req>}><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={people}/></OntField></div>
+                <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Same as owner" options={people}/></OntField></div>
+              </div>
+            </div>}
+
+            {sec==="source" && <div style={{maxWidth:720}}>
+              <OntField label={<Req>Ontology</Req>}><SLSelect value={d.ontologyId} onChange={e=>setD({...d, ontologyId:e.target.value, classIds:null})} placeholder="Select an ontology"
+                options={onts.map(x=>({v:x.id, l:`${x.name} · ${x.status==="Published"?`v${x.publishedN}`:"Draft"}`}))}/></OntField>
+              {o && <>
+                <div style={{display:"flex",alignItems:"center",gap:10,margin:"6px 0 8px"}}>
+                  <span style={{fontSize:11.5,fontWeight:600,color:T.textSub,flex:1}}>Classes · {included.length} of {o.classes.length} included</span>
+                  <Btn small ghost onClick={()=>setD({...d, classIds:o.classes.filter(c=>(full.classes.find(x=>x.classId===c.id)||{sources:[]}).sources.length).map(c=>c.id)})}>Only with data</Btn>
+                  <Btn small ghost onClick={()=>setD({...d, classIds:null})}>All</Btn>
+                </div>
+                <OntTable empty="No classes" onRow={r=>toggleClass(r.c.id, !included.includes(r.c.id))}
+                  cols={[{l:"",w:"28px"},{l:"Class",w:"1.2fr"},{l:"Data sources",w:"1.6fr"},{l:"Entities",w:".7fr"},{l:"Relationships",w:".8fr"}]}
+                  rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{ const fc = full.classes.find(x=>x.classId===c.id)||{sources:[]}; return {key:c.id, c, cells:[
+                    <input type="checkbox" checked={included.includes(c.id)} onClick={e=>e.stopPropagation()} onChange={e=>toggleClass(c.id, e.target.checked)}/>,
+                    c.name,
+                    fc.sources.length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{fc.sources.map(s=>s.table).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
+                    fc.total ? KG.fmtCount(fc.total) : "—",
+                    String(o.rels.filter(r=>r.from===c.id||r.to===c.id).length)]}; })}/>
+              </>}
+            </div>}
+
+            {sec==="build" && <div style={{maxWidth:620}}>
+              <OntField label="Build schedule"><SLSelect value={d.schedule} onChange={e=>setD({...d,schedule:e.target.value})} options={Object.entries(KG_SCHEDULES).map(([v,l])=>({v,l}))}/></OntField>
+              <OntField label="Target store"><SLSelect value={d.target} onChange={e=>setD({...d,target:e.target.value})} options={Object.entries(KG_TARGETS).map(([v,l])=>({v,l}))}/></OntField>
+              <AIDRow l="Mask PII in entity records" on={d.mask} set={v=>setD({...d,mask:v})}/>
+              <AIDRow l={isEdit?"Build after saving":"Build after creating"} on={d.buildNow} set={v=>setD({...d,buildNow:v})}/>
+            </div>}
+
+            {sec==="review" && <div style={{maxWidth:680}}>
+              <KV rows={[["Name", d.name||"—"], ["Description", d.desc||"—"], ["Data domain", ((domains.find(x=>x.name===d.domain)||{}).displayName)||d.domain||"—"],
+                ["Owner", d.owner||"—"], ["Steward", d.steward||d.owner||"—"], ["Ontology", o?o.name:"—"],
+                ["Classes", `${included.length} of ${o?o.classes.length:0}`], ["Classes with data", eg?`${eg.stats.withData} of ${eg.stats.classes}`:"—"],
+                ["Relationships linked", eg?`${eg.stats.linked} of ${eg.stats.relationships}`:"—"], ["Estimated entities", eg?KG.fmtCount(eg.stats.entities):"—"],
+                ["Open issues", String(checks.length)], ["Build schedule", KG_SCHEDULES[d.schedule]], ["Target store", KG_TARGETS[d.target]],
+                ["Mask PII", d.mask?"Yes":"No"], ["Build", d.buildNow?(isEdit?"After saving":"After creating"):"Not now"]]}/>
+            </div>}
+          </div>
+        </div>
+        <div style={{flexShrink:0,padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:9,background:T.bg}}>
+          <span style={{fontSize:11.5,color:err?T.textMuted:T.green,flex:1}}>{err || (sec==="review" ? "Ready" : "")}</span>
+          <Btn ghost onClick={onClose}>Cancel</Btn>
+          {idx>0 && <Btn ghost onClick={()=>setSec(order[idx-1])}>Back</Btn>}
+          {sec!=="review" && <Btn ghost={isEdit} variant={isEdit?undefined:"primary"} onClick={()=>go(order[idx+1])}>Next</Btn>}
+          {(isEdit || sec==="review") && <Btn variant="primary" disabled={!!err} onClick={save}>{isEdit?"Save changes":"Create knowledge graph"}</Btn>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Build detail drawer: what each step did.
+const KgBuildDrawer = ({g, run, onClose}) => (
+  <OntDrawerShell title={`${g.name} · build #${run.n}`} width={560} onClose={onClose} footer={<Btn ghost onClick={onClose}>Close</Btn>}>
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+      <KgRunChip s={run.status}/><span style={{fontSize:11.5,color:T.textMuted}}>{new Date(run.at).toLocaleString()} · {run.trigger} · {run.by}</span></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:16}}>
+      {[["Duration",KGOPS.fmtDuration(run.duration)],[g.kind==="metadata"?"Nodes":"Entities",KG.fmtCount(run.entities)],[g.kind==="metadata"?"Edges":"Relationships",KG.fmtCount(run.links)],["Issues",String((run.errors||0)+(run.warnings||0))]].map(([k,v])=>(
+        <div key={k} style={{padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div></div>))}
+    </div>
+    <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:8}}>Steps</div>
+    <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+      {run.steps.map((s,i)=>{ const [ic,c] = KG_STEP[s.status]||KG_STEP.pending; return (
+        <div key={s.l} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderBottom:i<run.steps.length-1?`1px solid ${T.border}`:"none"}}>
+          <span style={{width:18,height:18,borderRadius:"50%",background:c+"18",color:c,fontSize:10.5,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{ic}</span>
+          <span style={{fontSize:12,fontWeight:600,color:T.text,width:150}}>{s.l}</span>
+          <span style={{fontSize:11.5,color:s.status==="failed"?T.rose:T.textSub,flex:1}}>{s.detail||(s.status==="skipped"?"Skipped":"")}</span>
+        </div>); })}
+    </div>
+  </OntDrawerShell>
+);
+
+// Entity record drawer.
+const KgEntityDrawer = ({eg, o, ent, onOpen, onClose, onAsset}) => {
+  const c = ontClass(o, ent.classId);
+  const all = Object.values(eg.samples).flat();
+  const out = eg.links.filter(l=>l.from===ent.id).map(l=>({l, other:all.find(x=>x.id===l.to), name:l.name}));
+  const inc = eg.links.filter(l=>l.to===ent.id).map(l=>{ const r = o.rels.find(x=>x.id===l.relId)||{}; return {l, other:all.find(x=>x.id===l.from), name:r.inverse||`← ${l.name}`}; });
+  const src = (eg.classes.find(x=>x.classId===ent.classId)||{sources:[]}).sources.find(s=>s.table===ent.source)||{keys:[]};
+  const Head = ({children}) => <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"16px 0 7px"}}>{children}</div>;
+  return (
+    <OntDrawerShell title={ent.label} width={540} onClose={onClose} footer={<Btn ghost onClick={onClose}>Close</Btn>}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:11,fontWeight:600,padding:"1px 8px",borderRadius:4,background:T.accentDim,color:T.accent}}>{c?c.name:"—"}</span>
+        <span style={{fontSize:11.5,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{ent.source} · {src.keys.join("+")} = {ent.key}</span>
+        <span style={{flex:1}}/><OntCatalogLink table={ent.source} onAsset={onAsset}/>
+      </div>
+      <Head>Properties</Head>
+      <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+        {Object.entries(ent.props).length===0 && <div style={{padding:"10px 12px",fontSize:12,color:T.textMuted}}>No properties linked to columns</div>}
+        {Object.entries(ent.props).map(([k,v],i,arr)=>(
+          <div key={k} style={{display:"grid",gridTemplateColumns:"160px 1fr",padding:"8px 12px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none"}}>
+            <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span>
+            <span style={{fontSize:12,color:v==="••••••"?T.textMuted:T.text,fontFamily:"ui-monospace,monospace"}}>{String(v)}{v==="••••••" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,color:T.rose,fontFamily:"inherit"}}>PII · Masked</span>}</span>
+          </div>))}
+      </div>
+      <Head>Linked entities · {out.length+inc.length}</Head>
+      {out.length+inc.length===0 ? <div style={{fontSize:12,color:T.textMuted}}>None</div> :
+        <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
+          {[...out, ...inc].filter(x=>x.other).map((x,i,arr)=>(
+            <div key={x.l.from+x.l.to+i} onClick={()=>onOpen(x.other)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderBottom:i<arr.length-1?`1px solid ${T.border}`:"none",cursor:"pointer"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <span style={{fontSize:11.5,color:T.violet,width:130}}>{x.name}</span>
+              <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{x.other.label}</span>
+              <span style={{fontSize:10.5,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{x.other.source}</span>
+            </div>))}
+        </div>}
+    </OntDrawerShell>);
+};
+
+const KgDownloadBtn = ({title, onClick}) => (
+  <button title={title} aria-label="Download" onClick={onClick}
+    style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2.5v8M4.5 7L8 10.5 11.5 7M3 13h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  </button>);
+
+// ── The screen ──
+const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
+  const st = useKgs(); useOnt();
+  const { roleCfg } = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+  const [selId, setSelId] = useState(null);
+  const [tab, setTab] = useState("overview");
+  const [q, setQ] = useState("");
+  const [fStatus, setFStatus] = useState("");
+  const [fKind, setFKind] = useState("");
+  const [wiz, setWiz] = useState(null);       // "new" | "edit"
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [delOpen, setDelOpen] = useState(false);
+  const [runOpen, setRunOpen] = useState(null);
+  const [entOpen, setEntOpen] = useState(null);
+  const [clsSel, setClsSel] = useState(null);
+  const [entCls, setEntCls] = useState(null);
+  const [entQ, setEntQ] = useState("");
+  const [sevF, setSevF] = useState("all");
+  useEffect(()=>{ setMenuOpen(false); setClsSel(null); setEntCls(null); setEntQ(""); setSevF("all"); },[selId]);
+  // A source change seen by the metadata graph becomes a build in its history.
+  const G = kgGraph();
+  useEffect(()=>{ if(_kgAutoPending){ _kgAutoPending = false; const meta = st.graphs.find(x=>x.kind==="metadata"); if(meta) kgBuild(meta.id, "Source changed", "system"); } });
+  const g = selId ? st.graphs.find(x=>x.id===selId) : null;
+  const build = (id) => { const x = kgById(id); kgBuild(id, "Manual", me, (r)=>onToast&&onToast(`${x.name} · build #${r.n} ${r.status==="Failed"?"failed":"finished"}`, r.status==="Failed"?"error":"success")); };
+  const openClassInOntology = (ontId, classId) => { _ontJump = {id:ontId, tab:"overview", classId}; onNav && onNav("ontologies"); };
+  const drawers = <>
+    {wiz && <KgEditorWizard g={wiz==="edit"?g:null} onClose={()=>setWiz(null)} onToast={onToast} onSaved={(id)=>{ setWiz(null); setSelId(id); setTab("overview"); }}/>}
+  </>;
+
+  // ── List ──
+  if(!g){
+    const sums = Object.fromEntries(st.graphs.map(x=>[x.id, kgSummary(x)]));
+    const shown = st.graphs.filter(x=>(!q || `${x.name} ${x.domain} ${x.owner} ${x.desc} ${(ontById(x.ontologyId)||{}).name||""}`.toLowerCase().includes(q.toLowerCase()))
+      && (!fStatus || sums[x.id].status===fStatus) && (!fKind || x.kind===fKind));
+    const entTotal = st.graphs.filter(x=>x.kind==="entity").reduce((n,x)=>n+(sums[x.id].entities||0),0);
+    const day = Date.now()-24*3600e3;
+    const runs = st.graphs.flatMap(x=>(x.builds||[]).filter(b=>new Date(b.at).getTime()>day));
+    const failed = runs.filter(b=>b.status==="Failed").length;
+    const issues = st.graphs.reduce((n,x)=>n+(sums[x.id].issues||0),0);
+    const active = st.graphs.filter(x=>["Active","Warnings","Running"].includes(sums[x.id].status)).length;
+    return (
+      <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+        <Topbar breadcrumb={[{label:"Knowledge Graphs"}]}/>
+        <div style={{flex:1,overflowY:"auto",padding:28}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+            <Metric label="Knowledge graphs" value={String(st.graphs.length)} sub={`${active} active`} color={T.accent}/>
+            <Metric label="Entities" value={KG.fmtCount(entTotal)} sub="across entity graphs" color={T.green}/>
+            <Metric label="Builds · 24h" value={String(runs.length)} sub={failed?`${failed} failed`:"none failed"} color={failed?T.rose:T.blue}/>
+            <Metric label="Open issues" value={String(issues)} sub="quality checks" color={issues?T.amber:T.green}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+            <div style={{flex:1}}><Input2 placeholder="Search knowledge graphs…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+            <div style={{width:170}}><SLSelect value={fKind} onChange={e=>setFKind(e.target.value)} options={[{v:"",l:"All types"},{v:"entity",l:"Entity graph"},{v:"metadata",l:"Metadata graph"}]}/></div>
+            <div style={{width:170}}><SLSelect value={fStatus} onChange={e=>setFStatus(e.target.value)} options={[{v:"",l:"All statuses"}, ...["Active","Warnings","Failed","Needs data","Paused","Not built"].map(s=>({v:s,l:KG_STATUS[s].l}))]}/></div>
+            <button onClick={()=>setWiz("new")}
+              style={{height:34,padding:"0 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>
+              {Ic.plus(10)} New Knowledge Graph</button>
+          </div>
+          <div style={{fontSize:12,color:T.textMuted,marginBottom:14}}>{shown.length} knowledge graph{shown.length!==1?"s":""}</div>
+          {shown.length===0 && <div style={{padding:"60px 0",textAlign:"center"}}>
+            <div style={{fontSize:14,fontWeight:600,color:T.text,marginBottom:6}}>No knowledge graphs match</div>
+            <div style={{fontSize:12,color:T.textMuted}}>Try a different search or filter</div></div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(360px,1fr))",gap:16}}>
+            {shown.map(x=>{ const s = sums[x.id]; const hue = (KG_STATUS[s.status]||KG_STATUS["Not built"]).c; const last = (x.builds||[])[0]; const o = ontById(x.ontologyId);
+              return (
+              <div key={x.id} onClick={()=>{setSelId(x.id); setTab("overview");}}
+                style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:14,overflow:"hidden",cursor:"pointer",transition:"all .15s"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=hue;e.currentTarget.style.boxShadow=`0 4px 20px ${hue}20`;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+                <div style={{height:4,background:hue}}/>
+                <div style={{padding:"16px 18px"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:7}}>
+                    <span style={{width:26,height:26,borderRadius:8,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,background:`${x.color}18`,border:`1px solid ${x.color}45`,color:x.color}}>{x.icon}</span>
+                    <span style={{fontSize:14.5,fontWeight:700,color:T.text}}>{x.name}</span>
+                    <KgStatusChip s={s.status}/><KgKindChip g={x}/>
+                  </div>
+                  <div style={{fontSize:11.5,color:T.textSub,lineHeight:1.55,marginBottom:12,minHeight:36}}>{x.desc}</div>
+                  <div style={{display:"flex",gap:18,flexWrap:"wrap",alignItems:"baseline",paddingBottom:12,marginBottom:12,borderBottom:`1px solid ${T.border}`}}>
+                    {[[s.entitiesL,KG.fmtCount(s.entities)],[s.bL,typeof s.b==="number"?KG.fmtCount(s.b):s.b],[s.cL,typeof s.c==="number"?KG.fmtCount(s.c):s.c],...(x.kind==="entity"?[["Issues",String(s.issues)]]:[])].map(([k,v])=>(
+                      <div key={k}>
+                        <div style={{fontSize:17,fontWeight:700,color:k==="Issues"&&s.errors?T.rose:T.text,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{v}</div>
+                        <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{k}</div>
+                      </div>))}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",fontSize:10.5,color:T.textMuted}}>
+                    <span>{x.kind==="metadata"?"Catalog · glossary · lineage · models · ontologies":o?o.name:"No ontology"}</span>
+                    <span style={{marginLeft:"auto"}}>{_kgRunning[x.id]?"Building…":last?`Built ${kgAgo(last.at)}`:"Never built"} · {x.paused?"Paused":KG_SCHEDULES[x.schedule]}</span>
+                  </div>
+                </div>
+              </div>); })}
+          </div>
+        </div>
+        {drawers}
+      </div>
+    );
+  }
+
+  // ── Profile ──
+  const sum = kgSummary(g);
+  const isMeta = g.kind==="metadata";
+  const o = isMeta ? null : kgOntView(g);
+  const eg = sum.eg, checks = sum.checks||[];
+  const running = _kgRunning[g.id];
+  const builds = [...(running?[running]:[]), ...(g.builds||[])];
+  const last = (g.builds||[])[0];
+  const TABS = isMeta
+    ? [{key:"overview",label:"Overview"},{key:"explore",label:"Explore"},{key:"builds",label:`Builds · ${(g.builds||[]).length}`},{key:"settings",label:"Settings"}]
+    : [{key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"entities",label:"Entities"},{key:"explore",label:"Explore"},
+       {key:"builds",label:`Builds · ${(g.builds||[]).length}`},{key:"quality",label:`Quality · ${checks.length}`},{key:"settings",label:"Settings"}];
+  const endpoint = `https://kg.jnj.com/${kgSlug(g.name)}/sparql`;
+  const entityRdf = () => { const big = kgEntityGraph(g, {samplesPerSource:25});
+    const nodes = Object.values(big.samples).flat().map(s=>({id:`entity:${s.id}`, type:"entity", label:s.label}));
+    const edges = big.links.map((l,i)=>({id:`l${i}`, from:`entity:${l.from}`, to:`entity:${l.to}`, type:String(l.name).replace(/\s+/g,"_")}));
+    return {nodes, edges}; };
+  const STATS = isMeta
+    ? [["Nodes",KG.fmtCount(sum.entities),T.accent],["Edges",KG.fmtCount(sum.b),T.blue],["Derived facts",KG.fmtCount(sum.c),T.violet],["Sources","5",T.green]]
+    : [["Entities",KG.fmtCount(sum.entities),T.green],["Classes with data",sum.b,eg&&eg.stats.withData===eg.stats.classes?T.green:T.amber],
+       ["Relationships linked",sum.c,eg&&eg.stats.linked===eg.stats.relationships?T.green:T.amber],["Open issues",String(checks.length),checks.length?(sum.errors?T.rose:T.amber):T.green]];
+  const entRows = (()=>{ if(isMeta||!eg) return [];
+    const big = kgEntityGraph(g, {samplesPerSource:8});
+    return {big, list:Object.values(big.samples).flat()}; })();
 
   return (
     <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
-      <Topbar breadcrumb={[{label:"Knowledge Graphs"}]}/>
-      <div style={{padding:"24px 28px 0",flexShrink:0}}><Tabs2 tabs={TABS} active={tab} onChange={setTab}/></div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px"}}>
-
-        {tab==="overview" && <>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
-            <Metric label="Business concepts" value={String(allClasses)} sub={`classes in ${onts.length} ontolog${onts.length===1?"y":"ies"}`} color={T.violet}/>
-            <Metric label="Connected to data" value={`${connected} / ${allClasses}`} sub="classes with a data source" color={connected===allClasses?T.green:T.amber}/>
-            <Metric label="Entities" value={KG.fmtCount(entTotal)} sub="records the classes describe" color={T.green}/>
-            <Metric label="Linked data assets" value={String(linkedTables)} sub="tables behind the classes" color={T.blue}/>
-          </div>
-          <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-              <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>How the graph is built</span>
-              <span style={{width:8,height:8,borderRadius:"50%",background:T.green}}/>
-              <span style={{fontSize:11.5,color:T.textMuted}}>{lastBuilt?`Built ${new Date(lastBuilt.at).toLocaleString()}`:"Built automatically"} · {({change:"rebuilds when a source changes", hourly:"rebuilds hourly", daily:"rebuilds daily"})[kg.settings.schedule]}</span>
-              <Btn small onClick={()=>{ kgRebuild(); onToast&&onToast("Knowledge graph rebuilt","success"); }}>Rebuild now</Btn>
-            </div>
-            <div style={{display:"flex",alignItems:"stretch",gap:8,flexWrap:"wrap"}}>
-              {[["Catalog", `${ASSETS.length} assets`, `${S.byNodeType.column||0} columns · lineage`, "catalog"],
-                ["Glossary", `${_gtState.length} terms`, "meanings", "glossary"],
-                ["Semantic models", `${_slState.models.length} models`, `${_slState.metrics.length} metrics · ${_slState.rels.length} joins`, "semanticlayer"],
-                ["Ontologies", `${allClasses} classes`, `${onts.reduce((n,x)=>n+x.rels.length,0)} relationships`, "ontologies"],
-                ["Knowledge graph", `${KG.fmtCount(entTotal)} entities`, `${connected} of ${allClasses} classes connected`, null]].map(([t,a,b,nav],i,arr)=>(
-                <React.Fragment key={t}>
-                  <div onClick={nav?()=>onNav&&onNav(nav):undefined} style={{flex:1,minWidth:140,padding:"10px 12px",borderRadius:9,cursor:nav?"pointer":"default",
-                    background:nav?T.bgElevated:T.accentDim,border:`1px solid ${nav?T.border:T.accent+"40"}`}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em"}}>{t}</div>
-                    <div style={{fontSize:14,fontWeight:700,color:T.text,marginTop:3}}>{a}</div>
-                    <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{b}</div>
-                  </div>
-                  {i<arr.length-1 && <div style={{display:"flex",alignItems:"center",color:T.textMuted}}>→</div>}
-                </React.Fragment>))}
-            </div>
-          </div></Card2>
-          <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Ontologies</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(340px,1fr))",gap:14}}>
-            {onts.map(x=>{ const st = egs[x.id].stats; const pct = st.classes?Math.round(st.withData/st.classes*100):0; return (
-              <div key={x.id} onClick={()=>openOnt(x.id)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,padding:"14px 16px",cursor:"pointer"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                  <span style={{width:24,height:24,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:`${ontColour(x)}18`,color:ontColour(x)}}>{ontIcon(x)}</span>
-                  <span style={{fontSize:14,fontWeight:700,color:T.text,flex:1}}>{x.name}</span><span style={{fontSize:11,color:T.textMuted}}>{x.domain}</span></div>
-                <div style={{display:"flex",gap:18,marginBottom:10}}>
-                  {[["Entities",KG.fmtCount(st.entities)],["Classes",`${st.withData} / ${st.classes}`],["Relationships",`${st.linked} / ${st.relationships}`]].map(([k,v])=>(
-                    <div key={k}><div style={{fontSize:16,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:10.5,color:T.textMuted}}>{k}</div></div>))}
-                </div>
-                <div style={{height:5,background:T.bgElevated,borderRadius:3,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:pct===100?T.green:T.accent}}/></div>
-                <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{pct}% of classes connected to data</div>
-              </div>); })}
-          </div>
-        </>}
-
-        {tab==="business" && <>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-            <div style={{width:260}}><SLSelect value={ontId} onChange={e=>{setOntId(e.target.value); setClsSel(null);}} options={onts.map(x=>({v:x.id,l:x.name}))}/></div>
-            {eg && <span style={{fontSize:11.5,color:T.textMuted}}>{KG.fmtCount(eg.stats.entities)} entities · {eg.stats.withData} of {eg.stats.classes} classes connected to data · {eg.stats.linked} of {eg.stats.relationships} relationships linked</span>}
-          </div>
-          {o && <OntRelCanvas o={o} selected={clsSel} onSelect={setClsSel} onAsset={onAsset}
-            counts={Object.fromEntries(eg.classes.map(c=>[c.classId, c.total?`${KG.fmtCount(c.total)} entities`:null]))}
-            panel={(sel)=> sel ? classProfile(sel) : <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b"}}>
-              <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:6}}>{o.name}</div>Select a class</div>}/>}
-        </>}
-
-        {tab==="explore" && <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
-          <div style={{width:300,flexShrink:0}}>
-            <Input2 placeholder="Search tables, columns, terms, classes, metrics…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
-            <div style={{marginTop:10,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",maxHeight:600,overflowY:"auto"}}>
-              {!q && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>Search for anything EDG knows</div>}
-              {q && results.length===0 && <div style={{padding:"14px 12px",fontSize:12,color:T.textMuted}}>No matches</div>}
-              {results.map((n,i)=>(
-                <button key={n.id} onClick={()=>setFocus(n.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:focus===n.id?T.bgActive:"transparent",border:"none",borderBottom:i<results.length-1?`1px solid ${T.border}`:"none",cursor:"pointer",textAlign:"left"}}>
-                  <KgTypeChip type={n.type}/><span style={{fontSize:12,color:T.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.label}</span>
-                </button>))}
-            </div>
-          </div>
+      <Topbar breadcrumb={[{label:"Knowledge Graphs",onClick:()=>setSelId(null)},{label:g.name}]}/>
+      <div style={{padding:"24px 28px 0",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:16,marginBottom:20}}>
+          <div style={{width:64,height:64,borderRadius:18,background:`${g.color}18`,border:`2.5px solid ${g.color}50`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:g.color,fontSize:28,fontWeight:700}}>{g.icon}</div>
           <div style={{flex:1,minWidth:0}}>
-            {!fNode ? <div style={{padding:"80px 0",textAlign:"center",fontSize:12.5,color:T.textMuted,border:`1px dashed ${T.border}`,borderRadius:10}}>Select a result</div> : <>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
-                <KgTypeChip type={fNode.type}/><span style={{fontSize:16,fontWeight:700,color:T.text}}>{fNode.label}</span>
-                {fNode.type==="asset" && ASSETS.find(a=>a.name===fNode.label) && onAsset && <button onClick={()=>onAsset(ASSETS.find(a=>a.name===fNode.label))} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in catalog ↗</button>}
-                {fNode.type==="class" && <button onClick={()=>{ setOntId(fNode.ontology); setClsSel(fNode.classId); setTab("business"); }} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Open in business view ↗</button>}
+            <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{g.name}</h1>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+              <KgStatusChip s={sum.status}/><KgKindChip g={g}/>
+              {o && <button onClick={()=>{ _ontJump = {id:o.id, tab:"overview"}; onNav&&onNav("ontologies"); }} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",padding:0}}>{o.name} ↗</button>}
+              <span style={{fontSize:11,color:T.textMuted}}>· {g.domain} · {g.owner}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>· {running?"Building…":last?`Built ${kgAgo(last.at)}`:"Never built"} · {g.paused?"Paused":KG_SCHEDULES[g.schedule]}</span>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+            <Btn variant="primary" icon={Ic.refresh(12)} disabled={!!running} onClick={()=>build(g.id)}>{running?"Building…":"Build now"}</Btn>
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setMenuOpen(v=>!v)}
+                style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>⋮</button>
+              {menuOpen && (
+                <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
+                  {[...(isMeta?[]:[{icon:"🖊️",label:"Edit Details",sub:"Details, ontology, classes and build settings",action:()=>{setMenuOpen(false);setWiz("edit");}}]),
+                    {icon:g.paused?"▶":"⏸",label:g.paused?"Resume schedule":"Pause schedule",sub:g.paused?KG_SCHEDULES[g.schedule]:"Stop scheduled builds",
+                      action:()=>{ setMenuOpen(false); kgsPatch(g.id,{paused:!g.paused}); onToast&&onToast(`${g.name} ${g.paused?"resumed":"paused"}`,"success"); }},
+                  ].map(item=>(
+                    <button key={item.label} onClick={item.action}
+                      style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:"pointer",textAlign:"left",borderBottom:`1px solid ${T.border}`}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <span style={{fontSize:15,marginTop:1,width:18}}>{item.icon}</span>
+                      <div><div style={{fontSize:12,fontWeight:600,color:T.text}}>{item.label}</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{item.sub}</div></div>
+                    </button>))}
+                  <button onClick={g.system?undefined:()=>{setMenuOpen(false);setDelOpen(true);}} disabled={!!g.system}
+                    style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:g.system?"not-allowed":"pointer",opacity:g.system?.45:1,textAlign:"left"}}
+                    onMouseEnter={e=>{if(!g.system)e.currentTarget.style.background="rgba(239,68,68,.07)";}} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <span style={{fontSize:15,marginTop:1,width:18}}>🗑️</span>
+                    <div><div style={{fontSize:12,fontWeight:600,color:T.rose}}>Delete Knowledge Graph</div><div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{g.system?"System graph":"Remove the graph and its build history"}</div></div>
+                  </button>
+                </div>)}
+            </div>
+          </div>
+        </div>
+        <Tabs2 tabs={TABS} active={tab} onChange={setTab}/>
+      </div>
+
+      {tab==="overview" && (
+        <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+          <div style={{flex:1,overflowY:"auto",padding:"0 28px 28px",minWidth:0}}>
+            <DescSection key={g.id} text={g.desc} onToast={onToast} onSave={t=>kgsPatch(g.id,{desc:t})} style={{marginBottom:16}}
+              obj={{name:"kg:"+g.id, label:g.name, kind:"Knowledge Graph", owners:g.owners||[], stewards:g.stewards||[]}}/>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+              {STATS.map(([l,v,c])=><Metric key={l} label={l} value={v} color={c}/>)}
+            </div>
+            {/* Latest build */}
+            <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{fontSize:13,fontWeight:700,color:T.text}}>Latest build</span>
+                {builds[0] && <><KgRunChip s={builds[0].status}/><span style={{fontSize:11.5,color:T.textMuted}}>#{builds[0].n} · {builds[0].trigger} · {kgAgo(builds[0].at)}{builds[0].duration?` · ${KGOPS.fmtDuration(builds[0].duration)}`:""}</span></>}
                 <span style={{flex:1}}/>
-                <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
-                <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={showDiagram?"diagram":"list"} onChange={k=>setShowDiagram(k==="diagram")}/>
+                {builds[0] && !running && <Btn small ghost onClick={()=>setRunOpen(builds[0])}>Details</Btn>}
+                <Btn small ghost onClick={()=>setTab("builds")}>All builds</Btn>
               </div>
-              {showDiagram ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus}/>
-                : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
+              {!builds[0] ? <div style={{fontSize:12,color:T.textMuted,padding:"6px 0"}}>{sum.status==="Needs data"?"No class has a data source":"Never built"}</div> :
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {builds[0].steps.map(s=>{ const [ic,c] = KG_STEP[s.status]||KG_STEP.pending; return (
+                  <div key={s.l} title={s.detail||""} style={{flex:1,minWidth:110,padding:"8px 10px",borderRadius:8,background:T.bgElevated,border:`1px solid ${s.status==="failed"?T.rose+"60":s.status==="warning"?T.amber+"60":T.border}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}><span style={{animation:running?"pulse2 1.2s infinite":undefined,fontSize:11,fontWeight:800,color:c}}>{ic}</span><span style={{fontSize:11,fontWeight:600,color:T.text}}>{s.l}</span></div>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.detail||(running?"Waiting":"")}</div>
+                  </div>); })}
+              </div>}
+            </div></Card2>
+            {isMeta ? <>
+              <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Sources</div>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8}}>
+                  {[["Catalog",`${ASSETS.length} assets`,`${sum.G.stats.byNodeType.column||0} columns`,"catalog"],["Lineage",`${kgLineage().length} edges`,"asset to asset","catalog"],
+                    ["Glossary",`${_gtState.length} terms`,"meanings","glossary"],["Semantic models",`${_slState.models.length} models`,`${_slState.metrics.length} metrics`,"semanticlayer"],
+                    ["Ontologies",`${ontLoad().ontologies.length} ontologies`,`${ontLoad().ontologies.reduce((n,x)=>n+x.classes.length,0)} classes`,"ontologies"]].map(([t,a,b,nav])=>(
+                    <div key={t} onClick={()=>onNav&&onNav(nav)} style={{padding:"10px 12px",borderRadius:9,cursor:"pointer",background:T.bgElevated,border:`1px solid ${T.border}`}}
+                      onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+                      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em"}}>{t}</div>
+                      <div style={{fontSize:14,fontWeight:700,color:T.text,marginTop:3}}>{a}</div>
+                      <div style={{fontSize:11,color:T.textMuted,marginTop:1}}>{b}</div>
+                    </div>))}
+                </div>
+              </div></Card2>
+              <Card2><div style={{padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Nodes by type</div>
+                {(()=>{ const rows = Object.entries(sum.G.stats.byNodeType).sort((a,b)=>b[1]-a[1]); const max = Math.max(...rows.map(r=>r[1]),1);
+                  return rows.map(([k,n])=>{ const t = KG.NODE_TYPES[k]||{l:k,c:T.textMuted}; return (
+                    <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"4px 0"}}>
+                      <span style={{fontSize:12,color:T.textSub,width:150}}>{t.l}</span>
+                      <div style={{flex:1,height:8,background:T.bgElevated,borderRadius:4,overflow:"hidden"}}><div style={{width:`${n/max*100}%`,height:"100%",background:t.c,opacity:.75}}/></div>
+                      <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:60,textAlign:"right"}}>{n.toLocaleString("en-US")}</span>
+                    </div>); }); })()}
+              </div></Card2>
+            </> : <>
+              <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Entities by class</span>
+                  <Btn small ghost onClick={()=>setTab("schema")}>View schema</Btn>
+                </div>
+                {(()=>{ const rows = eg.classes.slice().sort((a,b)=>(b.total||0)-(a.total||0)); const max = Math.max(...rows.map(r=>r.total||0),1);
+                  return rows.map(c=>(
+                    <div key={c.classId} onClick={()=>{ setEntCls(c.classId); setTab("entities"); }} style={{display:"flex",alignItems:"center",gap:10,padding:"5px 0",cursor:"pointer"}}>
+                      <span style={{fontSize:12,fontWeight:600,color:T.text,width:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                      <div style={{flex:1,height:8,background:T.bgElevated,borderRadius:4,overflow:"hidden"}}><div style={{width:`${(c.total||0)/max*100}%`,height:"100%",background:g.color,opacity:.8}}/></div>
+                      <span style={{fontSize:11.5,fontFamily:"'Geist Mono',monospace",color:c.total?T.text:T.amber,width:64,textAlign:"right"}}>{c.total?KG.fmtCount(c.total):"No data"}</span>
+                      <span style={{fontSize:10.5,color:T.textMuted,width:170,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontFamily:"ui-monospace,monospace"}}>{c.sources.map(s=>s.table).join(", ")||"—"}</span>
+                    </div>)); })()}
+              </div></Card2>
+              <Card2><div style={{padding:"14px 16px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Open issues · {checks.length}</span>
+                  {checks.length>0 && <Btn small ghost onClick={()=>setTab("quality")}>View all</Btn>}
+                </div>
+                {checks.length===0 ? <div style={{fontSize:12,color:T.green}}>✓ No issues</div> :
+                  checks.slice(0,4).map(c=>(
+                    <div key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
+                      <KgSevChip s={c.severity}/><span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{c.title}</span><span style={{fontSize:11,color:T.textMuted}}>{c.detail}</span>
+                    </div>))}
+              </div></Card2>
             </>}
           </div>
-        </div>}
+          <KgSidebar g={g} sum={sum}/>
+        </div>
+      )}
+
+      <div style={{flex:1,overflowY:"auto",padding:"16px 28px 28px",display:tab==="overview"?"none":"block"}}>
+        {tab==="schema" && o && <>
+          <OntRelCanvas o={o} selected={clsSel} onSelect={setClsSel} onAsset={onAsset}
+            counts={Object.fromEntries(eg.classes.map(c=>[c.classId, c.total?`${KG.fmtCount(c.total)} entities`:null]))}
+            panel={(sel)=> sel ? kgClassPanel({o, eg, G, c:sel, onAsset}) : <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b"}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:"#0f172a",marginBottom:6}}>{o.name}</div>Select a class</div>}/>
+        </>}
+
+        {tab==="entities" && o && (()=>{ const {big, list} = entRows;
+          const cur = entCls || (big.classes.find(c=>c.sources.length)||{}).classId;
+          const cl = big.classes.find(c=>c.classId===cur);
+          const props = (ontClass(o, cur)||{props:[]}).props||[];
+          const rows = list.filter(e=>e.classId===cur && (!entQ || `${e.label} ${e.key} ${Object.values(e.props).join(" ")}`.toLowerCase().includes(entQ.toLowerCase())));
+          return (
+          <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+            <div style={{width:240,flexShrink:0,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{padding:"9px 12px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>Classes</div>
+              {big.classes.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(c=>(
+                <button key={c.classId} onClick={()=>setEntCls(c.classId)} disabled={!c.sources.length}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:cur===c.classId?T.bgActive:"transparent",border:"none",borderLeft:`2px solid ${cur===c.classId?T.accent:"transparent"}`,cursor:c.sources.length?"pointer":"default",textAlign:"left",opacity:c.sources.length?1:.5}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text,flex:1}}>{c.name}</span>
+                  <span style={{fontSize:11,fontFamily:"'Geist Mono',monospace",color:T.textMuted}}>{c.total?KG.fmtCount(c.total):"—"}</span>
+                </button>))}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+                <div style={{width:320}}><Input2 placeholder="Search entities…" value={entQ} onChange={e=>setEntQ(e.target.value)} icon={Ic.search(12)}/></div>
+                <span style={{fontSize:11.5,color:T.textMuted}}>{rows.length} of {cl&&cl.total?KG.fmtCount(cl.total):"0"}</span>
+                <span style={{flex:1}}/>
+                {g.mask!==false && <span style={{fontSize:10.5,fontWeight:700,color:T.rose,padding:"2px 8px",borderRadius:4,background:T.rose+"10",border:`1px solid ${T.rose}30`}}>PII masked</span>}
+              </div>
+              <OntTable empty={entQ?"No entities match":"No entities"} onRow={r=>setEntOpen(r.e)}
+                cols={[{l:"Entity",w:"1.3fr"},{l:"Source",w:"1fr"},{l:"Key",w:".8fr"}, ...props.slice(0,3).map(p=>({l:p.name})), {l:"Links",w:".5fr"}]}
+                rows={rows.map(e=>({key:e.id, e, cells:[e.label, <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{e.source}</span>, <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{e.key}</span>,
+                  ...props.slice(0,3).map(p=>e.props[p.name]==null?"—":String(e.props[p.name])),
+                  String(big.links.filter(l=>l.from===e.id||l.to===e.id).length)]}))}/>
+            </div>
+            {entOpen && <KgEntityDrawer eg={big} o={o} ent={entOpen} onOpen={x=>setEntOpen(x)} onClose={()=>setEntOpen(null)} onAsset={onAsset}/>}
+          </div>); })()}
+
+        {tab==="explore" && <KgExplorer key={g.id} g={G} onAsset={onAsset}
+          initial={o ? (o.classes[0] ? `class:${o.id}:${o.classes[0].id}` : null) : null}
+          onOpenClass={(n)=>openClassInOntology(n.ontology, n.classId)}/>}
+
+        {tab==="builds" && <>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <span style={{fontSize:12,color:T.textMuted}}>{builds.length} build{builds.length===1?"":"s"} · next {kgNext(g)}</span>
+            <span style={{flex:1}}/>
+            <Btn variant="primary" icon={Ic.refresh(12)} disabled={!!running} onClick={()=>build(g.id)}>{running?"Building…":"Build now"}</Btn>
+          </div>
+          <OntTable empty="No builds yet" onRow={r=>r.b.status!=="Running" && setRunOpen(r.b)}
+            cols={[{l:"Build",w:".5fr"},{l:"Status",w:"1.1fr"},{l:"Trigger"},{l:"Started",w:"1.2fr"},{l:"Duration",w:".7fr"},{l:isMeta?"Nodes":"Entities",w:".8fr"},{l:isMeta?"Edges":"Relationships",w:".8fr"},{l:"Issues",w:".6fr"},{l:"By"}]}
+            rows={builds.map(b=>({key:`${b.n}-${b.status}`, b, cells:[`#${b.n}`, <KgRunChip s={b.status}/>, b.trigger, new Date(b.at).toLocaleString("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),
+              b.status==="Running"?"—":KGOPS.fmtDuration(b.duration), b.status==="Running"?"—":KG.fmtCount(b.entities), b.status==="Running"?"—":KG.fmtCount(b.links),
+              b.status==="Running"?"—":<span style={{color:b.errors?T.rose:b.warnings?T.amber:T.textSub}}>{(b.errors||0)+(b.warnings||0)}</span>, b.by]}))}/>
+        </>}
+
+        {tab==="quality" && <>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+            <SegTabs tabs={[{key:"all",label:`All · ${checks.length}`},{key:"error",label:`Errors · ${checks.filter(c=>c.severity==="error").length}`},{key:"warning",label:`Warnings · ${checks.filter(c=>c.severity==="warning").length}`}]} active={sevF} onChange={setSevF}/>
+            <span style={{flex:1}}/><span style={{fontSize:11.5,color:T.textMuted}}>Checked {last?kgAgo(last.at):"now"}</span>
+          </div>
+          <OntTable empty="No issues" onRow={r=>openClassInOntology(g.ontologyId, r.c.classId)}
+            cols={[{l:"Severity",w:".7fr"},{l:"Check",w:".8fr"},{l:"Class",w:".9fr"},{l:"Finding",w:"2fr"},{l:"Detail",w:"2fr"},{l:"",w:".9fr"}]}
+            rows={checks.filter(c=>sevF==="all"||c.severity===sevF).map(c=>({key:c.id, c, cells:[<KgSevChip s={c.severity}/>, KGOPS.CHECK_KINDS[c.kind], (ontClass(o,c.classId)||{}).name||"—",
+              <span style={{color:T.text,fontWeight:600}}>{c.title}</span>, c.detail, <span style={{fontSize:11,color:T.accent}}>Fix in ontology ↗</span>]}))}/>
+        </>}
 
         {tab==="settings" && <div style={{maxWidth:820}}>
-          <AIDCard title="Rebuild">
+          <AIDCard title="Build schedule">
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:280}}><SLSelect value={kg.settings.schedule} onChange={e=>kgSet(s=>({...s, settings:{...s.settings, schedule:e.target.value}}))}
-                options={[{v:"change",l:"When a source changes"},{v:"hourly",l:"Hourly"},{v:"daily",l:"Daily"}]}/></div>
-              <Btn small onClick={()=>{ kgRebuild(); onToast&&onToast("Knowledge graph rebuilt","success"); }}>Rebuild now</Btn>
+              <div style={{width:280}}><SLSelect value={g.schedule} onChange={e=>kgsPatch(g.id,{schedule:e.target.value})} options={Object.entries(KG_SCHEDULES).map(([v,l])=>({v,l}))}/></div>
+              <span style={{fontSize:11.5,color:T.textMuted}}>Next: {kgNext(g)}</span>
             </div>
+            <div style={{marginTop:10}}><AIDRow l="Pause schedule" on={!!g.paused} set={v=>kgsPatch(g.id,{paused:v})}/></div>
           </AIDCard>
-          <AIDCard title="Inference rules">
-            {Object.entries(KG.RULES).map(([k,r])=><AIDRow key={k} l={`${r.l} · ${S.byRule[k]||0} facts`} d={r.d} on={kg.settings.rules[k]!==false}
-              set={v=>{ kgSet(s=>({...s, settings:{...s.settings, rules:{...s.settings.rules, [k]:v}}})); kgRebuild(`${r.l} turned ${v?"on":"off"}`); }}/>)}
+          <AIDCard title="Target store">
+            <div style={{width:280}}><SLSelect value={g.target} onChange={e=>kgsPatch(g.id,{target:e.target.value})} options={Object.entries(KG_TARGETS).map(([v,l])=>({v,l}))}/></div>
           </AIDCard>
-          <AIDCard title="Graph statistics">
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:18}}>
-              {[["Nodes", S.byNodeType, KG.NODE_TYPES, S.nodes],["Edges", S.byEdgeType, KG.EDGE_TYPES, S.edges]].map(([t,counts,meta,total])=>(
-                <div key={t}><div style={{fontSize:11.5,fontWeight:700,color:T.text,marginBottom:6}}>{t} · {total.toLocaleString("en-US")}</div>
-                  {Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([k,n])=><div key={k} style={{display:"flex",fontSize:11.5,padding:"2px 0"}}>
-                    <span style={{flex:1,color:T.textSub}}>{(meta[k]||{l:k}).l}</span><span style={{fontFamily:"'Geist Mono',monospace",color:T.text}}>{n.toLocaleString("en-US")}</span></div>)}</div>))}
-            </div>
+          {isMeta && <AIDCard title="Inference rules">
+            {Object.entries(KG.RULES).map(([k,r])=><AIDRow key={k} l={`${r.l} · ${(G.stats.byRule[k]||0).toLocaleString("en-US")} facts`} d={r.d} on={g.rules[k]!==false}
+              set={v=>{ kgsPatch(g.id, x=>({rules:{...x.rules, [k]:v}})); kgBuild(g.id, `${r.l} turned ${v?"on":"off"}`, me); }}/>)}
+          </AIDCard>}
+          {!isMeta && <AIDCard title="Records">
+            <AIDRow l="Mask PII in entity records" on={g.mask!==false} set={v=>kgsPatch(g.id,{mask:v})}/>
+          </AIDCard>}
+          <AIDCard title="Access">
+            {[["SPARQL endpoint", endpoint], ["Graph IRI", `https://kg.jnj.com/${kgSlug(g.name)}`]].map(([k,v])=>(
+              <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:`1px solid ${T.border}`}}>
+                <span style={{fontSize:12,color:T.textMuted,width:140}}>{k}</span>
+                <span style={{fontSize:12,color:T.text,fontFamily:"ui-monospace,monospace",flex:1}}>{v}</span>
+                <button title="Copy" onClick={()=>{ try { navigator.clipboard.writeText(v); } catch(e) {} onToast&&onToast("Copied","success"); }} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.copy(13)}</button>
+              </div>))}
           </AIDCard>
           <AIDCard title="Export">
-            <AIDRow l="Include derived facts" on={kg.settings.exportDerived} set={v=>kgSet(s=>({...s, settings:{...s.settings, exportDerived:v}}))}/>
-            <div style={{display:"flex",gap:8,marginTop:10}}>
-              <Btn small onClick={()=>kgDownload("edg-knowledge-graph.ttl", KG.toTurtle(g, {derived:kg.settings.exportDerived}), "text/turtle")}>RDF · Turtle</Btn>
-              <Btn small onClick={()=>kgDownload("edg-knowledge-graph.jsonld", KG.toJsonLd(g, {derived:kg.settings.exportDerived}), "application/ld+json")}>JSON-LD</Btn>
+            {isMeta && <AIDRow l="Include derived facts" on={g.exportDerived!==false} set={v=>kgsPatch(g.id,{exportDerived:v})}/>}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10}}>
+              <span style={{fontSize:12,color:T.textSub,width:140}}>RDF · Turtle</span>
+              <KgDownloadBtn title={`Download ${kgSlug(g.name)}.ttl`} onClick={()=>kgDownload(`${kgSlug(g.name)}.ttl`, KG.toTurtle(isMeta?G:entityRdf(), {derived:g.exportDerived!==false}), "text/turtle")}/>
+              <span style={{fontSize:12,color:T.textSub,width:90,marginLeft:20}}>JSON-LD</span>
+              <KgDownloadBtn title={`Download ${kgSlug(g.name)}.jsonld`} onClick={()=>kgDownload(`${kgSlug(g.name)}.jsonld`, KG.toJsonLd(isMeta?G:entityRdf(), {derived:g.exportDerived!==false}), "application/ld+json")}/>
             </div>
           </AIDCard>
         </div>}
       </div>
+
+      {runOpen && <KgBuildDrawer g={g} run={runOpen} onClose={()=>setRunOpen(null)}/>}
+      {delOpen && <OntDrawerShell title={`Delete ${g.name}`} width={460} onClose={()=>setDelOpen(false)} footer={<>
+          <Btn ghost onClick={()=>setDelOpen(false)}>Cancel</Btn>
+          <button onClick={()=>{ const n = g.name; kgsSet(s=>({...s, graphs:s.graphs.filter(x=>x.id!==g.id)})); setDelOpen(false); setSelId(null); onToast&&onToast(`${n} deleted`,"success"); }}
+            style={{height:32,padding:"0 14px",borderRadius:8,background:T.rose,border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete</button></>}>
+          <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.6}}>The graph and its {(g.builds||[]).length} builds are removed. The ontology and its links to data are kept.</div>
+        </OntDrawerShell>}
+      {drawers}
     </div>
   );
 };
 
 // Knowledge Graph tab on a catalog asset: what it connects to, in plain sections.
 const KgAssetTab = ({asset, onAsset}) => {
-  useKg(); useOnt();
+  useKgs(); useOnt();
   const [focus, setFocus] = useState(`asset:${asset.name}`);
   const [showDerived, setShowDerived] = useState(true);
   const [showDiagram, setShowDiagram] = useState(false);
