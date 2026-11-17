@@ -4839,59 +4839,299 @@ const useNotifs = () => {
   useEffect(()=>{ const fn=()=>force(n=>n+1); _notifSubs.add(fn); return ()=>_notifSubs.delete(fn); },[]);
   return [_notifState, notifSet];
 };
-const pushNotif = (entry) => { _notifIdSeq += 1; notifSet(prev=>[{id:_notifIdSeq, unread:true, time:"just now", asset:null, forMe:true, ...entry}, ...prev]); };
+const pushNotif = (entry) => { _notifIdSeq += 1; const n={id:_notifIdSeq, unread:true, time:"just now", asset:null, forMe:true, ...entry}; notifSet(prev=>[n, ...prev]); _collabDeliver(n); };
+
+// ── Slack & Microsoft Teams — collaboration delivery channels ──────────────────
+// Same event engine as the bell: every pushNotif() is also delivered to each
+// connected app. Two paths per app:
+//   • Channel post — admin routing (Settings › Channels): first matching route
+//     (menu + domain) wins, otherwise the default channel.
+//   • Direct message — each user's per-event preference (Settings › Notifications),
+//     sent to the asset's owners & stewards, matched to app users by email.
+// Messages carry metadata only (title, subject, link) — never sample values.
+// 5-minute duplicate collapse per app + target + title, same as in-app.
+const COLLAB_APPS = {
+  slack:{key:"slack", label:"Slack", orgLabel:"Workspace", org:"jnj-data.slack.com", connectLabel:"Connect with Slack",
+    channels:["#data-governance","#data-quality-alerts","#fin-data-gov","#commerce-data","#data-eng-oncall","#privacy-legal"],
+    unmatched:["tom.vance@jnj.com"]},
+  teams:{key:"teams", label:"Microsoft Teams", orgLabel:"Tenant", org:"jnj.onmicrosoft.com", connectLabel:"Connect with Microsoft",
+    channels:["Data Governance › General","Data Governance › Quality","Finance › Data","Commerce › Data","Data Engineering › On-call","Legal › Privacy"],
+    unmatched:[]},
+};
+const COLLAB_DOMAINS = ["Commerce","Finance","Product","Platform","Procurement","Marketing","ML"];
+const _collabInit = ()=>({connected:false, org:"", connectedBy:"", connectedAt:"", defaultChannel:"", dm:true, routes:[]});
+let _collab = {slack:_collabInit(), teams:_collabInit(), log:[]};
+let _chPrefs = {slack:{}, teams:{}}; // personal DM preference per event; missing = on
+let _collabSeq = 0;
+const _collabSubs = new Set();
+const _collabNotify = ()=>_collabSubs.forEach(f=>f());
+const collabSet = (ch,patch)=>{ _collab={..._collab,[ch]:{..._collab[ch],...patch}}; _collabNotify(); };
+const chPrefSet = (ch,ev,on)=>{ _chPrefs={..._chPrefs,[ch]:{..._chPrefs[ch],[ev]:on}}; _collabNotify(); };
+const chPrefSetMenu = (ch,menuKey,on)=>{ const g=NOTIF_CATALOG.find(x=>x.key===menuKey); if(!g)return; const next={..._chPrefs[ch]}; g.events.forEach(e=>{next[e.ev]=on;}); _chPrefs={..._chPrefs,[ch]:next}; _collabNotify(); };
+const useCollab = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_collabSubs.add(fn);return()=>{_collabSubs.delete(fn);};},[]); return {..._collab, prefs:_chPrefs}; };
+const _NOTIF_CAT_MENU = {Policy:"policy",Classifications:"tags",Glossary:"glossary",Domains:"domains","Data Products":"dataproducts",Catalog:"catalog",Quality:"catalog",Connections:"integrations"};
+const _NOTIF_NAV_MENU = {glossary:"glossary",policymanager:"policy",catalog:"catalog",quality:"catalog",tags:"tags",domains:"domains",dataproducts:"dataproducts"};
+const notifMenuOf = (n)=>NOTIF_EV_MENU[n.event]||_NOTIF_CAT_MENU[n.category]||_NOTIF_NAV_MENU[n.nav]||null;
+const _collabAsset = (name)=>(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===name);
+const _collabResp = (name)=>{ const a=_collabAsset(name); if(!a) return []; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return [...new Set([...own,...stw])]; };
+const _collabLog = (e)=>{
+  const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000);
+  if(dup) return false;
+  _collabSeq+=1; _collab={..._collab, log:[{id:_collabSeq,...e}, ..._collab.log].slice(0,60)}; return true;
+};
+const _collabDeliver = (n)=>{
+  const menu=notifMenuOf(n); const dom=n.asset?(_collabAsset(n.asset)?.domain||""):""; const at=Date.now();
+  let changed=false;
+  ["slack","teams"].forEach(ch=>{
+    const c=_collab[ch]; if(!c.connected) return;
+    const r=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom));
+    const chan=r?.channel||c.defaultChannel;
+    if(chan) changed=_collabLog({ch,kind:"channel",target:chan,via:r?"Route":"Default channel",title:n.title,body:n.body,at})||changed;
+    const g=NOTIF_CATALOG.find(x=>x.key===menu);
+    const dmOn = n.event ? _chPrefs[ch][n.event]!==false : (g ? g.events.some(e=>_chPrefs[ch][e.ev]!==false) : true);
+    if(c.dm&&dmOn){
+      const unmatched=COLLAB_APPS[ch].unmatched.map(m=>m.split("@")[0]);
+      const who=(n.asset?_collabResp(n.asset):[]).filter(u=>!unmatched.includes(u));
+      const target=who.length?who.map(u=>"@"+u).join(", "):"Recipient";
+      changed=_collabLog({ch,kind:"dm",target,via:"Direct message",title:n.title,body:n.body,at})||changed;
+    }
+  });
+  if(changed) _collabNotify();
+};
+const collabTest = (ch)=>{ const c=_collab[ch]; const target=c.defaultChannel||COLLAB_APPS[ch].channels[0]; _collabLog({ch,kind:"channel",target,via:"Test",title:"Test message · Solix EDG",body:`Connected to ${COLLAB_APPS[ch].label}. Notifications routed here will appear like this.`,at:Date.now()}); _collabNotify(); };
+const _agoShort = (at)=>{ const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:`${Math.round(m/60)}h ago`; };
+
+// One message, rendered the way each app shows it (Slack message / Teams card).
+const ChatMsgPreview = ({ch,entry})=>{
+  const isSlack = ch==="slack";
+  return (
+    <div style={{display:"flex",gap:10,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+      <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>S</div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+          <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Solix EDG</span>
+          <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.bgHover,color:T.textMuted,letterSpacing:".04em"}}>{isSlack?"APP":"BOT"}</span>
+          <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(entry.at)}</span>
+        </div>
+        <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,paddingLeft:10,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{entry.title}</div>
+          {entry.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8}}>{entry.body}</div>}
+          <span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>Open in EDG</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Settings › Channels drawer for Slack / Microsoft Teams (app connection, not a webhook).
+const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
+  const st = useCollab(); const c = st[ch]; const app = COLLAB_APPS[ch];
+  const [tab,setTab] = useState("workspace");
+  const [connecting,setConnecting] = useState(false);
+  const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
+  const lbl = {display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6};
+  const connect = ()=>{ setConnecting(true); setTimeout(()=>{ setConnecting(false); collabSet(ch,{connected:true,org:app.org,connectedBy:"alex.rivera",connectedAt:"Nov 17, 2026",defaultChannel:app.channels[0]}); onToast(`${app.label} connected`,"success"); },1100); };
+  const setRoute = (i,patch)=>collabSet(ch,{routes:c.routes.map((r,j)=>j===i?{...r,...patch}:r)});
+  const menuLabel = (k)=>NOTIF_CATALOG.find(g=>g.key===k)?.menu||k;
+  const members = typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[];
+  const log = st.log.filter(e=>e.ch===ch);
+  const TABS = [["workspace",app.orgLabel],["routing","Routing"],["users","Users"],["activity",`Activity${log.length?` · ${log.length}`:""}`]];
+  return (
+    <>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={onClose}/>
+      <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:560,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+        <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:9,background:bg,border:`1.5px solid ${border}`,display:"flex",alignItems:"center",justifyContent:"center",color}}>{icon}</div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:T.text}}>{app.label}</div>
+              <div style={{fontSize:11,color:T.textMuted}}>{c.connected?`Connected · ${c.org}`:"Not connected"}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+        </div>
+
+        {!c.connected ? (
+          <div style={{flex:1,overflowY:"auto",padding:22,display:"flex",flexDirection:"column",gap:16}}>
+            <div>
+              <div style={lbl}>Permissions requested</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {["Post messages to channels","Send direct messages","Read channel list","Look up users by email"].map(p=>(
+                  <div key={p} style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke={T.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>{p}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={connect} disabled={connecting} style={{padding:"10px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12.5,fontWeight:700,cursor:connecting?"default":"pointer",opacity:connecting?.75:1}}>
+              {connecting?"Connecting…":app.connectLabel}
+            </button>
+          </div>
+        ) : (<>
+          <div style={{display:"flex",gap:0,padding:"0 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            {TABS.map(([k,l])=>(
+              <button key={k} onClick={()=>setTab(k)} style={{padding:"10px 12px",fontSize:12,fontWeight:tab===k?700:500,cursor:"pointer",background:"transparent",border:"none",borderBottom:`2.5px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted}}>{l}</button>
+            ))}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:22}}>
+            {tab==="workspace"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[[app.orgLabel,c.org],["Status","Connected"],["Connected by",c.connectedBy],["Connected on",c.connectedAt]].map(([k,v])=>(
+                  <div key={k} style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                    <div style={{fontSize:10.5,color:T.textMuted,marginBottom:3}}>{k}</div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{v}</div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label style={lbl}>Default channel</label>
+                <select value={c.defaultChannel} onChange={e=>collabSet(ch,{defaultChannel:e.target.value})} style={sel}>
+                  <option value="">None</option>
+                  {app.channels.map(x=><option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Direct messages</div>
+                  <div style={{fontSize:11,color:T.textMuted}}>Owners & stewards · per-user preferences</div>
+                </div>
+                <div onClick={()=>collabSet(ch,{dm:!c.dm})} style={{width:34,height:19,borderRadius:10,background:c.dm?T.accent:T.border,cursor:"pointer",position:"relative",flexShrink:0}}>
+                  <div style={{position:"absolute",top:2,left:c.dm?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{collabTest(ch);setTab("activity");onToast("Test message sent","success");}} style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer"}}>Send Test Message</button>
+                <button onClick={()=>{collabSet(ch,_collabInit());onToast(`${app.label} disconnected`,"success");}} style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Disconnect</button>
+              </div>
+            </div>}
+
+            {tab==="routing"&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 28px",gap:8,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>
+                <span>Menu</span><span>Domain</span><span>Channel</span><span/>
+              </div>
+              {c.routes.map((r,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 28px",gap:8,alignItems:"center"}}>
+                  <select value={r.menu} onChange={e=>setRoute(i,{menu:e.target.value})} style={sel}>
+                    <option value="">All menus</option>
+                    {NOTIF_CATALOG.map(g=><option key={g.key} value={g.key}>{g.menu}</option>)}
+                  </select>
+                  <select value={r.domain} onChange={e=>setRoute(i,{domain:e.target.value})} style={sel}>
+                    <option value="">Any domain</option>
+                    {COLLAB_DOMAINS.map(d=><option key={d} value={d}>{d}</option>)}
+                  </select>
+                  <select value={r.channel} onChange={e=>setRoute(i,{channel:e.target.value})} style={sel}>
+                    {app.channels.map(x=><option key={x} value={x}>{x}</option>)}
+                  </select>
+                  <button onClick={()=>collabSet(ch,{routes:c.routes.filter((_,j)=>j!==i)})} title="Remove route" style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
+                </div>
+              ))}
+              {c.routes.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No routes · all notifications go to {c.defaultChannel||"no channel"}</div>}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
+                <button onClick={()=>collabSet(ch,{routes:[...c.routes,{menu:"",domain:"",channel:app.channels[0]}]})} style={{padding:"7px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Add route</button>
+                <span style={{fontSize:11,color:T.textMuted}}>First match wins · otherwise {c.defaultChannel||"none"}</span>
+              </div>
+            </div>}
+
+            {tab==="users"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{fontSize:12,color:T.textSub,marginBottom:4}}><b style={{color:T.text}}>{members.filter(m=>!app.unmatched.includes(m.email)).length} of {members.length}</b> matched by email</div>
+              {members.map(m=>{ const ok=!app.unmatched.includes(m.email); return (
+                <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>
+                  <div style={{width:26,height:26,borderRadius:7,background:T.bgHover,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:T.textSub}}>{m.avatar}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{m.name}</div>
+                    <div style={{fontSize:11,color:T.textMuted}}>{m.email}</div>
+                  </div>
+                  <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,color:ok?"#16a34a":T.textMuted}}>{ok?"Matched":`Not in ${app.orgLabel.toLowerCase()}`}</span>
+                </div>
+              );})}
+            </div>}
+
+            {tab==="activity"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+              {log.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No messages delivered yet</div>}
+              {log.map(e=>(
+                <div key={e.id}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:11,color:T.textMuted}}>
+                    <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.via}</span>
+                  </div>
+                  <ChatMsgPreview ch={ch} entry={e}/>
+                </div>
+              ))}
+            </div>}
+          </div>
+          <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",flexShrink:0}}>
+            <button onClick={onClose} style={{padding:"9px 18px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Done</button>
+          </div>
+        </>)}
+      </div>
+    </>
+  );
+};
 
 // Reusable notification-preferences UI — lives in Settings → Notifications (the proper home).
 // Per-category in-app mute toggles + honest channel status. Wired to the shared _notifPrefs store.
 const NotifPrefsSettings = ()=>{
   const prefs = useNotifPrefs();
+  const co = useCollab();
   const [open,setOpen] = useState({});
   const toggleOpen = (k)=>setOpen(o=>({...o,[k]:!o[k]}));
+  // Delivery columns: In-app always; Slack / Teams once connected (direct messages to you).
+  const COLS = [{k:"inapp",l:"In-app"}, ...["slack","teams"].filter(ch=>co[ch].connected).map(ch=>({k:ch,l:ch==="slack"?"Slack":"Teams"}))];
+  const isOn = (col,ev)=>col==="inapp"?prefs[ev]!==false:co.prefs[col][ev]!==false;
+  const setEv = (col,ev,on)=>col==="inapp"?npSet(ev,on):chPrefSet(col,ev,on);
+  const setMenu = (col,key,on)=>col==="inapp"?npSetMenu(key,on):chPrefSetMenu(col,key,on);
+  const Sw = ({on,partial,onClick,big,title})=>{ const w=big?34:30,h=big?19:17,d=big?15:13; return (
+    <div onClick={onClick} title={title} style={{width:w,height:h,borderRadius:h/2,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0,opacity:partial?0.8:1}}>
+      <div style={{position:"absolute",top:2,left:on?w-d-2:2,width:d,height:d,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
+    </div>); };
+  const cell = {width:56,display:"flex",justifyContent:"center",flexShrink:0};
+  const chStatus = (ch)=>co[ch].connected?`Connected · ${co[ch].org}`:"Not connected";
   return (
     <div style={{display:"flex",flexDirection:"column",gap:22}}>
-      {/* In-app alerts — menu groups (collapsed) with a master toggle; expand to tune individual events */}
+      {/* Alerts — menu groups (collapsed) with a master toggle per delivery column; expand to tune individual events */}
       <div>
-        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>In-app alerts</div>
-        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Toggle a whole menu, or expand it to tune individual events. You only receive alerts for assets you own or steward; these switches mute event types on top of that. In-app is the only channel today — email &amp; Slack are coming.</div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>Alerts</div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginBottom:12}}>Only for objects you own or steward. {COLS.length>1?`${COLS.slice(1).map(c=>c.l).join(" and ")} = direct messages to you.`:"Connect Slack or Microsoft Teams in Settings › Channels for direct messages."}</div>
+        <div style={{display:"flex",alignItems:"center",padding:"0 14px 6px"}}>
+          <span style={{flex:1}}/>
+          {COLS.map(c=><span key={c.k} style={{...cell,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em"}}>{c.l}</span>)}
+        </div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {NOTIF_CATALOG.map(g=>{
             const total = g.events.length;
             const onCount = g.events.filter(e=>prefs[e.ev]!==false).length;
-            const anyOn = onCount>0; const allOn = onCount===total; const isOpen = !!open[g.key];
+            const allOn = onCount===total; const isOpen = !!open[g.key];
             return (
               <div key={g.key} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-                {/* Group header — menu-level master control */}
+                {/* Group header — menu-level master control per column */}
                 <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px"}}>
                   <button onClick={()=>toggleOpen(g.key)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,display:"flex",alignItems:"center",padding:0,width:14,flexShrink:0}}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:isOpen?"rotate(90deg)":"none",transition:"transform .15s"}}><path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                   <span onClick={()=>toggleOpen(g.key)} style={{flex:1,fontSize:13,fontWeight:600,color:T.text,cursor:"pointer"}}>{g.menu}</span>
-                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}>{allOn?`All ${total}`:!anyOn?"Off":`${onCount} of ${total}`}</span>
-                  <div onClick={()=>npSetMenu(g.key,!anyOn)} title={anyOn?"Turn all off":"Turn all on"} style={{width:34,height:19,borderRadius:10,background:anyOn?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0,opacity:allOn||!anyOn?1:0.8}}>
-                    <div style={{position:"absolute",top:2,left:anyOn?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
-                  </div>
+                  <span style={{fontSize:10.5,color:T.textMuted,fontWeight:500}}>{allOn?`All ${total}`:onCount===0?"Off":`${onCount} of ${total}`}</span>
+                  {COLS.map(c=>{ const n=g.events.filter(e=>isOn(c.k,e.ev)).length; const any=n>0; return (
+                    <span key={c.k} style={cell}><Sw big on={any} partial={any&&n<total} onClick={()=>setMenu(c.k,g.key,!any)} title={`${c.l}: ${any?"turn all off":"turn all on"}`}/></span>
+                  );})}
                 </div>
                 {/* Per-event toggles (progressive disclosure — the attribute level) */}
                 {isOpen&&<div style={{borderTop:`1px solid ${T.border}`,padding:"3px 14px 8px 38px"}}>
-                  {g.events.map(e=>{const on=prefs[e.ev]!==false;return(
-                    <div key={e.ev} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0"}}>
-                      <span style={{fontSize:12,color:on?T.textSub:T.textMuted}}>{e.label}</span>
-                      <div onClick={()=>npSet(e.ev,!on)} style={{width:30,height:17,borderRadius:9,background:on?T.accent:T.border,cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-                        <div style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 2px rgba(0,0,0,.2)"}}/>
-                      </div>
+                  {g.events.map(e=>(
+                    <div key={e.ev} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0"}}>
+                      <span style={{flex:1,fontSize:12,color:isOn("inapp",e.ev)?T.textSub:T.textMuted}}>{e.label}</span>
+                      {COLS.map(c=>{ const on=isOn(c.k,e.ev); return <span key={c.k} style={cell}><Sw on={on} onClick={()=>setEv(c.k,e.ev,!on)} title={c.l}/></span>; })}
                     </div>
-                  );})}
+                  ))}
                 </div>}
               </div>
             );
           })}
         </div>
       </div>
-      {/* Channels — honest about what's live today */}
+      {/* Channels — status of each delivery channel */}
       <div>
         <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Delivery channels</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {[["In-app","Active",true],["Email","Coming soon",false],["Slack","Coming soon",false]].map(([c,st,live])=>(
+          {[["In-app","Active",true],["Email","Coming soon",false],["Slack",chStatus("slack"),co.slack.connected],["Microsoft Teams",chStatus("teams"),co.teams.connected]].map(([c,st,live])=>(
             <div key={c} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,opacity:live?1:0.7}}>
               <span style={{fontSize:13,fontWeight:500,color:live?T.text:T.textMuted}}>{c}</span>
               {live
@@ -21013,7 +21253,11 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
   const [internal,setInternal]=useState(["Owners"]);
   const [external,setExternal]=useState([]);
   const [extTarget,setExtTarget]=useState("");
+  const co=useCollab();
+  const [chatChan,setChatChan]=useState({});
   if(!open) return null;
+  const isChat=(id)=>id==="slack"||id==="teams";
+  const chanOf=(id)=>chatChan[id]||co[id].defaultChannel||COLLAB_APPS[id].channels[0];
   const steps=["Source","Filters","Triggers","Destinations"];
   const toggle=(arr,set,v)=>set(arr.includes(v)?arr.filter(x=>x!==v):[...arr,v]);
   const canNext = step===0?(!!name.trim()&&!!source): step===2?triggers.length>0: step===3?(internal.length>0||external.length>0):true;
@@ -21071,8 +21315,19 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
           <div><Lbl>Internal destinations</Lbl>
             <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>{ALERT_DEST_INTERNAL.map(d=><Pill key={d} active={internal.includes(d)} onClick={()=>toggle(internal,setInternal,d)}>{d}</Pill>)}</div></div>
           <div><Lbl>External destinations</Lbl>
-            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>{ALERT_DEST_EXTERNAL.map(d=><Pill key={d.id} active={external.includes(d.id)} onClick={()=>toggle(external,setExternal,d.id)}>{d.label}</Pill>)}</div>
-            {external.length>0&&<input value={extTarget} onChange={e=>setExtTarget(e.target.value)} placeholder="endpoint (email address, channel, or webhook URL)"
+            <div style={{display:"flex",gap:7,flexWrap:"wrap",marginBottom:10}}>{ALERT_DEST_EXTERNAL.map(d=>isChat(d.id)&&!co[d.id].connected
+              ? <span key={d.id} title="Connect in Settings › Channels" style={{padding:"6px 13px",borderRadius:99,fontSize:12,color:T.textMuted,background:T.bgElevated,border:`1px dashed ${T.border}`,cursor:"not-allowed"}}>{d.label} · Not connected</span>
+              : <Pill key={d.id} active={external.includes(d.id)} onClick={()=>toggle(external,setExternal,d.id)}>{d.label}</Pill>)}</div>
+            {external.filter(isChat).map(id=>(
+              <div key={id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <span style={{width:70,fontSize:11.5,fontWeight:600,color:T.textSub}}>{id==="slack"?"Slack":"MS Teams"}</span>
+                <select value={chanOf(id)} onChange={e=>setChatChan(c=>({...c,[id]:e.target.value}))}
+                  style={{flex:1,padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}>
+                  {COLLAB_APPS[id].channels.map(x=><option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>
+            ))}
+            {external.some(id=>!isChat(id))&&<input value={extTarget} onChange={e=>setExtTarget(e.target.value)} placeholder="email address or webhook URL"
               style={{width:"100%",boxSizing:"border-box",padding:"9px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>}
           </div>
         </div>}
@@ -21084,8 +21339,8 @@ const AlertWizard = ({open,onClose,onCreate,seedSource})=>{
         {step<3
           ? <Btn small disabled={!canNext} onClick={()=>canNext&&setStep(step+1)}>Next →</Btn>
           : <Btn small disabled={!canNext} onClick={()=>{
-              const chan=[...internal,...external.map(e=>ALERT_DEST_EXTERNAL.find(x=>x.id===e)?.label||e)];
-              onCreate({rule:name.trim(),source,channel:(extTarget||chan.join(", ")||"Owners"),triggers:triggers.length,status:"Active",severity:triggers.includes("testFailed")?"Critical":"High"});
+              const chan=[...internal,...external.map(e=>isChat(e)?`${e==="slack"?"Slack":"MS Teams"} ${chanOf(e)}`:(extTarget||ALERT_DEST_EXTERNAL.find(x=>x.id===e)?.label||e))];
+              onCreate({rule:name.trim(),source,channel:(chan.join(", ")||"Owners"),triggers:triggers.length,status:"Active",severity:triggers.includes("testFailed")?"Critical":"High"});
             }}>Create alert</Btn>}
       </div>
     </Modal>
@@ -59534,8 +59789,7 @@ const SettingsView = ({onToast})=>{
   const [channelPanelOpen, setChannelPanelOpen] = useState(null); // null | "email" | "slack" | "teams"
   const [channelTestState, setChannelTestState] = useState("idle"); // idle | testing | success
   const [emailChCfg, setEmailChCfg] = useState({configured:true, senderName:"Solix EDG", senderEmail:"noreply@jnj.com", provider:"smtp", host:"smtp.jnj.com", port:"587", username:"", password:"", apiKey:""});
-  const [slackChCfg, setSlackChCfg] = useState({configured:false, webhookUrl:""});
-  const [teamsChCfg, setTeamsChCfg] = useState({configured:false, webhookUrl:""});
+  const collabSt = useCollab(); // Slack / Teams connection state (shared store)
 
   // ── Regulatory Frameworks state (hoisted to avoid hook-in-conditional-IIFE crash) ──
   const [fwSearch,      setFwSearch]      = useState("");
@@ -61140,7 +61394,7 @@ const SettingsView = ({onToast})=>{
             {section==="ai"&&<AISettingsSection onToast={onToast}/>}
 
             {section==="notifications"&&<>
-              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which in-app alerts reach you. Today notifications are delivered in-app; email & Slack are coming soon."/>
+              <SettSH icon={Ic.notif(16)} title="Notifications" desc="Choose which alerts reach you, in-app and in Slack or Microsoft Teams."/>
               <NotifPrefsSettings/>
             </>}
 
@@ -61389,23 +61643,19 @@ const SettingsView = ({onToast})=>{
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M3 7l9 6 9-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,
                   summary: emailChCfg.configured ? `Configured · ${emailChCfg.senderEmail}` : "Not configured — password resets & alerts can't be delivered",
                   desc:"SMTP or API-based provider for password resets, invites & notification emails."},
-                {key:"slack", label:"Slack", cfg:slackChCfg,
+                {key:"slack", label:"Slack", cfg:{configured:collabSt.slack.connected},
                   color:"#22c55e", bg:"rgba(34,197,94,.1)", border:"rgba(34,197,94,.25)",
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.5"/></svg>,
-                  summary: slackChCfg.configured ? "Connected via webhook" : "Not connected",
-                  desc:"Post policy alerts, quality issues & mentions to a Slack channel."},
-                {key:"teams", label:"Microsoft Teams", cfg:teamsChCfg,
+                  summary: collabSt.slack.connected ? `Connected · ${collabSt.slack.org} · ${collabSt.slack.routes.length} route${collabSt.slack.routes.length===1?"":"s"} · default ${collabSt.slack.defaultChannel||"none"}` : "Not connected",
+                  desc:"Channel posts and direct messages for governance notifications."},
+                {key:"teams", label:"Microsoft Teams", cfg:{configured:collabSt.teams.connected},
                   color:"#6366f1", bg:"rgba(99,102,241,.1)", border:"rgba(99,102,241,.25)",
                   icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3.5" stroke="currentColor" strokeWidth="1.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M14.5 20c0-2.8 1.7-5 4.5-5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
-                  summary: teamsChCfg.configured ? "Connected via webhook" : "Not connected",
-                  desc:"Post policy alerts, quality issues & mentions to a Teams channel."},
+                  summary: collabSt.teams.connected ? `Connected · ${collabSt.teams.org} · ${collabSt.teams.routes.length} route${collabSt.teams.routes.length===1?"":"s"} · default ${collabSt.teams.defaultChannel||"none"}` : "Not connected",
+                  desc:"Channel posts and direct messages for governance notifications."},
               ];
               const active = CHANNELS.find(c=>c.key===channelPanelOpen);
-              const setActiveCfg = (patch) => {
-                if(channelPanelOpen==="email") setEmailChCfg(p=>({...p,...patch}));
-                if(channelPanelOpen==="slack") setSlackChCfg(p=>({...p,...patch}));
-                if(channelPanelOpen==="teams") setTeamsChCfg(p=>({...p,...patch}));
-              };
+              const setActiveCfg = (patch) => { if(channelPanelOpen==="email") setEmailChCfg(p=>({...p,...patch})); };
               return (
                 <>
                   <SettSH icon={Ic.notif(16)} title="Channels" desc="Configure where the system delivers outbound messages — password resets, invites, and policy or quality alerts. Email is required for account emails; Slack and Teams are optional for team alerts."/>
@@ -61435,8 +61685,12 @@ const SettingsView = ({onToast})=>{
                     ))}
                   </div>
 
-                  {/* Channel config right slide-in panel */}
-                  {channelPanelOpen&&(
+                  {/* Slack / Teams — app connection drawer */}
+                  {(channelPanelOpen==="slack"||channelPanelOpen==="teams")&&
+                    <CollabChannelDrawer ch={channelPanelOpen} icon={active.icon} color={active.color} bg={active.bg} border={active.border} onClose={()=>setChannelPanelOpen(null)} onToast={onToast}/>}
+
+                  {/* Email config right slide-in panel */}
+                  {channelPanelOpen==="email"&&(
                     <>
                       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={()=>setChannelPanelOpen(null)}/>
                       <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:520,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
@@ -61525,25 +61779,7 @@ const SettingsView = ({onToast})=>{
                                 </div>
                               )}
                             </div>
-                          ) : (
-                            <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                              <div style={{fontSize:12,color:T.textMuted,lineHeight:1.6}}>
-                                Create an incoming webhook in {active.label} and paste the URL below. Policy and quality alerts will be posted to that channel.
-                              </div>
-                              <div>
-                                <label style={{display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Webhook URL <span style={{color:"#ee2424"}}>*</span></label>
-                                <input value={active.cfg.webhookUrl} onChange={e=>setActiveCfg({webhookUrl:e.target.value})} placeholder="https://hooks.example.com/services/…"
-                                  style={{width:"100%",padding:"9px 12px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:9,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"'Geist Mono',monospace"}}
-                                  onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
-                              </div>
-                              {channelTestState==="success"&&(
-                                <div style={{display:"flex",alignItems:"center",gap:7,padding:"9px 12px",background:"rgba(52,211,153,.1)",border:"1px solid rgba(52,211,153,.3)",borderRadius:8,fontSize:12,color:"#34d399"}}>
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                  Test message sent to {active.label}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                          ) : null}
                         </div>
 
                         {/* Panel footer */}
