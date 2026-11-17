@@ -4882,7 +4882,7 @@ const _collabResp = (name)=>{ const a=_collabAsset(name); if(!a) return []; cons
 const _collabLog = (e)=>{
   // A distinct approval request is never collapsed into an earlier one with the same title.
   const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000&&(!e.req||(x.req&&x.req.src===e.req.src&&x.req.id===e.req.id)));
-  if(dup) return false;
+  if(dup&&e.kind!=="user") return false;
   _collabSeq+=1; _collab={..._collab, log:[{id:_collabSeq,...e}, ..._collab.log].slice(0,60)}; return true;
 };
 const _collabDeliver = (n)=>{
@@ -4892,12 +4892,12 @@ const _collabDeliver = (n)=>{
     const c=_collab[ch]; if(!c.connected) return;
     const r=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom));
     const chan=r?.channel||c.defaultChannel;
-    if(chan) changed=_collabLog({ch,kind:"channel",target:chan,via:r?"Route":"Default channel",title:n.title,body:n.body,at})||changed;
+    if(chan&&!n.dmOnly) changed=_collabLog({ch,kind:"channel",target:chan,via:r?"Route":"Default channel",title:n.title,body:n.body,at})||changed;
     const g=NOTIF_CATALOG.find(x=>x.key===menu);
     const dmOn = n.event ? _chPrefs[ch][n.event]!==false : (g ? g.events.some(e=>_chPrefs[ch][e.ev]!==false) : true);
     if(c.dm&&dmOn){
       const unmatched=COLLAB_APPS[ch].unmatched.map(m=>m.split("@")[0]);
-      const who=(n.asset?_collabResp(n.asset):[]).filter(u=>!unmatched.includes(u));
+      const who=(Array.isArray(n.to)?n.to:(n.asset?_collabResp(n.asset):[])).filter(u=>!unmatched.includes(u));
       const target=who.length?who.map(u=>"@"+u).join(", "):"Recipient";
       changed=_collabLog({ch,kind:"dm",target,via:"Direct message",title:n.title,body:n.body,at})||changed;
     }
@@ -4907,25 +4907,130 @@ const _collabDeliver = (n)=>{
 const collabTest = (ch)=>{ const c=_collab[ch]; const target=c.defaultChannel||COLLAB_APPS[ch].channels[0]; _collabLog({ch,kind:"channel",target,via:"Test",title:"Test message · Solix EDG",body:`Connected to ${COLLAB_APPS[ch].label}. Notifications routed here will appear like this.`,at:Date.now()}); _collabNotify(); };
 const _agoShort = (at)=>{ const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:`${Math.round(m/60)}h ago`; };
 
+// ── Inbound: people using EDG from Slack / Teams ─────────────────────────────
+//   • Paste an EDG link  → link preview (metadata only: owner, steward, status, quality, tags)
+//   • /edg search <text> → assets + glossary terms, only visible to the sender
+//   • @EDG <question> or /edg ask <question> → the Copilot (aiAsk), run with the
+//     SENDER's role. Answers are only visible to the sender, so a channel never
+//     shows something another member's role would mask.
+const collabLink = (kind,id)=>`${typeof location!=="undefined"?location.origin:"https://edg"}/${kind}/${encodeURIComponent(id)}`;
+const _collabStrip = (t)=>String(t||"").replace(/\*\*/g,"").replace(/\*/g,"");
+const _collabUnfurl = (text)=>{
+  const m=String(text).match(/https?:\/\/\S+?\/(catalog|glossary)\/([^\s/?#]+)/); if(!m) return null;
+  const id=decodeURIComponent(m[2]);
+  if(m[1]==="catalog"){
+    const a=_collabAsset(id);
+    if(!a) return {title:`Not found · ${id}`, body:"No catalog asset with that name"};
+    return {title:a.name, body:[a.type,a.domain,a.db].filter(Boolean).join(" · "),
+      kv:[["Owner",(a.owners||[a.owner]).filter(Boolean).join(", ")||"—"],["Steward",(a.stewards||[a.steward]).filter(Boolean).join(", ")||"—"],["Status",a.cert||"—"],["Quality",a.quality!=null?String(a.quality):"—"],["Tags",(a.tags||[]).join(", ")||"—"]]};
+  }
+  const t=(typeof _gtState!=="undefined"?_gtState:[]).find(x=>(x.term||"").toLowerCase()===id.toLowerCase()||String(x.id)===id);
+  if(!t) return {title:`Not found · ${id}`, body:"No glossary term with that name"};
+  const def=_collabStrip(t.definition||t.description||"");
+  return {title:t.term, body:def.length>180?def.slice(0,180)+"…":def,
+    kv:[["Owner",t.owner||"—"],["Steward",t.steward||"—"],["Status",t.cert||t.status||"—"],["Domain",t.domain||"—"]]};
+};
+const _collabSearch = (q)=>{
+  const s=q.toLowerCase().trim(); if(!s) return {title:"Search", body:"Usage: /edg search <text>", ephemeral:true};
+  const assets=(typeof ASSETS!=="undefined"?ASSETS:[]).filter(a=>a.name.toLowerCase().includes(s)||(a.description||"").toLowerCase().includes(s)||(a.tags||[]).some(x=>String(x).toLowerCase().includes(s))).slice(0,5);
+  const terms=(typeof _gtState!=="undefined"?_gtState:[]).filter(t=>(t.term||"").toLowerCase().includes(s)||(t.abbr||"").toLowerCase()===s).slice(0,3);
+  const lines=[...assets.map(a=>({t:a.name,sub:[a.type,a.domain,a.cert].filter(Boolean).join(" · ")})),...terms.map(t=>({t:t.term,sub:["Glossary term",t.domain,t.cert||t.status].filter(Boolean).join(" · ")}))];
+  return {title:`${lines.length} result${lines.length===1?"":"s"} for "${q.trim()}"`, lines, ephemeral:true, open:"Open search in EDG"};
+};
+const _collabAsk = (q,role)=>{
+  if(!q.trim()) return {title:"Ask the Copilot", body:"Usage: @EDG <question>", ephemeral:true};
+  let ans; try{ ans=aiAsk(q,{role,scope:"auto",asset:null}); }catch(err){ return {title:"The Copilot could not answer", body:String((err&&err.message)||err), ephemeral:true}; }
+  const texts=[], lines=[]; let kv=null;
+  (ans.blocks||[]).forEach(b=>{
+    if(b.kind==="text") texts.push(_collabStrip(b.text));
+    else if(b.kind==="kv") kv=(b.rows||[]).map(r=>Array.isArray(r)?[r[0],_collabStrip(r[1])]:[r.k||r.label,_collabStrip(r.v||r.value)]);
+    else if(b.kind==="refusal") texts.push(_collabStrip(b.reason));
+    else if(b.kind==="data") texts.push("Answered with data — open it in the Copilot to see the result.");
+    else if(Array.isArray(b.rows)) b.rows.slice(0,5).forEach(r=>lines.push({t:r.name||r.term||r.asset||r.title||r.policy||String((r&&r[0])||""),sub:b.label||""}));
+  });
+  return {title:_collabStrip(ans.headline||"Answer"), body:texts.slice(0,3).join("\n"), kv, lines:lines.slice(0,6), ephemeral:true,
+    sources:(ans.trace||[]).map(t=>t.name).filter(Boolean).slice(0,4), open:"Open in Copilot"};
+};
+const COLLAB_HELP = {title:"Solix EDG commands", ephemeral:true, lines:[
+  {t:"/edg search <text>",sub:"Assets and glossary terms"},
+  {t:"@EDG <question>  ·  /edg ask <question>",sub:"Ask the Copilot"},
+  {t:"Paste an EDG link",sub:"Preview an asset or term"}]};
+// A message sent in the connected app's default channel by `me` (role = their EDG role).
+const collabPost = (ch,text,me,role)=>{
+  const t=String(text||"").trim(); if(!t) return;
+  const c=_collab[ch]; const chan=c.defaultChannel||COLLAB_APPS[ch].channels[0];
+  let reply=null;
+  if(/^\/edg\s+search\b/i.test(t)) reply=_collabSearch(t.replace(/^\/edg\s+search\s*/i,""));
+  else if(/^\/edg\s+ask\b/i.test(t)) reply=_collabAsk(t.replace(/^\/edg\s+ask\s*/i,""),role);
+  else if(/^\/edg\b/i.test(t)) reply=COLLAB_HELP;
+  else if(/(^|\s)@EDG\b/i.test(t)) reply=_collabAsk(t.replace(/@EDG\b/ig,"").trim(),role);
+  else reply=_collabUnfurl(t);
+  _collabLog({ch,kind:"user",target:chan,via:"Message",author:me,text:t,reply,at:Date.now()});
+  _collabNotify();
+};
+
 // One message, rendered the way each app shows it (Slack message / Teams card).
+const CollabChatBody = ({isSlack,m,children})=>(
+  <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
+    {m.title&&<div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{m.title}</div>}
+    {m.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8,whiteSpace:"pre-line"}}>{m.body}</div>}
+    {m.kv&&m.kv.length>0&&<div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"3px 12px",fontSize:11.5,marginBottom:8}}>
+      {m.kv.map(([k,v],i)=><React.Fragment key={i}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,fontWeight:500}}>{v}</span></React.Fragment>)}
+    </div>}
+    {m.lines&&m.lines.length>0&&<div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
+      {m.lines.map((l,i)=><div key={i} style={{fontSize:12}}><span style={{fontWeight:600,color:T.text}}>{l.t}</span>{l.sub&&<span style={{color:T.textMuted}}> · {l.sub}</span>}</div>)}
+    </div>}
+    {m.sources&&m.sources.length>0&&<div style={{fontSize:10.5,color:T.textMuted,marginBottom:8}}>Tools · {m.sources.join(", ")}</div>}
+    {children}
+  </div>
+);
+const CollabChatBot = ({isSlack,at,ephemeral,children})=>(
+  <div style={{display:"flex",gap:10}}>
+    <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>S</div>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+        <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Solix EDG</span>
+        <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.bgHover,color:T.textMuted,letterSpacing:".04em"}}>{isSlack?"APP":"BOT"}</span>
+        <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(at)}</span>
+        {ephemeral&&<span style={{fontSize:10.5,color:T.textMuted}}>· Only visible to you</span>}
+      </div>
+      {children}
+    </div>
+  </div>
+);
 const ChatMsgPreview = ({ch,entry,onDecide})=>{
   const isSlack = ch==="slack";
   const d = entry.decided; const ok = d&&d.verdict==="approved";
   const chatBtn = (label,primary,onClick)=>(
     <button key={label} onClick={onClick} style={{fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${primary?T.accent:T.border}`,color:primary?"#fff":T.text,background:primary?T.accent:T.bgSurface,cursor:"pointer"}}>{label}</button>
   );
-  return (
-    <div style={{display:"flex",gap:10,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
-      <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>S</div>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-          <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>Solix EDG</span>
-          <span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.bgHover,color:T.textMuted,letterSpacing:".04em"}}>{isSlack?"APP":"BOT"}</span>
-          <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(entry.at)}</span>
+  const openBtn = (label)=><span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>{label||"Open in EDG"}</span>;
+  if(entry.kind==="user"){
+    const initials=String(entry.author||"?").split(".").map(x=>x[0]||"").join("").toUpperCase().slice(0,2);
+    return (
+      <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{display:"flex",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.bgHover,color:T.textSub,fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{initials}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{entry.author}</span>
+              <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(entry.at)}</span>
+            </div>
+            <div style={{fontSize:12.5,color:T.text,wordBreak:"break-word"}}>{entry.text}</div>
+          </div>
         </div>
-        <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,paddingLeft:10,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
-          <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{entry.title}</div>
-          {entry.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8}}>{entry.body}</div>}
+        {entry.reply&&<div style={{marginLeft:40,paddingLeft:10,borderLeft:`2px solid ${T.border}`}}>
+          <CollabChatBot isSlack={isSlack} at={entry.at} ephemeral={entry.reply.ephemeral}>
+            <CollabChatBody isSlack={isSlack} m={entry.reply}>{entry.reply.title&&!/^Not found/.test(entry.reply.title)&&openBtn(entry.reply.open)}</CollabChatBody>
+          </CollabChatBot>
+        </div>}
+      </div>
+    );
+  }
+  return (
+    <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+      <CollabChatBot isSlack={isSlack} at={entry.at}>
+        <CollabChatBody isSlack={isSlack} m={{title:entry.title,body:entry.body}}>
           {d&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:ok?"#16a34a":T.rose,marginBottom:8}}>
             {ok?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:Ic.x(10)}
             {ok?"Approved":d.verdict==="rejected"?"Rejected":d.verdict==="withdrawn"?"Withdrawn":"Closed"} by @{d.by} · {d.via==="EDG"?"in EDG":`via ${d.via}`}
@@ -4933,10 +5038,10 @@ const ChatMsgPreview = ({ch,entry,onDecide})=>{
           {entry.denied&&!d&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>Only the approver, owners and stewards can decide this.</div>}
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {entry.req&&!d&&onDecide&&[chatBtn(entry.req.approve,true,()=>onDecide(entry,"approved")),chatBtn("Reject",false,()=>onDecide(entry,"rejected"))]}
-            <span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>Open in EDG</span>
+            {openBtn()}
           </div>
-        </div>
-      </div>
+        </CollabChatBody>
+      </CollabChatBot>
     </div>
   );
 };
@@ -4947,6 +5052,8 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
   const {role:cdRole, roleCfg:cdRoleCfg} = useRole();
   const cdMe = ((cdRoleCfg&&cdRoleCfg.email)||"you@jnj").split("@")[0];
   const onDecide = (entry,verdict)=>{ const r=collabDecide(entry.id,verdict,cdMe,cdRole==="Admin"||cdRole==="admin"); if(r) onToast(r.msg,r.ok?"success":"info"); };
+  const [draft,setDraft] = useState("");
+  const sendDraft = ()=>{ if(!draft.trim()) return; collabPost(ch,draft,cdMe,cdRole); setDraft(""); };
   const [tab,setTab] = useState("workspace");
   const [connecting,setConnecting] = useState(false);
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
@@ -5068,11 +5175,23 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
             </div>}
 
             {tab==="activity"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
-              {log.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No messages delivered yet</div>}
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{display:"flex",gap:8}}>
+                  <input value={draft} onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")sendDraft();}} placeholder={`Message ${c.defaultChannel||app.channels[0]} as @${cdMe}`}
+                    style={{flex:1,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none"}}/>
+                  <button onClick={sendDraft} disabled={!draft.trim()} style={{padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:draft.trim()?"pointer":"default",opacity:draft.trim()?1:.6}}>Send</button>
+                </div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {[["/edg search customer","/edg search customer"],["@EDG who owns orders?","@EDG who owns orders?"],["Asset link",collabLink("catalog","orders")],["/edg help","/edg help"]].map(([l,v])=>(
+                    <button key={l} onClick={()=>setDraft(v)} style={{fontSize:11,padding:"3px 9px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,cursor:"pointer"}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              {log.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 0"}}>No messages yet</div>}
               {log.map(e=>(
                 <div key={e.id}>
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:11,color:T.textMuted}}>
-                    <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.via}</span>
+                    <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.kind==="user"?"Conversation":e.via}</span>
                   </div>
                   <ChatMsgPreview ch={ch} entry={e} onDecide={onDecide}/>
                 </div>
