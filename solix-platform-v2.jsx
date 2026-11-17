@@ -4861,11 +4861,15 @@ const COLLAB_APPS = {
 };
 const COLLAB_DOMAINS = ["Commerce","Finance","Product","Platform","Procurement","Marketing","ML"];
 const _collabInit = ()=>({connected:false, org:"", connectedBy:"", connectedAt:"", defaultChannel:"", dm:true, routes:[]});
-let _collab = {slack:_collabInit(), teams:_collabInit(), log:[]};
-let _chPrefs = {slack:{}, teams:{}}; // personal DM preference per event; missing = on
+// Connection settings persist (a real install is stored server-side); the message log does not.
+const _COLLAB_KEY = "edg.collab.v1";
+const _collabLoad = ()=>{ try{ const v=JSON.parse(localStorage.getItem(_COLLAB_KEY)||"null"); return v&&v.slack&&v.teams?v:null; }catch(e){ return null; } };
+const _collabSaved = _collabLoad();
+let _collab = {slack:{..._collabInit(),...(_collabSaved?.slack||{})}, teams:{..._collabInit(),...(_collabSaved?.teams||{})}, log:[]};
+let _chPrefs = _collabSaved?.prefs||{slack:{}, teams:{}}; // personal DM preference per event; missing = on
 let _collabSeq = 0;
 const _collabSubs = new Set();
-const _collabNotify = ()=>_collabSubs.forEach(f=>f());
+const _collabNotify = ()=>{ try{ localStorage.setItem(_COLLAB_KEY, JSON.stringify({slack:_collab.slack, teams:_collab.teams, prefs:_chPrefs})); }catch(e){} _collabSubs.forEach(f=>f()); };
 const collabSet = (ch,patch)=>{ _collab={..._collab,[ch]:{..._collab[ch],...patch}}; _collabNotify(); };
 const chPrefSet = (ch,ev,on)=>{ _chPrefs={..._chPrefs,[ch]:{..._chPrefs[ch],[ev]:on}}; _collabNotify(); };
 const chPrefSetMenu = (ch,menuKey,on)=>{ const g=NOTIF_CATALOG.find(x=>x.key===menuKey); if(!g)return; const next={..._chPrefs[ch]}; g.events.forEach(e=>{next[e.ev]=on;}); _chPrefs={..._chPrefs,[ch]:next}; _collabNotify(); };
@@ -4876,7 +4880,8 @@ const notifMenuOf = (n)=>NOTIF_EV_MENU[n.event]||_NOTIF_CAT_MENU[n.category]||_N
 const _collabAsset = (name)=>(typeof ASSETS!=="undefined"?ASSETS:[]).find(x=>x.name===name);
 const _collabResp = (name)=>{ const a=_collabAsset(name); if(!a) return []; const own=(Array.isArray(a.owners)?a.owners:[a.owner]).filter(Boolean); const stw=(Array.isArray(a.stewards)?a.stewards:[a.steward]).filter(Boolean); return [...new Set([...own,...stw])]; };
 const _collabLog = (e)=>{
-  const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000);
+  // A distinct approval request is never collapsed into an earlier one with the same title.
+  const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000&&(!e.req||(x.req&&x.req.src===e.req.src&&x.req.id===e.req.id)));
   if(dup) return false;
   _collabSeq+=1; _collab={..._collab, log:[{id:_collabSeq,...e}, ..._collab.log].slice(0,60)}; return true;
 };
@@ -4903,8 +4908,12 @@ const collabTest = (ch)=>{ const c=_collab[ch]; const target=c.defaultChannel||C
 const _agoShort = (at)=>{ const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:`${Math.round(m/60)}h ago`; };
 
 // One message, rendered the way each app shows it (Slack message / Teams card).
-const ChatMsgPreview = ({ch,entry})=>{
+const ChatMsgPreview = ({ch,entry,onDecide})=>{
   const isSlack = ch==="slack";
+  const d = entry.decided; const ok = d&&d.verdict==="approved";
+  const chatBtn = (label,primary,onClick)=>(
+    <button key={label} onClick={onClick} style={{fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${primary?T.accent:T.border}`,color:primary?"#fff":T.text,background:primary?T.accent:T.bgSurface,cursor:"pointer"}}>{label}</button>
+  );
   return (
     <div style={{display:"flex",gap:10,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
       <div style={{width:30,height:30,borderRadius:isSlack?7:"50%",background:T.accent,color:"#fff",fontSize:12,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>S</div>
@@ -4917,7 +4926,15 @@ const ChatMsgPreview = ({ch,entry})=>{
         <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,paddingLeft:10,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
           <div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{entry.title}</div>
           {entry.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8}}>{entry.body}</div>}
-          <span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>Open in EDG</span>
+          {d&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:ok?"#16a34a":T.rose,marginBottom:8}}>
+            {ok?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:Ic.x(10)}
+            {ok?"Approved":d.verdict==="rejected"?"Rejected":d.verdict==="withdrawn"?"Withdrawn":"Closed"} by @{d.by} · {d.via==="EDG"?"in EDG":`via ${d.via}`}
+          </div>}
+          {entry.denied&&!d&&<div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>Only the approver, owners and stewards can decide this.</div>}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {entry.req&&!d&&onDecide&&[chatBtn(entry.req.approve,true,()=>onDecide(entry,"approved")),chatBtn("Reject",false,()=>onDecide(entry,"rejected"))]}
+            <span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>Open in EDG</span>
+          </div>
         </div>
       </div>
     </div>
@@ -4927,6 +4944,9 @@ const ChatMsgPreview = ({ch,entry})=>{
 // Settings › Channels drawer for Slack / Microsoft Teams (app connection, not a webhook).
 const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
   const st = useCollab(); const c = st[ch]; const app = COLLAB_APPS[ch];
+  const {role:cdRole, roleCfg:cdRoleCfg} = useRole();
+  const cdMe = ((cdRoleCfg&&cdRoleCfg.email)||"you@jnj").split("@")[0];
+  const onDecide = (entry,verdict)=>{ const r=collabDecide(entry.id,verdict,cdMe,cdRole==="Admin"||cdRole==="admin"); if(r) onToast(r.msg,r.ok?"success":"info"); };
   const [tab,setTab] = useState("workspace");
   const [connecting,setConnecting] = useState(false);
   const sel = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"};
@@ -5054,7 +5074,7 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:11,color:T.textMuted}}>
                     <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.via}</span>
                   </div>
-                  <ChatMsgPreview ch={ch} entry={e}/>
+                  <ChatMsgPreview ch={ch} entry={e} onDecide={onDecide}/>
                 </div>
               ))}
             </div>}
@@ -54661,6 +54681,142 @@ const resolveEnfApproval = (id,status)=>erSet(prev=>prev.map(r=>r.id===id?{...r,
 const useEnfApprovals = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_erSubs.add(fn);return()=>{_erSubs.delete(fn);};},[]); return _enfReqs; };
 const enfApprovalFor = (policyId,ruleId) => _enfReqs.filter(r=>r.policyId===policyId&&r.ruleId===ruleId).slice(-1)[0]||null;
 
+// ── One decision engine for request-backed work items ─────────────────────────
+// The Workspace inbox AND the Slack / Teams buttons call decideRequest(), so a
+// decision is identical wherever it is made. Resolving the request removes the
+// inbox item (items are derived from pending requests) and every chat message
+// for that request is updated to show who decided, and where.
+// Covered: status (term/domain/policy/cert) · deletion (term/domain) ·
+// enforcement (incl. legal-hold release) · role (asset owner/steward, platform role).
+// Not covered from chat: tag requests (need the Classifications context) and
+// Policy Manager 2 requests (separation-of-duties rules) — those stay in EDG.
+const REQ_SOURCES = {
+  status:{find:id=>_statusReqs.find(r=>r.id===id), set:u=>srSet(u), kinds:["term","domain","policy","cert"]},
+  delete:{find:id=>_deleteReqs.find(r=>r.id===id), set:u=>drSet(u), kinds:["term","domain"]},
+  enf:   {find:id=>_enfReqs.find(r=>r.id===id),    set:u=>erSet(u), kinds:null},
+  role:  {find:id=>_roleReqs.find(r=>r.id===id),   set:u=>rrSet(u), kinds:null},
+};
+const _reqMark = (src,id,status,by,via)=>REQ_SOURCES[src].set(prev=>prev.map(r=>r.id===id?{...r,status,decidedBy:by,decidedVia:via}:r));
+const reqSubject = (src,r)=>src==="enf"?(r.table||"asset"):src==="role"?(r.kind==="rbac"?r.requestedBy:r.asset):r.name;
+const reqTitle = (src,r)=>{
+  const s=reqSubject(src,r);
+  if(src==="status") return `Approve status change · ${s} → ${r.requestedStatus}`;
+  if(src==="delete") return `Approve deletion · ${s} (${r.kind})`;
+  if(src==="enf") return r.action==="Unhold"?`Approve release of legal hold · ${s}`:r.action==="Partial Unhold"?`Approve partial unhold · ${s}`:`Approve ${r.action} · ${s}`;
+  return r.kind==="rbac"?`Platform role request · ${r.requestedBy} → ${r.targetRole}`:`Role request · ${r.requestedBy} as ${r.role} of ${s}`;
+};
+const reqApproveLabel = (src,r)=>src==="enf"&&(r.action==="Unhold"||r.action==="Partial Unhold")?"Approve release":src==="delete"?"Approve deletion":src==="role"&&r.kind==="rbac"?"Grant role":"Approve";
+const reqMenu = (src,r)=>src==="enf"?"policy":src==="role"?"catalog":r.kind==="term"?"glossary":r.kind==="domain"?"domains":r.kind==="policy"?"policy":"catalog";
+const reqApprovers = (src,r)=>{ if(src==="role"&&r.kind==="rbac") return (typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[]).filter(m=>m.status==="Active"&&(m.roles||[]).includes("Admin")).map(m=>m.email.split("@")[0]); const named=[r.approver,r.steward,r.owner].filter(Boolean); if(named.length) return [...new Set(named)]; const a=reqSubject(src,r); return typeof _collabResp==="function"?_collabResp(a):[]; };
+const canDecideRequest = (src,r,me,isAdmin)=>isAdmin||reqApprovers(src,r).includes(me);
+
+// Returns the confirmation text (the same text the inbox shows).
+const decideRequest = (src,r,verdict,me,via="EDG")=>{
+  const ok = verdict==="approved"; const by = me||"approver"; const today=new Date().toISOString().slice(0,10);
+  const name = reqSubject(src,r);
+  if(src==="status"){
+    const navOf={term:["glossary",{termId:r.targetId}],domain:["domains",{domainId:r.targetId}],policy:["policymanager",{policyId:r.targetId}],cert:["catalog",undefined]}[r.kind]||["catalog"];
+    if(r.kind==="term") setTermStatus(r.targetId, ok?r.requestedStatus:"Draft");
+    if(r.kind==="domain") domainsSet(prev=>prev.map(d=>d.id===r.targetId?{...d,cert:ok?r.requestedStatus:"Draft"}:d));
+    if(r.kind==="policy") polSet(prev=>prev.map(pp=>pp.id===r.targetId?{...pp,lifecycle:ok?r.requestedStatus:"Draft",updated:today,history:[{when:today,who:by,action:ok?r.requestedStatus:"Rejected — sent back to draft"},...(pp.history||[])]}:pp));
+    if(r.kind==="cert") certSet(prev=>prev.map(c=>c.id===r.targetId?(ok?{...c,status:r.requestedStatus,certifier:r.requestedStatus==="Approved"?by:c.certifier,date:r.requestedStatus==="Approved"?today:c.date}:{...c,status:"Draft",certifier:null,date:null}):c));
+    _reqMark(src,r.id,verdict,by,via);
+    pushNotif(ok?{category:"Status",type:"cert",title:`Status changed to ${r.requestedStatus} · ${name}`,body:`Approved by ${by}${via!=="EDG"?` in ${via}`:""}`,nav:navOf[0],navArg:navOf[1]}
+              :{category:"Status",type:"field_updated",title:`Status change rejected · ${name}`,body:`${r.requestedBy}'s request was sent back to Draft`,nav:navOf[0],navArg:navOf[1]});
+    return ok?`${name} status → ${r.requestedStatus} — requester notified`:"Status change rejected — sent back to Draft";
+  }
+  if(src==="delete"){
+    const nav=r.kind==="term"?"glossary":"domains";
+    if(ok&&r.kind==="term") gtSet(prev=>prev.filter(t=>t.id!==r.targetId));
+    if(ok&&r.kind==="domain") domainsSet(prev=>prev.filter(d=>d.id!==r.targetId));
+    _reqMark(src,r.id,verdict,by,via);
+    pushNotif(ok?{category:"Ownership",type:"alert",title:`${name} deleted (${r.kind})`,body:`Deletion approved by ${by}${via!=="EDG"?` in ${via}`:""}`,nav}
+              :{category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${name}`,body:`${r.requestedBy}'s request to delete this ${r.kind} was declined`,nav,navArg:r.kind==="term"?{termId:r.targetId}:{domainId:r.targetId}});
+    return ok?`${name} deleted — requester notified`:"Deletion request rejected — requester notified";
+  }
+  if(src==="enf"){
+    const navArg={policyId:r.policyId};
+    _reqMark(src,r.id,verdict,by,via);
+    if(r.action==="Unhold"){
+      const baseRuleId=(r.ruleId||"").replace(/-unhold$/,"");
+      polSet(prev=>prev.map(pp=>pp.id===r.policyId?{...pp,rules:ok?(pp.rules||[]).filter(x=>x.id!==baseRuleId):(pp.rules||[]).map(x=>x.id===baseRuleId?{...x,pendingUnhold:false}:x)}:pp));
+      pushNotif(ok?{category:"Policy",type:"cert",title:`Legal hold released · ${name}`,body:`The hold on ${name} was released by ${by} — the table is no longer under legal hold.`,nav:"policymanager",navArg}
+                :{category:"Policy",type:"field_updated",title:`Unhold rejected · ${name}`,body:`${r.requestedBy}'s request to release the legal hold on ${name} was declined — the hold remains in place.`,nav:"policymanager",navArg});
+      return ok?`Legal hold released on ${name} — requester notified`:"Unhold rejected — hold remains in place";
+    }
+    if(r.action==="Partial Unhold"){
+      const cnt=r.count||(r.keys||[]).length;
+      if(ok) polSet(prev=>prev.map(pp=>pp.id===r.policyId?{...pp,rules:(pp.rules||[]).map(x=>x.id===r.baseRuleId?{...x,releasedKeys:Array.from(new Set([...(x.releasedKeys||[]),...(r.keys||[])]))}:x)}:pp));
+      pushNotif(ok?{category:"Policy",type:"cert",title:`Records released from hold · ${name}`,body:`${cnt} record${cnt>1?"s":""} released from the legal hold on ${name} by ${by} — the hold remains active for the rest.`,nav:"policymanager",navArg}
+                :{category:"Policy",type:"field_updated",title:`Partial unhold rejected · ${name}`,body:`${r.requestedBy}'s request to release ${cnt} record${cnt>1?"s":""} from the legal hold on ${name} was declined — all records remain held.`,nav:"policymanager",navArg});
+      return ok?`${cnt} record${cnt>1?"s":""} released on ${name} — requester notified`:"Partial unhold rejected — records remain held";
+    }
+    pushNotif(ok?{category:"Policy",type:"cert",title:`Enforcement approved · ${name}`,body:`${r.action} approved by ${by}`,nav:"policymanager",navArg}
+              :{category:"Policy",type:"field_updated",title:`Enforcement rejected · ${name}`,body:`${r.requestedBy}'s request to ${(r.action||"enforce").toLowerCase()} was declined`,nav:"policymanager",navArg});
+    return ok?`Enforcement approved — ${r.action} on ${name}`:"Enforcement rejected — requester notified";
+  }
+  if(src==="role"){
+    if(ok&&r.kind!=="rbac") assignOwnership(r.asset, r.requestedBy, r.role==="owner"?"owner":"steward");
+    _reqMark(src,r.id,verdict,by,via);
+    if(r.kind==="rbac") return ok?`${r.targetRole} role granted to ${r.requestedBy} — requester notified`:"Role request rejected — requester notified";
+    return ok?`${r.requestedBy} added as ${r.role==="owner"?"Owner":"Steward"} of ${r.asset} — requester notified`:"Request rejected — requester notified";
+  }
+  return "";
+};
+
+// ── Chat round-trip: new pending request → buttons on the Slack / Teams message;
+// decided anywhere → every message for it shows the outcome. Requests that exist
+// before an app is connected are not back-filled (only new events are sent).
+const _collabSeenReqs = new Set();
+const _collabReqList = ()=>[
+  ..._statusReqs.filter(r=>REQ_SOURCES.status.kinds.includes(r.kind)).map(r=>({src:"status",r})),
+  ..._deleteReqs.filter(r=>REQ_SOURCES.delete.kinds.includes(r.kind)).map(r=>({src:"delete",r})),
+  ..._enfReqs.filter(r=>!String(r.policyId||"").startsWith("pm2:")).map(r=>({src:"enf",r})),
+  ..._roleReqs.map(r=>({src:"role",r})),
+];
+const _collabSync = ()=>{
+  let changed=false; const at=Date.now();
+  _collabReqList().forEach(({src,r})=>{
+    const key=src+":"+r.id;
+    if(r.status==="pending"&&!_collabSeenReqs.has(key)){
+      _collabSeenReqs.add(key);
+      const subject=reqSubject(src,r); const req={src,id:r.id,approve:reqApproveLabel(src,r)};
+      ["slack","teams"].forEach(ch=>{
+        const c=_collab[ch]; if(!c.connected) return;
+        // The event's own message (sent moments ago by pushNotif) gets the buttons…
+        const recent=_collab.log.filter(e=>e.ch===ch&&!e.req&&at-e.at<3000&&subject&&(e.title||"").includes(subject));
+        if(recent.length){ _collab={..._collab,log:_collab.log.map(e=>recent.includes(e)?{...e,req}:e)}; changed=true; return; }
+        // …otherwise post an approval card: channel (routing) + DM to the approvers.
+        const menu=reqMenu(src,r); const dom=src==="enf"||(src==="role"&&r.kind!=="rbac")?(_collabAsset(subject)?.domain||""):"";
+        const route=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom));
+        const chan=route?.channel||c.defaultChannel; const title=reqTitle(src,r); const body=r.note||r.reason||`Requested by ${r.requestedBy}`;
+        if(chan) changed=_collabLog({ch,kind:"channel",target:chan,via:route?"Route":"Default channel",title,body,at,req})||changed;
+        if(c.dm){ const who=reqApprovers(src,r); changed=_collabLog({ch,kind:"dm",target:who.length?who.map(u=>"@"+u).join(", "):"Approver",via:"Direct message",title,body,at,req})||changed; }
+      });
+    }
+    if(r.status!=="pending"&&_collab.log.some(e=>e.req&&e.req.src===src&&e.req.id===r.id&&!e.decided)){
+      const decided={verdict:r.status,by:r.decidedBy||"EDG",via:r.decidedVia||"EDG"};
+      _collab={..._collab,log:_collab.log.map(e=>e.req&&e.req.src===src&&e.req.id===r.id&&!e.decided?{...e,decided,denied:false}:e)};
+      changed=true;
+    }
+  });
+  if(changed) _collabNotify();
+};
+const _collabSyncSoon = ()=>setTimeout(_collabSync,0);
+_collabReqList().forEach(({src,r})=>_collabSeenReqs.add(src+":"+r.id)); // existing requests are not re-sent
+[_srSubs,_drSubs,_erSubs,_rrSubs].forEach(s=>s.add(_collabSyncSoon));
+
+// A button pressed in Slack / Teams. `me` is the EDG user matched to the chat user.
+const collabDecide = (entryId,verdict,me,isAdmin)=>{
+  const e=_collab.log.find(x=>x.id===entryId); if(!e||!e.req) return null;
+  const r=REQ_SOURCES[e.req.src].find(e.req.id);
+  if(!r||r.status!=="pending"){ _collabSync(); return {ok:false,msg:"Already decided"}; }
+  if(!canDecideRequest(e.req.src,r,me,isAdmin)){ _collab={..._collab,log:_collab.log.map(x=>x.id===entryId?{...x,denied:true}:x)}; _collabNotify(); return {ok:false,msg:"Only the approver, owners and stewards can decide"}; }
+  const msg=decideRequest(e.req.src,r,verdict,me,COLLAB_APPS[e.ch].label);
+  _collabSync();
+  return {ok:true,msg};
+};
+
 // ── Custom Properties (two-layer) ──
 // Layer 1: DEFINITIONS — an admin adds a typed field to an object TYPE (Asset/Tag/Domain) once,
 //          in Settings › Custom Properties. It then appears on every instance of that type.
@@ -55218,6 +55374,9 @@ const InboxView = ({onToast}) => {
     // Consistent action template for every event:
     //   [ Primary action ] · [ Secondary: Reject (approvals) / Dismiss (alerts) / domain action ] · [ Open in {section} ]
     const openIn = (label,nav,arg)=>btn(label,()=>{onNav&&onNav(nav,arg);});
+    // Request-backed items decide through the shared engine — the same one Slack / Teams buttons use.
+    const decide = (src,verdict)=>{ const r=REQ_SOURCES[src].find(item.reqId); if(!r||r.status!=="pending"){ ack(item.id,"Already decided"); return; } ack(item.id, decideRequest(src,r,verdict,meHandle,"EDG")); };
+    const decideBtns = (src,openBtn,approveLabel="Approve")=><>{btn(approveLabel,()=>decide(src,"approved"),true)}{btn("Reject",()=>decide(src,"rejected"),false,true)}{openBtn}</>;
     if(item.type==="kl_build_approval" || item.type==="kl_dial_approval"){
       const isDial = item.type==="kl_dial_approval";
       return <>{btn(isDial?"Approve change":"Approve build",()=>{
@@ -55261,56 +55420,26 @@ const InboxView = ({onToast}) => {
       if(item.reqKind==="tag")
         return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
-        return <>{btn("Approve",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:item.requestedStatus}:d));if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{domainsSet(prev=>prev.map(d=>d.id===item.reqTargetId?{...d,cert:"Draft"}:d));if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Domains","domains")}</>;
+        return decideBtns("status",openIn("Open in Domains","domains"));
       if(item.reqKind==="policy")
-        return <>{btn("Approve",()=>{
-          polSet(prev=>prev.map(pp=>pp.id===item.reqTargetId?{...pp,lifecycle:item.requestedStatus,updated:new Date().toISOString().slice(0,10),history:[{when:new Date().toISOString().slice(0,10),who:meHandle||"steward",action:item.requestedStatus},...(pp.history||[])]}:pp));
-          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
-          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"policymanager",navArg:{policyId:item.reqTargetId}});
-          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
-        },true)}{btn("Reject",()=>{
-          polSet(prev=>prev.map(pp=>pp.id===item.reqTargetId?{...pp,lifecycle:"Draft",updated:new Date().toISOString().slice(0,10),history:[{when:new Date().toISOString().slice(0,10),who:meHandle||"steward",action:"Rejected — sent back to draft"},...(pp.history||[])]}:pp));
-          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
-          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"policymanager",navArg:{policyId:item.reqTargetId}});
-          ack(item.id,"Status change rejected — sent back to Draft");
-        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.reqTargetId})}</>;
+        return decideBtns("status",openIn("Open in Policy Manager","policymanager",{policyId:item.reqTargetId}));
       if(item.reqKind==="term")
-        return <>{btn("Approve",()=>{
-          setTermStatus(item.reqTargetId,item.requestedStatus);
-          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
-          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"glossary",navArg:{termId:item.reqTargetId}});
-          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
-        },true)}{btn("Reject",()=>{
-          setTermStatus(item.reqTargetId,"Draft");
-          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
-          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"glossary",navArg:{termId:item.reqTargetId}});
-          ack(item.id,"Status change rejected — sent back to Draft");
-        },false,true)}{openIn("Open in Glossary","glossary")}</>;
+        return decideBtns("status",openIn("Open in Glossary","glossary"));
       if(item.reqKind==="cert")
-        return <>{btn("Approve",()=>{
-          certSet(prev=>prev.map(c=>c.id===item.reqTargetId?{...c,status:item.requestedStatus,certifier:item.requestedStatus==="Approved"?(meHandle||"steward"):c.certifier,date:item.requestedStatus==="Approved"?new Date().toISOString().slice(0,10):c.date}:c));
-          if(item.reqId)resolveStatusRequest(item.reqId,"approved");
-          pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"catalog"});
-          ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);
-        },true)}{btn("Reject",()=>{
-          certSet(prev=>prev.map(c=>c.id===item.reqTargetId?{...c,status:"Draft",certifier:null,date:null}:c));
-          if(item.reqId)resolveStatusRequest(item.reqId,"rejected");
-          pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"catalog"});
-          ack(item.id,"Status change rejected — sent back to Draft");
-        },false,true)}{openIn("Open in Catalog","catalog")}</>;
+        return decideBtns("status",openIn("Open in Catalog","catalog"));
       return <>{btn("Approve",()=>{certifyByAsset(item.asset.name);certifyAsset(item.asset.name);ack(item.id,`${item.asset.name} status → Approved`);},true)}{btn("Reject",()=>{certSet(prev=>prev.map(c=>c.asset===item.asset.name?{...c,status:"Rejected",certifier:null,date:null}:c));ack(item.id,"Status change rejected");},false,true)}{openIn("Open in Catalog","catalog")}</>;
     }
     if(item.type==="stewardship_request")
-      return <>{btn("Approve",()=>{const role=item.requestedRole==="Owner"?"owner":"steward";assignOwnership(item.asset.name,item.requestedBy,role);if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.requestedBy} added as ${item.requestedRole} of ${item.asset.name} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Request rejected — requester notified");},false,true)}{openIn("Open in Catalog","catalog")}</>;
+      return decideBtns("role",openIn("Open in Catalog","catalog"));
     if(item.type==="rbac_request")
-      return <>{btn("Grant role",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"approved");ack(item.id,`${item.targetRole} role granted to ${item.requestedBy} — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveRoleRequest(item.reqId,"rejected");ack(item.id,"Role request rejected — requester notified");},false,true)}{openIn("Open in Access","access")}</>;
+      return decideBtns("role",openIn("Open in Access","access"),"Grant role");
     if(item.type==="delete_request"){
       if(item.reqKind==="tag")
         return <>{btn("Approve deletion",()=>{tagCtx?.deleteTagDef(item.reqTargetId);if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (tag)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"tags"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this tag was declined`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
-        return <>{btn("Approve deletion",()=>{domainsSet(prev=>prev.filter(d=>d.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (domain)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"domains"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this domain was declined`,nav:"domains",navArg:{domainId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Domains","domains")}</>;
+        return decideBtns("delete",openIn("Open in Domains","domains"),"Approve deletion");
       if(item.reqKind==="term")
-        return <>{btn("Approve deletion",()=>{gtSet(prev=>prev.filter(t=>t.id!==item.reqTargetId));if(item.reqId)resolveDeleteRequest(item.reqId,"approved");pushNotif({category:"Ownership",type:"alert",title:`${item.asset.name} deleted (term)`,body:`Deletion approved by ${meHandle||"owner"}`,nav:"glossary"});ack(item.id,`${item.asset.name} deleted — requester notified`);},true)}{btn("Reject",()=>{if(item.reqId)resolveDeleteRequest(item.reqId,"rejected");pushNotif({category:"Ownership",type:"field_updated",title:`Deletion request rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to delete this term was declined`,nav:"glossary",navArg:{termId:item.reqTargetId}});ack(item.id,"Deletion request rejected — requester notified");},false,true)}{openIn("Open in Glossary","glossary")}</>;
+        return decideBtns("delete",openIn("Open in Glossary","glossary"),"Approve deletion");
       return null;
     }
     if(item.type==="description_change"){
@@ -55340,43 +55469,11 @@ const InboxView = ({onToast}) => {
       },false,true)}{openIn(openLabel,navTo)}</>;
     }
     if(item.type==="enforcement_approval"){
-      if(item.action==="Unhold"){
-        const baseRuleId = (item.ruleId||"").replace(/-unhold$/,"");
-        return <>{btn("Approve release",()=>{
-          if(item.reqId)resolveEnfApproval(item.reqId,"approved");
-          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).filter(r=>r.id!==baseRuleId)}:pp));
-          pushNotif({category:"Policy",type:"cert",title:`Legal hold released · ${item.asset.name}`,body:`The hold on ${item.asset.name} was released by ${meHandle||"owner"} — the table is no longer under legal hold.`,nav:"policymanager",navArg:{policyId:item.policyId}});
-          ack(item.id,`Legal hold released on ${item.asset.name} — requester notified`);
-        },true)}{btn("Reject",()=>{
-          if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
-          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).map(r=>r.id===baseRuleId?{...r,pendingUnhold:false}:r)}:pp));
-          pushNotif({category:"Policy",type:"field_updated",title:`Unhold rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to release the legal hold on ${item.asset.name} was declined — the hold remains in place.`,nav:"policymanager",navArg:{policyId:item.policyId}});
-          ack(item.id,"Unhold rejected — hold remains in place");
-        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
-      }
-      if(item.action==="Partial Unhold"){
-        const cnt = item.count||(item.keys||[]).length;
-        return <>{btn("Approve release",()=>{
-          if(item.reqId)resolveEnfApproval(item.reqId,"approved");
-          polSet(prev=>prev.map(pp=>pp.id===item.policyId?{...pp,rules:(pp.rules||[]).map(r=>r.id===item.baseRuleId?{...r,releasedKeys:Array.from(new Set([...(r.releasedKeys||[]),...(item.keys||[])]))}:r)}:pp));
-          pushNotif({category:"Policy",type:"cert",title:`Records released from hold · ${item.asset.name}`,body:`${cnt} record${cnt>1?"s":""} released from the legal hold on ${item.asset.name} by ${meHandle||"owner"} — the hold remains active for the rest.`,nav:"policymanager",navArg:{policyId:item.policyId}});
-          ack(item.id,`${cnt} record${cnt>1?"s":""} released on ${item.asset.name} — requester notified`);
-        },true)}{btn("Reject",()=>{
-          if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
-          pushNotif({category:"Policy",type:"field_updated",title:`Partial unhold rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to release ${cnt} record${cnt>1?"s":""} from the legal hold on ${item.asset.name} was declined — all records remain held.`,nav:"policymanager",navArg:{policyId:item.policyId}});
-          ack(item.id,"Partial unhold rejected — records remain held");
-        },false,true)}{openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
-      }
-      return <>{btn("Approve",()=>{
-        if(item.reqId)resolveEnfApproval(item.reqId,"approved");
-        pushNotif({category:"Policy",type:"cert",title:`Enforcement approved · ${item.asset.name}`,body:`${item.action} approved by ${meHandle||"owner"}`,nav:"policymanager",navArg:{policyId:item.policyId}});
-        ack(item.id,`Enforcement approved — ${item.action} on ${item.asset.name}`);
-      },true)}{btn("Reject",()=>{
-        if(item.reqId)resolveEnfApproval(item.reqId,"rejected");
-        pushNotif({category:"Policy",type:"field_updated",title:`Enforcement rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request to ${(item.action||"enforce").toLowerCase()} was declined`,nav:"policymanager",navArg:{policyId:item.policyId}});
-        ack(item.id,"Enforcement rejected — requester notified");
-      },false,true)}{String(item.policyId||"").startsWith("pm2:")?btn("Open in Policy Manager 2",()=>{ _pm2Deep={policy:String(item.policyId).slice(4), tab:"activity"}; onNav&&onNav("policymanager2"); }):openIn("Open in Policy Manager","policymanager",{policyId:item.policyId})}</>;
+      const lbl = (item.action==="Unhold"||item.action==="Partial Unhold")?"Approve release":"Approve";
+      const open = String(item.policyId||"").startsWith("pm2:")?btn("Open in Policy Manager 2",()=>{ _pm2Deep={policy:String(item.policyId).slice(4), tab:"activity"}; onNav&&onNav("policymanager2"); }):openIn("Open in Policy Manager","policymanager",{policyId:item.policyId});
+      return decideBtns("enf",open,lbl);
     }
+
     if(item.type==="orphan_assignment")
       return <>{btn("Assign owner",()=>setAssignOpen(a=>!a),true)}{btn("Deprecate",()=>ack(item.id,"Asset deprecated"),false,true)}{openIn("Open in Catalog","catalog")}</>;
     if(item.type==="needs_attention")
