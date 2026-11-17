@@ -15,6 +15,7 @@ import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
 import * as KG from "./src/kg/engine.js";
 import * as KGOPS from "./src/kg/ops.js";
+import * as AXM from "./src/access/model.js";
 import { IMPORT_SAMPLES as ONT_IMPORT_SAMPLES, IMPORT_SOURCES as ONT_IMPORT_SOURCES } from "./src/ontology/standards.js";
 import { createStorageAdapter, mergeSaved, tombstonesOf, resetSeeded } from "./src/context/persist.js";
 
@@ -49372,6 +49373,553 @@ const AddBtn = ({label,onClick}) => (
   </button>
 );
 
+
+// ─────────────────────────────────────────────
+// SETTINGS › ACCESS & PERSONAS — simplified model
+//   Role = what you may do · Grant = who + role + scope + add-ons · Persona = what you see
+// ─────────────────────────────────────────────
+const apSel = {height:32,padding:"0 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:"none",cursor:"pointer"};
+const apInp = {height:32,padding:"0 10px",borderRadius:7,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",width:"100%"};
+const APLabel = ({children}) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:6}}>{children}</div>;
+const APPill = ({children,c}) => <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,background:c?`${c}15`:T.bgElevated,border:`1px solid ${c?c+"33":T.border}`,color:c||T.textSub,whiteSpace:"nowrap"}}>{children}</span>;
+const APLevel = ({l}) => {
+  const n = AXM.rank(l);
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,color:n?T.text:T.textMuted,fontWeight:n>=2?600:400}}>
+      <span style={{display:"inline-flex",gap:2}}>{[1,2,3].map(i=><span key={i} style={{width:6,height:10,borderRadius:2,background:i<=n?T.text:T.bgHover,opacity:i<=n?.75:1}}/>)}</span>
+      {AXM.LEVEL_LABEL[l||"none"]}
+    </span>
+  );
+};
+const APDrawer = ({title,sub,onClose,children,footer,width=620}) => (
+  <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1000,display:"flex",justifyContent:"flex-end"}}>
+    <div onClick={e=>e.stopPropagation()} className="slideInRight" style={{width,maxWidth:"96vw",height:"100%",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,display:"flex",flexDirection:"column"}}>
+      <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.text}}>{title}</div>
+          {sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}
+        </div>
+        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>✕</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:20}}>{children}</div>
+      {footer&&<div style={{padding:"12px 20px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,alignItems:"center"}}>{footer}</div>}
+    </div>
+  </div>
+);
+const apRoleName = (roles,id) => roles.find(r=>r.id===id)?.name || id;
+const apUser = id => AXM.USERS.find(u=>u.id===id);
+const APAvatar = ({u,size=24}) => <span style={{width:size,height:size,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:size*.4,fontWeight:700,color:T.textSub,flexShrink:0}}>{u?.avatar||"?"}</span>;
+
+// ── Roles tab ───────────────────────────────
+const APRoleDrawer = ({role,roles,grants,onClose,onSave,onDelete}) => {
+  const isNew = !role.id;
+  const readOnly = !!role.system;
+  const presets = roles.filter(r=>r.preset&&!r.system);
+  const [d,setD] = useState(()=>({...role,levels:{...role.levels}}));
+  const base = roles.find(r=>r.id===d.base);
+  const diff = AXM.diffFromBase(d,roles);
+  const usedBy = grants.filter(g=>g.role===role.id);
+  const original = roles.find(r=>r.id===role.id);
+  const changed = original ? AXM.SECTIONS.filter(s=>original.levels[s.key]!==d.levels[s.key]) : [];
+  const pickBase = id => { const b=roles.find(r=>r.id===id); setD(x=>({...x,base:id,levels:{...b.levels}})); };
+  return (
+    <APDrawer onClose={onClose} title={isNew?"New role":d.name}
+      sub={readOnly?"System role · read only":d.preset?"Preset role":base?`Based on ${base.name} · ${diff.length} change${diff.length===1?"":"s"}`:null}
+      footer={readOnly?<Btn ghost onClick={onClose}>Close</Btn>:<>
+        {!isNew&&!d.preset&&<span style={{marginRight:"auto"}}><Btn variant="danger" small onClick={()=>onDelete(role)}>Delete role</Btn></span>}
+        {!isNew&&changed.length>0&&<span style={{fontSize:11.5,color:T.amber,marginRight:8}}>Affects {usedBy.length} grant{usedBy.length===1?"":"s"} · {changed.length} section{changed.length===1?"":"s"} changed</span>}
+        <Btn ghost onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" disabled={!d.name.trim()} onClick={()=>onSave(d)}>{isNew?"Create role":"Save"}</Btn>
+      </>}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:18}}>
+        <div><APLabel>Name</APLabel><input disabled={readOnly||d.preset} value={d.name} onChange={e=>setD(x=>({...x,name:e.target.value}))} placeholder="e.g. Data Quality Lead" style={apInp}/></div>
+        <div><APLabel>Start from</APLabel>
+          {isNew
+            ? <select value={d.base} onChange={e=>pickBase(e.target.value)} style={{...apSel,width:"100%"}}>{presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            : <div style={{...apInp,display:"flex",alignItems:"center",color:T.textSub}}>{base?.name||"—"}</div>}
+        </div>
+        <div style={{gridColumn:"1 / -1"}}><APLabel>Description</APLabel><input disabled={readOnly} value={d.desc||""} onChange={e=>setD(x=>({...x,desc:e.target.value}))} style={apInp}/></div>
+      </div>
+      <APLabel>Permissions</APLabel>
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        {AXM.SECTIONS.map((s,i)=>{
+          const l = d.levels[s.key];
+          const isDiff = base && base.levels[s.key]!==l;
+          return (
+            <div key={s.key} style={{display:"grid",gridTemplateColumns:"180px 150px 1fr",gap:12,alignItems:"center",padding:"10px 14px",borderTop:i?`1px solid ${T.border}`:"none",background:isDiff?T.amberDim:"transparent"}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{s.label}</div>
+              {readOnly||d.preset
+                ? <APLevel l={l}/>
+                : <select value={l} onChange={e=>setD(x=>({...x,levels:{...x.levels,[s.key]:e.target.value}}))} style={apSel}>
+                    {AXM.LEVELS.map(v=><option key={v} value={v}>{AXM.LEVEL_LABEL[v]}</option>)}
+                  </select>}
+              <div style={{fontSize:11,color:T.textMuted}}>
+                {AXM.rank(l)===0?"—":AXM.LEVELS.slice(1,AXM.rank(l)+1).map(v=>s.allows[v]).join(" · ")}
+                {isDiff&&<span style={{marginLeft:8,color:T.amber,fontWeight:600}}>was {AXM.LEVEL_LABEL[base.levels[s.key]]}</span>}
+              </div>
+            </div>
+          );
+        })}
+        <div style={{display:"grid",gridTemplateColumns:"180px 150px 1fr",gap:12,alignItems:"center",padding:"10px 14px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Settings & Users</div>
+          <APLevel l={d.settings?"manage":"none"}/>
+          <div style={{fontSize:11,color:T.textMuted}}>Admin only</div>
+        </div>
+      </div>
+      <div style={{marginTop:16,display:"flex",gap:8,flexWrap:"wrap"}}>
+        <APPill>{Ic.lock?Ic.lock(10):null} Certify needs Manage on Catalog assets</APPill>
+        <APPill>Scope is set on the grant</APPill>
+        <APPill>Add-ons are set on the grant</APPill>
+      </div>
+      {!isNew&&<div style={{marginTop:20}}>
+        <APLabel>Granted to</APLabel>
+        {usedBy.length===0?<div style={{fontSize:12,color:T.textMuted}}>Not granted</div>:
+          usedBy.map(g=><div key={g.id} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",fontSize:12,color:T.text}}>
+            <span style={{color:T.textMuted,display:"flex"}}>{g.whoType==="user"?Ic.persona(13):Ic.teams(13)}</span>{AXM.whoLabel(g)}<span style={{color:T.textMuted}}>· {AXM.scopeLabel(g)}</span></div>)}
+      </div>}
+    </APDrawer>
+  );
+};
+
+const APRolesTab = ({roles,setRoles,grants,onToast}) => {
+  const [open,setOpen] = useState(null);
+  const save = d => {
+    if(!d.id){ const id="r_"+Date.now(); setRoles(rs=>[...rs,{...d,id}]); onToast(`Role "${d.name}" created`,"success"); }
+    else { setRoles(rs=>rs.map(r=>r.id===d.id?d:r)); onToast(`Role "${d.name}" saved`,"success"); }
+    setOpen(null);
+  };
+  const del = r => {
+    if(grants.some(g=>g.role===r.id)){ onToast(`Reassign ${grants.filter(g=>g.role===r.id).length} grant(s) before deleting "${r.name}"`,"error"); return; }
+    setRoles(rs=>rs.filter(x=>x.id!==r.id)); setOpen(null); onToast(`Role "${r.name}" deleted`,"success");
+  };
+  return (<>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{fontSize:13,fontWeight:700,color:T.text}}>Roles <span style={{color:T.textMuted,fontWeight:500}}>· {roles.length}</span></div>
+      <AddBtn label="New role" onClick={()=>setOpen({name:"",desc:"",base:"contributor",levels:{...roles.find(r=>r.id==="contributor").levels}})}/>
+    </div>
+    <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:760}}>
+        <thead><tr style={{background:T.bgElevated}}>
+          <th style={{padding:"10px 14px",textAlign:"left",fontSize:10.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`}}>Section</th>
+          {roles.map(r=>(
+            <th key={r.id} onClick={()=>setOpen(r)} style={{padding:"10px 14px",textAlign:"left",borderBottom:`1px solid ${T.border}`,cursor:"pointer",verticalAlign:"top"}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.text,display:"flex",alignItems:"center",gap:6}}>{r.name}{r.system&&<APPill>System</APPill>}</div>
+              <div style={{fontSize:10.5,color:T.textMuted,fontWeight:500,marginTop:2}}>
+                {(()=>{const n=AXM.diffFromBase(r,roles).length,gn=grants.filter(g=>g.role===r.id).length;return `${r.preset?"Preset":`Based on ${apRoleName(roles,r.base)} · ${n} change${n===1?"":"s"}`} · ${gn} grant${gn===1?"":"s"}`;})()}
+              </div>
+            </th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {AXM.SECTIONS.map(s=>(
+            <tr key={s.key} style={{borderBottom:`1px solid ${T.border}`}}>
+              <td style={{padding:"10px 14px",fontSize:12.5,fontWeight:600,color:T.text,whiteSpace:"nowrap"}}>{s.label}</td>
+              {roles.map(r=>{ const b=roles.find(x=>x.id===r.base); const isD=b&&b.levels[s.key]!==r.levels[s.key];
+                return <td key={r.id} style={{padding:"10px 14px",background:isD?T.amberDim:"transparent"}}><APLevel l={r.levels[s.key]}/></td>;})}
+            </tr>
+          ))}
+          <tr>
+            <td style={{padding:"10px 14px",fontSize:12.5,fontWeight:600,color:T.text}}>Settings & Users</td>
+            {roles.map(r=><td key={r.id} style={{padding:"10px 14px"}}><APLevel l={r.settings?"manage":"none"}/></td>)}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:14}}>
+      {[["View","See · Search · Lineage"],["Contribute","Edit metadata · Raise requests"],["Manage","Create · Delete · Approve · Configure"]].map(([l,d])=>(
+        <div key={l} style={{padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgSurface,display:"flex",alignItems:"center",gap:10}}>
+          <APLevel l={l.toLowerCase()}/><span style={{fontSize:11,color:T.textMuted}}>{d}</span>
+        </div>
+      ))}
+    </div>
+    {open&&<APRoleDrawer key={open.id||"new"} role={open} roles={roles} grants={grants} onClose={()=>setOpen(null)} onSave={save} onDelete={del}/>}
+  </>);
+};
+
+// ── Grants tab ──────────────────────────────
+const APGrantDrawer = ({grant,roles,onClose,onSave,onDelete}) => {
+  const [d,setD] = useState(()=>({...grant,scope:grant.scope==="all"?"all":[...grant.scope],addons:[...grant.addons]}));
+  const isNew = !grant.id;
+  const whoList = d.whoType==="team"?AXM.TEAMS:AXM.USERS;
+  const toggleDomain = dm => setD(x=>{ const cur=x.scope==="all"?[]:x.scope; return {...x,scope:cur.includes(dm)?cur.filter(v=>v!==dm):[...cur,dm]}; });
+  const valid = d.who && d.role && (d.scope==="all" || d.scope.length>0);
+  return (
+    <APDrawer onClose={onClose} title={isNew?"New grant":`Grant · ${AXM.whoLabel(grant)}`} width={520}
+      footer={<>
+        {!isNew&&!grant.system&&<span style={{marginRight:"auto"}}><Btn variant="danger" small onClick={()=>onDelete(grant)}>Remove grant</Btn></span>}
+        <Btn ghost onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" disabled={!valid} onClick={()=>onSave(d)}>{isNew?"Add grant":"Save"}</Btn>
+      </>}>
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        {grant.system
+          ? <div><APLabel>Who</APLabel><div style={{...apInp,display:"flex",alignItems:"center"}}>Everyone · default</div></div>
+          : <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8}}>
+              <div><APLabel>Type</APLabel><select value={d.whoType} onChange={e=>setD(x=>({...x,whoType:e.target.value,who:""}))} style={{...apSel,width:"100%"}}><option value="team">Team</option><option value="user">User</option></select></div>
+              <div><APLabel>{d.whoType==="team"?"Team":"User"}</APLabel>
+                <select value={d.who} onChange={e=>setD(x=>({...x,who:e.target.value}))} style={{...apSel,width:"100%"}}>
+                  <option value="">Select…</option>{whoList.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+                </select></div>
+            </div>}
+        <div><APLabel>Role</APLabel>
+          <select value={d.role} onChange={e=>setD(x=>({...x,role:e.target.value}))} style={{...apSel,width:"100%"}}>
+            {roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+          </select></div>
+        <div><APLabel>Scope</APLabel>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            <button onClick={()=>setD(x=>({...x,scope:"all"}))} style={{...apSel,background:d.scope==="all"?T.text:T.bgElevated,color:d.scope==="all"?T.bgSurface:T.textSub,fontWeight:600}}>All domains</button>
+            {AXM.DOMAINS.map(dm=>{ const on=d.scope!=="all"&&d.scope.includes(dm); return (
+              <button key={dm} onClick={()=>toggleDomain(dm)} style={{...apSel,background:on?T.text:T.bgElevated,color:on?T.bgSurface:T.textSub,fontWeight:on?600:400}}>{dm}</button>);})}
+          </div></div>
+        <div><APLabel>Add-ons</APLabel>
+          {AXM.ADDONS.map(a=>(
+            <label key={a.key} style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:T.text,padding:"5px 0",cursor:"pointer"}}>
+              <input type="checkbox" checked={d.addons.includes(a.key)} onChange={()=>setD(x=>({...x,addons:x.addons.includes(a.key)?x.addons.filter(v=>v!==a.key):[...x.addons,a.key]}))}/>{a.label}
+            </label>))}
+        </div>
+        <div><APLabel>Expires</APLabel><input type="date" value={d.expires} onChange={e=>setD(x=>({...x,expires:e.target.value}))} style={{...apInp,width:200}}/></div>
+      </div>
+    </APDrawer>
+  );
+};
+
+const APGrantsTab = ({roles,grants,setGrants,onToast}) => {
+  const [open,setOpen] = useState(null);
+  const save = d => {
+    if(!d.id){ setGrants(gs=>[...gs,{...d,id:"g_"+Date.now()}]); onToast("Grant added","success"); }
+    else { setGrants(gs=>gs.map(g=>g.id===d.id?d:g)); onToast("Grant saved","success"); }
+    setOpen(null);
+  };
+  const del = g => { setGrants(gs=>gs.filter(x=>x.id!==g.id)); setOpen(null); onToast("Grant removed","success"); };
+  const th = {padding:"9px 14px",textAlign:"left",fontSize:10.5,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",borderBottom:`1px solid ${T.border}`,fontWeight:700};
+  const td = {padding:"11px 14px",fontSize:12,color:T.text,borderBottom:`1px solid ${T.border}`};
+  return (<>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <div style={{fontSize:13,fontWeight:700,color:T.text}}>Grants <span style={{color:T.textMuted,fontWeight:500}}>· {grants.length}</span></div>
+      <AddBtn label="New grant" onClick={()=>setOpen({whoType:"team",who:"",role:"viewer",scope:"all",addons:[],expires:""})}/>
+    </div>
+    <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:720}}>
+        <thead><tr style={{background:T.bgElevated}}>{["Who","Role","Scope","Add-ons","Expires"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+        <tbody>
+          {grants.map(g=>(
+            <tr key={g.id} className="row-hover" onClick={()=>setOpen(g)} style={{cursor:"pointer",opacity:AXM.grantActive(g)?1:.5}}>
+              <td style={td}><span style={{display:"inline-flex",alignItems:"center",gap:8}}>
+                <span style={{color:T.textMuted,display:"flex"}}>{g.whoType==="user"?Ic.persona(13):Ic.teams(13)}</span>
+                <b style={{fontWeight:600}}>{AXM.whoLabel(g)}</b>{g.system&&<APPill>Default</APPill>}</span></td>
+              <td style={td}>{apRoleName(roles,g.role)}</td>
+              <td style={td}>{AXM.scopeLabel(g)}</td>
+              <td style={td}><span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>{g.addons.length?g.addons.map(a=><APPill key={a}>{AXM.ADDONS.find(x=>x.key===a)?.short}</APPill>):<span style={{color:T.textMuted}}>—</span>}</span></td>
+              <td style={td}>{g.expires?<span style={{color:AXM.grantActive(g)?T.text:T.rose}}>{g.expires}{!AXM.grantActive(g)&&" · expired"}</span>:<span style={{color:T.textMuted}}>Never</span>}</td>
+            </tr>
+          ))}
+          <tr style={{background:T.bgElevated}}>
+            <td style={td}><span style={{display:"inline-flex",alignItems:"center",gap:8}}><span style={{color:T.textMuted,display:"flex"}}>{Ic.persona(13)}</span><b style={{fontWeight:600}}>Asset owners</b><APPill>Built in</APPill></span></td>
+            <td style={td}>Contribute</td><td style={td}>Assets they own</td><td style={td}><span style={{color:T.textMuted}}>—</span></td><td style={td}><span style={{color:T.textMuted}}>Never</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {open&&<APGrantDrawer key={open.id||"new"} grant={open} roles={roles} onClose={()=>setOpen(null)} onSave={save} onDelete={del}/>}
+  </>);
+};
+
+// ── Personas tab ────────────────────────────
+const APKpiTile = ({k,domains}) => {
+  const m = AXM.KPI_MEASURES.find(x=>x.id===k.m);
+  const v = AXM.kpiValue(k.m,domains);
+  const ok = AXM.kpiOnTrack(k.m,v,k.target);
+  const c = ok==null?T.textSub:ok?T.green:T.amber;
+  return (
+    <div style={{padding:"10px 12px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgSurface,minWidth:0}}>
+      <div style={{fontSize:10.5,color:T.textMuted,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m?.label}</div>
+      <div style={{fontSize:19,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",marginTop:2}}>{v}{m?.kind==="pct"?"%":""}</div>
+      {k.target!==""&&k.target!=null
+        ? <div style={{fontSize:10.5,color:c,marginTop:2,fontWeight:600}}>{ok?"On track":"Behind"} · target {m?.better==="lower"?"≤":"≥"} {k.target}{m?.kind==="pct"?"%":""}{k.by?` by ${k.by}`:""}</div>
+        : <div style={{fontSize:10.5,color:T.textMuted,marginTop:2}}>No target</div>}
+      {m?.kind==="pct"&&k.target!==""&&<div style={{height:3,background:T.bgHover,borderRadius:2,marginTop:6,position:"relative"}}>
+        <div style={{height:"100%",width:`${Math.min(100,v)}%`,background:c,borderRadius:2}}/>
+        <div style={{position:"absolute",top:-2,left:`${Math.min(100,Number(k.target))}%`,width:1.5,height:7,background:T.text}}/>
+      </div>}
+    </div>
+  );
+};
+
+const APPreview = ({persona,userId,roles,grants}) => {
+  const domains = AXM.userScopeDomains(userId,grants);
+  const screens = persona.nav.map(k=>AXM.NAV_SCREENS.find(s=>s.key===k)).filter(Boolean);
+  const shown = screens.filter(s=>AXM.screenAllowed(s,userId,grants,roles));
+  const hidden = screens.filter(s=>!AXM.screenAllowed(s,userId,grants,roles));
+  const landing = AXM.NAV_SCREENS.find(s=>s.key===persona.landing);
+  return (
+    <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",display:"grid",gridTemplateColumns:"150px 1fr",minHeight:300}}>
+      <div style={{background:T.bgElevated,borderRight:`1px solid ${T.border}`,padding:"10px 0"}}>
+        {shown.map(s=>(
+          <div key={s.key} style={{padding:"6px 12px",fontSize:11.5,color:s.key===persona.landing?T.text:T.textSub,fontWeight:s.key===persona.landing?700:400,borderLeft:`2px solid ${s.key===persona.landing?T.accent:"transparent"}`}}>{s.label}</div>
+        ))}
+        {hidden.length>0&&<div style={{padding:"10px 12px 0",fontSize:10,color:T.textMuted,borderTop:`1px solid ${T.border}`,marginTop:8}}>
+          <div style={{fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",marginBottom:4}}>Hidden by role</div>
+          {hidden.map(s=><div key={s.key} style={{textDecoration:"line-through",padding:"2px 0"}}>{s.label}</div>)}
+        </div>}
+      </div>
+      <div style={{padding:14,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:T.text}}>Home</span>
+          <APPill>Lands on {landing?.label}</APPill>
+          <APPill>Scope · {domains.length===AXM.DOMAINS.length?"All domains":domains.join(", ")}</APPill>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))",gap:8,marginBottom:12}}>
+          {persona.kpis.map((k,i)=><APKpiTile key={i} k={k} domains={domains}/>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {persona.widgets.map(w=>(
+            <div key={w} style={{padding:"10px 12px",border:`1px dashed ${T.border}`,borderRadius:9,fontSize:11.5,color:T.textSub,fontWeight:600}}>
+              {AXM.WIDGETS.find(x=>x.key===w)?.label}
+              <div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}>{[70,55,40].map((p,i)=><div key={i} style={{height:5,width:`${p}%`,background:T.bgHover,borderRadius:3}}/>)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const APPersonaDrawer = ({persona,roles,grants,onClose,onSave,onDelete}) => {
+  const isNew = !persona.id;
+  const [d,setD] = useState(()=>JSON.parse(JSON.stringify(persona)));
+  const [tab,setTab] = useState("general");
+  const [previewUser,setPreviewUser] = useState(()=>{
+    const u = AXM.USERS.find(u=>persona.assigned?.users?.includes(u.id)||u.teams.some(t=>persona.assigned?.teams?.includes(t)));
+    return (u||AXM.USERS[0]).id;
+  });
+  const move = (arr,i,dir) => { const a=[...arr]; const j=i+dir; if(j<0||j>=a.length) return a; [a[i],a[j]]=[a[j],a[i]]; return a; };
+  const presetRoles = roles.filter(r=>r.preset);
+  return (
+    <APDrawer onClose={onClose} title={isNew?"New persona":d.name} sub="Changes what people see · never what they can do" width={720}
+      footer={<>
+        {!isNew&&<span style={{marginRight:"auto"}}><Btn variant="danger" small onClick={()=>onDelete(persona)}>Delete persona</Btn></span>}
+        <Btn ghost onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" disabled={!d.name.trim()} onClick={()=>onSave(d)}>{isNew?"Create persona":"Save"}</Btn>
+      </>}>
+      <Tabs2 tabs={[{key:"general",label:"General"},{key:"nav",label:"Navigation"},{key:"home",label:"Home"},{key:"kpis",label:`KPIs · ${d.kpis.length}`},{key:"assigned",label:"Assigned"},{key:"preview",label:"Preview"}]} active={tab} onChange={setTab}/>
+
+      {tab==="general"&&<div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <div><APLabel>Name</APLabel><input value={d.name} onChange={e=>setD(x=>({...x,name:e.target.value}))} placeholder="e.g. Finance Analyst" style={apInp}/></div>
+        <div><APLabel>Suggested role</APLabel>
+          <select value={d.suggestedRole} onChange={e=>setD(x=>({...x,suggestedRole:e.target.value}))} style={{...apSel,width:260}}>
+            {roles.map(r=><option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Pre-fills the invite drawer · grants nothing</div></div>
+        <div><APLabel>Landing page</APLabel>
+          <select value={d.landing} onChange={e=>setD(x=>({...x,landing:e.target.value}))} style={{...apSel,width:260}}>
+            {d.nav.map(k=>AXM.NAV_SCREENS.find(s=>s.key===k)).filter(Boolean).map(s=><option key={s.key} value={s.key}>{s.label}</option>)}
+          </select></div>
+      </div>}
+
+      {tab==="nav"&&<div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        {[...d.nav.map(k=>AXM.NAV_SCREENS.find(s=>s.key===k)).filter(Boolean),...AXM.NAV_SCREENS.filter(s=>!d.nav.includes(s.key))].map((s,i)=>{
+          const on = d.nav.includes(s.key);
+          const idx = d.nav.indexOf(s.key);
+          const without = AXM.rolesWithoutScreen(s,presetRoles);
+          return (
+            <div key={s.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none",opacity:on?1:.6}}>
+              <input type="checkbox" checked={on} disabled={s.locked} onChange={()=>setD(x=>({...x,nav:on?x.nav.filter(v=>v!==s.key):[...x.nav,s.key],landing:on&&x.landing===s.key?"home":x.landing}))}/>
+              <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{s.label}{s.locked&&<span style={{marginLeft:6}}><APPill>Required</APPill></span>}{d.landing===s.key&&<span style={{marginLeft:6}}><APPill>Landing</APPill></span>}</span>
+              {without.length>0&&<span style={{fontSize:10.5,color:T.textMuted}}>Hidden for {without.map(r=>r.name).join(", ")}</span>}
+              {on&&<span style={{display:"flex",gap:2}}>
+                <button disabled={idx<=0} onClick={()=>setD(x=>({...x,nav:move(x.nav,idx,-1)}))} style={{...apSel,height:24,padding:"0 7px"}}>↑</button>
+                <button disabled={idx>=d.nav.length-1} onClick={()=>setD(x=>({...x,nav:move(x.nav,idx,1)}))} style={{...apSel,height:24,padding:"0 7px"}}>↓</button>
+              </span>}
+            </div>
+          );
+        })}
+      </div>}
+
+      {tab==="home"&&<div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        {[...d.widgets.map(k=>AXM.WIDGETS.find(w=>w.key===k)).filter(Boolean),...AXM.WIDGETS.filter(w=>!d.widgets.includes(w.key))].map((w,i)=>{
+          const on = d.widgets.includes(w.key); const idx=d.widgets.indexOf(w.key);
+          return (
+            <div key={w.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none",opacity:on?1:.6}}>
+              <input type="checkbox" checked={on} onChange={()=>setD(x=>({...x,widgets:on?x.widgets.filter(v=>v!==w.key):[...x.widgets,w.key]}))}/>
+              <span style={{fontSize:12.5,fontWeight:600,color:T.text,flex:1}}>{w.label}</span>
+              {on&&<span style={{display:"flex",gap:2}}>
+                <button disabled={idx<=0} onClick={()=>setD(x=>({...x,widgets:move(x.widgets,idx,-1)}))} style={{...apSel,height:24,padding:"0 7px"}}>↑</button>
+                <button disabled={idx>=d.widgets.length-1} onClick={()=>setD(x=>({...x,widgets:move(x.widgets,idx,1)}))} style={{...apSel,height:24,padding:"0 7px"}}>↓</button>
+              </span>}
+            </div>);
+        })}
+      </div>}
+
+      {tab==="kpis"&&<div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 90px 140px 30px",gap:8,padding:"8px 12px",background:T.bgElevated,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>
+            <span>Measure</span><span>Target</span><span>By</span><span/>
+          </div>
+          {d.kpis.map((k,i)=>{ const m=AXM.KPI_MEASURES.find(x=>x.id===k.m); return (
+            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 140px 30px",gap:8,padding:"8px 12px",borderTop:`1px solid ${T.border}`,alignItems:"center"}}>
+              <select value={k.m} onChange={e=>setD(x=>({...x,kpis:x.kpis.map((q,j)=>j===i?{...q,m:e.target.value}:q)}))} style={{...apSel,width:"100%"}}>
+                {AXM.KPI_MEASURES.map(mm=><option key={mm.id} value={mm.id}>{mm.label}</option>)}
+              </select>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{fontSize:11,color:T.textMuted}}>{m?.better==="lower"?"≤":"≥"}</span>
+                <input value={k.target} onChange={e=>setD(x=>({...x,kpis:x.kpis.map((q,j)=>j===i?{...q,target:e.target.value.replace(/[^0-9.]/g,"")}:q)}))} placeholder="—" style={{...apInp,width:56}}/>
+              </div>
+              <input type="date" value={k.by} onChange={e=>setD(x=>({...x,kpis:x.kpis.map((q,j)=>j===i?{...q,by:e.target.value}:q)}))} style={apInp}/>
+              <button onClick={()=>setD(x=>({...x,kpis:x.kpis.filter((_,j)=>j!==i)}))} style={{...apSel,height:28,padding:"0 8px"}}>✕</button>
+            </div>);})}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10}}>
+          <Btn ghost small disabled={d.kpis.length>=6} onClick={()=>setD(x=>({...x,kpis:[...x.kpis,{m:"desc_cov",target:"",by:""}]}))}>+ Add KPI</Btn>
+          <span style={{fontSize:11,color:T.textMuted}}>{d.kpis.length} / 6 · values follow each viewer's scope</span>
+        </div>
+      </div>}
+
+      {tab==="assigned"&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        {[["teams","Teams",AXM.TEAMS],["users","Users",AXM.USERS]].map(([key,label,list])=>(
+          <div key={key}><APLabel>{label}</APLabel>
+            {list.map(x=>(
+              <label key={x.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:T.text,padding:"5px 0",cursor:"pointer"}}>
+                <input type="checkbox" checked={d.assigned[key].includes(x.id)} onChange={()=>setD(p=>({...p,assigned:{...p.assigned,[key]:p.assigned[key].includes(x.id)?p.assigned[key].filter(v=>v!==x.id):[...p.assigned[key],x.id]}}))}/>
+                {key==="users"&&<APAvatar u={x} size={20}/>}{x.name}
+              </label>))}
+          </div>))}
+      </div>}
+
+      {tab==="preview"&&<div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+          <APLabel>Preview as</APLabel>
+          <select value={previewUser} onChange={e=>setPreviewUser(e.target.value)} style={apSel}>
+            {AXM.USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+          <span style={{fontSize:11,color:T.textMuted}}>Persona screens ∩ what their role allows</span>
+        </div>
+        <APPreview persona={d} userId={previewUser} roles={roles} grants={grants}/>
+      </div>}
+    </APDrawer>
+  );
+};
+
+const APPersonasTab = ({roles,grants,personas,setPersonas,onToast}) => {
+  const [open,setOpen] = useState(null);
+  const count = p => AXM.USERS.filter(u=>p.assigned.users.includes(u.id)||u.teams.some(t=>p.assigned.teams.includes(t))).length;
+  const save = d => {
+    if(!d.id){ setPersonas(ps=>[...ps,{...d,id:"p_"+Date.now()}]); onToast(`Persona "${d.name}" created`,"success"); }
+    else { setPersonas(ps=>ps.map(p=>p.id===d.id?d:p)); onToast(`Persona "${d.name}" saved`,"success"); }
+    setOpen(null);
+  };
+  const del = p => { setPersonas(ps=>ps.filter(x=>x.id!==p.id)); setOpen(null); onToast(`Persona "${p.name}" deleted · users fall back to their role's persona`,"success"); };
+  const [tpl,setTpl] = useState("");
+  return (<>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:8}}>
+      <div style={{fontSize:13,fontWeight:700,color:T.text}}>Personas <span style={{color:T.textMuted,fontWeight:500}}>· {personas.length}</span></div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <select value={tpl} onChange={e=>setTpl(e.target.value)} style={apSel}>
+          <option value="">Blank</option>{personas.map(p=><option key={p.id} value={p.id}>From {p.name}</option>)}
+        </select>
+        <AddBtn label="New persona" onClick={()=>{
+          const src = personas.find(p=>p.id===tpl);
+          setOpen(src?{...JSON.parse(JSON.stringify(src)),id:undefined,name:`${src.name} (copy)`,assigned:{users:[],teams:[]}}
+            :{name:"",suggestedRole:"viewer",landing:"home",nav:["home","search"],widgets:["recent"],kpis:[],assigned:{users:[],teams:[]}});
+        }}/>
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:12}}>
+      {personas.map(p=>(
+        <div key={p.id} onClick={()=>setOpen(p)} style={{padding:14,border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,cursor:"pointer"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor=T.textMuted} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{color:T.textMuted,display:"flex"}}>{Ic.persona(15)}</span>
+            <span style={{fontSize:13.5,fontWeight:700,color:T.text,flex:1}}>{p.name}</span>
+            <span style={{fontSize:11,color:T.textMuted}}>{count(p)} user{count(p)===1?"":"s"}</span>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:10}}>
+            <APPill>Role · {apRoleName(roles,p.suggestedRole)}</APPill>
+            <APPill>Lands on {AXM.NAV_SCREENS.find(s=>s.key===p.landing)?.label}</APPill>
+          </div>
+          <div style={{marginTop:10,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>KPIs</div>
+          <div style={{marginTop:4,display:"flex",flexDirection:"column",gap:3}}>
+            {p.kpis.slice(0,4).map((k,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}>{AXM.KPI_MEASURES.find(m=>m.id===k.m)?.label}</div>)}
+            {p.kpis.length>4&&<div style={{fontSize:11,color:T.textMuted}}>+{p.kpis.length-4} more</div>}
+          </div>
+          <div style={{marginTop:10,fontSize:11,color:T.textMuted}}>{p.nav.length} screens · {p.widgets.length} widgets</div>
+        </div>
+      ))}
+    </div>
+    {open&&<APPersonaDrawer key={open.id||"new"} persona={open} roles={roles} grants={grants} onClose={()=>setOpen(null)} onSave={save} onDelete={del}/>}
+  </>);
+};
+
+// ── Check access tab ────────────────────────
+const APCheckTab = ({roles,grants,personas}) => {
+  const [userId,setUserId] = useState("maya.chen");
+  const [assetId,setAssetId] = useState("customers");
+  const rows = AXM.checkAccess(userId,assetId,grants,roles);
+  const asset = AXM.ASSETS.find(a=>a.id===assetId);
+  const myGrants = AXM.grantsFor(userId,grants);
+  const myPersonas = AXM.personasFor(userId,personas);
+  return (<>
+    <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:14,flexWrap:"wrap"}}>
+      <div><APLabel>User</APLabel><select value={userId} onChange={e=>setUserId(e.target.value)} style={{...apSel,width:200}}>{AXM.USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+      <div><APLabel>Asset</APLabel><select value={assetId} onChange={e=>setAssetId(e.target.value)} style={{...apSel,width:220}}>{AXM.ASSETS.map(a=><option key={a.id} value={a.id}>{a.name} · {a.domain}</option>)}</select></div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",paddingBottom:4}}>
+        <APPill>Domain · {asset.domain}</APPill>
+        <APPill>Owner · {apUser(asset.owner)?.name||"None"}</APPill>
+        {asset.sensitive&&<APPill c={T.amber}>{asset.sensitive}</APPill>}
+      </div>
+    </div>
+    <div style={{display:"flex",flexWrap:"wrap",gap:14,alignItems:"flex-start"}}>
+      <div style={{flex:"1 1 480px",minWidth:0,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
+        <div style={{display:"grid",gridTemplateColumns:"150px 86px minmax(0,1fr)",gap:10,padding:"9px 14px",background:T.bgElevated,fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em"}}>
+          <span>Action</span><span>Result</span><span>Because</span>
+        </div>
+        {rows.map(r=>(
+          <div key={r.key} style={{display:"grid",gridTemplateColumns:"150px 86px minmax(0,1fr)",gap:10,padding:"10px 14px",borderTop:`1px solid ${T.border}`,alignItems:"center"}}>
+            <span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{r.label}</span>
+            <span style={{fontSize:11.5,fontWeight:700,color:r.allowed?T.green:T.rose}}>{r.allowed?"✓ Allowed":"✕ Blocked"}</span>
+            <span style={{fontSize:11.5,color:T.textSub}}>{r.why}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{flex:"1 1 240px",display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:14,background:T.bgSurface}}>
+          <APLabel>Grants · {myGrants.length}</APLabel>
+          {myGrants.map(g=>(
+            <div key={g.id} style={{padding:"6px 0",borderTop:`1px solid ${T.border}`,fontSize:12,color:T.text}}>
+              <b style={{fontWeight:600}}>{apRoleName(roles,g.role)}</b> <span style={{color:T.textMuted}}>· {AXM.scopeLabel(g)}</span>
+              <div style={{fontSize:11,color:T.textMuted}}>via {AXM.whoLabel(g)}{g.addons.length?` · ${g.addons.map(a=>AXM.ADDONS.find(x=>x.key===a)?.short).join(", ")}`:""}{g.expires?` · until ${g.expires}`:""}</div>
+            </div>))}
+        </div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:14,background:T.bgSurface}}>
+          <APLabel>Personas · {myPersonas.length}</APLabel>
+          {myPersonas.length===0?<div style={{fontSize:12,color:T.textMuted}}>None · uses role default</div>:
+            myPersonas.map(p=>{
+              const shown = p.nav.map(k=>AXM.NAV_SCREENS.find(s=>s.key===k)).filter(s=>s&&AXM.screenAllowed(s,userId,grants,roles));
+              return <div key={p.id} style={{padding:"6px 0",borderTop:`1px solid ${T.border}`}}>
+                <div style={{fontSize:12,fontWeight:600,color:T.text}}>{p.name}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:2}}>{shown.map(s=>s.label).join(" · ")}</div>
+              </div>;})}
+        </div>
+      </div>
+    </div>
+  </>);
+};
+
+const AccessPersonasSection = ({onToast}) => {
+  const [tab,setTab] = useState("roles");
+  const [roles,setRoles] = useState(()=>[...AXM.PRESET_ROLES,...AXM.SEED_CUSTOM_ROLES]);
+  const [grants,setGrants] = useState(()=>AXM.SEED_GRANTS);
+  const [personas,setPersonas] = useState(()=>AXM.SEED_PERSONAS);
+  return (<>
+    <SettSH icon={Ic.access(16)} title="Access & Personas" desc="Role = what you can do · Grant = who, where · Persona = what you see"/>
+    <div style={{marginBottom:18}}>
+      <SegTabs tabs={[{key:"roles",label:"Roles"},{key:"grants",label:"Grants"},{key:"personas",label:"Personas"},{key:"check",label:"Check access"}]} active={tab} onChange={setTab}/>
+    </div>
+    {tab==="roles"&&<APRolesTab roles={roles} setRoles={setRoles} grants={grants} onToast={onToast}/>}
+    {tab==="grants"&&<APGrantsTab roles={roles} grants={grants} setGrants={setGrants} onToast={onToast}/>}
+    {tab==="personas"&&<APPersonasTab roles={roles} grants={grants} personas={personas} setPersonas={setPersonas} onToast={onToast}/>}
+    {tab==="check"&&<APCheckTab roles={roles} grants={grants} personas={personas}/>}
+  </>);
+};
+
 const HealthBadge = ({health,status}) => {
   const c=HEALTH_COLOR[health]||T.textMuted;
   return <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"2px 9px",borderRadius:99,background:`${c}15`,border:`1px solid ${c}33`,color:c}}>
@@ -60014,6 +60562,7 @@ const SettingsView = ({onToast})=>{
     {label:"Identity & Access", items:[
       {key:"teams",        icon:"teams",   label:"Teams & Users",         desc:"Members and teams"},
       {key:"access",       icon:"access",  label:"Access Control",       desc:"Roles & policies"},
+      {key:"access_personas", icon:"persona", label:"Access & Personas",  desc:"Roles, grants & personas"},
       {key:"bots",         icon:"bot",     label:"Bots",                 desc:"Service accounts"},
       {key:"sso",          icon:"sso",     label:"SSO",                  desc:"Identity providers"},
     ]},
@@ -60881,6 +61430,7 @@ const SettingsView = ({onToast})=>{
 
             {section==="teams" && <TeamsSection onToast={onToast}/>}
             {section==="access" && <AccessSection onToast={onToast}/>}
+            {section==="access_personas" && <AccessPersonasSection onToast={onToast}/>}
             {/* ══ SSO ══ */}
             {section==="bots"&&<>
               <SettSH icon={Ic.bot(16)} title="Bots" desc="Service accounts with scoped access permissions for automated metadata operations."
