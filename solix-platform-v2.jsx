@@ -15682,6 +15682,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
       </div>);
     const dot = (c) => <span style={{width:7,height:7,borderRadius:"50%",background:c,display:"inline-block",flexShrink:0}}/>;
     const m = regMeta(fw.id);
+    const lbl = k => ({evidence:"Sign-off due", review2:"Sign-off in review", pending:"Waiting for table owner"}[k]||ART_META[k].l);
     return (<>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
         <span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>
@@ -15692,17 +15693,17 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
         {tile("Readiness", `${s}%`, sc, <>{states.filter(x=>x.st==="met").length} of {inIdx.length} articles met
           <div style={{height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden",marginTop:6}}><div style={{width:`${s}%`,height:"100%",background:sc}}/></div></>)}
         {tile("Open findings", finds.length, finds.length?T.rose:T.green, finds.length?`${sev("High")} high · ${sev("Medium")} medium · ${sev("Low")} low`:"None open", finds.length?()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}:null)}
-        {tile("Enforcement", tgts.length?`${enfRun}/${tgts.length}`:"—", enfRej?T.rose:enfWait?T.amber:T.green, tgts.length?`running · ${enfWait} awaiting owner${enfRej?` · ${enfRej} rejected`:""}`:"No enforcement rules", enfWait?()=>onNav&&onNav("stewardship"):null)}
-        {tile("Evidence", ev.length?`${evCur}/${ev.length}`:"—", evDue?T.violet:evRev?T.amber:T.green, ev.length?`current · ${evDue} due · ${evRev} in review`:"No evidence rules")}
+        {tile("Retention & holds", tgts.length?`${enfRun}/${tgts.length}`:"—", enfRej?T.rose:enfWait?T.amber:T.green, tgts.length?`tables running · ${enfWait} waiting for owner approval${enfRej?` · ${enfRej} rejected`:""}`:"None in this framework", enfWait?()=>onNav&&onNav("stewardship"):null)}
+        {tile("Sign-offs", ev.length?`${evCur}/${ev.length}`:"—", evDue?T.violet:evRev?T.amber:T.green, ev.length?`up to date · ${evDue} due · ${evRev} in review`:"None required")}
         {tile("Scan coverage", `${covPct}%`, unscanned.length?T.amber:T.green, <>{inScope.length-unscanned.length} of {inScope.length} assets scanned<br/>{lastRun?`Last run ${lastRun.ts}`:"Never run"}</>, ()=>{setTab("scans");setSelFw(null);})}
       </div>
       <div style={{...card,padding:"14px 16px",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",marginBottom:10}}><span style={{...label,flex:1}}>Articles by status</span>
           <button onClick={()=>setFwTab("articles")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>All articles →</button></div>
         <div style={{display:"flex",height:10,borderRadius:5,overflow:"hidden",background:T.bgElevated,marginBottom:10}}>
-          {dist.map(d=><div key={d.k} title={`${ART_META[d.k].l}: ${d.n}`} style={{width:`${d.n/inIdx.length*100}%`,background:ART_META[d.k].c}}/>)}
+          {dist.map(d=><div key={d.k} title={`${lbl(d.k)}: ${d.n}`} style={{width:`${d.n/inIdx.length*100}%`,background:ART_META[d.k].c}}/>)}
         </div>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{dist.map(d=><span key={d.k} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{dot(ART_META[d.k].c)}{ART_META[d.k].l} <b style={{color:T.text}}>{d.n}</b></span>)}</div>
+        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>{dist.map(d=><span key={d.k} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{dot(ART_META[d.k].c)}{lbl(d.k)} <b style={{color:T.text}}>{d.n}</b></span>)}</div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start"}}>
         <div style={{...card,overflow:"hidden"}}>
@@ -15713,7 +15714,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textSub,minWidth:92}}>{fw.arts[i].ref}</span>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{fw.arts[i].t}</div>
                 <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reason(i)}</div></div>
-              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{ART_META[k].l}</span>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{lbl(k)}</span>
             </div>)}
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -16035,7 +16036,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
               <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Compliance Score</div>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Pass rate</div>
                 <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:8}}>
                   <span style={{fontSize:32,fontWeight:800,color:healthColor,lineHeight:1,fontFamily:"'Geist Mono',monospace"}}>{pct}%</span>
                   <span style={{fontSize:11,color:healthColor,fontWeight:600,marginBottom:4,padding:"1px 7px",borderRadius:99,background:`${healthColor}18`,border:`1px solid ${healthColor}30`}}>{healthLabel}</span></div>
@@ -16324,7 +16325,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {srcBox(p)}
               <span style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
               {p.status!=="Active"&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`,flexShrink:0}}>{p.status}</span>}
-              {p.status==="Active"&&<span title="Compliance score" style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${healthColor}12`,color:healthColor,border:`1px solid ${healthColor}30`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{pct}%</span>}
+              {p.status==="Active"&&<span title="Pass rate" style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${healthColor}12`,color:healthColor,border:`1px solid ${healthColor}30`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{pct}%</span>}
               <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>v{p.version||1}</span>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
