@@ -2403,8 +2403,6 @@ const runDQCase = (id, batchOverride) => {
     dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, timeline: [...(i.timeline||[]), { action: next.status === "Warning" ? "Test case re-ran with a warning" : "Test case passed on re-run", by: "system", at }] } : i));
   }
   dqtcSet(prev => prev.map(t => t.id === id ? next : t));
-  naObsEmit({source:"Test Case", trigger:"Test Case Status", status:next.status, name:next.name, table:next.table, suite:dqTableSuite(next)?.name,
-    title:`Test case ${next.status==="Success"?"passed":next.status.toLowerCase()} · ${next.name}`, body:next.failedReason||`${next.defName||next.name} on ${next.table}${next.col?"."+next.col:""}`});
   return next;
 };
 // Run every case of a suite (a default suite's own cases, a custom suite's picked cases —
@@ -2419,10 +2417,6 @@ const runDQSuite = (suiteId) => {
   const fired = (s.actions||[]).filter(a => a.target && (a.trigger === "always" || failed > 0 || (a.trigger === "warning" && warned > 0)));
   const run = { at: "just now", passed: results.length - failed - warned, warned, failed, batch: dqBatchLabel(s.batch), sent: fired.map(a => `${a.type} · ${a.target}`) };
   dqsSet(prev => prev.map(x => x.id === suiteId ? { ...x, lastRun: "Just now", runs: [run, ...(x.runs||[])].slice(0, 10) } : x));
-  // One event per completed suite run with the summary — statuses present in the summary match the trigger.
-  const tsStatus = failed > 0 ? "Failed" : "Success";
-  naObsEmit({source:"Test Suite", trigger:"Test Suite Status", status:tsStatus, name:s.name, table:s.table||"",
-    title:`Test suite ${tsStatus==="Failed"?"failed":"passed"} · ${s.name}`, body:`${run.passed} passed · ${warned} warning · ${failed} failed`});
   return run;
 };
 DQ_TEST_CASES.forEach(t => { if (t.data && t.status !== "Aborted") t.result = dqMeasure(t); });
@@ -4878,23 +4872,6 @@ const naFiltersFor = (src)=>{
 };
 const naInternalFor = (src)=>["Admins","Followers","Owners","Teams","Users",...(src==="Task"?["Assignees"]:[])];
 const NA_EXTERNAL = ["Email","Slack","MS Teams","G Chat","Webhook"];
-// Observability › Alerts — sources, per-source filters and triggers (OpenMetadata alert behavior reference)
-const NA_OBS_SOURCES = ["Container","Ingestion Pipeline","Pipeline","Table","Test Case","Test Suite","Topic","Data Contract"];
-const NA_OBS_NAME_LABEL = {"Container":"Container Name","Ingestion Pipeline":"Ingestion Pipeline Name","Pipeline":"Pipeline Name","Table":"Table Name","Test Case":"Test Case Name","Test Suite":"Test Suite Name","Topic":"Topic Name","Data Contract":"Data Contract Name"};
-const naObsFiltersFor = (src)=>src==="Data Contract"?["Entity Name","Domain","Owner Name","Filter By Updater Is Bot"]
-  :["Entity Specific Name","Domain","Owner Name",...(src==="Test Case"?["Table Name Test Case Belongs To"]:[]),"Filter By Updater Is Bot"];
-const NA_TC_STATUS = ["Success","Failed","Aborted","Queued"];
-const NA_OBS_TRIGGERS = {
-  "Table":             [{t:"Schema Changes"},{t:"Metric Updates"}],
-  "Topic":             [{t:"Schema Changes"}],
-  "Container":         [{t:"Schema Changes"}],
-  "Pipeline":          [{t:"Pipeline Status",opts:["Successful","Failed","Pending","Skipped"]}],
-  "Ingestion Pipeline":[{t:"Ingestion Pipeline Status",opts:["queued","running","success","partialSuccess","failed","stopped"]}],
-  "Test Case":         [{t:"Test Case Status",opts:NA_TC_STATUS},{t:"Test Case Status Under Suite",suite:true}],
-  "Test Suite":        [{t:"Test Suite Status",opts:NA_TC_STATUS}],
-  "Data Contract":     [{t:"Data Contract Status",opts:["Success","Failed","Running","Aborted"]}],
-};
-const naFilterLabel = (type,src,kind)=>kind==="observability"&&type==="Entity Specific Name"?(NA_OBS_NAME_LABEL[src]||type):type;
 const NA_DELIVERY = ["Email","Slack","MS Teams","G Chat","Webhook"];
 const NA_SUB_TYPES = ["Slack","MS Teams","G Chat","Webhook"];
 const NA_URL_LABEL = {"Slack":"Slack Webhook URL","MS Teams":"MS Teams Destination (HTTP POST URL)","G Chat":"G Chat Webhook URL","Webhook":"Endpoint URL"};
@@ -4942,7 +4919,7 @@ const naFilterHit = (f,n,ctx)=>{
   const v=String(f.value||"").toLowerCase();
   switch(f.type){
     case "Owner Name": return ctx.owners.some(o=>o.toLowerCase()===v);
-    case "Entity Specific Name": return !!v&&((ctx.name||"").toLowerCase()===v||(ctx.kind!=="observability"&&(n.title||"").toLowerCase().includes(v)));
+    case "Entity Specific Name": return !!v&&((ctx.name||"").toLowerCase()===v||(n.title||"").toLowerCase().includes(v));
     case "Event Type": return ctx.eventType===f.value;
     case "Updater Name": return !!v&&(n.body||"").toLowerCase().includes(v);
     case "Domain": return (ctx.domain||"").toLowerCase()===v;
@@ -4950,8 +4927,6 @@ const naFilterHit = (f,n,ctx)=>{
     case "Filter By Updater Is Bot": return false;
     case "Entity ID": return String(ctx.id||"")===String(f.value||"");
     case "Mentioned Name": return !!v&&(n.body||"").toLowerCase().includes(v);
-    case "Entity Name": return (ctx.name||"").toLowerCase()===v;
-    case "Table Name Test Case Belongs To": return (ctx.table||"").toLowerCase()===v;
     default: return false;
   }
 };
@@ -5008,39 +4983,10 @@ const _naDeliver = (n)=>{
     owners:a?[...new Set([...(a.owners||[a.owner]),...(a.stewards||[])].filter(Boolean))]:(Array.isArray(n.to)?n.to:[])};
   let hit=false;
   const alerts=_na.alerts.map(al=>{
-    if(al.kind==="observability"||!naMatches(al,n,ctx)) return al;
+    if(!naMatches(al,n,ctx)) return al;
     hit=true;
     const at=Date.now();
     const evs=(al.destinations||[]).flatMap(d=>naResolve(d,n,ctx)).map(x=>({...x,at,title:n.title,eventType:ctx.eventType}));
-    return {...al,events:[...evs,...(al.events||[])].slice(0,40)};
-  });
-  if(hit) naSet({alerts});
-};
-
-// Observability event — emitted by test case / test suite runs and data contract validation.
-// ev = {source, trigger, status, name, table, suite, title, body}. Triggers: included ones are
-// OR'd (no trigger = every event of the source); an excluded trigger silences a match.
-const naTriggerHit = (tr,ev)=>{
-  if(tr.t!==ev.trigger&&!(tr.t==="Test Case Status Under Suite"&&ev.trigger==="Test Case Status")) return false;
-  if(tr.t==="Test Case Status Under Suite") return (tr.suites||[]).includes(ev.suite)&&(!(tr.values||[]).length||(tr.values||[]).includes(ev.status));
-  return !(tr.values||[]).length||(tr.values||[]).includes(ev.status);
-};
-const naObsEmit = (ev)=>{
-  if(!_na.alerts.some(a=>a.kind==="observability")) return;
-  const a=ev.table?(_naAsset(ev.table)||_naAsset(String(ev.table).split(".").pop())):null;
-  const ctx={kind:"observability", source:ev.source, eventType:ev.trigger, name:ev.name, table:ev.table||"", id:"", domain:a?a.domain:"",
-    owners:a?[...new Set([...(a.owners||[a.owner]),...(a.stewards||[])].filter(Boolean))]:(ev.owner?[ev.owner]:[])};
-  const n={title:ev.title, body:ev.body||""};
-  let hit=false;
-  const alerts=_na.alerts.map(al=>{
-    if(al.kind!=="observability"||al.enabled===false||al.source!==ev.source) return al;
-    if(!naMatches({...al,source:"All"},n,ctx)) return al;
-    const trs=(al.triggers||[]).filter(t=>t.t);
-    const inc=trs.filter(t=>t.include!==false), exc=trs.filter(t=>t.include===false);
-    if(inc.length&&!inc.some(t=>naTriggerHit(t,ev))) return al;
-    if(exc.some(t=>naTriggerHit(t,ev))) return al;
-    hit=true; const at=Date.now();
-    const evs=(al.destinations||[]).flatMap(d=>naResolve(d,n,ctx)).map(x=>({...x,at,title:ev.title,eventType:`${ev.trigger} · ${ev.status}`}));
     return {...al,events:[...evs,...(al.events||[])].slice(0,40)};
   });
   if(hit) naSet({alerts});
@@ -5056,7 +5002,7 @@ const NaSw = ({on,onClick,label})=>(
     </span>{label}
   </span>
 );
-const naBlank = (kind="notification")=>({id:"na-"+Date.now(), kind, name:"", description:"", source:"", filters:[], join:"AND", triggers:[], destinations:[], enabled:true});
+const naBlank = ()=>({id:"na-"+Date.now(), name:"", description:"", source:"", filters:[], join:"AND", destinations:[], enabled:true});
 
 // Test Connection — same check OpenMetadata runs before saving (simulated send).
 const NaTest = ({type,endpoint})=>{
@@ -5140,19 +5086,15 @@ const NaDestination = ({d,source,onChange,onRemove})=>{
 
 // Add / edit drawer — the OpenMetadata notification alert form.
 const NaAlertDrawer = ({initial,onClose,onToast})=>{
-  const obs = initial.kind==="observability";
   const [a,setA]=useState(initial);
   const [tab,setTab]=useState("configuration");
   const live=useNA().alerts.find(x=>x.id===a.id);
   const set=(p)=>setA(x=>({...x,...p}));
-  const filterTypes=obs?naObsFiltersFor(a.source):naFiltersFor(a.source);
-  const trigOpts=obs?(NA_OBS_TRIGGERS[a.source]||[]):[];
-  const suiteNames=(typeof DQ_SUITES!=="undefined"?DQ_SUITES:[]).map(x=>x.name);
+  const filterTypes=naFiltersFor(a.source);
   const errors=[];
   if(!a.name.trim()) errors.push("Name is required");
   if(!a.source) errors.push("Source is required");
   if(!a.destinations.length) errors.push("Add at least one destination");
-  (a.triggers||[]).forEach(t=>{ if(t.t==="Test Case Status Under Suite"&&!(t.suites||[]).length) errors.push("Select a test suite for Test Case Status Under Suite"); });
   a.destinations.forEach(d=>{
     if(d.category==="external"&&d.target!=="Email"){ const b=naUrlCheck(d.target,d.endpoint); if(b) errors.push(b); }
     if(d.category==="external"&&d.target==="Email"&&!String(d.emails||"").trim()) errors.push("Email Addresses are required");
@@ -5172,7 +5114,7 @@ const NaAlertDrawer = ({initial,onClose,onToast})=>{
       <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={onClose}/>
       <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width:600,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
         <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{live?a.name||"Alert":obs?"Add Alert":"Add Notification"}</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{live?a.name||"Alert":"Add Notification"}</div>
           <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
         </div>
         {live&&<div style={{display:"flex",padding:"0 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -5196,10 +5138,9 @@ const NaAlertDrawer = ({initial,onClose,onToast})=>{
             <div><NaLbl req>Name</NaLbl><input value={a.name} onChange={e=>set({name:e.target.value})} style={naIn()}/></div>
             <div><NaLbl>Description</NaLbl><textarea value={a.description} onChange={e=>set({description:e.target.value})} rows={2} style={{...naIn(),resize:"vertical"}}/></div>
             <div><NaLbl req>Source</NaLbl>
-              <select value={a.source} onChange={e=>{ const src=e.target.value; set({source:src,filters:[],triggers:[],destinations:a.destinations.map(d=>d.target==="Assignees"&&src!=="Task"?{...d,target:"Owners"}:d)}); }} style={naIn()}>
+              <select value={a.source} onChange={e=>{ const src=e.target.value; set({source:src,filters:[],destinations:a.destinations.map(d=>d.target==="Assignees"&&src!=="Task"?{...d,target:"Owners"}:d)}); }} style={naIn()}>
                 <option value="">Select a source</option>
-                {obs?NA_OBS_SOURCES.map(x=><option key={x} value={x}>{x}</option>)
-                    :NA_SOURCES.map(g=><optgroup key={g.g} label={g.g}>{g.items.map(x=><option key={x} value={x}>{x}</option>)}</optgroup>)}
+                {NA_SOURCES.map(g=><optgroup key={g.g} label={g.g}>{g.items.map(x=><option key={x} value={x}>{x}</option>)}</optgroup>)}
               </select></div>
             {a.source&&<div>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
@@ -5208,7 +5149,7 @@ const NaAlertDrawer = ({initial,onClose,onToast})=>{
               </div>
               {a.filters.map((f,i)=>(
                 <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto 28px",gap:8,alignItems:"center",marginBottom:8}}>
-                  <select value={f.type} onChange={e=>set({filters:a.filters.map((x,j)=>j===i?{...x,type:e.target.value,value:""}:x)})} style={naIn()}>{filterTypes.map(x=><option key={x} value={x}>{naFilterLabel(x,a.source,a.kind)}</option>)}</select>
+                  <select value={f.type} onChange={e=>set({filters:a.filters.map((x,j)=>j===i?{...x,type:e.target.value,value:""}:x)})} style={naIn()}>{filterTypes.map(x=><option key={x}>{x}</option>)}</select>
                   {fVal(f,i)}
                   <NaSw on={f.include!==false} onClick={()=>set({filters:a.filters.map((x,j)=>j===i?{...x,include:x.include===false}:x)})} label="Include"/>
                   <button onClick={()=>set({filters:a.filters.filter((_,j)=>j!==i)})} style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
@@ -5216,22 +5157,6 @@ const NaAlertDrawer = ({initial,onClose,onToast})=>{
               {filterTypes.length>0
                 ?<button onClick={()=>set({filters:[...a.filters,{type:filterTypes[0],value:"",include:true}]})} style={{fontSize:11.5,padding:"5px 11px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,cursor:"pointer"}}>+ Add Filter</button>
                 :<div style={{fontSize:11.5,color:T.textMuted}}>No filters for {a.source}</div>}
-            </div>}
-            {obs&&a.source&&<div>
-              <div style={{fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6}}>Trigger</div>
-              {(a.triggers||[]).map((tr,i)=>{ const def=trigOpts.find(x=>x.t===tr.t)||{}; const upd=(p)=>set({triggers:a.triggers.map((x,j)=>j===i?{...x,...p}:x)});
-                const chips=(list,key)=><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{list.map(o=>{ const on=(tr[key]||[]).includes(o); return <button key={o} onClick={()=>upd({[key]:on?(tr[key]||[]).filter(y=>y!==o):[...(tr[key]||[]),o]})} style={{fontSize:11.5,padding:"4px 10px",borderRadius:99,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accentDim:"transparent",color:on?T.accent:T.textSub,cursor:"pointer"}}>{o}</button>; })}</div>;
-                return (
-                <div key={i} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:12,background:T.bgSurface,display:"flex",flexDirection:"column",gap:10,marginBottom:8}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr auto 28px",gap:8,alignItems:"center"}}>
-                    <select value={tr.t} onChange={e=>upd({t:e.target.value,values:[],suites:[]})} style={naIn()}>{trigOpts.map(x=><option key={x.t} value={x.t}>{x.t}</option>)}</select>
-                    <NaSw on={tr.include!==false} onClick={()=>upd({include:tr.include===false})} label="Include"/>
-                    <button onClick={()=>set({triggers:a.triggers.filter((_,j)=>j!==i)})} style={{width:28,height:28,borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>
-                  </div>
-                  {def.suite&&<div><NaLbl req>Test Suites</NaLbl>{chips(suiteNames,"suites")}</div>}
-                  {(def.opts||def.suite)&&<div><NaLbl>Status</NaLbl>{chips(def.opts||NA_TC_STATUS,"values")}</div>}
-                </div>); })}
-              {trigOpts.length>0&&<button onClick={()=>set({triggers:[...(a.triggers||[]),{t:trigOpts[0].t,values:[],suites:[],include:true}]})} style={{fontSize:11.5,padding:"5px 11px",borderRadius:7,border:`1px solid ${T.border}`,background:"transparent",color:T.textSub,cursor:"pointer"}}>+ Add Trigger</button>}
             </div>}
             <div>
               <NaLbl req>Destination</NaLbl>
@@ -5268,15 +5193,14 @@ const NotifSettingsTabs = ({onToast})=>{
   );
 };
 // Settings › Notifications › Alerts
-const NotifAlertsSettings = ({onToast,kind="notification"})=>{
-  const all=useNA();
-  const st={...all, alerts:all.alerts.filter(a=>(a.kind||"notification")===kind)};
+const NotifAlertsSettings = ({onToast})=>{
+  const st=useNA();
   const [open,setOpen]=useState(null);
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{fontSize:12,fontWeight:600,color:T.textSub}}>Alerts <span style={{color:T.textMuted,fontWeight:400}}>({st.alerts.length})</span></div>
-        <button onClick={()=>setOpen(naBlank(kind))} style={{padding:"7px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>{kind==="observability"?"Add Alert":"Add Notification"}</button>
+        <button onClick={()=>setOpen(naBlank())} style={{padding:"7px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>Add Notification</button>
       </div>
       <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",background:T.bgSurface}}>
         <div style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.6fr 70px 60px",gap:10,padding:"9px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",borderBottom:`1px solid ${T.border}`}}>
@@ -5286,7 +5210,7 @@ const NotifAlertsSettings = ({onToast,kind="notification"})=>{
         {st.alerts.map(al=>(
           <div key={al.id} style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.6fr 70px 60px",gap:10,padding:"10px 14px",borderTop:`1px solid ${T.border}`,alignItems:"center",fontSize:12.5}}>
             <span onClick={()=>setOpen(JSON.parse(JSON.stringify(al)))} style={{fontWeight:600,color:T.text,cursor:"pointer"}}>{al.name}</span>
-            <span style={{color:T.textSub}}>{al.source}{(al.triggers||[]).length?` · ${al.triggers.map(t=>t.t).join(", ")}`:""}</span>
+            <span style={{color:T.textSub}}>{al.source}</span>
             <span style={{color:T.textSub,fontSize:12}}>{(al.destinations||[]).map(naDestLabel).join(", ")}</span>
             <NaSw on={al.enabled!==false} onClick={()=>naSaveAlert({id:al.id,enabled:al.enabled===false})} label=""/>
             <span style={{display:"flex",gap:6}}>
@@ -7056,7 +6980,6 @@ const QualityView = ({onToast=()=>{}}) => {
     {key:"testcases",  label:"Tests"},
     {key:"rules",      label:"Test Definitions"},
     {key:"incidents",  label:openIncCount>0?`Incidents (${openIncCount} open)`:"Incidents"},
-    {key:"alerts",     label:"Alerts"},
   ];
 
   const FPill = ({active,onClick,color,children})=>(
@@ -7609,7 +7532,6 @@ const QualityView = ({onToast=()=>{}}) => {
         </>}
 
         {/* ════════════════ INCIDENT MANAGER ════════════════ */}
-        {tab==="alerts"&&<div style={{padding:"20px 28px"}}><NotifAlertsSettings kind="observability" onToast={onToast}/></div>}
         {tab==="incidents"&&<>
           {/* ── Filter bar: search + assignee + status, one clean row ── */}
           {(()=>{
@@ -21363,8 +21285,6 @@ const AssetContractTab = ({asset,onToast})=>{
       SLA:{pass:res.sections.SLA,items:(res.sla&&!res.sla.pass)?[res.sla.reason]:[]},
     };
     const run={at:"Just now",by:"You",trigger:"Manual",result:status,total,passed,failed:res.failedSections,detail};
-    naObsEmit({source:"Data Contract", trigger:"Data Contract Status", status:status==="Success"?"Success":status==="Aborted"?"Aborted":"Failed", name:target.name, table:asset?.name,
-      title:`Data contract ${status==="Success"?"passed":"failed"} · ${target.name}`, body:res.failedSections.length?`Failing checks: ${res.failedSections.join(", ")}`:`${passed} of ${total} checks passed`});
     let incidentOpened=false;
     setContract(c=>{
       // replace the leading "Running" placeholder with the finalized run
