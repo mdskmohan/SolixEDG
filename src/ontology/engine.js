@@ -16,7 +16,7 @@ export const CARDINALITY = {
   many_to_one: "many to one", one_to_many: "one to many", one_to_one: "one to one", many_to_many: "many to many",
 };
 export const INVERSE_CARD = { many_to_one: "one_to_many", one_to_many: "many_to_one", one_to_one: "one_to_one", many_to_many: "many_to_many" };
-export const DATATYPES = ["string", "integer", "decimal", "boolean", "date", "dateTime", "anyURI"];
+export const DATATYPES = ["string", "integer", "long", "decimal", "double", "float", "boolean", "date", "dateTime", "time", "duration", "anyURI", "langString"];
 export const CONSTRAINT_KINDS = {
   required: "Required", unique: "Unique", pattern: "Matches pattern", values: "Allowed values",
   range: "Value range", cardinality: "Relationship count",
@@ -83,7 +83,8 @@ export function validate(ont) {
 export function snapshot(ont) {
   return clone({ name: ont.name, prefix: ont.prefix, namespace: ont.namespace, desc: ont.desc || "",
     classes: ont.classes || [], rels: ont.rels || [], constraints: ont.constraints || [], mappings: ont.mappings || [],
-    ...(ont.tests ? { tests: ont.tests } : {}), ...(ont.audience ? { audience: ont.audience } : {}) });
+    ...(ont.tests ? { tests: ont.tests } : {}), ...(ont.audience ? { audience: ont.audience } : {}),
+    ...(ont.individuals ? { individuals: ont.individuals } : {}), ...(ont.imports ? { imports: ont.imports } : {}), ...(ont.license ? { license: ont.license } : {}) });
 }
 export function hash(snap) {
   const norm = (v) => Array.isArray(v) ? v.map(norm) : v && typeof v === "object"
@@ -120,6 +121,7 @@ export function diff(prev, next) {
   coll("classes", "class", (x) => x.name, prev, next);
   coll("rels", "relationship", (x, s) => `${nm(s, x.from)} ${x.name} ${nm(s, x.to)}`, prev, next);
   coll("mappings", "mapping", (x, s) => `${x.kind} for ${nm(s, x.classId)}${x.target && x.target.column ? "." + x.target.column : ""}`, prev, next);
+  coll("individuals", "individual", (x) => x.name, prev, next);
   coll("tests", "expected-answer test", (x) => `"${x.question}"`, prev, next);
   coll("constraints", "constraint", (x, s) => `${CONSTRAINT_KINDS[x.kind] || x.kind} on ${nm(s, x.classId)}${x.prop ? "." + x.prop : ""}`, prev, next);
   return lines;

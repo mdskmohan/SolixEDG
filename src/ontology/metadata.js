@@ -17,7 +17,7 @@ import { slug, propSlug, parseTurtle, hash, snapshot } from "./engine.js";
 export const NS = {
   rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#", rdfs: "http://www.w3.org/2000/01/rdf-schema#",
   owl: "http://www.w3.org/2002/07/owl#", xsd: "http://www.w3.org/2001/XMLSchema#", sh: "http://www.w3.org/ns/shacl#",
-  skos: "http://www.w3.org/2004/02/skos/core#", dash: "http://datashapes.org/dash#",
+  skos: "http://www.w3.org/2004/02/skos/core#", dash: "http://datashapes.org/dash#", dcterms: "http://purl.org/dc/terms/",
   edg: "https://edg.solix.com/def#", cat: "https://edg.solix.com/catalog/",
 };
 const RDF_TYPE = NS.rdf + "type";
@@ -27,7 +27,8 @@ export const curie = (iri, extra = {}) => {
   for (const [k, v] of Object.entries(all)) if (v && String(iri).startsWith(v) && /^[A-Za-z0-9_.-]*$/.test(String(iri).slice(v.length))) return `${k}:${String(iri).slice(v.length)}`;
   return `<${iri}>`;
 };
-const XSD = { string: "xsd:string", integer: "xsd:integer", decimal: "xsd:decimal", boolean: "xsd:boolean", date: "xsd:date", dateTime: "xsd:dateTime", anyURI: "xsd:anyURI" };
+export const XSD = { string: "xsd:string", integer: "xsd:integer", long: "xsd:long", decimal: "xsd:decimal", double: "xsd:double", float: "xsd:float",
+  boolean: "xsd:boolean", date: "xsd:date", dateTime: "xsd:dateTime", time: "xsd:time", duration: "xsd:duration", anyURI: "xsd:anyURI", langString: "rdf:langString" };
 
 // ═══ Stable identifiers ═══
 // Assigned once, from the name at creation; renaming never changes them.
@@ -35,7 +36,7 @@ export function ensureIris(ont) {
   const ns = ont.namespace;
   if (!ns) return ont;   // a draft with no namespace yet gets its IRIs on save
   const used = new Set();
-  [...(ont.classes || []), ...(ont.rels || [])].forEach((x) => x.iri && used.add(x.iri));
+  [...(ont.classes || []), ...(ont.rels || []), ...(ont.individuals || [])].forEach((x) => x.iri && used.add(x.iri));
   (ont.classes || []).forEach((c) => (c.props || []).forEach((p) => p.iri && used.add(p.iri)));
   const take = (base, alt) => { let iri = ns + base; if (used.has(iri)) iri = ns + alt; let n = 2; const b = iri; while (used.has(iri)) iri = b + n++; used.add(iri); return iri; };
   const nameOf = (id) => ((ont.classes || []).find((c) => c.id === id) || {}).name || "";
@@ -43,7 +44,8 @@ export function ensureIris(ont) {
   const withProps = classes.map((c) => ({ ...c, props: (c.props || []).map((p) => ({ ...p, iri: p.iri || take(propSlug(p.name), propSlug(`${c.name} ${p.name}`)) })) }));
   const rels = (ont.rels || []).map((r) => ({ ...r, iri: r.iri || take(propSlug(r.name), propSlug(`${r.name} ${nameOf(r.to)}`)),
     inverseIri: r.inverse ? (r.inverseIri || take(propSlug(r.inverse), propSlug(`${r.inverse} ${nameOf(r.from)}`))) : null }));
-  return { ...ont, classes: withProps, rels };
+  const individuals = (ont.individuals || []).map((x) => ({ ...x, iri: x.iri || take(slug(x.name), slug(`${nameOf(x.classId)} ${x.name}`)) }));
+  return { ...ont, classes: withProps, rels, ...(ont.individuals ? { individuals } : {}) };
 }
 
 // ═══ Catalog references ═══
@@ -80,35 +82,194 @@ const lit = (v, dt) => ({ lit: String(v), ...(dt ? { dt } : {}) });
 
 export function owlTriples(ont) {
   const o = ensureIris(ont), ns = o.namespace, oi = ns.replace(/[#/]$/, "");
+  let bn = 0; const B = () => `_:o${++bn}`;
   const L = [T(oi, RDF_TYPE, id(X("owl:Ontology"))), T(oi, X("rdfs:label"), lit(o.name))];
   if (o.desc) L.push(T(oi, X("rdfs:comment"), lit(o.desc)));
-  if (o.publishedN) L.push(T(oi, X("owl:versionInfo"), lit(String(o.publishedN))));
+  // Ontology header: version, imports, provenance, licence, deprecation.
+  if (o.publishedN) {
+    L.push(T(oi, X("owl:versionInfo"), lit(String(o.publishedN))), T(oi, X("owl:versionIRI"), id(`${oi}/v${o.publishedN}`)));
+    if (o.publishedN > 1) L.push(T(oi, X("owl:priorVersion"), id(`${oi}/v${o.publishedN - 1}`)));
+  }
+  (o.imports || []).forEach((iri) => L.push(T(oi, X("owl:imports"), id(iri))));
+  (o.owners || (o.owner ? [o.owner] : [])).forEach((u) => L.push(T(oi, X("dcterms:creator"), lit(u))));
+  (o.stewards || (o.steward ? [o.steward] : [])).forEach((u) => L.push(T(oi, X("dcterms:contributor"), lit(u))));
+  if (o.created) L.push(T(oi, X("dcterms:created"), lit(o.created, X("xsd:date"))));
+  if (o.license) L.push(T(oi, X("dcterms:license"), /^https?:/.test(o.license) ? id(o.license) : lit(o.license)));
+  if (o.deprecated) L.push(T(oi, X("owl:deprecated"), lit("true", X("xsd:boolean"))));
   const C = (cid) => ((o.classes || []).find((c) => c.id === cid) || {}).iri;
+  const P = (pid) => { for (const c of o.classes || []) { const p = (c.props || []).find((x) => x.id === pid); if (p) return p; } return null; };
+  const R = (rid) => (o.rels || []).find((r) => r.id === rid);
+  const I = (iid) => (o.individuals || []).find((x) => x.id === iid);
+  const dep = (s, x) => { if (x.deprecated) L.push(T(s, X("owl:deprecated"), lit("true", X("xsd:boolean")))); };
+  const CARD = { min: ["owl:minCardinality", "owl:minQualifiedCardinality"], max: ["owl:maxCardinality", "owl:maxQualifiedCardinality"], exact: ["owl:cardinality", "owl:qualifiedCardinality"] };
+  const restrict = (cls, prop, kind, target, n, isRel) => {
+    const b = B();
+    L.push(T(cls, X("rdfs:subClassOf"), id(b)), T(b, RDF_TYPE, id(X("owl:Restriction"))), T(b, X("owl:onProperty"), id(prop)));
+    if (kind === "some") L.push(T(b, X("owl:someValuesFrom"), id(target)));
+    else if (kind === "all") L.push(T(b, X("owl:allValuesFrom"), id(target)));
+    else if (kind === "value") L.push(T(b, X("owl:hasValue"), target && /^https?:/.test(target) ? id(target) : lit(target)));
+    else if (isRel && target) L.push(T(b, X(CARD[kind][1]), lit(n, X("xsd:nonNegativeInteger"))), T(b, X("owl:onClass"), id(target)));
+    else L.push(T(b, X(CARD[kind][0]), lit(n, X("xsd:nonNegativeInteger"))));
+  };
   (o.classes || []).forEach((c) => {
     L.push(T(c.iri, RDF_TYPE, id(X("owl:Class"))), T(c.iri, X("rdfs:label"), lit(c.name)));
     if (c.desc) L.push(T(c.iri, X("rdfs:comment"), lit(c.desc)));
-    if (c.parent && C(c.parent)) L.push(T(c.iri, X("rdfs:subClassOf"), id(C(c.parent))));
+    [...new Set([c.parent, ...(c.parents || [])].filter(Boolean))].forEach((pid) => { if (C(pid)) L.push(T(c.iri, X("rdfs:subClassOf"), id(C(pid)))); });
     (c.synonyms || []).forEach((s) => L.push(T(c.iri, X("skos:altLabel"), lit(s))));
     (c.sameAs || []).forEach((s) => L.push(T(c.iri, X("owl:equivalentClass"), id(s.iri))));
+    (c.disjoint || []).forEach((d) => { if (C(d)) L.push(T(c.iri, X("owl:disjointWith"), id(C(d)))); });
+    const keys = (c.keyProps || []).map((k) => (P(k) || R(k) || {}).iri).filter(Boolean);
+    if (keys.length) L.push(T(c.iri, X("owl:hasKey"), { list: keys.map((k) => id(k)) }));
+    dep(c.iri, c);
     (c.props || []).forEach((p) => {
       L.push(T(p.iri, RDF_TYPE, id(X("owl:DatatypeProperty"))), T(p.iri, X("rdfs:label"), lit(p.name)),
         T(p.iri, X("rdfs:domain"), id(c.iri)), T(p.iri, X("rdfs:range"), id(X(XSD[p.datatype] || "xsd:string"))));
       if (p.desc) L.push(T(p.iri, X("rdfs:comment"), lit(p.desc)));
+      if (p.functional) L.push(T(p.iri, RDF_TYPE, id(X("owl:FunctionalProperty"))));
+      if (p.parentProp && P(p.parentProp)) L.push(T(p.iri, X("rdfs:subPropertyOf"), id(P(p.parentProp).iri)));
+      dep(p.iri, p);
+      if (p.required) restrict(c.iri, p.iri, "min", null, 1, false);
+    });
+    (c.restrictions || []).forEach((x) => {
+      const pr = R(x.prop) || P(x.prop); if (!pr) return;
+      const isRel = !!R(x.prop);
+      let target = null;
+      if (x.kind === "some" || x.kind === "all") target = isRel ? C(x.target) : X(XSD[x.target] || "xsd:string");
+      else if (x.kind === "value") target = (I(x.target) || {}).iri || x.target;
+      else if (isRel && x.target) target = C(x.target);
+      if ((x.kind === "some" || x.kind === "all" || x.kind === "value") && !target) return;
+      restrict(c.iri, pr.iri, x.kind, target, x.n != null ? x.n : 1, isRel);
     });
   });
+  const CHAR = { transitive: "owl:TransitiveProperty", symmetric: "owl:SymmetricProperty", asymmetric: "owl:AsymmetricProperty",
+    reflexive: "owl:ReflexiveProperty", irreflexive: "owl:IrreflexiveProperty", inverseFunctional: "owl:InverseFunctionalProperty" };
   (o.rels || []).forEach((r) => {
     if (!C(r.from) || !C(r.to)) return;
     L.push(T(r.iri, RDF_TYPE, id(X("owl:ObjectProperty"))), T(r.iri, X("rdfs:label"), lit(r.name)),
       T(r.iri, X("rdfs:domain"), id(C(r.from))), T(r.iri, X("rdfs:range"), id(C(r.to))));
     if (r.desc) L.push(T(r.iri, X("rdfs:comment"), lit(r.desc)));
     (r.synonyms || []).forEach((s) => L.push(T(r.iri, X("skos:altLabel"), lit(s))));
-    if (r.cardinality === "many_to_one" || r.cardinality === "one_to_one") L.push(T(r.iri, RDF_TYPE, id(X("owl:FunctionalProperty"))));
+    const types = new Set();
+    if (r.cardinality === "many_to_one" || r.cardinality === "one_to_one") types.add("owl:FunctionalProperty");
+    if (r.cardinality === "one_to_one" || r.cardinality === "one_to_many") types.add("owl:InverseFunctionalProperty");
+    (r.characteristics || []).forEach((k) => { if (CHAR[k]) types.add(CHAR[k]); });
+    types.forEach((t) => L.push(T(r.iri, RDF_TYPE, id(X(t)))));
+    if (r.parentRel && R(r.parentRel)) L.push(T(r.iri, X("rdfs:subPropertyOf"), id(R(r.parentRel).iri)));
+    if ((r.chain || []).length === 2 && r.chain.every((x) => R(x))) L.push(T(r.iri, X("owl:propertyChainAxiom"), { list: r.chain.map((x) => id(R(x).iri)) }));
+    dep(r.iri, r);
+    if (r.required) restrict(C(r.from), r.iri, "min", C(r.to), 1, true);
     if (r.inverseIri) {
       L.push(T(r.inverseIri, RDF_TYPE, id(X("owl:ObjectProperty"))), T(r.inverseIri, X("rdfs:label"), lit(r.inverse)),
         T(r.inverseIri, X("owl:inverseOf"), id(r.iri)), T(r.inverseIri, X("rdfs:domain"), id(C(r.to))), T(r.inverseIri, X("rdfs:range"), id(C(r.from))));
     }
   });
+  (o.individuals || []).forEach((x) => {
+    L.push(T(x.iri, RDF_TYPE, id(X("owl:NamedIndividual"))), T(x.iri, X("rdfs:label"), lit(x.name)));
+    if (C(x.classId)) L.push(T(x.iri, RDF_TYPE, id(C(x.classId))));
+    if (x.desc) L.push(T(x.iri, X("rdfs:comment"), lit(x.desc)));
+    dep(x.iri, x);
+  });
   return L;
+}
+
+// ═══ OWL as RDF/XML ═══
+// The format Protégé and most OWL tools open by default. Blank nodes are written
+// with rdf:nodeID; lists are written as rdf:first / rdf:rest chains.
+export function toRdfXml(triples, prefixes = {}) {
+  const out = []; let ln = 0;
+  triples.forEach((t) => {
+    if (!t.o.list) { out.push(t); return; }
+    const items = t.o.list; if (!items.length) { out.push({ s: t.s, p: t.p, o: { id: NS.rdf + "nil" } }); return; }
+    const nodes = items.map(() => `_:l${++ln}`);
+    out.push({ s: t.s, p: t.p, o: { id: nodes[0] } });
+    items.forEach((it, i) => { out.push({ s: nodes[i], p: NS.rdf + "first", o: it }, { s: nodes[i], p: NS.rdf + "rest", o: { id: nodes[i + 1] || NS.rdf + "nil" } }); });
+  });
+  const P = { ...NS, ...prefixes }, used = new Set(["rdf"]);
+  const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const qn = (iri) => { for (const [k, v] of Object.entries(P)) if (iri.startsWith(v) && /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(iri.slice(v.length))) { used.add(k); return `${k}:${iri.slice(v.length)}`; } return null; };
+  const ref = (x) => (String(x).startsWith("_:") ? `rdf:nodeID="${esc(String(x).slice(2))}"` : `rdf:resource="${esc(x)}"`);
+  const order = [], by = new Map();
+  out.forEach((t) => { if (!by.has(t.s)) { by.set(t.s, []); order.push(t.s); } by.get(t.s).push(t); });
+  const body = order.map((s) => {
+    const head = String(s).startsWith("_:") ? `<rdf:Description rdf:nodeID="${esc(String(s).slice(2))}">` : `<rdf:Description rdf:about="${esc(s)}">`;
+    const lines = by.get(s).map((t) => {
+      const q = qn(t.p) || "rdf:value";
+      if (t.o.id != null) return `    <${q} ${ref(t.o.id)}/>`;
+      return `    <${q}${t.o.dt ? ` rdf:datatype="${esc(t.o.dt)}"` : ""}>${esc(t.o.lit)}</${q}>`;
+    });
+    return `  ${head}\n${lines.join("\n")}\n  </rdf:Description>`;
+  }).join("\n");
+  const xmlns = Object.entries(P).filter(([k]) => used.has(k)).map(([k, v]) => `\n    xmlns:${k}="${esc(v)}"`).join("");
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<rdf:RDF${xmlns}>\n${body}\n</rdf:RDF>\n`;
+}
+
+// ═══ Apache Ossie (ontology spec 0.3.0.dev0) ═══
+// Classes → EntityType concepts; data properties → relationships to built-in
+// value types; object properties → relationships with roles and multiplicity;
+// keys → identify_by; parents → extends. Catalog bindings travel in a separate
+// mapping document (concept_mappings), as the spec defines.
+export const OSSIE_ONTOLOGY_VERSION = "0.3.0.dev0";
+const OSSIE_VT = { string: "String", integer: "Integer", long: "Integer", decimal: "Decimal", double: "Float", float: "Float", boolean: "Boolean",
+  date: "Date", dateTime: "DateTime", time: "String", duration: "String", anyURI: "String", langString: "String" };
+const yq = (v) => (/^[A-Za-z_][A-Za-z0-9_ .\-/]*$/.test(String(v)) && !/^(true|false|null|yes|no)$/i.test(String(v)) && !/:\s/.test(String(v)) ? String(v) : JSON.stringify(String(v)));
+export function toYaml(v, ind = 0) {
+  const pad = " ".repeat(ind);
+  if (Array.isArray(v)) {
+    if (!v.length) return "[]";
+    return v.map((x) => {
+      if (x && typeof x === "object" && !Array.isArray(x)) { const inner = toYaml(x, ind + 2).replace(/^\s+/, ""); return `${pad}- ${inner}`; }
+      return `${pad}- ${yq(x)}`;
+    }).join("\n");
+  }
+  if (v && typeof v === "object") {
+    return Object.entries(v).filter(([, x]) => x != null && !(Array.isArray(x) && !x.length)).map(([k, x]) => {
+      if (x && typeof x === "object") return `${pad}${k}:\n${toYaml(x, ind + 2)}`;
+      return `${pad}${k}: ${yq(x)}`;
+    }).join("\n");
+  }
+  return `${pad}${yq(v)}`;
+}
+const ossieName = (s) => slug(s) || "Concept";
+export function toOssie(ont, ctx) {
+  const o = ensureIris(ont), pf = o.prefix || "ex";
+  const cname = (cid) => ossieName(((o.classes || []).find((c) => c.id === cid) || {}).name);
+  const q = (iri) => (iri && iri.startsWith(o.namespace) ? `${pf}:${iri.slice(o.namespace.length)}` : iri);
+  const concepts = (o.classes || []).map((c) => {
+    const cn = ossieName(c.name);
+    const dataRels = (c.props || []).map((p) => ({ name: propSlug(p.name), description: p.desc || undefined,
+      multiplicity: p.functional || (c.keyProps || []).includes(p.id) ? "ManyToOne" : undefined,
+      roles: [{ concept: OSSIE_VT[p.datatype] || "String" }], verbalizes: [`{${cn}} has ${p.name} {${OSSIE_VT[p.datatype] || "String"}}`], iri: q(p.iri) }));
+    const objRels = (o.rels || []).filter((r) => r.from === c.id).map((r) => {
+      const tn = cname(r.to), self = tn === cn;
+      return { name: propSlug(r.name), description: r.desc || undefined,
+        multiplicity: r.cardinality === "many_to_one" ? "ManyToOne" : r.cardinality === "one_to_one" ? "OneToOne" : undefined,
+        roles: [self ? { concept: tn, name: "other" } : { concept: tn }],
+        verbalizes: [`{${cn}} ${r.name} {${self ? `${tn}:other` : tn}}`], iri: q(r.iri) };
+    });
+    const keys = (c.keyProps || []).map((k) => { const p = (c.props || []).find((x) => x.id === k); return p ? propSlug(p.name) : null; }).filter(Boolean);
+    return { concept: cn, type: "EntityType", description: c.desc || undefined,
+      extends: [...new Set([c.parent, ...(c.parents || [])].filter(Boolean))].map(cname),
+      identify_by: keys.length ? keys : undefined, iri: q(c.iri), relationships: [...dataRels, ...objRels] };
+  });
+  const doc = { name: ossieName(o.name), description: o.desc || undefined, prefixes: { [pf]: o.namespace }, ontology: concepts };
+  // Mapping document: each bound class to its key expression; properties and
+  // relationships as link mappings to DATASET.FIELD expressions.
+  const bs = bindings(o, ctx);
+  const cm = (o.classes || []).map((c) => {
+    const cb = bs.find((b) => b.kind === "class" && b.classId === c.id && b.table); if (!cb) return null;
+    const keyExpr = `${cb.table}.${(cb.keys || [])[0] || "ID"}`;
+    const children = [
+      ...bs.filter((b) => b.kind === "property" && b.classId === c.id && b.column).map((b) => {
+        const p = (c.props || []).find((x) => x.id === b.propId); return p ? { relationship: propSlug(p.name), object_mapping: { expression: `${b.table}.${b.column}` } } : null; }),
+      ...bs.filter((b) => b.kind === "relationship" && b.classId === c.id && b.column).map((b) => {
+        const r = (o.rels || []).find((x) => x.id === b.relId); return r ? { relationship: propSlug(r.name), object_mapping: { concept: cname(r.to), expression: `${b.table}.${b.column}` } } : null; }),
+    ].filter(Boolean);
+    return { concept: ossieName(c.name), link_mappings: [{ object_mapping: { expression: keyExpr }, children: children.length ? children : undefined }] };
+  }).filter(Boolean);
+  const mapping = { version: OSSIE_ONTOLOGY_VERSION, name: `${ossieName(o.name)}Mapping`, description: `Catalog bindings of ${o.name}`,
+    ontology_ref: { name: ossieName(o.name) }, semantic_model_ref: { name: `${ossieName(o.name)}Catalog` }, concept_mappings: cm };
+  const clean = (x) => JSON.parse(JSON.stringify(x));
+  return { ontology: `# Apache Ossie ontology · spec ${OSSIE_ONTOLOGY_VERSION}\n${toYaml(clean(doc))}\n`, mapping: `# Apache Ossie mapping · spec ${OSSIE_ONTOLOGY_VERSION}\n${toYaml(clean(mapping))}\n` };
 }
 
 // Catalog facts for the assets and fields the bindings reference: present
@@ -402,6 +563,9 @@ export function exportFiles(ont, ctx) {
     "mappings.ttl": writeTurtle([...catalogTriples(o, ctx), ...mappingTriples(o, ctx)], pf),
     "mapping-shapes.ttl": writeTurtle(shapesTriples(MAPPING_SHAPES), pf),
     "report.ttl": writeTurtle(reportTriples(validateMetadata(o, ctx)), pf),
+    "ontology.owl": toRdfXml(owlTriples(o), pf),
+    "ossie-ontology.yaml": toOssie(o, ctx).ontology,
+    "ossie-mapping.yaml": toOssie(o, ctx).mapping,
   };
 }
 
@@ -468,22 +632,37 @@ export function roundTrip(ont, ctx) {
   return { ok: checks.every((c) => c.ok), checks, files };
 }
 
-// ═══ Review lifecycle ═══
-// Draft → In review → Approved (or Changes requested). The steward submits;
-// an owner other than the submitter approves. Approval pins the exact draft;
-// any edit after that puts it back to Draft.
+// ═══ Status, the EDG way ═══
+// Draft → In Review → Approved, or Rejected; Deprecated by an owner. Anyone
+// editing submits; an owner who did not submit approves, and only when there
+// are no errors. Approving publishes the exact draft as a new version; any edit
+// after that is a new Draft while the approved version stays active.
+export const STATUSES = ["Draft", "In Review", "Approved", "Rejected", "Deprecated"];
 export const draftHash = (ont) => hash({ ...snapshot(ont), tests: ont.tests || [], audience: ont.audience || [] });
-export function reviewState(ont) {
+export function statusOf(ont) {
+  if (ont.deprecated) return "Deprecated";
   const r = ont.review || {};
-  if (!r.state || r.state === "draft") return "draft";
-  if (r.hash && r.hash !== draftHash(ont)) return "draft";
-  return r.state;
+  const same = r.hash && r.hash === draftHash(ont);
+  if (same && r.state === "in_review") return "In Review";
+  if (same && (r.state === "rejected" || r.state === "changes_requested")) return "Rejected";
+  const latest = (ont.versions || [])[0];
+  if (ont.publishedN && latest && latest.hash === hash(snapshot(ont))) return "Approved";
+  return "Draft";
 }
-export function canApprove(ont, user) {
+// Kept for callers that still read the lower-case review state.
+export const reviewState = (ont) => ({ "In Review": "in_review", Approved: "approved", Rejected: "changes_requested" })[statusOf(ont)] || "draft";
+// Errors that block approval: structure, mapping checks (SHACL violations) and failing expected answers.
+export function blockingIssues(ont, ctx, structuralErrors = 0) {
+  const rep = validateMetadata(ont, ctx), tests = runTests(ont, ctx);
+  const failing = tests.filter((t) => !t.pass).length;
+  return { structural: structuralErrors, violations: rep.violations, failing, total: structuralErrors + rep.violations + failing };
+}
+export function canApprove(ont, user, blocking = 0) {
   const r = ont.review || {};
   const owners = ont.owners || (ont.owner ? [ont.owner] : []);
-  if (reviewState(ont) !== "in_review") return { ok: false, why: "Not in review" };
+  if (statusOf(ont) !== "In Review") return { ok: false, why: "Not in review" };
   if (r.submittedBy === user) return { ok: false, why: "The submitter cannot approve" };
   if (!owners.includes(user)) return { ok: false, why: "Only an owner can approve" };
+  if (blocking > 0) return { ok: false, why: `${blocking} error${blocking === 1 ? "" : "s"} must be fixed first` };
   return { ok: true };
 }

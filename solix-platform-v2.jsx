@@ -41085,6 +41085,8 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
   const [srcIdx, setSrcIdx] = useState(0);
   const [pickTable, setPickTable] = useState("");
   const [pickCols, setPickCols] = useState({});
+  const [eqIri, setEqIri] = useState("");
+  const [propOpen, setPropOpen] = useState(null);
   const concepts = _gtState.filter(t=>t.status!=="Deprecated");
   const opts = ontCatalogOptions();
   const sources = maps.filter(m=>m.kind==="dataset"||m.kind==="table");
@@ -41160,9 +41162,46 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
     <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
     <OntField label="Synonyms · skos:altLabel"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
     <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1}}><OntField label="Parent class · rdfs:subClassOf"><SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})} options={[{v:"",l:"—"}, ...o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))]}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Parent classes · rdfs:subClassOf"><OntMulti value={[d.parent, ...(d.parents||[])].filter(Boolean)} onChange={v=>setD({...d, parent:v[0]||null, parents:v.slice(1)})}
+        placeholder="Add a parent class" options={o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))}/></OntField></div>
       <div style={{flex:1}}><OntField label="Glossary term"><SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})} options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
     </div>
+  </>;
+  const relsOut = o.rels.filter(r=>r.from===d.id);
+  const propOpts = [...relsOut.map(r=>({v:r.id,l:`${r.name} → ${(ontClass(o,r.to)||{}).name}`})), ...d.props.filter(p=>p.name).map(p=>({v:p.id,l:p.name}))];
+  const setR = (i, patch) => setD(x=>({...x, restrictions:(x.restrictions||[]).map((y,j)=>j===i?{...y,...patch}:y)}));
+  const axioms = <>
+    <Head>OWL axioms</Head>
+    <div style={{display:"flex",gap:12}}>
+      <div style={{flex:1}}><OntField label="Disjoint with · owl:disjointWith"><OntMulti value={d.disjoint||[]} onChange={v=>setD({...d,disjoint:v})} placeholder="Add a class" options={o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Key · owl:hasKey"><OntMulti value={d.keyProps||[]} onChange={v=>setD({...d,keyProps:v})} placeholder="Add a property" options={d.props.filter(p=>p.name).map(p=>({v:p.id,l:p.name}))}/></OntField></div>
+    </div>
+    <OntField label="Equivalent to · owl:equivalentClass">
+      {(d.sameAs||[]).length>0 && <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>{d.sameAs.map(x=>(
+        <div key={x.iri} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5}}>
+          <span style={{fontFamily:"ui-monospace,monospace",color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.iri}</span>
+          <button onClick={()=>setD(y=>({...y, sameAs:y.sameAs.filter(z=>z.iri!==x.iri)}))} style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(11)}</button></div>))}</div>}
+      <div style={{display:"flex",gap:8}}><div style={{flex:1}}><Input2 value={eqIri} onChange={e=>setEqIri(e.target.value)} placeholder="https://schema.org/Person"/></div>
+        <Btn small onClick={()=>{ const v = eqIri.trim(); if(!/^https?:\/\//.test(v)){ onToast&&onToast("Enter a full IRI","error"); return; }
+          setD(y=>({...y, sameAs:[...(y.sameAs||[]).filter(z=>z.iri!==v), {iri:v, label:v.replace(/^.*[#/]/,""), standard:"External"}]})); setEqIri(""); }}>Add</Btn></div>
+    </OntField>
+    <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:6}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
+    <Head right={<Btn small icon={Ic.plus(10)} disabled={!propOpts.length} onClick={()=>setD(x=>({...x, restrictions:[...(x.restrictions||[]), {id:ONT.uid("x"), prop:propOpts[0].v, kind:"some", target:"", n:1}]}))}>Add restriction</Btn>}>
+      Restrictions · owl:Restriction · {(d.restrictions||[]).length}</Head>
+    {(d.restrictions||[]).length===0 && <div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>None</div>}
+    {(d.restrictions||[]).map((x,i)=>{ const rel = o.rels.find(r=>r.id===x.prop); const card = ["min","max","exact"].includes(x.kind);
+      const inds = (o.individuals||[]).filter(v=>rel && v.classId===rel.to);
+      return (
+      <div key={x.id} style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.4fr 24px",gap:8,alignItems:"center",marginBottom:6}}>
+        <SLSelect value={x.prop} onChange={e=>setR(i,{prop:e.target.value, target:""})} options={propOpts}/>
+        <SLSelect value={x.kind} onChange={e=>setR(i,{kind:e.target.value, target:""})} options={[{v:"some",l:"some values from"},{v:"all",l:"all values from"},{v:"value",l:"has value"},{v:"min",l:"min cardinality"},{v:"max",l:"max cardinality"},{v:"exact",l:"exact cardinality"}]}/>
+        {card ? <div style={{display:"flex",gap:6}}><div style={{width:64}}><Input2 value={String(x.n==null?1:x.n)} onChange={e=>setR(i,{n:Math.max(0,parseInt(e.target.value,10)||0)})}/></div>
+            {rel && <div style={{flex:1}}><SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} options={[{v:"",l:"Any class"}, ...o.classes.map(c=>({v:c.id,l:c.name}))]}/></div>}</div>
+          : x.kind==="value" ? (inds.length ? <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Select an individual" options={inds.map(v=>({v:v.id,l:v.name}))}/>
+            : <Input2 value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Value"/>)
+          : <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder={rel?"Select a class":"Select a data type"} options={rel ? o.classes.map(c=>({v:c.id,l:c.name})) : ONT.DATATYPES}/>}
+        <button onClick={()=>setD(y=>({...y, restrictions:y.restrictions.filter(z=>z.id!==x.id)}))} title="Remove" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
+      </div>); })}
   </>;
   return (
     <OntDrawerShell title={isNew?"New Class":`Edit ${cls.name}`} width={760} onClose={onClose} footer={<>
@@ -41192,6 +41231,7 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
 
       {mode==="edit" && <>
         {identity}
+        {axioms}
         <Head right={<div style={{width:300}}><SLSelect value="" onChange={e=>addSource(e.target.value)} placeholder="Add a catalog table" options={opts}/></div>}>
           Data sources · {sources.length}</Head>
         {sources.length===0 && <div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>No table yet · the class has no instances until one is added</div>}
@@ -41205,18 +41245,31 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
         {sources.length>1 && <div style={{marginBottom:8}}><SegTabs tabs={sources.map((m,i)=>({key:String(i), label:MAP.sourceTable(m, ctx)}))} active={String(Math.min(srcIdx, sources.length-1))} onChange={k=>setSrcIdx(Number(k))}/></div>}
         {d.props.length===0 ? <div style={{fontSize:11.5,color:T.textMuted}}>No properties</div> :
         <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:`1.4fr .9fr .6fr ${src?"1.4fr ":""}28px`,gap:8,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-            {["Property","Data type","Required", ...(src?[`Column in ${srcTable}`]:[]), ""].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</span>)}
+          <div style={{display:"grid",gridTemplateColumns:`1.3fr .9fr .55fr .55fr ${src?"1.3fr ":""}24px 24px`,gap:8,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+            {["Property · owl:DatatypeProperty","Data type · rdfs:range","Required","Single value", ...(src?[`Column in ${srcTable}`]:[]), "", " "].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</span>)}
           </div>
           {d.props.map((p,i)=>{ const fm = src ? fieldOf(p.id) : null; return (
-            <div key={p.id||i} style={{display:"grid",gridTemplateColumns:`1.4fr .9fr .6fr ${src?"1.4fr ":""}28px`,gap:8,padding:"6px 12px",alignItems:"center",borderBottom:i<d.props.length-1?`1px solid ${T.border}`:"none"}}>
+            <React.Fragment key={p.id||i}>
+            <div style={{display:"grid",gridTemplateColumns:`1.3fr .9fr .55fr .55fr ${src?"1.3fr ":""}24px 24px`,gap:8,padding:"6px 12px",alignItems:"center",borderBottom:i<d.props.length-1||propOpen===p.id?`1px solid ${T.border}`:"none"}}>
               <Input2 value={p.name} onChange={e=>setProp(i,{name:e.target.value})} placeholder="Property name"/>
               <SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ONT.DATATYPES}/>
               <input type="checkbox" checked={!!p.required} onChange={e=>setProp(i,{required:e.target.checked})} style={{justifySelf:"start"}}/>
+              <input type="checkbox" title="owl:FunctionalProperty" checked={!!p.functional} onChange={e=>setProp(i,{functional:e.target.checked})} style={{justifySelf:"start"}}/>
               {src && <SLSelect value={fm?fm.target.column:""} onChange={e=>setColumn(p.id, e.target.value)} placeholder="Not mapped"
                 options={[{v:"",l:"Not mapped"}, ...srcCols.map(c=>({v:c.name,l:`${c.name} · ${c.type}`})), ...(fm && !srcCols.some(c=>c.name===fm.target.column)?[{v:fm.target.column,l:`${fm.target.column} · missing`}]:[])]}/>}
+              <button onClick={()=>setPropOpen(propOpen===p.id?null:p.id)} title="More OWL fields" style={{background:"transparent",border:"none",color:propOpen===p.id?T.accent:T.textMuted,cursor:"pointer",display:"flex",fontWeight:800}}>⋯</button>
               <button onClick={()=>removeProp(p.id)} title="Remove property" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
-            </div>); })}
+            </div>
+            {propOpen===p.id && <div style={{padding:"10px 12px",background:T.bg,borderBottom:i<d.props.length-1?`1px solid ${T.border}`:"none"}}>
+              <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginBottom:8}}>{p.iri || (o.namespace?`${o.namespace}${ONT.propSlug(p.name||"…")}`:"Assigned on save")}</div>
+              <div style={{display:"flex",gap:10}}>
+                <div style={{flex:2}}><OntField label="Definition · rdfs:comment"><Input2 value={p.desc||""} onChange={e=>setProp(i,{desc:e.target.value})}/></OntField></div>
+                <div style={{flex:1}}><OntField label="Sub-property of · rdfs:subPropertyOf"><SLSelect value={p.parentProp||""} onChange={e=>setProp(i,{parentProp:e.target.value||null})}
+                  options={[{v:"",l:"—"}, ...o.classes.flatMap(c=>(c.id===d.id?d.props:(c.props||[])).filter(x=>x.id!==p.id && x.name).map(x=>({v:x.id,l:`${c.id===d.id?d.name:c.name}.${x.name}`})))]}/></OntField></div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!p.deprecated} onChange={e=>setProp(i,{deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
+            </div>}
+            </React.Fragment>); })}
         </div>}
         {(d.sameAs||[]).length>0 && <><Head>Equivalent to</Head>
           {d.sameAs.map(s=>(
@@ -41403,7 +41456,8 @@ const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
   const { roleCfg } = useRole();
   const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
   const isNew = !rel || !rel.id;
-  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", required:false, kind:"association", desc:"", synonyms:[], ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
+  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", required:false, kind:"association", desc:"", synonyms:[], characteristics:[], chain:[], parentRel:null, deprecated:false, ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
+  const relOpts = o.rels.filter(r=>r.id!==d.id).map(r=>({v:r.id,l:`${(ontClass(o,r.from)||{}).name} ${r.name} ${(ontClass(o,r.to)||{}).name}`}));
   const [syn, setSyn] = useState(((rel&&rel.synonyms)||[]).join(", "));
   const opts = o.classes.map(c=>({v:c.id,l:c.name}));
   // The relationship is bound to one catalog field: the column of the source
@@ -41418,7 +41472,7 @@ const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
   const iri = rel && rel.iri ? rel.iri : (o.namespace ? `${o.namespace}${ONT.propSlug(d.name||"…")}` : "Assigned on save");
   const save = () => {
     if(!d.from||!d.to||!d.name.trim()){ onToast&&onToast("Pick both classes and name the relationship","error"); return; }
-    const r = {...d, name:d.name.trim().toLowerCase(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean)};
+    const r = {...d, name:d.name.trim().toLowerCase(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean), chain:(d.chain||[]).filter(Boolean).length===2?d.chain:[]};
     const rf = table ? [{id:(cur&&cur.id)||ONT.uid("map"), kind:"relfield", classId:r.from, relId:r.id, target:{table, column:column||""}, status:"approved", by:me, at:new Date().toISOString(), prov:{by:"human"}}] : [];
     ap(x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y),
       mappings:[...MAP.mappingsOf(x).filter(m=>!(m.kind==="relfield" && m.relId===r.id)), ...rf]}));
@@ -41442,6 +41496,20 @@ const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
         <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l:`${l}${v==="many_to_one"||v==="one_to_one"?" · sh:maxCount 1":""}`}))}/></OntField></div>
         <div style={{flex:1}}><OntField label="Required · sh:minCount 1"><SLSelect value={d.required?"yes":"no"} onChange={e=>setD({...d,required:e.target.value==="yes"})} options={[{v:"no",l:"No"},{v:"yes",l:"Yes"}]}/></OntField></div>
       </div>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><OntField label="Sub-property of · rdfs:subPropertyOf"><SLSelect value={d.parentRel||""} onChange={e=>setD({...d,parentRel:e.target.value||null})} options={[{v:"",l:"—"}, ...relOpts]}/></OntField></div>
+        <div style={{flex:1.4}}><OntField label="Property chain · owl:propertyChainAxiom"><div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{flex:1}}><SLSelect value={(d.chain||[])[0]||""} onChange={e=>setD({...d,chain:[e.target.value,(d.chain||[])[1]||""]})} options={[{v:"",l:"—"}, ...relOpts]}/></div>
+          <span style={{fontSize:11,color:T.textMuted}}>then</span>
+          <div style={{flex:1}}><SLSelect value={(d.chain||[])[1]||""} onChange={e=>setD({...d,chain:[(d.chain||[])[0]||"",e.target.value]})} options={[{v:"",l:"—"}, ...relOpts]}/></div></div></OntField></div>
+      </div>
+      <OntField label="Characteristics">
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px 14px"}}>{[["transitive","Transitive"],["symmetric","Symmetric"],["asymmetric","Asymmetric"],["reflexive","Reflexive"],["irreflexive","Irreflexive"],["inverseFunctional","Inverse functional"]].map(([k,l])=>(
+          <label key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}><input type="checkbox" checked={(d.characteristics||[]).includes(k)}
+            onChange={e=>setD({...d, characteristics:e.target.checked?[...(d.characteristics||[]),k]:(d.characteristics||[]).filter(x=>x!==k)})}/>{l}
+            <span style={{fontFamily:"ui-monospace,monospace",fontSize:10,color:T.textMuted}}>owl:{k==="inverseFunctional"?"InverseFunctional":k.charAt(0).toUpperCase()+k.slice(1)}Property</span></label>))}</div>
+      </OntField>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:4}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
       <Head>Catalog binding · edg:RelationshipBinding</Head>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Catalog asset · edg:sourceAsset"><SLSelect value={table} onChange={e=>{ setTable(e.target.value); setColumn(""); }}
@@ -41465,12 +41533,12 @@ const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
     if(needsValue && !String(d.value).trim()){ onToast&&onToast("Give the constraint a value","error"); return; }
     const k = {...d, id:d.id||ONT.uid("k")};
     ap(x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
-    onToast&&onToast("Constraint saved","success"); onClose();
+    onToast&&onToast("Rule saved","success"); onClose();
   };
   return (
-    <OntDrawerShell title={isNew?"New constraint":"Constraint"} width={540} onClose={onClose} footer={<>
+    <OntDrawerShell title={isNew?"New data rule":"Data rule"} width={540} onClose={onClose} footer={<>
       {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Constraint removed","success"); onClose(); }}>Remove</Btn></span>}
-      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add constraint":"Save"}</Btn></>}>
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add rule":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value,prop:""})} placeholder="Select a class" options={o.classes.map(x=>({v:x.id,l:x.name}))}/></OntField></div>
         <div style={{flex:1}}><OntField label={d.kind==="cardinality"?"Relationship · sh:path":"Property · sh:path"}><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})}
@@ -42127,12 +42195,11 @@ const SLOntologyTab = ({mdl, ents, mets, onNav, onToast}) => {
 // ── Presentation shared with Semantic Models: icon badge, colour, status chip ──
 const ontIcon   = (o) => (o && o.icon)  || "◈";
 const ontColour = (o) => (o && o.color) || "#7c3aed";
-const OntStatusChip = ({o}) => {
-  const pub = o.status==="Published", c = CERT_META[pub?"Approved":"Draft"];
-  const dirty = (o.versions||[]).length>0 && ONT.isDirty(o), d = CERT_META["In Review"];
+const ONT_STATUS_C = {Draft:"#64748b", "In Review":"#2563eb", Approved:"#16a34a", Rejected:"#e11d48", Deprecated:"#7c3aed"};
+const OntStatusChip = ({o}) => { const st = OMD.statusOf(o), c = ONT_STATUS_C[st];
   return (<>
-    <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c.bg,color:c.color,border:`1px solid ${c.border}`,whiteSpace:"nowrap"}}>{c.icon} {pub?`Published · v${o.publishedN}`:"Draft"}</span>
-    {dirty && <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:d.bg,color:d.color,border:`1px solid ${d.border}`,whiteSpace:"nowrap"}}>Unpublished changes</span>}
+    <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:c+"12",color:c,border:`1px solid ${c}38`,whiteSpace:"nowrap"}}>{st}{st==="Approved"&&o.publishedN?` · v${o.publishedN}`:""}</span>
+    {st!=="Approved" && o.publishedN ? <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,whiteSpace:"nowrap"}}>v{o.publishedN} active</span> : null}
   </>);
 };
 const OntSidebar = ({o, cov}) => {
@@ -42148,17 +42215,23 @@ const OntSidebar = ({o, cov}) => {
     <div style={{width:260,flexShrink:0,borderLeft:`1px solid ${T.border}`,background:T.bgSurface,overflowY:"auto"}}>
       <Sec>
         <SLMetaLabel>Details</SLMetaLabel>
-        {[["Data domain",o.domain],["Classes",String(o.classes.length)],["Relationships",String(o.rels.length)],["Constraints",String(o.constraints.length)],
+        {[["Data domain",o.domain],["Classes",String(o.classes.length)],["Relationships",String(o.rels.length)],["Data rules",String(o.constraints.length)],
           ["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
           ["Glossary terms",String(o.classes.filter(c=>c.termId).length)],["Created",o.created||"—"],["Published",latest?`v${latest.n} · ${latest.at.slice(0,10)}`:"Never"],
-          ["Prefix",o.prefix],["Store",ONT_STORE]].map(([k,v])=>(
+          ["Prefix",o.prefix],["Imports",String((o.imports||[]).length)],["License",(ONT_LICENSES.find(x=>x.v===(o.license||""))||{l:o.license||"—"}).l],
+          ["Individuals",String((o.individuals||[]).length)],["Store",ONT_STORE]].map(([k,v])=>(
           <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
             <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
             <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
           </div>))}
       </Sec>
-      <Sec><SLMetaLabel>Status</SLMetaLabel><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><OntStatusChip o={o}/><OntReviewChip o={o}/></div>
-        {(o.review||{}).approvedBy && OMD.reviewState(o)==="approved" && <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Approved by {o.review.approvedBy}</div>}</Sec>
+      <Sec><SLMetaLabel>Status</SLMetaLabel><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><OntStatusChip o={o}/></div>
+        {(o.review||{}).state==="in_review" && OMD.statusOf(o)==="In Review" && <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Submitted by {o.review.submittedBy}</div>}
+        {(o.versions||[]).length>0 && <div style={{marginTop:10}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>Versions</div>
+          {o.versions.slice(0,6).map(v=><div key={v.n} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,color:v.n===o.publishedN?T.text:T.textMuted,padding:"2px 0"}}>
+            <span style={{fontWeight:v.n===o.publishedN?700:400}}>v{v.n}{v.n===o.publishedN?" · active":""}</span><span>{v.at.slice(0,10)} · {v.by}</span></div>)}
+        </div>}</Sec>
       <Sec>
         <SLMetaLabel onEdit={()=>setPane(p=>p==="aud"?null:"aud")}>Query access</SLMetaLabel>
         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -42228,8 +42301,8 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
   const people = STEWARDS_LIST.map(x=>x.name);
   const [sec, setSec] = useState("details");
   const [d, setD] = useState(()=> isEdit
-    ? {name:o.name, desc:o.desc||"", domain:o.domain||"", owner:o.owner||"", steward:o.steward||"", prefix:o.prefix, ns:o.namespace, prefixTouched:true}
-    : {name:"", desc:"", domain:"", owner:"", steward:"", prefix:"", ns:"", prefixTouched:false});
+    ? {name:o.name, desc:o.desc||"", domain:o.domain||"", owner:o.owner||"", steward:o.steward||"", prefix:o.prefix, ns:o.namespace, prefixTouched:true, imports:o.imports||[], license:o.license||""}
+    : {name:"", desc:"", domain:"", owner:"", steward:"", prefix:"", ns:"", prefixTouched:false, imports:[], license:""});
   const [draft, setDraft] = useState(()=> JSON.parse(JSON.stringify(isEdit
     ? {id:o.id, name:o.name, classes:o.classes||[], rels:o.rels||[], constraints:o.constraints||[], mappings:o.mappings||[]}
     : {id:"ont_draft", name:"", classes:[], rels:[], constraints:[], mappings:[]})));
@@ -42249,7 +42322,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
   const err = !d.name.trim() ? "Enter an ontology name" : nameTaken ? "An ontology with this name exists" : !d.domain ? "Select a data domain"
     : !d.owner ? "Select an owner" : !isEdit && !/^[a-z][a-z0-9]{0,9}$/.test(prefix) ? "Prefix: 1–10 lowercase letters or digits, starting with a letter" : prefixTaken ? "Prefix is in use" : null;
   const SECTIONS = [{k:"details",l:"Details"},{k:"classes",l:`Classes · ${draft.classes.length}`},{k:"rels",l:`Relationships · ${draft.rels.length}`},
-    {k:"constraints",l:`Constraints · ${draft.constraints.length}`},{k:"review",l:"Review"}];
+    {k:"constraints",l:`Data rules · ${draft.constraints.length}`},{k:"review",l:"Review"}];
   const order = SECTIONS.map(s=>s.k), idx = order.indexOf(sec);
   const go = (k) => { if(k!=="details" && err){ onToast&&onToast(err,"error"); setSec("details"); return; } setSec(k); };
   const view = {...draft, name:d.name};      // what the editors see
@@ -42267,7 +42340,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
     if(err){ onToast&&onToast(err,"error"); setSec("details"); return; }
     const owners = [d.owner, ...((isEdit && o.owners)||[]).filter(x=>x!==d.owner)];
     const stewards = d.steward ? [d.steward, ...((isEdit && o.stewards)||[]).filter(x=>x!==d.steward)] : ((isEdit && o.stewards)||[d.owner]);
-    const body = {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards,
+    const body = {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards, imports:d.imports, license:d.license,
       classes:draft.classes, rels:draft.rels, constraints:draft.constraints,
       mappings:draft.mappings.filter(m=>m.kind==="metric" || draft.classes.some(c=>c.id===m.classId))};
     if(isEdit){ ontPatch(o.id, body); onToast&&onToast(`${body.name} saved`,"success"); onSaved(o.id); return; }
@@ -42334,6 +42407,11 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
                 <div style={{flex:1}}><OntField label={<Req>Owner</Req>}><SLSelect value={d.owner} onChange={e=>setD({...d,owner:e.target.value})} placeholder="Select an owner" options={people}/></OntField></div>
                 <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Same as owner" options={people}/></OntField></div>
               </div>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:2}}><OntField label="Imports · owl:imports"><OntMulti value={d.imports} onChange={v=>setD({...d,imports:v})} placeholder="Add an ontology"
+                  options={[...ONT_IMPORT_OPTIONS, ...ontLoad().ontologies.filter(x=>!isEdit||x.id!==o.id).map(x=>({v:String(x.namespace||"").replace(/[#/]$/,""), l:`${x.name} · EDG`}))]}/></OntField></div>
+                <div style={{flex:1}}><OntField label="License · dcterms:license"><SLSelect value={d.license} onChange={e=>setD({...d,license:e.target.value})} options={ONT_LICENSES}/></OntField></div>
+              </div>
               <div style={{marginTop:6,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:10}}>Namespace</div>
                 {isEdit ? <div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{o.prefix}: {o.namespace}</div> :
@@ -42379,7 +42457,8 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
             {sec==="review" && <div style={{maxWidth:680}}>
               <KV rows={[["Ontology name", d.name||"—"], ["Description", d.desc||"—"], ["Data domain", ((domains.find(x=>x.name===d.domain)||{}).displayName)||d.domain||"—"],
                 ["Owner", d.owner||"—"], ["Steward", d.steward||d.owner||"—"], ["Namespace", isEdit?`${o.prefix}: ${o.namespace}`:(prefix?`${prefix}: ${nsUri}`:"—")],
-                ["Classes", String(draft.classes.length)], ["Relationships", String(draft.rels.length)], ["Constraints", String(draft.constraints.length)],
+                ["Imports", d.imports.length?d.imports.join(", "):"—"], ["License", (ONT_LICENSES.find(x=>x.v===d.license)||{l:d.license||"—"}).l],
+                ["Classes", String(draft.classes.length)], ["Relationships", String(draft.rels.length)], ["Data rules", String(draft.constraints.length)],
                 ["Classes with a data source", `${draft.classes.filter(c=>MAP.sourcesOf(draft,c.id).length).length} of ${draft.classes.length}`],
                 ["Status", isEdit ? (changes.length ? "Unpublished changes" : "No changes") : "Draft"]]}/>
               {isEdit && changes.length>0 && <div style={{marginTop:14}}>
@@ -43396,33 +43475,57 @@ const OntTestDrawer = ({o, test, onClose, onToast}) => {
     </OntDrawerShell>);
 };
 
-const OntValidationTab = ({o, me, onOpenMapping, onToast}) => {
-  const [view, setView] = useState("report");
+// Chips with an add dropdown: parents, disjoint classes, keys, imports.
+const OntMulti = ({value, options, onChange, placeholder}) => (
+  <div>
+    {value.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+      {value.map(v=>{ const op = options.find(x=>x.v===v); return (
+        <span key={v} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"2px 6px 2px 9px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>
+          {op?op.l:v}<button onClick={()=>onChange(value.filter(x=>x!==v))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",display:"flex",padding:0}}>{Ic.x(9)}</button></span>); })}
+    </div>}
+    <SLSelect value="" onChange={e=>{ const v = e.target.value; if(v && !value.includes(v)) onChange([...value, v]); }} placeholder={placeholder} options={options.filter(x=>!value.includes(x.v))}/>
+  </div>);
+const ONT_IMPORT_OPTIONS = [
+  {v:"https://schema.org/", l:"schema.org"}, {v:"https://spec.edmcouncil.org/fibo/ontology/", l:"FIBO"},
+  {v:"http://www.w3.org/2004/02/skos/core", l:"SKOS"}, {v:"http://purl.org/dc/terms/", l:"Dublin Core terms"}, {v:"http://www.w3.org/ns/prov#", l:"PROV-O"}];
+const ONT_LICENSES = [{v:"",l:"—"},{v:"https://creativecommons.org/licenses/by/4.0/",l:"CC BY 4.0"},{v:"https://creativecommons.org/publicdomain/zero/1.0/",l:"CC0 1.0"},
+  {v:"Internal use only",l:"Internal use only"},{v:"Proprietary",l:"Proprietary"}];
+const ontBlocking = (o) => OMD.blockingIssues(o, ontMdCtx(), ONT.validate(o).filter(i=>i.severity==="error").length);
+
+// ── Validation: data rules (documented), mapping checks (automatic), expected answers ──
+const OntValidationTab = ({o, me, onRule, onOpenMapping, onToast}) => {
+  const [view, setView] = useState("rules");
   const [testEdit, setTestEdit] = useState(null);
+  const [q, setQ] = useState("");
   const ctx = ontMdCtx();
   const rep = OMD.validateMetadata(o, ctx);
   const tests = OMD.runTests(o, ctx);
   const owners = o.owners || (o.owner?[o.owner]:[]);
   const failing = tests.filter(t=>!t.pass).length;
-  const files = OMD.exportFiles(o, ctx);
+  const nm = (id) => (ontClass(o,id)||{}).name||"—";
+  const rules = o.constraints.filter(k=>!q || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(q.toLowerCase()));
   return (<>
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
-      <Metric label="sh:conforms" value={rep.conforms?"true":"false"} color={rep.conforms?T.green:rep.violations?T.rose:T.amber}/>
-      <Metric label="Violations" value={String(rep.violations)} color={rep.violations?T.rose:T.green}/>
-      <Metric label="Warnings" value={String(rep.warnings)} color={rep.warnings?T.amber:T.green}/>
-      <Metric label="Expected answers" value={`${tests.length-failing} / ${tests.length}`} sub="passing" color={failing?T.rose:T.green}/>
+      <Metric label="Data rules" value={String(o.constraints.length)} sub="documented · SHACL" color={T.accent}/>
+      <Metric label="Mapping errors" value={String(rep.violations)} sub="block approval" color={rep.violations?T.rose:T.green}/>
+      <Metric label="Mapping warnings" value={String(rep.warnings)} color={rep.warnings?T.amber:T.green}/>
+      <Metric label="Expected answers" value={`${tests.length-failing} / ${tests.length}`} sub={failing?"failing blocks approval":"passing"} color={failing?T.rose:T.green}/>
     </div>
     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-      <SegTabs tabs={[{key:"report",label:`SHACL report · ${rep.results.length}`},{key:"tests",label:`Expected answers · ${tests.length}`},{key:"shapes",label:`Mapping shapes · ${OMD.MAPPING_SHAPES.length}`}]} active={view} onChange={setView}/>
+      <SegTabs tabs={[{key:"rules",label:`Data rules · ${o.constraints.length}`},{key:"report",label:`Mapping checks · ${rep.results.length}`},{key:"tests",label:`Expected answers · ${tests.length}`}]} active={view} onChange={setView}/>
+      {view==="rules" && <div style={{width:260}}><Input2 placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>}
       <span style={{flex:1}}/>
-      {view==="report" && <OntDlBtn title="Download report.ttl" onClick={()=>ontDownload(`${o.prefix}-report.ttl`, files["report.ttl"])}/>}
-      {view==="shapes" && <OntDlBtn title="Download mapping-shapes.ttl" onClick={()=>ontDownload(`${o.prefix}-mapping-shapes.ttl`, files["mapping-shapes.ttl"])}/>}
+      {view==="rules" && <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>onRule("new")} disabled={!o.classes.length}>Add rule</Btn>}
+      {view==="report" && <OntDlBtn title="Download report.ttl" onClick={()=>ontDownload(`${o.prefix}-report.ttl`, OMD.exportFiles(o, ctx)["report.ttl"])}/>}
       {view==="tests" && <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setTestEdit("new")} disabled={!o.rels.length}>Add expected answer</Btn>}
     </div>
+    {view==="rules" && <OntTable empty={q?"No rules match":"No data rules yet"} onRow={r=>onRule(r.k)}
+      cols={[{l:"Class · sh:targetClass"},{l:"Path · sh:path"},{l:"Rule"},{l:"Value",w:"1.1fr"},{l:"SHACL",w:"1.8fr"},{l:"Severity",w:".7fr"}]}
+      rows={rules.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <OntMono>{k.value||"—"}</OntMono>, <OntMono>{ontShaclOf(k)}</OntMono>, k.severity==="warning"?"Warning":"Violation"]}))}/>}
     {view==="report" && <OntTable empty="✓ Conforms · no results" onRow={r=>onOpenMapping&&onOpenMapping(r.r)}
-      cols={[{l:"Severity",w:".7fr"},{l:"Focus node",w:"1.5fr"},{l:"Result path",w:"1fr"},{l:"Constraint component",w:"1.4fr"},{l:"Message",w:"2fr"},{l:"Source shape",w:"1.2fr"}]}
+      cols={[{l:"Severity",w:".7fr"},{l:"Focus node",w:"1.5fr"},{l:"Result path",w:"1fr"},{l:"Constraint component",w:"1.4fr"},{l:"Message",w:"2fr"}]}
       rows={rep.results.map((r,i)=>({key:i, r, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(o, r.focusNode),
-        <OntMono>{r.inverse?"^":""}{ontCurie(o, r.resultPath)}</OntMono>, <OntMono>{r.component}</OntMono>, r.message, <OntMono>{ontCurie(o, r.sourceShape)}</OntMono>]}))}/>}
+        <OntMono>{r.inverse?"^":""}{ontCurie(o, r.resultPath)}</OntMono>, <OntMono>{r.component}</OntMono>, r.message]}))}/>}
     {view==="tests" && <OntTable empty="No expected answers" onRow={r=>setTestEdit(r.t)}
       cols={[{l:"Question",w:"1.8fr"},{l:"Relationship",w:"1.2fr"},{l:"Expected",w:"1.1fr"},{l:"Actual",w:"1.1fr"},{l:"Result",w:".6fr"},{l:"Approved by",w:"1fr"}]}
       rows={tests.map(t=>{ const r = o.rels.find(x=>x.id===t.relId)||{}; return {key:t.id, t:(o.tests||[]).find(x=>x.id===t.id), cells:[t.question, r.name||"—",
@@ -43430,65 +43533,47 @@ const OntValidationTab = ({o, me, onOpenMapping, onToast}) => {
         <span style={{fontWeight:700,color:t.pass?T.green:T.rose}}>{t.pass?"Pass":"Fail"}</span>,
         t.approvedBy ? t.approvedBy : owners.includes(me) ? <button onClick={e=>{ e.stopPropagation(); ontPatch(o.id, x=>({...x, tests:(x.tests||[]).map(y=>y.id===t.id?{...y,approvedBy:me}:y)})); onToast&&onToast("Expected answer approved","success"); }}
           style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Approve</button> : <span style={{color:T.amber}}>Pending</span>]}; })}/>}
-    {view==="shapes" && <OntTable empty="" cols={[{l:"Shape",w:"1.3fr"},{l:"sh:targetClass",w:"1.2fr"},{l:"sh:path",w:"1.2fr"},{l:"Constraints",w:"1.6fr"},{l:"Severity",w:".7fr"},{l:"sh:message",w:"2fr"}]}
-      rows={OMD.MAPPING_SHAPES.flatMap(sh=>sh.props.map((p,i)=>({key:sh.id+i, cells:[<OntMono>{ontCurie(o, sh.id)}</OntMono>, <OntMono>{ontCurie(o, sh.targetClass)}</OntMono>,
-        <OntMono>{p.inversePath?`[ sh:inversePath ${ontCurie(o,p.inversePath)} ]`:ontCurie(o, p.path)}</OntMono>,
-        <OntMono>{[p.minCount!=null&&`sh:minCount ${p.minCount}`, p.maxCount!=null&&`sh:maxCount ${p.maxCount}`, p.class&&`sh:class ${ontCurie(o,p.class)}`].filter(Boolean).join(" · ")}</OntMono>,
-        <OntSevChip s={p.severity||sh.severity||"Violation"}/>, p.message]})))}/>}
     {testEdit && <OntTestDrawer o={o} test={testEdit==="new"?null:testEdit} onClose={()=>setTestEdit(null)} onToast={onToast}/>}
   </>);
 };
 
-// ── Query: what an authorized agent gets through EDG ──
-const OntQueryTab = ({o}) => {
-  const callers = TEAMS_DATA.filter(u=>u.status==="Active").map(u=>({id:u.id, name:u.name, team:u.team}));
-  const audience = o.audience || [];
-  const [callerId, setCallerId] = useState(()=>(callers.find(c=>audience.includes(c.team))||callers[0]||{}).id);
-  const [q, setQ] = useState("Which field identifies the buyer?");
-  const [res, setRes] = useState(null);
-  const caller = callers.find(c=>c.id===callerId);
-  const run = (relId) => setRes(OMD.query(o, ontMdCtx(), {question:q, relId, caller}));
-  const Row = ({k, children}) => <div style={{display:"grid",gridTemplateColumns:"170px 1fr",gap:12,padding:"9px 14px",borderBottom:`1px solid ${T.border}`}}>
-    <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:T.text}}>{children}</span></div>;
+// ── Individuals: named reference values (owl:NamedIndividual) ──
+const OntIndividualDrawer = ({o, ind, onClose, onToast}) => {
+  const isNew = !ind;
+  const [d, setD] = useState(()=>({name:"", classId:"", desc:"", deprecated:false, ...(ind||{}), id:(ind&&ind.id)||ONT.uid("i")}));
+  const err = !d.name.trim() ? "Enter a name" : !d.classId ? "Select a class" : null;
+  const save = () => { if(err){ onToast&&onToast(err,"error"); return; }
+    const x0 = {...d, name:d.name.trim()};
+    ontPatch(o.id, x=>({...x, individuals: isNew ? [...(x.individuals||[]), x0] : (x.individuals||[]).map(y=>y.id===x0.id?x0:y)}));
+    onToast&&onToast(`${x0.name} saved`,"success"); onClose(); };
   return (
-    <div style={{maxWidth:880}}>
-      <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:10}}>
-        <div style={{width:260}}><OntField label="Caller"><SLSelect value={callerId} onChange={e=>{setCallerId(e.target.value); setRes(null);}} options={callers.map(c=>({v:c.id,l:`${c.name} · ${c.team}`}))}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Question"><Input2 value={q} onChange={e=>{setQ(e.target.value); setRes(null);}} placeholder="Which field identifies the buyer?"/></OntField></div>
-        <div style={{marginBottom:13}}><Btn variant="primary" onClick={()=>run()}>Ask</Btn></div>
-      </div>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
-        {["Which field identifies the buyer?","Which field identifies the billing customer?","Which customer is related to the order?"].map(s=>(
-          <button key={s} onClick={()=>{setQ(s); setRes(null);}} style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontFamily:"inherit"}}>{s}</button>))}
-      </div>
-      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>Tool <OntMono c={T.text}>get_relationship_field</OntMono> · access {audience.length?audience.join(", "):"none"} · published {o.publishedN?`v${o.publishedN}`:"—"}</div>
-      {res && <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
-        <Row k="Status"><span style={{fontWeight:700,color:res.status==="ok"?T.green:res.status==="unavailable"?T.textMuted:T.amber}}>{({ok:"Answered",unavailable:"Unavailable",ambiguous:"Needs clarification",no_match:"No matching relationship",not_mapped:"Not mapped"})[res.status]}</span></Row>
-        {res.status==="ok" && <>
-          <Row k="Field"><OntMono c={T.text}>{res.field}</OntMono></Row>
-          <Row k="Catalog reference"><OntMono>{res.catalog.fieldIri}</OntMono></Row>
-          <Row k="Relationship"><OntMono>{ontCurie(o, res.relationship.iri)}</OntMono> · {res.relationship.name}</Row>
-          <Row k="Published version">v{res.version}</Row>
-          <Row k="Named graph"><OntMono>{res.graph}</OntMono> · {ONT_STORE}</Row>
-        </>}
-        {res.status==="ambiguous" && <Row k="Options"><div style={{display:"flex",gap:6}}>{res.options.map(x=><Btn key={x.id} small onClick={()=>run(x.id)}>{x.name}</Btn>)}</div></Row>}
-        {res.status==="unavailable" && <Row k="Response">No answer, mapping or evidence returned</Row>}
-      </div>}
-    </div>);
+    <OntDrawerShell title={isNew?"New individual":ind.name} width={560} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, individuals:(x.individuals||[]).filter(y=>y.id!==d.id)})); onClose(); }}>Remove</Btn></span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>{isNew?"Add":"Save"}</Btn></>}>
+      <OntField label="Name · rdfs:label"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Shipped"/></OntField>
+      <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || `${o.namespace}${ONT.slug(d.name||"…")}`}</div></OntField>
+      <OntField label="Class · rdf:type"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value})} placeholder="Select a class" options={o.classes.map(c=>({v:c.id,l:c.name}))}/></OntField>
+      <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
+    </OntDrawerShell>);
 };
 
 // ── Configuration: the files, and a round-trip check ──
+const ONT_EXPORTS = [{f:"ontology.owl",l:"OWL · RDF/XML",mime:"application/rdf+xml"},{f:"ontology.ttl",l:"OWL · Turtle",mime:"text/turtle"},
+  {f:"shapes.ttl",l:"SHACL rules",mime:"text/turtle"},{f:"mappings.ttl",l:"Catalog bindings",mime:"text/turtle"},
+  {f:"ossie-ontology.yaml",l:"Ossie ontology",mime:"application/yaml"},{f:"ossie-mapping.yaml",l:"Ossie mapping",mime:"application/yaml"}];
 const OntConfigTab = ({o}) => {
-  const [file, setFile] = useState("ontology.ttl");
+  const [file, setFile] = useState("ontology.owl");
   const [rt, setRt] = useState(null);
   const files = OMD.exportFiles(o, ontMdCtx());
-  const NAMES = ["ontology.ttl","shapes.ttl","mappings.ttl","mapping-shapes.ttl","report.ttl"];
+  const cur = ONT_EXPORTS.find(x=>x.f===file);
+  const dl = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([files[file]],{type:cur.mime})); a.download = `${o.prefix}-${file}`; a.click(); };
   return (<>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-      <SegTabs tabs={NAMES.map(n=>({key:n,label:n}))} active={file} onChange={setFile}/>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+      <SegTabs tabs={ONT_EXPORTS.map(x=>({key:x.f,label:x.l}))} active={file} onChange={setFile}/>
       <span style={{flex:1}}/>
       <Btn small onClick={()=>setRt(OMD.roundTrip(o, ontMdCtx()))}>Verify round trip</Btn>
-      <OntDlBtn title={`Download ${o.prefix}-${file}`} onClick={()=>ontDownload(`${o.prefix}-${file}`, files[file])}/>
+      <OntDlBtn title={`Download ${o.prefix}-${file}`} onClick={dl}/>
     </div>
     {rt && <div style={{background:T.bgSurface,border:`1px solid ${rt.ok?T.green+"55":T.rose+"55"}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
       {rt.checks.map((c,i)=>(
@@ -43497,45 +43582,9 @@ const OntConfigTab = ({o}) => {
           <span style={{fontSize:12,fontWeight:600,color:T.text,width:260}}>{c.l}</span><span style={{fontSize:11.5,color:T.textMuted}}>{c.detail}</span>
         </div>))}
     </div>}
+    <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginBottom:6}}>{o.prefix}-{file}</div>
     <pre style={{margin:0,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace",maxHeight:560,overflow:"auto"}}>{files[file]}</pre>
   </>);
-};
-
-// ── Publications: active version, failed attempts, store ──
-const OntPublicationsTab = ({o}) => {
-  const [cmpN, setCmpN] = useState(null);
-  const pubs = o.publications || [];
-  const rows = [...pubs].sort((a,b)=>b.at.localeCompare(a.at));
-  return (<>
-    {rows.length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
-    <OntTable empty="" onRow={r=>r.p.n && setCmpN(cmpN===r.p.n?null:r.p.n)}
-      cols={[{l:"Version",w:".6fr"},{l:"Status",w:".8fr"},{l:"At",w:"1fr"},{l:"By",w:".8fr"},{l:"Approved by",w:".8fr"},{l:"Store",w:"1fr"},{l:"Named graph",w:"1.6fr"},{l:"Result",w:"1.6fr"}]}
-      rows={rows.map((p,i)=>{ const active = p.status==="published" && p.n===o.publishedN; return {key:i, p, cells:[p.n?`v${p.n}`:"—",
-        <span style={{fontWeight:700,color:p.status==="failed"?T.rose:active?T.green:T.textMuted}}>{p.status==="failed"?"Failed":active?"Active":"Superseded"}</span>,
-        p.at.slice(0,16).replace("T"," "), p.by, p.approvedBy||"—", ONT_STORE, p.n?<OntMono>{ontGraphIri(o, p.n)}</OntMono>:"—",
-        p.status==="failed" ? <span style={{color:T.rose}}>{p.reason}{o.publishedN?` · v${o.publishedN} still active`:""}</span> : (p.note||"—")]}; })}/>}
-    {cmpN && (()=>{ const v = (o.versions||[]).find(x=>x.n===cmpN); if(!v) return null; const lines = ONT.diff(v.snapshot, ONT.snapshot(o)); return (
-      <div style={{marginTop:12}}><div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>Draft compared with v{cmpN}</div>
-        {lines.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ Identical</div> : lines.map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}>· {l.text}</div>)}</div>); })()}
-  </>);
-};
-
-// Publish: runs the mapping shapes and the expected answers on the approved
-// draft. A failure is recorded and the active version keeps serving.
-const ontTryPublish = (o, me, note) => {
-  const ctx = ontMdCtx();
-  const rep = OMD.validateMetadata(o, ctx), tests = OMD.runTests(o, ctx);
-  const failed = tests.filter(t=>!t.pass);
-  const at = new Date().toISOString(), approvedBy = (o.review||{}).approvedBy||null;
-  if(rep.violations || failed.length){
-    const reason = [rep.violations?`${rep.violations} SHACL violation${rep.violations===1?"":"s"}`:null, failed.length?`${failed.length} expected answer${failed.length===1?"":"s"} failing`:null].filter(Boolean).join(" · ");
-    ontPatch(o.id, x=>({...x, publications:[...(x.publications||[]), {status:"failed", at, by:me, approvedBy, reason}]}));
-    return {ok:false, reason};
-  }
-  const r = ONT.publish(o, me, note);
-  if(!r.ok) return {ok:false, reason:r.error};
-  ontPatch(o.id, {...r.ontology, publications:[...(o.publications||[]), {status:"published", n:r.version.n, at:r.version.at, by:me, approvedBy, note}]});
-  return {ok:true, n:r.version.n};
 };
 
 const ontShaclOf = (k) => {
@@ -43575,6 +43624,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const [relView, setRelView] = useState("diagram");   // Relationships tab: diagram | list
   const [reviewOpen, setReviewOpen] = useState(null);  // "submit" | "approve" | "changes"
   const [reviewNote, setReviewNote] = useState("");
+  const [indEdit, setIndEdit] = useState(null);
   useEffect(()=>{ setListQ(""); },[tab, selId]);
   const o = selId ? st.ontologies.find(x=>x.id===selId) : null;
   const drawers = <>
@@ -43583,6 +43633,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
     {o && classEdit && <OntClassDrawer key={classEdit==="new"?"new":classEdit.id} o={o} cls={classEdit==="new"?null:classEdit} onClose={()=>setClassEdit(null)} onToast={onToast} onAsset={onAsset}/>}
     {o && relEdit && <OntRelDrawer key={relEdit==="new"?"new":relEdit.id} o={o} rel={relEdit==="new"?null:relEdit} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
     {o && conEdit && <OntConstraintDrawer o={o} con={conEdit==="new"?null:conEdit} onClose={()=>setConEdit(null)} onToast={onToast}/>}
+    {o && indEdit && <OntIndividualDrawer key={indEdit==="new"?"new":indEdit.id} o={o} ind={indEdit==="new"?null:indEdit} onClose={()=>setIndEdit(null)} onToast={onToast}/>}
     {o && editOpen && <OntDetailsDrawer o={o} onClose={()=>setEditOpen(false)} onToast={onToast}/>}
     {wiz && <OntEditorWizard o={wiz==="edit"?o:null} onClose={()=>setWiz(null)} onToast={onToast} onAsset={onAsset}
       onSaved={(id)=>{ setWiz(null); setSelId(id); if(wiz==="new") setTab("overview"); }}/>}
@@ -43654,22 +43705,26 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
   const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
-    {key:"constraints",label:`Shapes · ${o.constraints.length}`},
+    {key:"individuals",label:`Individuals · ${(o.individuals||[]).length}`},
     {key:"validation",label:(()=>{ const r = OMD.validateMetadata(o, ontMdCtx()), f = OMD.runTests(o, ontMdCtx()).filter(t=>!t.pass).length; const n = r.violations + f; return n ? `Validation · ${n}` : "Validation"; })()},
     ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
-    {key:"versions",label:`Publications · ${(o.publications||[]).length}`},{key:"query",label:"Query"},{key:"source",label:"Configuration"}];
+    {key:"source",label:"Configuration"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
-  const doPublish = () => { const r = ontTryPublish(o, me, pubNote); setPubOpen(false); setPubNote("");
-    if(!r.ok){ onToast&&onToast(`Publication failed · ${r.reason}${o.publishedN?` · v${o.publishedN} still active`:""}`,"error"); setTab("versions"); return; }
-    onToast&&onToast(`${o.name} published as v${r.n} · ${ONT_STORE}`,"success"); };
-  const doReview = () => { const at = new Date().toISOString();
-    if(reviewOpen==="changes" && !reviewNote.trim()){ onToast&&onToast("Add a comment for the author","error"); return; }
-    ontPatch(o.id, x=>({...x, review: reviewOpen==="submit" ? {state:"in_review", submittedBy:me, submittedAt:at, note:reviewNote.trim(), hash:OMD.draftHash(x)}
-      : reviewOpen==="approve" ? {...(x.review||{}), state:"approved", approvedBy:me, approvedAt:at, comment:reviewNote.trim(), hash:OMD.draftHash(x)}
-      : {...(x.review||{}), state:"changes_requested", reviewedBy:me, reviewedAt:at, comment:reviewNote.trim(), hash:OMD.draftHash(x)}}));
-    onToast&&onToast(reviewOpen==="submit"?`${o.name} submitted for review`:reviewOpen==="approve"?`${o.name} approved`:"Changes requested","success");
+  const doReview = () => { const at = new Date().toISOString(), note = reviewNote.trim();
+    if(reviewOpen==="changes" && !note){ onToast&&onToast("Add a comment for the author","error"); return; }
+    if(reviewOpen==="approve"){
+      const blk = ontBlocking(o); if(blk.total){ onToast&&onToast(`${blk.total} error${blk.total===1?"":"s"} must be fixed first`,"error"); return; }
+      const r = ONT.publish(o, me, note);
+      if(!r.ok){ onToast&&onToast(r.error,"error"); return; }
+      ontPatch(o.id, {...r.ontology, review:{...(o.review||{}), state:"approved", approvedBy:me, approvedAt:at, comment:note, hash:OMD.draftHash(r.ontology)}});
+      onToast&&onToast(`${o.name} approved · v${r.version.n} active`,"success"); setReviewOpen(null); setReviewNote(""); return;
+    }
+    ontPatch(o.id, x=>({...x, review: reviewOpen==="submit" ? {state:"in_review", submittedBy:me, submittedAt:at, note, hash:OMD.draftHash(x)}
+      : {...(x.review||{}), state:"rejected", reviewedBy:me, reviewedAt:at, comment:note, hash:OMD.draftHash(x)}}));
+    onToast&&onToast(reviewOpen==="submit"?`${o.name} submitted for review`:`${o.name} rejected`,"success");
     setReviewOpen(null); setReviewNote(""); };
-  const rState = OMD.reviewState(o), rApprove = OMD.canApprove(o, me);
+  const oStatus = OMD.statusOf(o), oBlk = ontBlocking(o), oApprove = OMD.canApprove(o, me, oBlk.total);
+  const isOwner = (o.owners||[o.owner]).filter(Boolean).includes(me);
   const download = (name, text) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:"text/turtle"})); a.download = name; a.click(); };
   const cls = selClass ? ontClass(o, selClass) : null;
   return (
@@ -43681,16 +43736,16 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           <div style={{flex:1,minWidth:0}}>
             <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{o.name}</h1>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <OntStatusChip o={o}/><OntReviewChip o={o}/>
+              <OntStatusChip o={o}/>
               <span style={{fontSize:11,color:T.textMuted}}>{o.domain} · {o.owner}</span>
               <span style={{fontSize:11,color:T.textMuted}}>· {o.classes.length} class{o.classes.length===1?"":"es"} · {o.rels.length} relationship{o.rels.length===1?"":"s"}</span>
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
-            {(rState==="draft"||rState==="changes_requested") && <Btn variant="primary" onClick={()=>setReviewOpen("submit")}>Submit for review</Btn>}
-            {rState==="in_review" && (rApprove.ok ? <><Btn ghost onClick={()=>setReviewOpen("changes")}>Request changes</Btn><Btn variant="primary" onClick={()=>setReviewOpen("approve")}>Approve</Btn></>
-              : <span title={rApprove.why} style={{fontSize:11.5,color:T.textMuted,padding:"0 6px"}}>Awaiting approval · {(o.owners||[o.owner]).filter(Boolean).join(", ")}</span>)}
-            {rState==="approved" && <Btn variant="primary" disabled={(o.versions||[]).length>0 && !ONT.isDirty(o)} onClick={()=>setPubOpen(true)}>{(o.versions||[]).length>0 && !ONT.isDirty(o) ? `Published · v${o.publishedN}` : "Publish"}</Btn>}
+            {(oStatus==="Draft"||oStatus==="Rejected") && <Btn variant="primary" onClick={()=>setReviewOpen("submit")}>Submit for review</Btn>}
+            {oStatus==="In Review" && (isOwner && (o.review||{}).submittedBy!==me
+              ? <><Btn ghost onClick={()=>setReviewOpen("changes")}>Reject</Btn><span title={oApprove.ok?"":oApprove.why}><Btn variant="primary" disabled={!oApprove.ok} onClick={()=>setReviewOpen("approve")}>Approve</Btn></span></>
+              : <span title={oApprove.why} style={{fontSize:11.5,color:T.textMuted,padding:"0 6px"}}>Awaiting approval · {(o.owners||[o.owner]).filter(Boolean).join(", ")}</span>)}
             <div style={{position:"relative"}}>
               <button onClick={()=>{setMenuOpen(v=>!v);setStyleOpen(false);}}
                 style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700}}
@@ -43699,6 +43754,8 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
                 <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
                   {[{icon:"🖊️",label:"Edit Details",sub:"Details, classes, relationships and constraints",action:()=>{setMenuOpen(false);setWiz("edit");}},
                     {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setStyleOpen(true);setMenuOpen(false);}},
+                    {icon:o.deprecated?"↺":"⊘",label:o.deprecated?"Restore":"Deprecate",sub:isOwner?(o.deprecated?"Back to its previous status":"owl:deprecated · kept, not for new use"):"Owners only",disabled:!isOwner,
+                      action:()=>{ setMenuOpen(false); ontPatch(o.id,{deprecated:!o.deprecated}); onToast&&onToast(`${o.name} ${o.deprecated?"restored":"deprecated"}`,"success"); }},
                   ].map(item=>(
                     <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
                       style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:item.disabled?"not-allowed":"pointer",opacity:item.disabled?.45:1,textAlign:"left",borderBottom:`1px solid ${T.border}`}}
@@ -43803,42 +43860,29 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, <OntMono>{ontCurie(o, r.iri)}</OntMono>, nm(r.to), ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
               (()=>{ const m = ontRelField(o, r.id); return m && m.target.column ? <OntMono>{m.target.table}.{m.target.column}</OntMono> : m ? <span style={{color:T.rose}}>{m.target.table} · no field</span> : <span style={{color:T.amber}}>Not mapped</span>; })()]}))}/>}
         </>}
-        {tab==="constraints" && <>
+        {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
+        {tab==="validation" && <OntValidationTab o={o} me={me} onToast={onToast} onRule={k=>setConEdit(k)} onOpenMapping={(r)=>{ const rr = o.rels.find(x=>ontNodeLabel(o, r.focusNode).endsWith(`${nm(x.from)} ${x.name}`) || x.iri===r.focusNode); if(rr) setRelEdit(rr); }}/>}
+        {tab==="individuals" && <>
           <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add shape</Btn></div>
-          <OntTable empty={listQ?"No constraints match":"No constraints yet"} onRow={r=>setConEdit(r.k)}
-            cols={[{l:"Class · sh:targetClass"},{l:"Path · sh:path"},{l:"Constraint type"},{l:"Value",w:"1.1fr"},{l:"SHACL",w:"1.8fr"},{l:"Severity",w:".7fr"}]}
-            rows={o.constraints.filter(k=>!listQ || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(listQ.toLowerCase())).map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, <OntMono>{ontShaclOf(k)}</OntMono>, k.severity==="warning"?"Warning":"Violation"]}))}/>
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setIndEdit("new")} disabled={!o.classes.length}>Add individual</Btn></div>
+          <OntTable empty={listQ?"No individuals match":"No individuals yet"} onRow={r=>setIndEdit(r.x)}
+            cols={[{l:"Individual · owl:NamedIndividual",w:"1.2fr"},{l:"IRI",w:"1.2fr"},{l:"Class · rdf:type"},{l:"Definition",w:"2fr"}]}
+            rows={(o.individuals||[]).filter(x=>!listQ || `${x.name} ${nm(x.classId)} ${x.desc||""}`.toLowerCase().includes(listQ.toLowerCase()))
+              .map(x=>({key:x.id, x, cells:[<span>{x.name}{x.deprecated && <span style={{marginLeft:6,fontSize:10,color:T.violet}}>deprecated</span>}</span>, <OntMono>{ontCurie(o, x.iri)}</OntMono>, nm(x.classId), x.desc||"—"]}))}/>
         </>}
-        {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
-        {tab==="validation" && <OntValidationTab o={o} me={me} onToast={onToast} onOpenMapping={(r)=>{ const rr = o.rels.find(x=>ontNodeLabel(o, r.focusNode).endsWith(`${nm(x.from)} ${x.name}`) || x.iri===r.focusNode); if(rr) setRelEdit(rr); }}/>}
-        {tab==="versions" && <OntPublicationsTab o={o}/>}
-        {tab==="query" && <OntQueryTab key={o.id+":"+(o.publishedN||0)} o={o}/>}
         {tab==="source" && <OntConfigTab o={o}/>}
       </div>
       {drawers}
-      <Modal open={pubOpen} onClose={()=>setPubOpen(false)} title={`Publish ${o.name}`}>
-        {(()=>{ const rep = OMD.validateMetadata(o, ontMdCtx()), tests = OMD.runTests(o, ontMdCtx()), failing = tests.filter(t=>!t.pass).length; const n = ((o.versions||[])[0]||{n:0}).n+1; return <>
-          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
-            {[["Version", `v${n}`], ["Approved by", (o.review||{}).approvedBy||"—"], ["SHACL", rep.violations?`${rep.violations} violation${rep.violations===1?"":"s"} · blocks publication`:`Conforms${rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}`],
-              ["Expected answers", failing?`${failing} of ${tests.length} failing · blocks publication`:`${tests.length} of ${tests.length} passing`], ["Store", ONT_STORE], ["Named graph", ontGraphIri(o, n)],
-              ["If it fails", o.publishedN?`v${o.publishedN} stays active`:"Nothing is published"]].map(([k,v],i)=>(
-              <div key={k} style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
-                <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:/blocks/.test(v)?T.rose:T.text,fontFamily:k==="Named graph"?"ui-monospace,monospace":"inherit"}}>{v}</span></div>))}
-          </div>
-          {(o.versions||[])[0] && <div style={{marginBottom:10}}>{ONT.diff(o.versions[0].snapshot, ONT.snapshot(o)).slice(0,8).map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}>· {l.text}</div>)}</div>}
-          <OntField label="Note"><Input2 value={pubNote} onChange={e=>setPubNote(e.target.value)} placeholder="What changed"/></OntField>
-        </>; })()}
-        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setPubOpen(false)}>Cancel</Btn><Btn variant="primary" disabled={errs>0} onClick={doPublish}>Publish</Btn></div>
-      </Modal>
-      <Modal open={!!reviewOpen} onClose={()=>setReviewOpen(null)} title={reviewOpen==="submit"?`Submit ${o.name} for review`:reviewOpen==="approve"?`Approve ${o.name}`:`Request changes to ${o.name}`}>
+      <Modal open={!!reviewOpen} onClose={()=>setReviewOpen(null)} title={reviewOpen==="submit"?`Submit ${o.name} for review`:reviewOpen==="approve"?`Approve ${o.name}`:`Reject ${o.name}`}>
         {(()=>{ const rep = OMD.validateMetadata(o, ontMdCtx()), tests = OMD.runTests(o, ontMdCtx()); const base = (o.versions||[])[0];
           const lines = base ? ONT.diff(base.snapshot, ONT.snapshot(o)) : [];
           return <div style={{marginBottom:12}}>
             <div style={{display:"flex",gap:14,fontSize:12,color:T.textSub,marginBottom:8,flexWrap:"wrap"}}>
               <span>SHACL: <b style={{color:rep.violations?T.rose:T.green}}>{rep.violations?`${rep.violations} violation${rep.violations===1?"":"s"}`:"conforms"}</b>{rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}</span>
               <span>Expected answers: <b style={{color:tests.every(t=>t.pass)?T.green:T.rose}}>{tests.filter(t=>t.pass).length} / {tests.length}</b></span>
+              {oBlk.total>0 && <span style={{color:T.rose,fontWeight:700}}>{oBlk.total} error{oBlk.total===1?"":"s"} · approval blocked</span>}
+              {reviewOpen==="approve" && !oBlk.total && <span>Approving publishes v{((o.versions||[])[0]||{n:0}).n+1} · {ONT_STORE}</span>}
               {(o.review||{}).submittedBy && reviewOpen!=="submit" && <span>Submitted by {(o.review||{}).submittedBy}</span>}
             </div>
             {base && <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",margin:"8px 0 4px"}}>Changes since v{base.n} · {lines.length}</div>}
@@ -43846,7 +43890,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           </div>; })()}
         <OntField label={reviewOpen==="changes"?"Comment for the author":"Comment"}><Input2 multiline rows={2} value={reviewNote} onChange={e=>setReviewNote(e.target.value)}/></OntField>
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setReviewOpen(null)}>Cancel</Btn>
-          <Btn variant="primary" onClick={doReview}>{reviewOpen==="submit"?"Submit":reviewOpen==="approve"?"Approve":"Request changes"}</Btn></div>
+          <Btn variant="primary" disabled={reviewOpen==="approve" && oBlk.total>0} onClick={doReview}>{reviewOpen==="submit"?"Submit":reviewOpen==="approve"?"Approve":"Reject"}</Btn></div>
       </Modal>
       <Modal open={delOpen} onClose={()=>setDelOpen(false)} title={`Delete ${o.name}`}>
         <div style={{fontSize:12.5,color:T.textSub,marginBottom:14}}>{o.classes.length} classes, {o.rels.length} relationships and {(o.versions||[]).length} versions are removed. This cannot be undone.</div>

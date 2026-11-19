@@ -97,13 +97,44 @@ test("round trip: export, re-read, identifiers, relationships, shapes and valida
   assert.ok(rt2.checks.find((c) => c.k === "validation").ok, JSON.stringify(rt2.checks));
 });
 
-test("review: submitter cannot approve; owner can; an edit after approval returns to draft", () => {
+test("status: draft, in review, approval only by an owner who did not submit and with no errors", () => {
   const o = base(); o.review = { state: "in_review", submittedBy: "alex.rivera", hash: M.draftHash(o) };
+  assert.equal(M.statusOf(o), "In Review");
   assert.equal(M.canApprove(o, "alex.rivera").ok, false);
   assert.equal(M.canApprove(o, "maya.chen").ok, true);
-  const approved = { ...o, review: { ...o.review, state: "approved" } };
-  assert.equal(M.reviewState(approved), "approved");
-  assert.equal(M.reviewState({ ...approved, rels: approved.rels.map((r) => ({ ...r, desc: "changed" })) }), "draft");
+  assert.equal(M.canApprove(o, "maya.chen", 1).ok, false);
+  assert.equal(M.statusOf({ ...o, rels: o.rels.map((r) => ({ ...r, desc: "changed" })) }), "Draft");
+  assert.equal(M.statusOf({ ...o, deprecated: true }), "Deprecated");
+  assert.equal(M.statusOf({ ...o, review: { ...o.review, state: "rejected" } }), "Rejected");
+});
+
+test("full OWL: parents, disjoint, keys, restrictions, characteristics, chains, individuals, header", () => {
+  const o = base();
+  o.publishedN = 2; o.imports = ["https://schema.org/"]; o.license = "https://creativecommons.org/licenses/by/4.0/"; o.created = "2026-11-10";
+  o.classes = [...o.classes, { id: "cP", name: "Party", props: [] }, { id: "cS", name: "Order Status", props: [] }];
+  o.classes[1] = { ...o.classes[1], parent: "cP", parents: ["cP"], disjoint: ["cO"], keyProps: ["pCid"] };
+  o.classes[0] = { ...o.classes[0], restrictions: [{ id: "x1", kind: "some", prop: "rB", target: "cC" }, { id: "x2", kind: "max", prop: "rT", target: "cC", n: 1 }, { id: "x3", kind: "value", prop: "pId", target: "O-1" }] };
+  o.rels = [...o.rels, { id: "rR", from: "cC", to: "cC", name: "related to", cardinality: "many_to_many", characteristics: ["symmetric", "transitive"], parentRel: null },
+    { id: "rX", from: "cO", to: "cC", name: "billed party", cardinality: "many_to_many", parentRel: "rB", chain: ["rB", "rR"] }];
+  o.individuals = [{ id: "i1", name: "Open", classId: "cS", desc: "Not yet shipped" }];
+  const ttl = M.exportFiles(o, ctx)["ontology.ttl"];
+  for (const re of [/owl:imports <https:\/\/schema.org\/>/, /owl:versionIRI/, /owl:priorVersion/, /dcterms:license/, /dcterms:creator "maya.chen"/,
+    /sales:Customer[\s\S]*rdfs:subClassOf sales:Party/, /owl:disjointWith sales:Order/, /owl:hasKey \( sales:customerID \)/,
+    /owl:someValuesFrom sales:Customer/, /owl:maxQualifiedCardinality "1"\^\^xsd:nonNegativeInteger/, /owl:hasValue "O-1"/,
+    /a owl:SymmetricProperty/, /a owl:TransitiveProperty/, /rdfs:subPropertyOf sales:placedBy/, /owl:propertyChainAxiom \( sales:placedBy sales:relatedTo \)/,
+    /sales:Open a owl:NamedIndividual/, /owl:minCardinality "1"/]) assert.match(ttl, re);
+  assert.ok(M.roundTrip(o, ctx).ok, JSON.stringify(M.roundTrip(o, ctx).checks));
+});
+
+test("RDF/XML and Apache Ossie exports", () => {
+  const f = M.exportFiles(base(), ctx);
+  assert.match(f["ontology.owl"], /^<\?xml version="1.0"/);
+  assert.match(f["ontology.owl"], /<rdf:Description rdf:about="https:\/\/example.org\/edg\/sales#placedBy">/);
+  assert.match(f["ontology.owl"], /<rdf:type rdf:resource="http:\/\/www.w3.org\/2002\/07\/owl#ObjectProperty"\/>/);
+  assert.match(f["ossie-ontology.yaml"], /concept: Order\n\s+type: EntityType/);
+  assert.match(f["ossie-ontology.yaml"], /name: placedBy[\s\S]*multiplicity: ManyToOne[\s\S]*verbalizes:/);
+  assert.match(f["ossie-mapping.yaml"], /expression: ORDERS.BUYER_ID/);
+  assert.match(f["ossie-mapping.yaml"], /ontology_ref:\n\s+name: Sales/);
 });
 
 test("inverse properties are not reported as unmapped relationships", () => {
