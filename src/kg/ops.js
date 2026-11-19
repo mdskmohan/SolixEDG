@@ -103,3 +103,43 @@ export function statusOf(g, eg) {
 }
 
 export const fmtDuration = (s) => (s == null ? "—" : s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`);
+
+// ═══ Ontology graphs (metadata only) ═══
+// An ontology graph is the PUBLISHED version of an ontology, its bindings to
+// catalog assets and fields, and its SHACL report. No source records are read
+// or copied. `og` = {published, version, stats:{classes, classesBound, rels,
+// relsBound, props, propsBound, assets, fields, triples, bindings},
+// report:{violations, warnings}, tests:{total, failing}}.
+export const ONTOLOGY_STEPS = [
+  { k: "read", l: "Read published ontology" }, { k: "catalog", l: "Read catalog" }, { k: "bind", l: "Resolve bindings" },
+  { k: "shacl", l: "Validate (SHACL)" }, { k: "tests", l: "Check expected answers" }, { k: "publish", l: "Publish to target" },
+];
+export function runOntologyBuild(og, { n, at, trigger = "Manual", by = "system", target = "Apache Jena TDB2", graph = "" } = {}) {
+  const st = og.stats || {}, rep = og.report || { violations: 0, warnings: 0 }, ts = og.tests || { total: 0, failing: 0 };
+  const steps = ONTOLOGY_STEPS.map((s) => ({ ...s, status: "ok", detail: "" }));
+  const set = (k, status, detail) => { const s = steps.find((x) => x.k === k); s.status = status; s.detail = detail; };
+  const skipFrom = (k) => { let on = false; steps.forEach((s) => { if (s.k === k) on = true; else if (on) { s.status = "skipped"; s.detail = ""; } }); };
+  if (!og.published) {
+    set("read", "failed", "The ontology has no published version"); skipFrom("read");
+    return { n, at, trigger, by, status: "Failed", duration: 2, entities: 0, links: 0, classes: 0, errors: 1, warnings: 0, steps };
+  }
+  set("read", "ok", `v${og.version} · ${st.classes} classes · ${st.rels} relationships`);
+  set("catalog", "ok", `${st.assets} asset${st.assets === 1 ? "" : "s"} · ${st.fields} field${st.fields === 1 ? "" : "s"}`);
+  const unbound = (st.classes - st.classesBound) + (st.rels - st.relsBound);
+  set("bind", unbound ? "warning" : "ok", `${st.classesBound} of ${st.classes} classes · ${st.relsBound} of ${st.rels} relationships · ${st.propsBound} of ${st.props} properties`);
+  set("shacl", rep.violations ? "failed" : rep.warnings ? "warning" : "ok",
+    rep.violations ? `${rep.violations} violation${rep.violations === 1 ? "" : "s"}` : rep.warnings ? `Conforms with ${rep.warnings} warning${rep.warnings === 1 ? "" : "s"}` : "Conforms");
+  set("tests", ts.failing ? "failed" : "ok", ts.total ? `${ts.total - ts.failing} of ${ts.total} passing` : "None defined");
+  const fail = rep.violations > 0 || ts.failing > 0;
+  if (fail) skipFrom("tests"); else set("publish", "ok", `${target}${graph ? ` · ${graph}` : ""}`);
+  return { n, at, trigger, by, status: fail ? "Failed" : (rep.warnings || unbound) ? "Warnings" : "Succeeded",
+    duration: 3 + Math.round((st.triples || 0) / 40), entities: st.triples || 0, links: st.bindings || 0, classes: st.classesBound || 0,
+    errors: rep.violations + ts.failing, warnings: rep.warnings, steps };
+}
+export function ontologyGraphStatus(g, og) {
+  if (g.paused) return "Paused";
+  if (og && !og.published) return "Not published";
+  const last = (g.builds || [])[0];
+  if (!last) return "Not built";
+  return last.status === "Failed" ? "Failed" : last.status === "Warnings" ? "Warnings" : "Active";
+}

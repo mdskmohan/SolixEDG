@@ -49,3 +49,17 @@ test("status follows the latest build, pause and missing data", () => {
   assert.equal(OPS.statusOf({ paused: true, builds: [{ status: "Succeeded" }] }, eg), "Paused");
   assert.equal(OPS.statusOf({ builds: [] }, { stats: { withData: 0 } }), "Needs data");
 });
+
+test("ontology graph build: metadata only, fails on SHACL violation or failing expected answer", () => {
+  const og = { published: true, version: 2, stats: { classes: 2, classesBound: 2, rels: 2, relsBound: 2, props: 6, propsBound: 6, assets: 2, fields: 8, triples: 120, bindings: 10 },
+    report: { violations: 0, warnings: 0 }, tests: { total: 2, failing: 0 } };
+  const ok = OPS.runOntologyBuild(og, { n: 1, graph: "https://x/sales/v2" });
+  assert.equal(ok.status, "Succeeded"); assert.equal(ok.steps.at(-1).detail, "Apache Jena TDB2 · https://x/sales/v2");
+  const bad = OPS.runOntologyBuild({ ...og, tests: { total: 2, failing: 1 } }, { n: 2 });
+  assert.equal(bad.status, "Failed"); assert.equal(bad.steps.find((s) => s.k === "publish").status, "skipped");
+  assert.equal(OPS.runOntologyBuild({ ...og, report: { violations: 0, warnings: 1 } }, { n: 3 }).status, "Warnings");
+  const none = OPS.runOntologyBuild({ published: false }, { n: 4 });
+  assert.equal(none.status, "Failed"); assert.equal(none.steps[0].detail, "The ontology has no published version");
+  assert.equal(OPS.ontologyGraphStatus({ builds: [] }, { published: false }), "Not published");
+  assert.equal(OPS.ontologyGraphStatus({ builds: [ok] }, og), "Active");
+});
