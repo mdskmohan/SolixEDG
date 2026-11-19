@@ -112,7 +112,7 @@ export const fmtDuration = (s) => (s == null ? "—" : s < 60 ? `${s}s` : `${Mat
 // report:{violations, warnings}, tests:{total, failing}}.
 export const ONTOLOGY_STEPS = [
   { k: "read", l: "Read published ontology" }, { k: "catalog", l: "Read catalog" }, { k: "bind", l: "Resolve bindings" },
-  { k: "shacl", l: "Validate (SHACL)" }, { k: "tests", l: "Check expected answers" }, { k: "publish", l: "Publish to target" },
+  { k: "shacl", l: "Check mappings" }, { k: "tests", l: "Check expected answers" }, { k: "publish", l: "Publish to target" },
 ];
 export function runOntologyBuild(og, { n, at, trigger = "Manual", by = "system", target = "Apache Jena TDB2", graph = "" } = {}) {
   const st = og.stats || {}, rep = og.report || { violations: 0, warnings: 0 }, ts = og.tests || { total: 0, failing: 0 };

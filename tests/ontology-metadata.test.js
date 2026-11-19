@@ -144,3 +144,12 @@ test("inverse properties are not reported as unmapped relationships", () => {
   const r2 = M.validateMetadata(unmapped, ctx);
   assert.equal(r2.results.length, 1); assert.equal(r2.results[0].severity, "Warning"); assert.ok(r2.results[0].focusNode.endsWith("#billedTo"));
 });
+
+test("restriction 'number of values' with separate min and max", () => {
+  const o = base();
+  o.classes[0] = { ...o.classes[0], restrictions: [{ id: "c1", kind: "count", prop: "rT", target: "cC", min: "1", max: "3" }, { id: "c2", kind: "count", prop: "pDt", min: "2", max: "2" }] };
+  const ttl = M.exportFiles(o, ctx)["ontology.ttl"];
+  assert.match(ttl, /owl:minQualifiedCardinality "1"/);
+  assert.match(ttl, /owl:maxQualifiedCardinality "3"/);
+  assert.match(ttl, /owl:cardinality "2"/);
+});

@@ -5936,6 +5936,9 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
 // SIDEBAR
 // ─────────────────────────────────────────────
 const KNOWLEDGE_LAYER_ENABLED = false;
+// The knowledge graph is shown on each asset (Knowledge Graph tab), not as its own
+// section. The section's code is kept; set to true to bring the sidebar item back.
+const KNOWLEDGE_GRAPHS_SECTION_ENABLED = false;
 // Context hidden 2026-11-16 until the knowledge graph it will read from exists.
 const CONTEXT_ENABLED = false;
 const GROUPS = [
@@ -5958,7 +5961,7 @@ const GROUPS = [
     {key:"glossary",       icon:"glossary",      label:"Glossary"},
     {key:"semanticlayer",  icon:"semantic",      label:"Semantic Models"},
     {key:"ontologies",     icon:"knowledge",     label:"Ontologies"},
-    {key:"knowledgegraphs",icon:"lineage",       label:"Knowledge Graphs"},
+    ...(KNOWLEDGE_GRAPHS_SECTION_ENABLED?[{key:"knowledgegraphs",icon:"lineage",       label:"Knowledge Graphs"}]:[]),
     ...(CONTEXT_ENABLED ? [{key:"context",        icon:"lineage",       label:"Context"}] : []),
     {key:"domains",        icon:"domains",       label:"Domains"},
     {key:"dataproducts",   icon:"dataproducts",  label:"Data Products"},
@@ -24538,7 +24541,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
 
   // The last tab shows where the object physically sits, not what produced it - calling
   // a storage path "Lineage" promised data lineage this connector does not report.
-  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"customprops",label:"Custom Properties"},{id:"lineage",label:"Storage Path"}];
+  const TABS = [{id:"overview",label:"Overview"},{id:"properties",label:"Properties"},{id:"lineage",label:"Storage Path"},{id:"kg",label:"Knowledge Graph"},{id:"customprops",label:"Custom Properties"}];
 
   const formatDate = (iso) => {
     if(!iso) return "—";
@@ -24601,6 +24604,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
       {/* ── Body ── */}
       <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:22,alignItems:"flex-start"}}>
 
+        {tab==="kg"&&<div style={{flex:1,minWidth:0}}><KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name}/></div>}
         {/* ── CUSTOM PROPERTIES TAB ── */}
         {tab==="customprops"&&(
           <div style={{flex:1,minWidth:0}}>
@@ -27047,13 +27051,14 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {key:"lineage",label:"Lineage"},
         {key:"akgversions",label:"Versions"},
         {key:"akgsynonyms",label:"Synonyms"},
+        {key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
       ]
     : isPartial
     ? [
         {key:"overview",label:"Overview"},{key:"schema",label:"Schema"},{key:"lineage",label:"Lineage"},
-        {key:"observability",label:"Data Quality"},
+        {key:"observability",label:"Data Quality"},{key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
       ]
     : isPBI
@@ -27064,6 +27069,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         // Power BI counts views for reports and dashboards; the tab appears only where
         // there is a number to show.
         ...(asset.usage?[{key:"usage",label:"Usage"}]:[]),
+        {key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
       ]
@@ -27075,6 +27081,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         ...(dbtHasComps?[{key:"components",label:"Components"}]:[]),
         ...(dbtHasTests?[{key:"dbttests",label:"Tests"}]:[]),
         ...(dbtInDag?[{key:"lineage",label:"Lineage"}]:[]),
+        {key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
       ]
@@ -27086,6 +27093,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         // Tableau reports view counts for views and workbooks, and popularity only for
         // PUBLISHED data sources - so the tab appears only where there is a number.
         ...(asset.usage?[{key:"usage",label:"Usage"}]:[]),
+        {key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
       ]
@@ -41159,10 +41167,10 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
       {taken && <div style={{fontSize:11,color:T.rose,marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>A class with this name exists
         {mode==="catalog" && pickTable && <Btn small onClick={addToExisting}>Add {pickTable} as a data source of {d.name.trim()}</Btn>}</div>}</OntField>
     <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || (o.namespace ? `${o.namespace}${ONT.slug(d.name||"…")}` : "Assigned on save")}</div></OntField>
-    <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
-    <OntField label="Synonyms · skos:altLabel"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
+    <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
+    <OntField label="Synonyms"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
     <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1}}><OntField label="Parent classes · rdfs:subClassOf"><OntMulti value={[d.parent, ...(d.parents||[])].filter(Boolean)} onChange={v=>setD({...d, parent:v[0]||null, parents:v.slice(1)})}
+      <div style={{flex:1}}><OntField label="Parent classes"><OntMulti value={[d.parent, ...(d.parents||[])].filter(Boolean)} onChange={v=>setD({...d, parent:v[0]||null, parents:v.slice(1)})}
         placeholder="Add a parent class" options={o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))}/></OntField></div>
       <div style={{flex:1}}><OntField label="Glossary term"><SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})} options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
     </div>
@@ -41171,12 +41179,12 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
   const propOpts = [...relsOut.map(r=>({v:r.id,l:`${r.name} → ${(ontClass(o,r.to)||{}).name}`})), ...d.props.filter(p=>p.name).map(p=>({v:p.id,l:p.name}))];
   const setR = (i, patch) => setD(x=>({...x, restrictions:(x.restrictions||[]).map((y,j)=>j===i?{...y,...patch}:y)}));
   const axioms = <>
-    <Head>OWL axioms</Head>
+    <Head>Axioms</Head>
     <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1}}><OntField label="Disjoint with · owl:disjointWith"><OntMulti value={d.disjoint||[]} onChange={v=>setD({...d,disjoint:v})} placeholder="Add a class" options={o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))}/></OntField></div>
-      <div style={{flex:1}}><OntField label="Key · owl:hasKey"><OntMulti value={d.keyProps||[]} onChange={v=>setD({...d,keyProps:v})} placeholder="Add a property" options={d.props.filter(p=>p.name).map(p=>({v:p.id,l:p.name}))}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Disjoint with"><OntMulti value={d.disjoint||[]} onChange={v=>setD({...d,disjoint:v})} placeholder="Add a class" options={o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Key"><OntMulti value={d.keyProps||[]} onChange={v=>setD({...d,keyProps:v})} placeholder="Add a property" options={d.props.filter(p=>p.name).map(p=>({v:p.id,l:p.name}))}/></OntField></div>
     </div>
-    <OntField label="Equivalent to · owl:equivalentClass">
+    <OntField label="Equivalent to">
       {(d.sameAs||[]).length>0 && <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:6}}>{d.sameAs.map(x=>(
         <div key={x.iri} style={{display:"flex",alignItems:"center",gap:8,fontSize:11.5}}>
           <span style={{fontFamily:"ui-monospace,monospace",color:T.textSub,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.iri}</span>
@@ -41185,21 +41193,23 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
         <Btn small onClick={()=>{ const v = eqIri.trim(); if(!/^https?:\/\//.test(v)){ onToast&&onToast("Enter a full IRI","error"); return; }
           setD(y=>({...y, sameAs:[...(y.sameAs||[]).filter(z=>z.iri!==v), {iri:v, label:v.replace(/^.*[#/]/,""), standard:"External"}]})); setEqIri(""); }}>Add</Btn></div>
     </OntField>
-    <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:6}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
-    <Head right={<Btn small icon={Ic.plus(10)} disabled={!propOpts.length} onClick={()=>setD(x=>({...x, restrictions:[...(x.restrictions||[]), {id:ONT.uid("x"), prop:propOpts[0].v, kind:"some", target:"", n:1}]}))}>Add restriction</Btn>}>
-      Restrictions · owl:Restriction · {(d.restrictions||[]).length}</Head>
+    <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:6}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated</label>
+    <Head right={<Btn small icon={Ic.plus(10)} disabled={!propOpts.length} onClick={()=>setD(x=>({...x, restrictions:[...(x.restrictions||[]), {id:ONT.uid("x"), prop:propOpts[0].v, kind:"some", target:"", min:"", max:""}]}))}>Add restriction</Btn>}>
+      Restrictions · {(d.restrictions||[]).length}</Head>
     {(d.restrictions||[]).length===0 && <div style={{fontSize:11.5,color:T.textMuted,marginBottom:6}}>None</div>}
-    {(d.restrictions||[]).map((x,i)=>{ const rel = o.rels.find(r=>r.id===x.prop); const card = ["min","max","exact"].includes(x.kind);
+    {(d.restrictions||[]).map((x,i)=>{ const rel = o.rels.find(r=>r.id===x.prop); const card = ["count","min","max","exact"].includes(x.kind);
       const inds = (o.individuals||[]).filter(v=>rel && v.classId===rel.to);
       return (
       <div key={x.id} style={{display:"grid",gridTemplateColumns:"1.3fr 1fr 1.4fr 24px",gap:8,alignItems:"center",marginBottom:6}}>
         <SLSelect value={x.prop} onChange={e=>setR(i,{prop:e.target.value, target:""})} options={propOpts}/>
-        <SLSelect value={x.kind} onChange={e=>setR(i,{kind:e.target.value, target:""})} options={[{v:"some",l:"some values from"},{v:"all",l:"all values from"},{v:"value",l:"has value"},{v:"min",l:"min cardinality"},{v:"max",l:"max cardinality"},{v:"exact",l:"exact cardinality"}]}/>
-        {card ? <div style={{display:"flex",gap:6}}><div style={{width:64}}><Input2 value={String(x.n==null?1:x.n)} onChange={e=>setR(i,{n:Math.max(0,parseInt(e.target.value,10)||0)})}/></div>
+        <SLSelect value={["min","max","exact"].includes(x.kind)?"count":x.kind} onChange={e=>setR(i,{kind:e.target.value, target:""})} options={[{v:"some",l:"At least one is"},{v:"all",l:"Only"},{v:"value",l:"Has value"},{v:"count",l:"Number of values"}]}/>
+        {card ? <div style={{display:"flex",gap:6}}>
+            <div style={{width:70}}><Input2 placeholder="Min" value={String(x.kind==="count"?(x.min??""):x.kind==="min"||x.kind==="exact"?(x.n??""):"")} onChange={e=>setR(i,{kind:"count", min:e.target.value.replace(/[^0-9]/g,""), max:x.kind==="count"?(x.max??""):x.kind==="max"||x.kind==="exact"?String(x.n??""):""})}/></div>
+            <div style={{width:70}}><Input2 placeholder="Max" value={String(x.kind==="count"?(x.max??""):x.kind==="max"||x.kind==="exact"?(x.n??""):"")} onChange={e=>setR(i,{kind:"count", max:e.target.value.replace(/[^0-9]/g,""), min:x.kind==="count"?(x.min??""):x.kind==="min"||x.kind==="exact"?String(x.n??""):""})}/></div>
             {rel && <div style={{flex:1}}><SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} options={[{v:"",l:"Any class"}, ...o.classes.map(c=>({v:c.id,l:c.name}))]}/></div>}</div>
           : x.kind==="value" ? (inds.length ? <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Select an individual" options={inds.map(v=>({v:v.id,l:v.name}))}/>
             : <Input2 value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Value"/>)
-          : <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder={rel?"Select a class":"Select a data type"} options={rel ? o.classes.map(c=>({v:c.id,l:c.name})) : ONT.DATATYPES}/>}
+          : <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder={rel?"Select a class":"Select a data type"} options={rel ? o.classes.map(c=>({v:c.id,l:c.name})) : ontDtOpts()}/>}
         <button onClick={()=>setD(y=>({...y, restrictions:y.restrictions.filter(z=>z.id!==x.id)}))} title="Remove" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
       </div>); })}
   </>;
@@ -41246,28 +41256,28 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
         {d.props.length===0 ? <div style={{fontSize:11.5,color:T.textMuted}}>No properties</div> :
         <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:`1.3fr .9fr .55fr .55fr ${src?"1.3fr ":""}24px 24px`,gap:8,padding:"7px 12px",background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
-            {["Property · owl:DatatypeProperty","Data type · rdfs:range","Required","Single value", ...(src?[`Column in ${srcTable}`]:[]), "", " "].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</span>)}
+            {["Property","Data type","Required","Single value", ...(src?[`Column in ${srcTable}`]:[]), "", " "].map(h=><span key={h} style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".04em"}}>{h}</span>)}
           </div>
           {d.props.map((p,i)=>{ const fm = src ? fieldOf(p.id) : null; return (
             <React.Fragment key={p.id||i}>
             <div style={{display:"grid",gridTemplateColumns:`1.3fr .9fr .55fr .55fr ${src?"1.3fr ":""}24px 24px`,gap:8,padding:"6px 12px",alignItems:"center",borderBottom:i<d.props.length-1||propOpen===p.id?`1px solid ${T.border}`:"none"}}>
               <Input2 value={p.name} onChange={e=>setProp(i,{name:e.target.value})} placeholder="Property name"/>
-              <SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ONT.DATATYPES}/>
+              <SLSelect value={p.datatype||"string"} onChange={e=>setProp(i,{datatype:e.target.value})} options={ontDtOpts()}/>
               <input type="checkbox" checked={!!p.required} onChange={e=>setProp(i,{required:e.target.checked})} style={{justifySelf:"start"}}/>
-              <input type="checkbox" title="owl:FunctionalProperty" checked={!!p.functional} onChange={e=>setProp(i,{functional:e.target.checked})} style={{justifySelf:"start"}}/>
+              <input type="checkbox" title="At most one value" checked={!!p.functional} onChange={e=>setProp(i,{functional:e.target.checked})} style={{justifySelf:"start"}}/>
               {src && <SLSelect value={fm?fm.target.column:""} onChange={e=>setColumn(p.id, e.target.value)} placeholder="Not mapped"
                 options={[{v:"",l:"Not mapped"}, ...srcCols.map(c=>({v:c.name,l:`${c.name} · ${c.type}`})), ...(fm && !srcCols.some(c=>c.name===fm.target.column)?[{v:fm.target.column,l:`${fm.target.column} · missing`}]:[])]}/>}
-              <button onClick={()=>setPropOpen(propOpen===p.id?null:p.id)} title="More OWL fields" style={{background:"transparent",border:"none",color:propOpen===p.id?T.accent:T.textMuted,cursor:"pointer",display:"flex",fontWeight:800}}>⋯</button>
+              <button onClick={()=>setPropOpen(propOpen===p.id?null:p.id)} title="More fields" style={{background:"transparent",border:"none",color:propOpen===p.id?T.accent:T.textMuted,cursor:"pointer",display:"flex",fontWeight:800}}>⋯</button>
               <button onClick={()=>removeProp(p.id)} title="Remove property" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
             </div>
             {propOpen===p.id && <div style={{padding:"10px 12px",background:T.bg,borderBottom:i<d.props.length-1?`1px solid ${T.border}`:"none"}}>
               <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace",marginBottom:8}}>{p.iri || (o.namespace?`${o.namespace}${ONT.propSlug(p.name||"…")}`:"Assigned on save")}</div>
               <div style={{display:"flex",gap:10}}>
-                <div style={{flex:2}}><OntField label="Definition · rdfs:comment"><Input2 value={p.desc||""} onChange={e=>setProp(i,{desc:e.target.value})}/></OntField></div>
-                <div style={{flex:1}}><OntField label="Sub-property of · rdfs:subPropertyOf"><SLSelect value={p.parentProp||""} onChange={e=>setProp(i,{parentProp:e.target.value||null})}
+                <div style={{flex:2}}><OntField label="Definition"><Input2 value={p.desc||""} onChange={e=>setProp(i,{desc:e.target.value})}/></OntField></div>
+                <div style={{flex:1}}><OntField label="Sub-property of"><SLSelect value={p.parentProp||""} onChange={e=>setProp(i,{parentProp:e.target.value||null})}
                   options={[{v:"",l:"—"}, ...o.classes.flatMap(c=>(c.id===d.id?d.props:(c.props||[])).filter(x=>x.id!==p.id && x.name).map(x=>({v:x.id,l:`${c.id===d.id?d.name:c.name}.${x.name}`})))]}/></OntField></div>
               </div>
-              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!p.deprecated} onChange={e=>setProp(i,{deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!p.deprecated} onChange={e=>setProp(i,{deprecated:e.target.checked})}/> Deprecated</label>
             </div>}
             </React.Fragment>); })}
         </div>}
@@ -41484,21 +41494,21 @@ const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
       {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!((m.kind==="join"||m.kind==="relfield") && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add relationship":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-        <div style={{flex:1}}><OntField label="Source class · rdfs:domain"><SLSelect value={d.from} onChange={e=>{ setD({...d,from:e.target.value}); setTable(""); setColumn(""); }} placeholder="Select a class" options={opts}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Relationship name · rdfs:label"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value, inverse:d.inverse||OAI.INVERSES[e.target.value.trim().toLowerCase()]||""})} placeholder="e.g. placed by"/></OntField></div>
-        <div style={{flex:1}}><OntField label="Target class · rdfs:range"><SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Source class"><SLSelect value={d.from} onChange={e=>{ setD({...d,from:e.target.value}); setTable(""); setColumn(""); }} placeholder="Select a class" options={opts}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Relationship name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value, inverse:d.inverse||OAI.INVERSES[e.target.value.trim().toLowerCase()]||""})} placeholder="e.g. placed by"/></OntField></div>
+        <div style={{flex:1}}><OntField label="Target class"><SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
       </div>
       <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{iri}</div></OntField>
-      <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="The customer who placed the order (the buyer)"/></OntField>
-      <OntField label="Aliases · skos:altLabel"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. buyer, purchaser"/></OntField>
+      <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="The customer who placed the order (the buyer)"/></OntField>
+      <OntField label="Aliases"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. buyer, purchaser"/></OntField>
       <div style={{display:"flex",gap:10}}>
-        <div style={{flex:1}}><OntField label="Inverse name · owl:inverseOf"><Input2 value={d.inverse} onChange={e=>setD({...d,inverse:e.target.value})} placeholder="e.g. places"/></OntField></div>
-        <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l:`${l}${v==="many_to_one"||v==="one_to_one"?" · sh:maxCount 1":""}`}))}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Required · sh:minCount 1"><SLSelect value={d.required?"yes":"no"} onChange={e=>setD({...d,required:e.target.value==="yes"})} options={[{v:"no",l:"No"},{v:"yes",l:"Yes"}]}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Inverse name"><Input2 value={d.inverse} onChange={e=>setD({...d,inverse:e.target.value})} placeholder="e.g. places"/></OntField></div>
+        <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Required"><SLSelect value={d.required?"yes":"no"} onChange={e=>setD({...d,required:e.target.value==="yes"})} options={[{v:"no",l:"No"},{v:"yes",l:"Yes"}]}/></OntField></div>
       </div>
       <div style={{display:"flex",gap:10}}>
-        <div style={{flex:1}}><OntField label="Sub-property of · rdfs:subPropertyOf"><SLSelect value={d.parentRel||""} onChange={e=>setD({...d,parentRel:e.target.value||null})} options={[{v:"",l:"—"}, ...relOpts]}/></OntField></div>
-        <div style={{flex:1.4}}><OntField label="Property chain · owl:propertyChainAxiom"><div style={{display:"flex",gap:6,alignItems:"center"}}>
+        <div style={{flex:1}}><OntField label="Sub-property of"><SLSelect value={d.parentRel||""} onChange={e=>setD({...d,parentRel:e.target.value||null})} options={[{v:"",l:"—"}, ...relOpts]}/></OntField></div>
+        <div style={{flex:1.4}}><OntField label="Property chain"><div style={{display:"flex",gap:6,alignItems:"center"}}>
           <div style={{flex:1}}><SLSelect value={(d.chain||[])[0]||""} onChange={e=>setD({...d,chain:[e.target.value,(d.chain||[])[1]||""]})} options={[{v:"",l:"—"}, ...relOpts]}/></div>
           <span style={{fontSize:11,color:T.textMuted}}>then</span>
           <div style={{flex:1}}><SLSelect value={(d.chain||[])[1]||""} onChange={e=>setD({...d,chain:[(d.chain||[])[0]||"",e.target.value]})} options={[{v:"",l:"—"}, ...relOpts]}/></div></div></OntField></div>
@@ -41506,18 +41516,17 @@ const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
       <OntField label="Characteristics">
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"6px 14px"}}>{[["transitive","Transitive"],["symmetric","Symmetric"],["asymmetric","Asymmetric"],["reflexive","Reflexive"],["irreflexive","Irreflexive"],["inverseFunctional","Inverse functional"]].map(([k,l])=>(
           <label key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}><input type="checkbox" checked={(d.characteristics||[]).includes(k)}
-            onChange={e=>setD({...d, characteristics:e.target.checked?[...(d.characteristics||[]),k]:(d.characteristics||[]).filter(x=>x!==k)})}/>{l}
-            <span style={{fontFamily:"ui-monospace,monospace",fontSize:10,color:T.textMuted}}>owl:{k==="inverseFunctional"?"InverseFunctional":k.charAt(0).toUpperCase()+k.slice(1)}Property</span></label>))}</div>
+            onChange={e=>setD({...d, characteristics:e.target.checked?[...(d.characteristics||[]),k]:(d.characteristics||[]).filter(x=>x!==k)})}/>{l}</label>))}</div>
       </OntField>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:4}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
-      <Head>Catalog binding · edg:RelationshipBinding</Head>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub,marginBottom:4}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated</label>
+      <Head>Catalog binding</Head>
       <div style={{display:"flex",gap:10}}>
-        <div style={{flex:1}}><OntField label="Catalog asset · edg:sourceAsset"><SLSelect value={table} onChange={e=>{ setTable(e.target.value); setColumn(""); }}
+        <div style={{flex:1}}><OntField label="Catalog asset"><SLSelect value={table} onChange={e=>{ setTable(e.target.value); setColumn(""); }}
           placeholder={!d.from?"Select the source class first":tableOpts.length?"Select an asset":"The source class has no data source"} options={[{v:"",l:"Not mapped"}, ...tableOpts.map(t=>({v:t,l:t}))]}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Catalog field · edg:sourceField"><SLSelect value={column} onChange={e=>setColumn(e.target.value)} placeholder={table?"Select a field":"Select an asset first"}
+        <div style={{flex:1}}><OntField label="Catalog field"><SLSelect value={column} onChange={e=>setColumn(e.target.value)} placeholder={table?"Select a field":"Select an asset first"}
           options={[{v:"",l:"No field"}, ...cols.map(c=>({v:c.name,l:`${c.name} · ${c.type}`})), ...(column && !cols.some(c=>c.name===column)?[{v:column,l:`${column} · not in catalog`}]:[])]}/></OntField></div>
       </div>
-      {table && <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{asset?OMD.fieldIri(asset.id, column||"…"):"Asset not in catalog"}</div>}
+      {table && !asset && <div style={{fontSize:11,color:T.rose}}>Asset not in catalog</div>}
     </OntDrawerShell>
   );
 };
@@ -41530,32 +41539,36 @@ const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
   const save = () => {
     if(!d.classId){ onToast&&onToast("Pick a class","error"); return; }
     if(!d.prop){ onToast&&onToast(d.kind==="cardinality"?"Pick a relationship":"Pick a property","error"); return; }
-    if(needsValue && !String(d.value).trim()){ onToast&&onToast("Give the constraint a value","error"); return; }
+    const two = d.kind==="range"||d.kind==="cardinality";
+    const [lo0, hi0] = String(d.value||"").split("..");
+    if(needsValue && (two ? !String(lo0||"").trim() && !String(hi0||"").trim() : !String(d.value).trim())){ onToast&&onToast(two?"Enter a minimum, a maximum or both":"Give the rule a value","error"); return; }
+    if(two && String(lo0||"").trim() && String(hi0||"").trim() && hi0!=="*" && +lo0 > +hi0){ onToast&&onToast("The minimum is above the maximum","error"); return; }
     const k = {...d, id:d.id||ONT.uid("k")};
     ap(x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
     onToast&&onToast("Rule saved","success"); onClose();
   };
   return (
     <OntDrawerShell title={isNew?"New data rule":"Data rule"} width={540} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Constraint removed","success"); onClose(); }}>Remove</Btn></span>}
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, constraints:x.constraints.filter(y=>y.id!==d.id)})); onToast&&onToast("Rule removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add rule":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value,prop:""})} placeholder="Select a class" options={o.classes.map(x=>({v:x.id,l:x.name}))}/></OntField></div>
-        <div style={{flex:1}}><OntField label={d.kind==="cardinality"?"Relationship · sh:path":"Property · sh:path"}><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})}
+        <div style={{flex:1}}><OntField label={d.kind==="cardinality"?"Relationship":"Property"}><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})}
           options={d.kind==="cardinality" ? [{v:"",l:"Select a relationship"}, ...o.rels.filter(r=>r.from===d.classId).map(r=>({v:r.name,l:r.name}))] : [{v:"",l:"Select a property"}, ...((c&&c.props)||[]).map(p=>({v:p.name,l:p.name}))]}/></OntField></div>
       </div>
       <div style={{display:"flex",gap:10}}>
-        <div style={{flex:1}}><OntField label="Constraint type"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={Object.entries(ONT.CONSTRAINT_KINDS).map(([v,l])=>({v,l}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Rule type"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={Object.entries(ONT.CONSTRAINT_KINDS).map(([v,l])=>({v,l}))}/></OntField></div>
         <div style={{flex:1}}><OntField label="Severity"><SLSelect value={d.severity} onChange={e=>setD({...d,severity:e.target.value})} options={[{v:"violation",l:"Violation"},{v:"warning",l:"Warning"}]}/></OntField></div>
       </div>
-      {needsValue && <OntField label={({pattern:"Regular expression", values:"Allowed values (comma-separated)", range:"Range (min..max)", cardinality:"Count (min..max)"})[d.kind]}>
-        <Input2 value={d.value} onChange={e=>setD({...d,value:e.target.value})} placeholder={({pattern:"^[^@]+@[^@]+$", values:"active, paused, closed", range:"0..100", cardinality:"1..*"})[d.kind]}/></OntField>}
+      {(d.kind==="range"||d.kind==="cardinality") ? (()=>{ const [lo, hi] = String(d.value||"").split("..");
+          const set = (a, b) => setD({...d, value:`${a}..${b}`});
+          return <div style={{display:"flex",gap:10}}>
+            <div style={{flex:1}}><OntField label={d.kind==="range"?"Minimum value":"Minimum count"}><Input2 value={lo||""} onChange={e=>set(e.target.value.replace(/[^0-9.\-]/g,""), hi||"")} placeholder={d.kind==="range"?"0":"1"}/></OntField></div>
+            <div style={{flex:1}}><OntField label={d.kind==="range"?"Maximum value":"Maximum count"}><Input2 value={hi==="*"?"":(hi||"")} onChange={e=>set(lo||"", e.target.value.replace(/[^0-9.\-]/g,""))} placeholder={d.kind==="range"?"100":"No limit"}/></OntField></div>
+          </div>; })()
+        : needsValue && <OntField label={({pattern:"Format (regular expression)", values:"Allowed values (comma-separated)"})[d.kind]}>
+        <Input2 value={d.value} onChange={e=>setD({...d,value:e.target.value})} placeholder={({pattern:"^[^@]+@[^@]+$", values:"active, paused, closed"})[d.kind]}/></OntField>}
       <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
-      {o.namespace && d.classId && d.prop && (()=>{ const k = {...d, id:d.id||"k_preview"};
-        const sh = OMD.businessShapes({...o, constraints:[...o.constraints.filter(x=>x.id!==k.id), k]}).find(x=>x.targetClass===(ontClass(o,d.classId)||{}).iri);
-        const ps = sh && sh.props.find(x=>x.name===d.prop); if(!ps) return null;
-        return <OntField label="SHACL · shapes.ttl"><pre style={{margin:0,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace"}}>
-          {OMD.writeTurtle(OMD.shapesTriples([{...sh, props:[ps]}]), {[o.prefix||"ex"]:o.namespace}).split("\n").filter(l=>!l.startsWith("@prefix")).join("\n").trim()}</pre></OntField>; })()}
     </OntDrawerShell>
   );
 };
@@ -42408,9 +42421,9 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
                 <div style={{flex:1}}><OntField label="Steward"><SLSelect value={d.steward} onChange={e=>setD({...d,steward:e.target.value})} placeholder="Same as owner" options={people}/></OntField></div>
               </div>
               <div style={{display:"flex",gap:12}}>
-                <div style={{flex:2}}><OntField label="Imports · owl:imports"><OntMulti value={d.imports} onChange={v=>setD({...d,imports:v})} placeholder="Add an ontology"
+                <div style={{flex:2}}><OntField label="Imports"><OntMulti value={d.imports} onChange={v=>setD({...d,imports:v})} placeholder="Add an ontology"
                   options={[...ONT_IMPORT_OPTIONS, ...ontLoad().ontologies.filter(x=>!isEdit||x.id!==o.id).map(x=>({v:String(x.namespace||"").replace(/[#/]$/,""), l:`${x.name} · EDG`}))]}/></OntField></div>
-                <div style={{flex:1}}><OntField label="License · dcterms:license"><SLSelect value={d.license} onChange={e=>setD({...d,license:e.target.value})} options={ONT_LICENSES}/></OntField></div>
+                <div style={{flex:1}}><OntField label="License"><SLSelect value={d.license} onChange={e=>setD({...d,license:e.target.value})} options={ONT_LICENSES}/></OntField></div>
               </div>
               <div style={{marginTop:6,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
                 <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",marginBottom:10}}>Namespace</div>
@@ -42814,7 +42827,6 @@ const kgClassPanel = ({o, og, G, c, onAsset}) => {
     <div>
       <div style={{padding:"16px 16px 12px"}}>
         <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{c.name}</div>
-        <div style={{fontSize:10.5,color:"#64748b",fontFamily:"ui-monospace,monospace",marginTop:2}}>{ontCurie(o, c.iri)}</div>
         <div style={{fontSize:11.5,color:"#475569",lineHeight:1.5,marginTop:6}}>{c.desc||"No definition"}</div>
       </div>
       <Sec t="Catalog asset">
@@ -43003,7 +43015,7 @@ const KgEditorWizard = ({g, onClose, onSaved, onToast}) => {
                 ["Classes", `${included.length} of ${o?o.classes.length:0}`],
                 ["Classes bound", og&&og.published?`${og.stats.classesBound} of ${og.stats.classes}`:"—"], ["Relationships bound", og&&og.published?`${og.stats.relsBound} of ${og.stats.rels}`:"—"],
                 ["Catalog fields", og&&og.published?String(og.stats.fields):"—"],
-                ["SHACL", og&&og.published?(og.report.violations?`${og.report.violations} violation${og.report.violations===1?"":"s"}`:`Conforms${og.report.warnings?` · ${og.report.warnings} warning${og.report.warnings===1?"":"s"}`:""}`):"—"],
+                ["Mapping checks", og&&og.published?(og.report.violations?`${og.report.violations} violation${og.report.violations===1?"":"s"}`:`Conforms${og.report.warnings?` · ${og.report.warnings} warning${og.report.warnings===1?"":"s"}`:""}`):"—"],
                 ["Expected answers", og&&og.published?`${og.tests.length-og.failing} of ${og.tests.length} passing`:"—"],
                 ["Build schedule", KG_SCHEDULES[d.schedule]], ["Target store", ONT_STORE], ["Build", d.buildNow?(isEdit?"After saving":"After creating"):"Not now"]]}/>
             </div>}
@@ -43275,11 +43287,11 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
                   <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>Bindings · v{og.version}</span>
                   <Btn small ghost onClick={()=>setTab("schema")}>View schema</Btn>
                 </div>
-                <OntTable empty="No classes" cols={[{l:"Definition",w:"1.4fr"},{l:"IRI",w:"1.2fr"},{l:"Catalog field",w:"1.4fr"}]}
+                <OntTable empty="No classes" cols={[{l:"Definition",w:"1.4fr"},{l:"Catalog field",w:"1.4fr"}]}
                   rows={[...o.classes.map(c=>{ const b = og.bindings.find(x=>x.kind==="class" && x.classId===c.id);
-                      return {key:c.id, cells:[<span style={{fontWeight:600}}>{c.name}</span>, <OntMono>{ontCurie(o, c.iri)}</OntMono>, b&&b.table?<OntMono c={T.text}>{b.table}{(b.keys||[]).length?` · key ${b.keys.join("+")}`:""}</OntMono>:<span style={{color:T.amber}}>Not bound</span>]}; }),
+                      return {key:c.id, cells:[<span style={{fontWeight:600}}>{c.name}</span>, b&&b.table?<OntMono c={T.text}>{b.table}{(b.keys||[]).length?` · key ${b.keys.join("+")}`:""}</OntMono>:<span style={{color:T.amber}}>Not bound</span>]}; }),
                     ...o.rels.map(r=>{ const b = og.bindings.find(x=>x.kind==="relationship" && x.relId===r.id);
-                      return {key:r.id, cells:[`${nmC(r.from)} ${r.name} ${nmC(r.to)}`, <OntMono>{ontCurie(o, r.iri)}</OntMono>, b&&b.column?<OntMono c={T.text}>{b.table}.{b.column}</OntMono>:<span style={{color:T.amber}}>Not bound</span>]}; })]}/>
+                      return {key:r.id, cells:[`${nmC(r.from)} ${r.name} ${nmC(r.to)}`, b&&b.column?<OntMono c={T.text}>{b.table}.{b.column}</OntMono>:<span style={{color:T.amber}}>Not bound</span>]}; })]}/>
               </div></Card2>
               <Card2><div style={{padding:"14px 16px"}}>
                 <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
@@ -43330,13 +43342,13 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
 
         {tab==="quality" && !isMeta && (!og.published ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>The ontology has no published version</div> : <>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-            <SegTabs tabs={[{key:"all",label:`SHACL report · ${checks.length}`},{key:"tests",label:`Expected answers · ${og.tests.length}`}]} active={sevF==="tests"?"tests":"all"} onChange={setSevF}/>
-            <span style={{flex:1}}/><span style={{fontSize:11.5,color:T.textMuted}}>v{og.version} · sh:conforms {String(og.report.conforms)}</span>
+            <SegTabs tabs={[{key:"all",label:`Mapping checks · ${checks.length}`},{key:"tests",label:`Expected answers · ${og.tests.length}`}]} active={sevF==="tests"?"tests":"all"} onChange={setSevF}/>
+            <span style={{flex:1}}/><span style={{fontSize:11.5,color:og.report.conforms?T.green:T.textMuted}}>v{og.version} · {og.report.conforms?"No issues":`${og.report.results.length} issue${og.report.results.length===1?"":"s"}`}</span>
             <Btn small ghost onClick={()=>{ _ontJump = {id:og.o.id, tab:"validation"}; onNav&&onNav("ontologies"); }}>Fix in ontology ↗</Btn>
           </div>
           {sevF!=="tests" ? <OntTable empty="✓ Conforms · no results"
-            cols={[{l:"Severity",w:".7fr"},{l:"Focus node",w:"1.5fr"},{l:"Result path",w:"1fr"},{l:"Constraint component",w:"1.4fr"},{l:"Message",w:"2fr"}]}
-            rows={checks.map((r,i)=>({key:i, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(og.view, r.focusNode), <OntMono>{r.inverse?"^":""}{ontCurie(og.view, r.resultPath)}</OntMono>, <OntMono>{r.component}</OntMono>, r.message]}))}/>
+            cols={[{l:"Severity",w:".7fr"},{l:"Item",w:"1.6fr"},{l:"Issue",w:"2.4fr"}]}
+            rows={checks.map((r,i)=>({key:i, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(og.view, r.focusNode), r.message]}))}/>
           : <OntTable empty="No expected answers" cols={[{l:"Question",w:"1.8fr"},{l:"Expected",w:"1.1fr"},{l:"Actual",w:"1.1fr"},{l:"Result",w:".6fr"}]}
             rows={og.tests.map(t=>({key:t.id, cells:[t.question, <OntMono>{t.expect}</OntMono>, <OntMono c={t.pass?T.green:T.rose}>{t.actual||"Not mapped"}</OntMono>, <span style={{fontWeight:700,color:t.pass?T.green:T.rose}}>{t.pass?"Pass":"Fail"}</span>]}))}/>}
         </>)}
@@ -43506,7 +43518,7 @@ const OntValidationTab = ({o, me, onRule, onOpenMapping, onToast}) => {
   const rules = o.constraints.filter(k=>!q || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(q.toLowerCase()));
   return (<>
     <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
-      <Metric label="Data rules" value={String(o.constraints.length)} sub="documented · SHACL" color={T.accent}/>
+      <Metric label="Data rules" value={String(o.constraints.length)} sub="documented for agents" color={T.accent}/>
       <Metric label="Mapping errors" value={String(rep.violations)} sub="block approval" color={rep.violations?T.rose:T.green}/>
       <Metric label="Mapping warnings" value={String(rep.warnings)} color={rep.warnings?T.amber:T.green}/>
       <Metric label="Expected answers" value={`${tests.length-failing} / ${tests.length}`} sub={failing?"failing blocks approval":"passing"} color={failing?T.rose:T.green}/>
@@ -43516,16 +43528,14 @@ const OntValidationTab = ({o, me, onRule, onOpenMapping, onToast}) => {
       {view==="rules" && <div style={{width:260}}><Input2 placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>}
       <span style={{flex:1}}/>
       {view==="rules" && <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>onRule("new")} disabled={!o.classes.length}>Add rule</Btn>}
-      {view==="report" && <OntDlBtn title="Download report.ttl" onClick={()=>ontDownload(`${o.prefix}-report.ttl`, OMD.exportFiles(o, ctx)["report.ttl"])}/>}
       {view==="tests" && <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setTestEdit("new")} disabled={!o.rels.length}>Add expected answer</Btn>}
     </div>
     {view==="rules" && <OntTable empty={q?"No rules match":"No data rules yet"} onRow={r=>onRule(r.k)}
-      cols={[{l:"Class · sh:targetClass"},{l:"Path · sh:path"},{l:"Rule"},{l:"Value",w:"1.1fr"},{l:"SHACL",w:"1.8fr"},{l:"Severity",w:".7fr"}]}
-      rows={rules.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <OntMono>{k.value||"—"}</OntMono>, <OntMono>{ontShaclOf(k)}</OntMono>, k.severity==="warning"?"Warning":"Violation"]}))}/>}
+      cols={[{l:"Class"},{l:"Property"},{l:"Rule"},{l:"Value",w:"1.6fr"},{l:"Severity",w:".7fr"},{l:"Description",w:"1.8fr"}]}
+      rows={rules.map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], ontRuleValue(k), k.severity==="warning"?"Warning":"Violation", k.desc||"—"]}))}/>}
     {view==="report" && <OntTable empty="✓ Conforms · no results" onRow={r=>onOpenMapping&&onOpenMapping(r.r)}
-      cols={[{l:"Severity",w:".7fr"},{l:"Focus node",w:"1.5fr"},{l:"Result path",w:"1fr"},{l:"Constraint component",w:"1.4fr"},{l:"Message",w:"2fr"}]}
-      rows={rep.results.map((r,i)=>({key:i, r, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(o, r.focusNode),
-        <OntMono>{r.inverse?"^":""}{ontCurie(o, r.resultPath)}</OntMono>, <OntMono>{r.component}</OntMono>, r.message]}))}/>}
+      cols={[{l:"Severity",w:".7fr"},{l:"Item",w:"1.6fr"},{l:"Issue",w:"2.4fr"}]}
+      rows={rep.results.map((r,i)=>({key:i, r, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(o, r.focusNode), r.message]}))}/>}
     {view==="tests" && <OntTable empty="No expected answers" onRow={r=>setTestEdit(r.t)}
       cols={[{l:"Question",w:"1.8fr"},{l:"Relationship",w:"1.2fr"},{l:"Expected",w:"1.1fr"},{l:"Actual",w:"1.1fr"},{l:"Result",w:".6fr"},{l:"Approved by",w:"1fr"}]}
       rows={tests.map(t=>{ const r = o.rels.find(x=>x.id===t.relId)||{}; return {key:t.id, t:(o.tests||[]).find(x=>x.id===t.id), cells:[t.question, r.name||"—",
@@ -43550,11 +43560,11 @@ const OntIndividualDrawer = ({o, ind, onClose, onToast}) => {
     <OntDrawerShell title={isNew?"New individual":ind.name} width={560} onClose={onClose} footer={<>
       {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, individuals:(x.individuals||[]).filter(y=>y.id!==d.id)})); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>{isNew?"Add":"Save"}</Btn></>}>
-      <OntField label="Name · rdfs:label"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Shipped"/></OntField>
+      <OntField label="Name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Shipped"/></OntField>
       <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || `${o.namespace}${ONT.slug(d.name||"…")}`}</div></OntField>
-      <OntField label="Class · rdf:type"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value})} placeholder="Select a class" options={o.classes.map(c=>({v:c.id,l:c.name}))}/></OntField>
-      <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
-      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated · owl:deprecated</label>
+      <OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value})} placeholder="Select a class" options={o.classes.map(c=>({v:c.id,l:c.name}))}/></OntField>
+      <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated</label>
     </OntDrawerShell>);
 };
 
@@ -43587,13 +43597,22 @@ const OntConfigTab = ({o}) => {
   </>);
 };
 
+const ONT_DT_LABEL = {string:"Text", integer:"Integer", long:"Long integer", decimal:"Decimal", double:"Double", float:"Float", boolean:"Yes / No",
+  date:"Date", dateTime:"Date and time", time:"Time", duration:"Duration", anyURI:"Web address", langString:"Text with language"};
+const ontDtOpts = () => ONT.DATATYPES.map(v=>({v, l:ONT_DT_LABEL[v]||v}));
+// A rule's value in words: ranges and counts as two numbers.
+const ontRuleValue = (k) => {
+  if(k.kind==="range"||k.kind==="cardinality"){ const [lo, hi] = String(k.value||"").split(/\s*\.\.\s*/);
+    return [lo!==undefined&&lo!==""?`Min ${lo}`:null, hi!==undefined&&hi!==""&&hi!=="*"?`Max ${hi}`:null].filter(Boolean).join(" · ")||"—"; }
+  return k.value||"—";
+};
 const ontShaclOf = (k) => {
   const [lo, hi] = String(k.value||"").split(/\s*\.\.\s*/);
   const t = ({required:"sh:minCount 1", unique:"dash:uniqueValueForClass true", pattern:`sh:pattern "${k.value}"`,
     values:`sh:in ( ${String(k.value||"").split(/\s*,\s*/).filter(Boolean).map(v=>`"${v}"`).join(" ")} )`,
     range:[lo&&`sh:minInclusive ${lo}`, hi&&`sh:maxInclusive ${hi}`].filter(Boolean).join(" · "),
     cardinality:[lo&&`sh:minCount ${lo}`, hi&&hi!=="*"&&`sh:maxCount ${hi}`].filter(Boolean).join(" · ")})[k.kind]||"";
-  return t + (k.severity==="warning" ? " · sh:severity sh:Warning" : "");
+  return t + (k.severity==="warning" ? " sh:Warning" : "");
 };
 // ── The screen ──
 const OntologyView = ({onToast, onNav, onAsset}) => {
@@ -43691,7 +43710,6 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{fontSize:10.5,color:T.textMuted}}>{x.domain} · {x.owner}</span>
-                    <span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{x.prefix}:</span>
                   </div>
                 </div>
               </div>); })}
@@ -43754,7 +43772,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
                 <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
                   {[{icon:"🖊️",label:"Edit Details",sub:"Details, classes, relationships and constraints",action:()=>{setMenuOpen(false);setWiz("edit");}},
                     {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setStyleOpen(true);setMenuOpen(false);}},
-                    {icon:o.deprecated?"↺":"⊘",label:o.deprecated?"Restore":"Deprecate",sub:isOwner?(o.deprecated?"Back to its previous status":"owl:deprecated · kept, not for new use"):"Owners only",disabled:!isOwner,
+                    {icon:o.deprecated?"↺":"⊘",label:o.deprecated?"Restore":"Deprecate",sub:isOwner?(o.deprecated?"Back to its previous status":"Kept, not for new use"):"Owners only",disabled:!isOwner,
                       action:()=>{ setMenuOpen(false); ontPatch(o.id,{deprecated:!o.deprecated}); onToast&&onToast(`${o.name} ${o.deprecated?"restored":"deprecated"}`,"success"); }},
                   ].map(item=>(
                     <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
@@ -43838,12 +43856,12 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
           <OntTable empty={listQ?"No classes match":"No classes yet"} onRow={r=>setClassEdit(r.c)}
-            cols={[{l:"Class",w:"1.1fr"},{l:"IRI",w:"1.2fr"},{l:"Parent class",w:".9fr"},{l:"Data sources",w:"1.1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:".9fr"},{l:"Definition",w:"1.8fr"}]}
+            cols={[{l:"Class",w:"1.1fr"},{l:"Parent class",w:".9fr"},{l:"Data sources",w:"1.1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:".9fr"},{l:"Definition",w:"1.8fr"}]}
             rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name))
               .filter(c=>!listQ || `${c.name} ${(c.synonyms||[]).join(" ")} ${c.desc||""} ${c.parent?nm(c.parent):""} ${MAP.sourcesOf(o,c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(" ")} ${(c.props||[]).map(p=>p.name).join(" ")}`.toLowerCase().includes(listQ.toLowerCase()))
               .map(c=>({key:c.id, c, cells:[
               <span>{c.name}{c.prov&&c.prov.by==="ai"?<span style={{marginLeft:6}}><SmaiChip conf={c.prov.conf||0.8} why={c.prov.why}/></span>:null}</span>,
-              <OntMono>{ontCurie(o, c.iri)}</OntMono>, c.parent?nm(c.parent):"—",
+              c.parent?nm(c.parent):"—",
               MAP.sourcesOf(o, c.id).length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.sourcesOf(o, c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
               String((c.props||[]).length), c.termId?((_gtState.find(t=>t.id===c.termId)||{}).term||"—"):"—",
               c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
@@ -43856,8 +43874,8 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
           {relView==="diagram" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAsset={onAsset}/>}
           {relView==="list" && <OntTable empty={listQ?"No relationships match":"No relationships yet"} onRow={r=>setRelEdit(r.r)}
-            cols={[{l:"Source class"},{l:"Relationship"},{l:"IRI",w:"1.1fr"},{l:"Target class"},{l:"Cardinality"},{l:"Catalog field",w:"1.3fr"}]}
-            rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, <OntMono>{ontCurie(o, r.iri)}</OntMono>, nm(r.to), ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
+            cols={[{l:"Source class"},{l:"Relationship"},{l:"Target class"},{l:"Cardinality"},{l:"Catalog field",w:"1.3fr"}]}
+            rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
               (()=>{ const m = ontRelField(o, r.id); return m && m.target.column ? <OntMono>{m.target.table}.{m.target.column}</OntMono> : m ? <span style={{color:T.rose}}>{m.target.table} · no field</span> : <span style={{color:T.amber}}>Not mapped</span>; })()]}))}/>}
         </>}
         {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
@@ -43867,9 +43885,9 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setIndEdit("new")} disabled={!o.classes.length}>Add individual</Btn></div>
           <OntTable empty={listQ?"No individuals match":"No individuals yet"} onRow={r=>setIndEdit(r.x)}
-            cols={[{l:"Individual · owl:NamedIndividual",w:"1.2fr"},{l:"IRI",w:"1.2fr"},{l:"Class · rdf:type"},{l:"Definition",w:"2fr"}]}
+            cols={[{l:"Individual",w:"1.2fr"},{l:"Class"},{l:"Definition",w:"2fr"}]}
             rows={(o.individuals||[]).filter(x=>!listQ || `${x.name} ${nm(x.classId)} ${x.desc||""}`.toLowerCase().includes(listQ.toLowerCase()))
-              .map(x=>({key:x.id, x, cells:[<span>{x.name}{x.deprecated && <span style={{marginLeft:6,fontSize:10,color:T.violet}}>deprecated</span>}</span>, <OntMono>{ontCurie(o, x.iri)}</OntMono>, nm(x.classId), x.desc||"—"]}))}/>
+              .map(x=>({key:x.id, x, cells:[<span>{x.name}{x.deprecated && <span style={{marginLeft:6,fontSize:10,color:T.violet}}>deprecated</span>}</span>, nm(x.classId), x.desc||"—"]}))}/>
         </>}
         {tab==="source" && <OntConfigTab o={o}/>}
       </div>
@@ -43879,7 +43897,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           const lines = base ? ONT.diff(base.snapshot, ONT.snapshot(o)) : [];
           return <div style={{marginBottom:12}}>
             <div style={{display:"flex",gap:14,fontSize:12,color:T.textSub,marginBottom:8,flexWrap:"wrap"}}>
-              <span>SHACL: <b style={{color:rep.violations?T.rose:T.green}}>{rep.violations?`${rep.violations} violation${rep.violations===1?"":"s"}`:"conforms"}</b>{rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}</span>
+              <span>Mapping checks: <b style={{color:rep.violations?T.rose:T.green}}>{rep.violations?`${rep.violations} error${rep.violations===1?"":"s"}`:"no errors"}</b>{rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}</span>
               <span>Expected answers: <b style={{color:tests.every(t=>t.pass)?T.green:T.rose}}>{tests.filter(t=>t.pass).length} / {tests.length}</b></span>
               {oBlk.total>0 && <span style={{color:T.rose,fontWeight:700}}>{oBlk.total} error{oBlk.total===1?"":"s"} · approval blocked</span>}
               {reviewOpen==="approve" && !oBlk.total && <span>Approving publishes v{((o.versions||[])[0]||{n:0}).n+1} · {ONT_STORE}</span>}
@@ -69487,7 +69505,7 @@ export default function App(){
       case "domains":       return <DomainsView onAsset={handleAsset} onNav={handleNav} onToast={showToast} deepLinkDomainId={deepLinkDomainId}/>;
       case "dataproducts":  return <DataProductsView onAsset={handleAsset} onNav={handleNav} onToast={showToast}/>;
       case "knowledgelayer":return !KNOWLEDGE_LAYER_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeLayerView onToast={showToast} onNav={handleNav}/>;
-      case "knowledgegraphs": return <KnowledgeGraphView onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
+      case "knowledgegraphs": return !KNOWLEDGE_GRAPHS_SECTION_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <KnowledgeGraphView onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
       case "ontologies":    return <OntologyView onToast={showToast} onNav={handleNav} onAsset={handleAsset}/>;
       case "semanticlayer": return <SemanticLayerView onToast={showToast} onNav={handleNav} deepLinkModelId={deepLinkModelId}/>;
       case "context":       return !CONTEXT_ENABLED ? <HomeView onNav={handleNav} onToast={showToast} role={role} roleCfg={roleCfg}/> : <ContextView onToast={showToast} onNav={handleNav} deepLink={ctxDeepLink}/>;

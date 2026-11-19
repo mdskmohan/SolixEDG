@@ -138,6 +138,13 @@ export function owlTriples(ont) {
       else if (x.kind === "value") target = (I(x.target) || {}).iri || x.target;
       else if (isRel && x.target) target = C(x.target);
       if ((x.kind === "some" || x.kind === "all" || x.kind === "value") && !target) return;
+      // "Number of values": a minimum and a maximum, each optional; equal means exact.
+      if (x.kind === "count") {
+        const lo = x.min === "" || x.min == null ? null : +x.min, hi = x.max === "" || x.max == null ? null : +x.max;
+        if (lo != null && hi != null && lo === hi) restrict(c.iri, pr.iri, "exact", target, lo, isRel);
+        else { if (lo != null) restrict(c.iri, pr.iri, "min", target, lo, isRel); if (hi != null) restrict(c.iri, pr.iri, "max", target, hi, isRel); }
+        return;
+      }
       restrict(c.iri, pr.iri, x.kind, target, x.n != null ? x.n : 1, isRel);
     });
   });
