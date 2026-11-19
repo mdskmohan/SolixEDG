@@ -13,6 +13,7 @@ import { SL_USAGE } from "./src/semantic/usage-seed.js";
 import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
+import * as OMD from "./src/ontology/metadata.js";
 import * as KG from "./src/kg/engine.js";
 import * as KGOPS from "./src/kg/ops.js";
 import * as AXM from "./src/access/model.js";
@@ -134,6 +135,8 @@ const ASSETS = [
   {id:9001, name:"orders_archive",    type:"Table",  domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:88, usage:"Low", updated:"3d ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / orders_archive", tier:2, rows:"412M", size:"96 GB", tags:["PII","GDPR","archived"], description:"Archived historical orders retired from Snowflake into CDP. Governed in place; retention 7y.", slaFreshness:"—"},
   {id:9002, name:"customers_archive", type:"Table",  domain:"Finance",  owner:"dev.patel", owners:["dev.patel"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:90, usage:"Low", updated:"1w ago", service:"cdp", connectionLabel:"Solix CDP — Archive", db:"cdp / kb.commerce / customers_archive", tier:1, rows:"28M", size:"14 GB", tags:["PII","legal-hold"], description:"Archived customer records under legal hold via Federated Governance.", slaFreshness:"—"},
   {id:9003, name:"contracts_2025.pdf",type:"Object", domain:"Finance",  owner:"sarah.kim", owners:["sarah.kim"], steward:"sarah.kim", stewards:["sarah.kim"], cert:"Approved", quality:0, usage:"Med", updated:"2d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / legal / contracts_2025.pdf", tier:2, rows:"—", size:"4.2 MB", tags:["confidential"], description:"Executed vendor contracts in ECS. Retention + legal hold enforced in place.", slaFreshness:"—", assetLevel:"object", fileFormat:"PDF"},
+  {id:9201, name:"ORDERS", type:"View", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:94, usage:"High", updated:"2h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"snowflake_prod / SALES / ORDERS", tier:1, rows:"18.4M", size:"3.1 GB", tags:["sales"], description:"Approved sales orders view. One row per order, with the buyer and the bill-to customer.", slaFreshness:"1h"},
+  {id:9202, name:"CUSTOMERS", type:"View", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:92, usage:"High", updated:"2h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"snowflake_prod / SALES / CUSTOMERS", tier:1, rows:"2.2M", size:"640 MB", tags:["PII","sales"], description:"Approved customer view. One row per customer.", slaFreshness:"1h"},
   {id:9101, name:"store_sales_sv", type:"Semantic View", domain:"Commerce", owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], cert:"Approved", quality:0, usage:"Med", updated:"6h ago", service:"snowflake", connectionLabel:"Snowflake DWH", db:"snowflake_prod / COMMERCE / store_sales_sv", tier:1, rows:"—", size:"—", tags:["revenue"], description:"Snowflake semantic view over store sales. Built by the Commerce analytics team in Snowflake; EDG reads its definitions.", slaFreshness:"—", semanticModelId:"mdl_store"},
   {id:9102, name:"product_engagement_mv", type:"Metric View", domain:"Product", owner:"alex.wu", owners:["alex.wu"], steward:"alex.wu", stewards:["alex.wu"], cert:"Approved", quality:0, usage:"Low", updated:"1d ago", service:"databricks", connectionLabel:"Databricks Unity", db:"main / product / product_engagement_mv", tier:2, rows:"—", size:"—", tags:["KPI"], description:"Databricks metric view for product engagement. Defined in Unity Catalog; EDG reads its measures and dimensions.", slaFreshness:"—", semanticModelId:"mdl_product"},
   {id:9004, name:"hr_records",        type:"Folder", domain:"Platform", owner:"james.oh",  owners:["james.oh"],  steward:"james.oh",  stewards:["james.oh"],  cert:"Approved", quality:0, usage:"Low", updated:"5d ago", service:"ecs", connectionLabel:"Solix ECS — Content", db:"ecs / hr / hr_records", tier:1, rows:"—", size:"1.1 GB", tags:["PII","confidential"], description:"HR document folder in ECS. Access-restricted; retention governed by EDG.", slaFreshness:"—", assetLevel:"folder", childCount:240},
@@ -1391,6 +1394,18 @@ function TagProvider({ children }) {
 }
 
 const SCHEMA = {
+  ORDERS:[
+    {name:"ORDER_ID",type:"VARCHAR",desc:"Order number, e.g. O-104",pii:false,nullable:false,pk:true},
+    {name:"BUYER_ID",type:"VARCHAR",desc:"Customer who placed the order",pii:false,nullable:true,pk:false},
+    {name:"BILL_TO_ID",type:"VARCHAR",desc:"Customer the order is invoiced to",pii:false,nullable:true,pk:false},
+    {name:"ORDER_DATE",type:"DATE",desc:"Date the order was placed",pii:false,nullable:false,pk:false},
+    {name:"AMOUNT",type:"DECIMAL(12,2)",desc:"Order total",pii:false,nullable:false,pk:false},
+  ],
+  CUSTOMERS:[
+    {name:"CUSTOMER_ID",type:"VARCHAR",desc:"Customer number, e.g. C-007",pii:false,nullable:false,pk:true},
+    {name:"NAME",type:"VARCHAR",desc:"Customer name",pii:true,nullable:false,pk:false},
+    {name:"EMAIL",type:"VARCHAR",desc:"Contact email",pii:true,nullable:true,pk:false},
+  ],
   orders:[
     {name:"order_id",type:"BIGINT",desc:"Unique order identifier",pii:false,nullable:false,quality:"NOT NULL",pk:true},
     {name:"customer_id",type:"BIGINT",desc:"Reference to customers.customer_id",pii:true,nullable:false,quality:"FK valid",pk:false},
@@ -40802,15 +40817,85 @@ const ontSeed = () => {
     classes:imp.classes, rels:imp.rels, constraints:imp.constraints, versions:[]};
   return [pub.ok ? pub.ontology : commerce, supply];
 };
+// The plan's example, at the metadata level: Order and Customer, two distinct
+// relationships bound to ORDERS.BUYER_ID and ORDERS.BILL_TO_ID, two approved
+// expected answers, published as v1 after approval.
+const ontSalesSeed = () => {
+  const O = "c_sales_order", C = "c_sales_customer";
+  const mk = (id, kind, classId, extra, target) => ({id, kind, classId, ...extra, target, status:"approved", by:"dev.patel", at:"2026-11-10T09:00:00.000Z"});
+  let o = {id:"ont_sales", name:"Sales", prefix:"sales", namespace:"https://ontology.jnj.com/sales#", domain:"Commerce",
+    owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], status:"Draft", created:"2026-11-10", source:{kind:"native"},
+    desc:"Who buys and who is billed. The sales meaning agents use to find the right catalog field.",
+    classes:[
+      {id:O, name:"Order", desc:"A request from a customer to buy products, identified by its order number.", synonyms:["Sales order"], parent:null, termId:null, sameAs:[],
+        props:[{id:"p_so_id", name:"Order ID", datatype:"string", required:true, desc:"Order number, e.g. O-104."},
+          {id:"p_so_date", name:"Order date", datatype:"date", required:false, desc:"Date the order was placed."},
+          {id:"p_so_amount", name:"Amount", datatype:"decimal", required:false, desc:"Order total."}]},
+      {id:C, name:"Customer", desc:"A person or organization that buys from us or is invoiced by us.", synonyms:["Client"], parent:null, termId:null, sameAs:[],
+        props:[{id:"p_sc_id", name:"Customer ID", datatype:"string", required:true, desc:"Customer number, e.g. C-007."},
+          {id:"p_sc_name", name:"Name", datatype:"string", required:true, desc:""},
+          {id:"p_sc_email", name:"Email", datatype:"string", required:false, desc:""}]}],
+    rels:[
+      {id:"r_sales_placed", from:O, to:C, name:"placed by", inverse:"places", cardinality:"many_to_one", required:true, kind:"association",
+        synonyms:["buyer","purchaser"], desc:"The customer who placed the order (the buyer)."},
+      {id:"r_sales_billed", from:O, to:C, name:"billed to", inverse:"is billed for", cardinality:"many_to_one", required:false, kind:"association",
+        synonyms:["bill-to","billing customer","payer"], desc:"The customer who receives the invoice for the order."}],
+    constraints:[
+      {id:"k_sales_oid", classId:O, prop:"Order ID", kind:"pattern", value:"^O-[0-9]+$", severity:"violation", desc:""},
+      {id:"k_sales_email", classId:C, prop:"Email", kind:"pattern", value:"^[^@]+@[^@]+$", severity:"warning", desc:""}],
+    mappings:[
+      mk("map_s1","table",O,{},{table:"ORDERS", keys:["ORDER_ID"]}), mk("map_s2","table",C,{},{table:"CUSTOMERS", keys:["CUSTOMER_ID"]}),
+      mk("map_s3","field",O,{propId:"p_so_id"},{table:"ORDERS", column:"ORDER_ID"}), mk("map_s4","field",O,{propId:"p_so_date"},{table:"ORDERS", column:"ORDER_DATE"}),
+      mk("map_s5","field",O,{propId:"p_so_amount"},{table:"ORDERS", column:"AMOUNT"}),
+      mk("map_s6","field",C,{propId:"p_sc_id"},{table:"CUSTOMERS", column:"CUSTOMER_ID"}), mk("map_s7","field",C,{propId:"p_sc_name"},{table:"CUSTOMERS", column:"NAME"}),
+      mk("map_s8","field",C,{propId:"p_sc_email"},{table:"CUSTOMERS", column:"EMAIL"}),
+      mk("map_s9","relfield",O,{relId:"r_sales_placed"},{table:"ORDERS", column:"BUYER_ID"}),
+      mk("map_s10","relfield",O,{relId:"r_sales_billed"},{table:"ORDERS", column:"BILL_TO_ID"})],
+    tests:[
+      {id:"t_sales_buyer", question:"Which field identifies the buyer?", relId:"r_sales_placed", expect:"ORDERS.BUYER_ID", approvedBy:"maya.chen"},
+      {id:"t_sales_billto", question:"Which field identifies the billing customer?", relId:"r_sales_billed", expect:"ORDERS.BILL_TO_ID", approvedBy:"maya.chen"}],
+    audience:["Analytics","Governance"], versions:[]};
+  o = OMD.ensureIris(o);
+  const review = {state:"approved", submittedBy:"dev.patel", submittedAt:"2026-11-11T15:20:00.000Z", approvedBy:"maya.chen", approvedAt:"2026-11-12T09:40:00.000Z", hash:OMD.draftHash(o)};
+  const pub = ONT.publish(o, "maya.chen", "Buyer and billing customer", "2026-11-12T10:00:00Z");
+  return {...pub.ontology, review, publications:[{status:"published", n:1, at:pub.version.at, by:"maya.chen", approvedBy:"maya.chen", note:"Buyer and billing customer"}]};
+};
+// A relationship mapped through a semantic-model join also gets its catalog
+// field: the join key on the source class's side.
+const ontJoinToField = (o) => {
+  const maps = o.mappings||[], add = [];
+  maps.filter(m=>m.kind==="join").forEach(m=>{
+    if(maps.some(x=>x.kind==="relfield" && x.relId===m.relId)) return;
+    const r = (o.rels||[]).find(x=>x.id===m.relId), j = _slState.rels.find(x=>x.id===m.target.joinId); if(!r||!j) return;
+    const ents = maps.filter(x=>x.kind==="dataset" && x.classId===r.from).map(x=>x.target.entityId);
+    const side = ents.includes(j.from) ? {e:j.from, k:(j.fromKeys||[j.fromKey])[0]} : ents.includes(j.to) ? {e:j.to, k:(j.toKeys||[j.toKey])[0]} : null; if(!side||!side.k) return;
+    const table = (_slState.entities.find(e=>e.id===side.e)||{}).table; if(!table) return;
+    add.push({id:"map_rf_"+m.id, kind:"relfield", classId:r.from, relId:r.id, target:{table, column:side.k}, status:"approved", by:m.by, at:m.at});
+  });
+  return add.length ? {...o, mappings:[...maps, ...add]} : o;
+};
+// Older saved ontologies: give them IRIs and catalog fields, in the draft and in
+// every published version alike, so nothing reads as changed.
+const ontMigrate = (o) => {
+  const x = OMD.ensureIris(ontJoinToField(o));
+  return {...x, versions:(x.versions||[]).map(v=>{
+    const m = OMD.ensureIris(ontJoinToField({...v.snapshot, id:x.id, namespace:v.snapshot.namespace||x.namespace}));
+    const snap = {...v.snapshot, classes:m.classes, rels:m.rels, mappings:m.mappings};
+    return {...v, snapshot:snap, hash:ONT.hash(snap)}; })};
+};
 let _ontState = null;
 const ontLoad = () => {
   if(_ontState) return _ontState;
   let saved = null; try { saved = JSON.parse(localStorage.getItem(ONT_KEY)||"null"); } catch(e) {}
-  _ontState = saved && Array.isArray(saved.ontologies) ? saved : {ontologies: ontSeed()};
+  const base = saved && Array.isArray(saved.ontologies) ? saved : {ontologies: ontSeed()};
+  const list = base.ontologies.some(o=>o.id==="ont_sales") ? base.ontologies : [...base.ontologies, ontSalesSeed()];
+  _ontState = {...base, ontologies:list.map(ontMigrate)};
   return _ontState;
 };
 const _ontSubs = new Set();
 const ontSet = (fn) => { _ontState = typeof fn==="function" ? fn(ontLoad()) : fn;
+  // Identifiers are assigned once, when a class, property or relationship first appears.
+  _ontState = {..._ontState, ontologies:_ontState.ontologies.map(o=>OMD.ensureIris(o))};
   try { localStorage.setItem(ONT_KEY, JSON.stringify(_ontState)); } catch(e) {}
   _ontSubs.forEach(f=>f()); };
 const useOnt = () => { const [,force] = useState(0);
@@ -40974,7 +41059,7 @@ const OntSourceRow = ({m, onRemove, onAsset, broken, compact}) => {
       <span style={{color:broken?T.rose:T.green,fontSize:12}}>{broken?"!":"✓"}</span>
       <div style={{flex:1,minWidth:0}}>
         <div style={{fontSize:12,fontWeight:600,color:T.text,fontFamily:"ui-monospace,monospace"}}>{table||"missing"}</div>
-        <div style={{fontSize:10.5,color:T.textMuted}}>{m.kind==="dataset" ? `Semantic dataset${models.length?` · ${models.join(", ")}`:""}` : "Catalog table"}{(m.target.keys||[]).length?` · key ${m.target.keys.join(" + ")}`:""}</div>
+        <div style={{fontSize:10.5,color:T.textMuted}}>{m.kind==="dataset" ? `Semantic dataset${models.length?` · ${models.join(", ")}`:""}` : "Catalog asset"}{(m.target.keys||[]).length?` · key ${m.target.keys.join(" + ")}`:""}{table && ASSETS.find(a=>a.name===table) ? ` · catalog ID ${ASSETS.find(a=>a.name===table).id}` : ""}</div>
       </div>
       {m.prov && m.prov.by==="ai" && <SmaiChip conf={m.prov.conf||0.8} why={`Accepted AI suggestion · ${m.prov.why||""}`}/>}
       <OntCatalogLink table={table} onAsset={onAsset}/>
@@ -41071,10 +41156,11 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
     <OntField label={<Req>Class name</Req>}><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Customer"/>
       {taken && <div style={{fontSize:11,color:T.rose,marginTop:4,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>A class with this name exists
         {mode==="catalog" && pickTable && <Btn small onClick={addToExisting}>Add {pickTable} as a data source of {d.name.trim()}</Btn>}</div>}</OntField>
-    <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
-    <OntField label="Synonyms"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
+    <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || (o.namespace ? `${o.namespace}${ONT.slug(d.name||"…")}` : "Assigned on save")}</div></OntField>
+    <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="What one instance of this class is"/></OntField>
+    <OntField label="Synonyms · skos:altLabel"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. Client, Buyer"/></OntField>
     <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1}}><OntField label="Parent class"><SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})} options={[{v:"",l:"—"}, ...o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))]}/></OntField></div>
+      <div style={{flex:1}}><OntField label="Parent class · rdfs:subClassOf"><SLSelect value={d.parent||""} onChange={e=>setD({...d,parent:e.target.value||null})} options={[{v:"",l:"—"}, ...o.classes.filter(x=>x.id!==d.id).map(x=>({v:x.id,l:x.name}))]}/></OntField></div>
       <div style={{flex:1}}><OntField label="Glossary term"><SLSelect value={d.termId||""} onChange={e=>setD({...d,termId:e.target.value||null})} options={[{v:"",l:"—"}, ...concepts.map(t=>({v:t.id,l:`${t.term} · ${t.termType||"Term"}`}))]}/></OntField></div>
     </div>
   </>;
@@ -41314,44 +41400,56 @@ const OntRelCanvas = ({o, selected, onSelect, onEditClass, onAddRel, onAsset, co
 
 const OntRelDrawer = ({o, rel, onClose, onToast, apply}) => {
   const ap = apply || ((f)=>ontPatch(o.id, f));
+  const { roleCfg } = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
   const isNew = !rel || !rel.id;
-  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", kind:"association", desc:"", ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
+  const [d, setD] = useState(()=>({from:"", to:"", name:"", inverse:"", cardinality:"many_to_one", required:false, kind:"association", desc:"", synonyms:[], ...(rel||{}), id:(rel&&rel.id)||ONT.uid("r")}));
+  const [syn, setSyn] = useState(((rel&&rel.synonyms)||[]).join(", "));
   const opts = o.classes.map(c=>({v:c.id,l:c.name}));
-  // The join that realises this relationship: any semantic-model join between a
-  // dataset of the source class and a dataset of the target class.
-  const entsOf = (cid) => MAP.sourcesOf(o, cid).filter(m=>m.kind==="dataset").map(m=>m.target.entityId);
-  const A = d.from ? entsOf(d.from) : [], B = d.to ? entsOf(d.to) : [];
-  const joins = _slState.rels.filter(j=>(A.includes(j.from)&&B.includes(j.to)) || (B.includes(j.from)&&A.includes(j.to)));
-  const entName = (id) => (_slState.entities.find(e=>e.id===id)||{}).table || id;
-  const cur = MAP.mappingsOf(o).find(m=>m.kind==="join" && m.relId===d.id);
-  const [joinId, setJoinId] = useState(cur ? cur.target.joinId : "");
+  // The relationship is bound to one catalog field: the column of the source
+  // class's asset that identifies the related entity (ORDERS.BUYER_ID).
+  const cur = ontRelField(o, d.id);
+  const [table, setTable] = useState(cur ? cur.target.table : "");
+  const [column, setColumn] = useState(cur ? (cur.target.column||"") : "");
+  const fromTables = d.from ? MAP.sourcesOf(o, d.from).map(m=>MAP.sourceTable(m, mapCtx())).filter(Boolean) : [];
+  const tableOpts = [...new Set([...fromTables, ...(table && !fromTables.includes(table) ? [table] : [])])];
+  const cols = table ? (SCHEMA[table]||[]) : [];
+  const asset = table ? ASSETS.find(a=>a.name===table) : null;
+  const iri = rel && rel.iri ? rel.iri : (o.namespace ? `${o.namespace}${ONT.propSlug(d.name||"…")}` : "Assigned on save");
   const save = () => {
     if(!d.from||!d.to||!d.name.trim()){ onToast&&onToast("Pick both classes and name the relationship","error"); return; }
-    const r = {...d, name:d.name.trim().toLowerCase()};
-    const jm = joinId ? [{id:ONT.uid("map"), kind:"join", classId:r.from, relId:r.id, target:{joinId}, status:"approved", by:"you", at:new Date().toISOString(), prov:{by:"human"}}] : [];
+    const r = {...d, name:d.name.trim().toLowerCase(), synonyms:syn.split(",").map(s=>s.trim()).filter(Boolean)};
+    const rf = table ? [{id:(cur&&cur.id)||ONT.uid("map"), kind:"relfield", classId:r.from, relId:r.id, target:{table, column:column||""}, status:"approved", by:me, at:new Date().toISOString(), prov:{by:"human"}}] : [];
     ap(x=>({...x, rels: isNew ? [...x.rels, r] : x.rels.map(y=>y.id===r.id?r:y),
-      mappings:[...MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===r.id)), ...jm]}));
+      mappings:[...MAP.mappingsOf(x).filter(m=>!(m.kind==="relfield" && m.relId===r.id)), ...rf]}));
     onToast&&onToast("Relationship saved","success"); onClose();
   };
+  const Head = ({children}) => <div style={{fontSize:11,fontWeight:700,color:T.textMuted,letterSpacing:".05em",textTransform:"uppercase",margin:"6px 0 10px",paddingTop:14,borderTop:`1px solid ${T.border}`}}>{children}</div>;
   return (
-    <OntDrawerShell title={isNew?"New relationship":`${(ontClass(o,d.from)||{}).name} ${d.name} ${(ontClass(o,d.to)||{}).name}`} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!(m.kind==="join" && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
+    <OntDrawerShell title={isNew?"New relationship":`${(ontClass(o,d.from)||{}).name} ${d.name} ${(ontClass(o,d.to)||{}).name}`} width={680} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, rels:x.rels.filter(y=>y.id!==d.id), mappings:MAP.mappingsOf(x).filter(m=>!((m.kind==="join"||m.kind==="relfield") && m.relId===d.id))})); onToast&&onToast("Relationship removed","success"); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add relationship":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-        <div style={{flex:1}}><OntField label="Source class"><SLSelect value={d.from} onChange={e=>setD({...d,from:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Relationship name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value, inverse:d.inverse||OAI.INVERSES[e.target.value.trim().toLowerCase()]||""})} placeholder="e.g. placed by"/></OntField></div>
-        <div style={{flex:1}}><OntField label="Target class"><SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Source class · rdfs:domain"><SLSelect value={d.from} onChange={e=>{ setD({...d,from:e.target.value}); setTable(""); setColumn(""); }} placeholder="Select a class" options={opts}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Relationship name · rdfs:label"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value, inverse:d.inverse||OAI.INVERSES[e.target.value.trim().toLowerCase()]||""})} placeholder="e.g. placed by"/></OntField></div>
+        <div style={{flex:1}}><OntField label="Target class · rdfs:range"><SLSelect value={d.to} onChange={e=>setD({...d,to:e.target.value})} placeholder="Select a class" options={opts}/></OntField></div>
       </div>
+      <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{iri}</div></OntField>
+      <OntField label="Definition · rdfs:comment"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})} placeholder="The customer who placed the order (the buyer)"/></OntField>
+      <OntField label="Aliases · skos:altLabel"><Input2 value={syn} onChange={e=>setSyn(e.target.value)} placeholder="e.g. buyer, purchaser"/></OntField>
       <div style={{display:"flex",gap:10}}>
-        <div style={{flex:1}}><OntField label="Inverse name"><Input2 value={d.inverse} onChange={e=>setD({...d,inverse:e.target.value})} placeholder="e.g. places"/></OntField></div>
-        <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l}))}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Relationship type"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={[{v:"association",l:"Association"},{v:"part_of",l:"Composition (part of)"}]}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Inverse name · owl:inverseOf"><Input2 value={d.inverse} onChange={e=>setD({...d,inverse:e.target.value})} placeholder="e.g. places"/></OntField></div>
+        <div style={{flex:1}}><OntField label="Cardinality"><SLSelect value={d.cardinality} onChange={e=>setD({...d,cardinality:e.target.value})} options={Object.entries(ONT.CARDINALITY).map(([v,l])=>({v,l:`${l}${v==="many_to_one"||v==="one_to_one"?" · sh:maxCount 1":""}`}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Required · sh:minCount 1"><SLSelect value={d.required?"yes":"no"} onChange={e=>setD({...d,required:e.target.value==="yes"})} options={[{v:"no",l:"No"},{v:"yes",l:"Yes"}]}/></OntField></div>
       </div>
-      <OntField label="Join">
-        <SLSelect value={joinId} onChange={e=>setJoinId(e.target.value)} placeholder={!d.from||!d.to ? "Select both classes first" : !A.length||!B.length ? "Both classes need a semantic-model data source" : joins.length ? "Select a join" : "No join between their data sources"}
-          options={[{v:"",l:"Not mapped"}, ...joins.map(j=>({v:j.id, l:`${entName(j.from)}.${(j.fromKeys||[j.fromKey]).join("+")} = ${entName(j.to)}.${(j.toKeys||[j.toKey]).join("+")}${j.role?` · ${j.role}`:""}`}))]}/>
-      </OntField>
-      <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      <Head>Catalog binding · edg:RelationshipBinding</Head>
+      <div style={{display:"flex",gap:10}}>
+        <div style={{flex:1}}><OntField label="Catalog asset · edg:sourceAsset"><SLSelect value={table} onChange={e=>{ setTable(e.target.value); setColumn(""); }}
+          placeholder={!d.from?"Select the source class first":tableOpts.length?"Select an asset":"The source class has no data source"} options={[{v:"",l:"Not mapped"}, ...tableOpts.map(t=>({v:t,l:t}))]}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Catalog field · edg:sourceField"><SLSelect value={column} onChange={e=>setColumn(e.target.value)} placeholder={table?"Select a field":"Select an asset first"}
+          options={[{v:"",l:"No field"}, ...cols.map(c=>({v:c.name,l:`${c.name} · ${c.type}`})), ...(column && !cols.some(c=>c.name===column)?[{v:column,l:`${column} · not in catalog`}]:[])]}/></OntField></div>
+      </div>
+      {table && <div style={{fontSize:11,color:T.textMuted,fontFamily:"ui-monospace,monospace"}}>{asset?OMD.fieldIri(asset.id, column||"…"):"Asset not in catalog"}</div>}
     </OntDrawerShell>
   );
 };
@@ -41363,6 +41461,7 @@ const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
   const needsValue = ["pattern","values","range","cardinality"].includes(d.kind);
   const save = () => {
     if(!d.classId){ onToast&&onToast("Pick a class","error"); return; }
+    if(!d.prop){ onToast&&onToast(d.kind==="cardinality"?"Pick a relationship":"Pick a property","error"); return; }
     if(needsValue && !String(d.value).trim()){ onToast&&onToast("Give the constraint a value","error"); return; }
     const k = {...d, id:d.id||ONT.uid("k")};
     ap(x=>({...x, constraints: isNew ? [...x.constraints, k] : x.constraints.map(y=>y.id===k.id?k:y)}));
@@ -41374,7 +41473,8 @@ const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" onClick={save}>{isNew?"Add constraint":"Save"}</Btn></>}>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value,prop:""})} placeholder="Select a class" options={o.classes.map(x=>({v:x.id,l:x.name}))}/></OntField></div>
-        <div style={{flex:1}}><OntField label="Property"><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})} options={[{v:"",l:"Entire class"}, ...((c&&c.props)||[]).map(p=>({v:p.name,l:p.name}))]}/></OntField></div>
+        <div style={{flex:1}}><OntField label={d.kind==="cardinality"?"Relationship · sh:path":"Property · sh:path"}><SLSelect value={d.prop||""} onChange={e=>setD({...d,prop:e.target.value||null})}
+          options={d.kind==="cardinality" ? [{v:"",l:"Select a relationship"}, ...o.rels.filter(r=>r.from===d.classId).map(r=>({v:r.name,l:r.name}))] : [{v:"",l:"Select a property"}, ...((c&&c.props)||[]).map(p=>({v:p.name,l:p.name}))]}/></OntField></div>
       </div>
       <div style={{display:"flex",gap:10}}>
         <div style={{flex:1}}><OntField label="Constraint type"><SLSelect value={d.kind} onChange={e=>setD({...d,kind:e.target.value})} options={Object.entries(ONT.CONSTRAINT_KINDS).map(([v,l])=>({v,l}))}/></OntField></div>
@@ -41383,6 +41483,11 @@ const OntConstraintDrawer = ({o, con, onClose, onToast, apply}) => {
       {needsValue && <OntField label={({pattern:"Regular expression", values:"Allowed values (comma-separated)", range:"Range (min..max)", cardinality:"Count (min..max)"})[d.kind]}>
         <Input2 value={d.value} onChange={e=>setD({...d,value:e.target.value})} placeholder={({pattern:"^[^@]+@[^@]+$", values:"active, paused, closed", range:"0..100", cardinality:"1..*"})[d.kind]}/></OntField>}
       <OntField label="Description"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
+      {o.namespace && d.classId && d.prop && (()=>{ const k = {...d, id:d.id||"k_preview"};
+        const sh = OMD.businessShapes({...o, constraints:[...o.constraints.filter(x=>x.id!==k.id), k]}).find(x=>x.targetClass===(ontClass(o,d.classId)||{}).iri);
+        const ps = sh && sh.props.find(x=>x.name===d.prop); if(!ps) return null;
+        return <OntField label="SHACL · shapes.ttl"><pre style={{margin:0,padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace"}}>
+          {OMD.writeTurtle(OMD.shapesTriples([{...sh, props:[ps]}]), {[o.prefix||"ex"]:o.namespace}).split("\n").filter(l=>!l.startsWith("@prefix")).join("\n").trim()}</pre></OntField>; })()}
     </OntDrawerShell>
   );
 };
@@ -42046,13 +42151,23 @@ const OntSidebar = ({o, cov}) => {
         {[["Data domain",o.domain],["Classes",String(o.classes.length)],["Relationships",String(o.rels.length)],["Constraints",String(o.constraints.length)],
           ["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
           ["Glossary terms",String(o.classes.filter(c=>c.termId).length)],["Created",o.created||"—"],["Published",latest?`v${latest.n} · ${latest.at.slice(0,10)}`:"Never"],
-          ["Prefix",o.prefix]].map(([k,v])=>(
+          ["Prefix",o.prefix],["Store",ONT_STORE]].map(([k,v])=>(
           <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
             <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
             <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
           </div>))}
       </Sec>
-      <Sec><SLMetaLabel>Status</SLMetaLabel><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><OntStatusChip o={o}/></div></Sec>
+      <Sec><SLMetaLabel>Status</SLMetaLabel><div style={{display:"flex",gap:5,flexWrap:"wrap"}}><OntStatusChip o={o}/><OntReviewChip o={o}/></div>
+        {(o.review||{}).approvedBy && OMD.reviewState(o)==="approved" && <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Approved by {o.review.approvedBy}</div>}</Sec>
+      <Sec>
+        <SLMetaLabel onEdit={()=>setPane(p=>p==="aud"?null:"aud")}>Query access</SLMetaLabel>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+          {(o.audience||[]).length===0 && <span style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No teams</span>}
+          {(o.audience||[]).map(x=><SLPersonChip key={x} name={x} color={T.blue}/>)}
+        </div>
+        <SLPicker open={pane==="aud"} items={TEAMS_INIT.map(t=>t.name)} selected={o.audience||[]} placeholder="Search teams…"
+          onToggle={u=>{ const cur = o.audience||[]; ontPatch(o.id, {audience: cur.includes(u) ? cur.filter(x=>x!==u) : [...cur, u]}); }} onDone={()=>setPane(null)}/>
+      </Sec>
       <Sec>
         <SLMetaLabel onEdit={()=>setPane(p=>p==="owners"?null:"owners")}>Owners</SLMetaLabel>
         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
@@ -43288,6 +43403,213 @@ const KgObjectTab = ({ids, name, onAsset}) => {
 };
 const KgAssetTab = ({asset, onAsset}) => <KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name} onAsset={onAsset}/>;
 
+// ═══ Ontology Manager · metadata level ═══════════════════════════════════════
+// Meaning (OWL), rules (SHACL) and bindings to catalog fields. Records stay in
+// the source. src/ontology/metadata.js does the work; these are the screens.
+const ontMdCtx = () => ({ tableOf:(m)=>MAP.sourceTable(m, mapCtx()), assetOf:(t)=>ASSETS.find(a=>a.name===t)||null, columnsOf:(t)=>SCHEMA[t]||[] });
+const ONT_STORE = "Apache Jena TDB2";
+const ontGraphIri = (o, n) => `${String(o.namespace||"").replace(/[#/]$/,"")}/v${n}`;
+const ontCurie = (o, iri) => iri ? OMD.curie(iri, {[o.prefix||"ex"]:o.namespace}) : "—";
+const ontRelField = (o, relId) => MAP.mappingsOf(o).find(m=>m.kind==="relfield" && m.relId===relId);
+const ONT_REVIEW = {draft:{l:"Draft",c:"#64748b"}, in_review:{l:"In review",c:"#2563eb"}, approved:{l:"Approved",c:"#16a34a"}, changes_requested:{l:"Changes requested",c:"#d97706"}};
+const OntReviewChip = ({o}) => { const st = OMD.reviewState(o); const m = ONT_REVIEW[st]||ONT_REVIEW.draft;
+  return <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:4,background:m.c+"12",color:m.c,border:`1px solid ${m.c}38`,whiteSpace:"nowrap"}}>{m.l}</span>; };
+const OntSevChip = ({s}) => { const c = s==="Violation"?T.rose:s==="Warning"?T.amber:T.textMuted;
+  return <span style={{fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:4,background:c+"12",color:c,border:`1px solid ${c}38`}}>{s}</span>; };
+const OntMono = ({children, c}) => <span style={{fontFamily:"ui-monospace,monospace",fontSize:11,color:c||T.textSub}}>{children}</span>;
+const ontDownload = (name, text) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:"text/turtle"})); a.download = name; a.click(); };
+const OntDlBtn = ({title, onClick}) => (
+  <button title={title} aria-label="Download" onClick={onClick}
+    style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+    onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  </button>);
+// Label of an IRI in the metadata graph: class, property, relationship, binding or catalog field.
+const ontNodeLabel = (o, iri) => {
+  const c = o.classes.find(x=>x.iri===iri); if(c) return c.name;
+  for(const x of o.classes){ const p = (x.props||[]).find(y=>y.iri===iri); if(p) return `${x.name}.${p.name}`; }
+  const r = o.rels.find(x=>x.iri===iri); if(r) return `${(ontClass(o,r.from)||{}).name} ${r.name} ${(ontClass(o,r.to)||{}).name}`;
+  const m = /\/mapping\/[^/]+\/(.+)$/.exec(iri||""); if(m){ const mp = MAP.mappingsOf(o).find(x=>x.id===decodeURIComponent(m[1]));
+    if(mp){ const cl = ontClass(o, mp.classId)||{};
+      if(mp.kind==="relfield"){ const r2 = o.rels.find(x=>x.id===mp.relId)||{}; return `Binding · ${cl.name} ${r2.name}`; }
+      if(mp.kind==="field"){ const p2 = (cl.props||[]).find(x=>x.id===mp.propId)||{}; return `Binding · ${cl.name}.${p2.name}`; }
+      return `Binding · ${cl.name}`; } }
+  return ontCurie(o, iri);
+};
+
+// ── Validation: SHACL report · expected answers · mapping shapes ──
+const OntTestDrawer = ({o, test, onClose, onToast}) => {
+  const isNew = !test;
+  const [d, setD] = useState(()=>({question:"", relId:"", expect:"", ...(test||{})}));
+  const r = o.rels.find(x=>x.id===d.relId);
+  const tables = r ? MAP.sourcesOf(o, r.from).map(m=>MAP.sourceTable(m, mapCtx())).filter(Boolean) : [];
+  const fields = tables.flatMap(t=>(SCHEMA[t]||[]).map(c=>`${t}.${c.name}`));
+  const err = !d.question.trim() ? "Enter the question" : !d.relId ? "Select the relationship" : !d.expect ? "Select the expected field" : null;
+  const save = () => { if(err){ onToast&&onToast(err,"error"); return; }
+    const t = {...d, question:d.question.trim(), id:d.id||ONT.uid("t"), approvedBy:null};
+    ontPatch(o.id, x=>({...x, tests: isNew ? [...(x.tests||[]), t] : (x.tests||[]).map(y=>y.id===t.id?t:y)}));
+    onToast&&onToast("Expected answer saved","success"); onClose(); };
+  return (
+    <OntDrawerShell title={isNew?"New expected answer":"Expected answer"} width={560} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, tests:(x.tests||[]).filter(y=>y.id!==d.id)})); onClose(); }}>Remove</Btn></span>}
+      <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>{isNew?"Add":"Save"}</Btn></>}>
+      <OntField label="Question"><Input2 value={d.question} onChange={e=>setD({...d,question:e.target.value})} placeholder="Which field identifies the buyer?"/></OntField>
+      <OntField label="Relationship"><SLSelect value={d.relId} onChange={e=>setD({...d,relId:e.target.value,expect:""})} placeholder="Select a relationship"
+        options={o.rels.map(x=>({v:x.id,l:`${(ontClass(o,x.from)||{}).name} ${x.name} ${(ontClass(o,x.to)||{}).name}`}))}/></OntField>
+      <OntField label="Expected catalog field"><SLSelect value={d.expect} onChange={e=>setD({...d,expect:e.target.value})} placeholder={r?"Select a field":"Select the relationship first"} options={fields}/></OntField>
+    </OntDrawerShell>);
+};
+
+const OntValidationTab = ({o, me, onOpenMapping, onToast}) => {
+  const [view, setView] = useState("report");
+  const [testEdit, setTestEdit] = useState(null);
+  const ctx = ontMdCtx();
+  const rep = OMD.validateMetadata(o, ctx);
+  const tests = OMD.runTests(o, ctx);
+  const owners = o.owners || (o.owner?[o.owner]:[]);
+  const failing = tests.filter(t=>!t.pass).length;
+  const files = OMD.exportFiles(o, ctx);
+  return (<>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14}}>
+      <Metric label="sh:conforms" value={rep.conforms?"true":"false"} color={rep.conforms?T.green:rep.violations?T.rose:T.amber}/>
+      <Metric label="Violations" value={String(rep.violations)} color={rep.violations?T.rose:T.green}/>
+      <Metric label="Warnings" value={String(rep.warnings)} color={rep.warnings?T.amber:T.green}/>
+      <Metric label="Expected answers" value={`${tests.length-failing} / ${tests.length}`} sub="passing" color={failing?T.rose:T.green}/>
+    </div>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+      <SegTabs tabs={[{key:"report",label:`SHACL report · ${rep.results.length}`},{key:"tests",label:`Expected answers · ${tests.length}`},{key:"shapes",label:`Mapping shapes · ${OMD.MAPPING_SHAPES.length}`}]} active={view} onChange={setView}/>
+      <span style={{flex:1}}/>
+      {view==="report" && <OntDlBtn title="Download report.ttl" onClick={()=>ontDownload(`${o.prefix}-report.ttl`, files["report.ttl"])}/>}
+      {view==="shapes" && <OntDlBtn title="Download mapping-shapes.ttl" onClick={()=>ontDownload(`${o.prefix}-mapping-shapes.ttl`, files["mapping-shapes.ttl"])}/>}
+      {view==="tests" && <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setTestEdit("new")} disabled={!o.rels.length}>Add expected answer</Btn>}
+    </div>
+    {view==="report" && <OntTable empty="✓ Conforms · no results" onRow={r=>onOpenMapping&&onOpenMapping(r.r)}
+      cols={[{l:"Severity",w:".7fr"},{l:"Focus node",w:"1.5fr"},{l:"Result path",w:"1fr"},{l:"Constraint component",w:"1.4fr"},{l:"Message",w:"2fr"},{l:"Source shape",w:"1.2fr"}]}
+      rows={rep.results.map((r,i)=>({key:i, r, cells:[<OntSevChip s={r.severity}/>, ontNodeLabel(o, r.focusNode),
+        <OntMono>{r.inverse?"^":""}{ontCurie(o, r.resultPath)}</OntMono>, <OntMono>{r.component}</OntMono>, r.message, <OntMono>{ontCurie(o, r.sourceShape)}</OntMono>]}))}/>}
+    {view==="tests" && <OntTable empty="No expected answers" onRow={r=>setTestEdit(r.t)}
+      cols={[{l:"Question",w:"1.8fr"},{l:"Relationship",w:"1.2fr"},{l:"Expected",w:"1.1fr"},{l:"Actual",w:"1.1fr"},{l:"Result",w:".6fr"},{l:"Approved by",w:"1fr"}]}
+      rows={tests.map(t=>{ const r = o.rels.find(x=>x.id===t.relId)||{}; return {key:t.id, t:(o.tests||[]).find(x=>x.id===t.id), cells:[t.question, r.name||"—",
+        <OntMono>{t.expect}</OntMono>, <OntMono c={t.pass?T.green:T.rose}>{t.actual||"Not mapped"}</OntMono>,
+        <span style={{fontWeight:700,color:t.pass?T.green:T.rose}}>{t.pass?"Pass":"Fail"}</span>,
+        t.approvedBy ? t.approvedBy : owners.includes(me) ? <button onClick={e=>{ e.stopPropagation(); ontPatch(o.id, x=>({...x, tests:(x.tests||[]).map(y=>y.id===t.id?{...y,approvedBy:me}:y)})); onToast&&onToast("Expected answer approved","success"); }}
+          style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>Approve</button> : <span style={{color:T.amber}}>Pending</span>]}; })}/>}
+    {view==="shapes" && <OntTable empty="" cols={[{l:"Shape",w:"1.3fr"},{l:"sh:targetClass",w:"1.2fr"},{l:"sh:path",w:"1.2fr"},{l:"Constraints",w:"1.6fr"},{l:"Severity",w:".7fr"},{l:"sh:message",w:"2fr"}]}
+      rows={OMD.MAPPING_SHAPES.flatMap(sh=>sh.props.map((p,i)=>({key:sh.id+i, cells:[<OntMono>{ontCurie(o, sh.id)}</OntMono>, <OntMono>{ontCurie(o, sh.targetClass)}</OntMono>,
+        <OntMono>{p.inversePath?`[ sh:inversePath ${ontCurie(o,p.inversePath)} ]`:ontCurie(o, p.path)}</OntMono>,
+        <OntMono>{[p.minCount!=null&&`sh:minCount ${p.minCount}`, p.maxCount!=null&&`sh:maxCount ${p.maxCount}`, p.class&&`sh:class ${ontCurie(o,p.class)}`].filter(Boolean).join(" · ")}</OntMono>,
+        <OntSevChip s={p.severity||sh.severity||"Violation"}/>, p.message]})))}/>}
+    {testEdit && <OntTestDrawer o={o} test={testEdit==="new"?null:testEdit} onClose={()=>setTestEdit(null)} onToast={onToast}/>}
+  </>);
+};
+
+// ── Query: what an authorized agent gets through EDG ──
+const OntQueryTab = ({o}) => {
+  const callers = TEAMS_DATA.filter(u=>u.status==="Active").map(u=>({id:u.id, name:u.name, team:u.team}));
+  const audience = o.audience || [];
+  const [callerId, setCallerId] = useState(()=>(callers.find(c=>audience.includes(c.team))||callers[0]||{}).id);
+  const [q, setQ] = useState("Which field identifies the buyer?");
+  const [res, setRes] = useState(null);
+  const caller = callers.find(c=>c.id===callerId);
+  const run = (relId) => setRes(OMD.query(o, ontMdCtx(), {question:q, relId, caller}));
+  const Row = ({k, children}) => <div style={{display:"grid",gridTemplateColumns:"170px 1fr",gap:12,padding:"9px 14px",borderBottom:`1px solid ${T.border}`}}>
+    <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:T.text}}>{children}</span></div>;
+  return (
+    <div style={{maxWidth:880}}>
+      <div style={{display:"flex",gap:10,alignItems:"flex-end",marginBottom:10}}>
+        <div style={{width:260}}><OntField label="Caller"><SLSelect value={callerId} onChange={e=>{setCallerId(e.target.value); setRes(null);}} options={callers.map(c=>({v:c.id,l:`${c.name} · ${c.team}`}))}/></OntField></div>
+        <div style={{flex:1}}><OntField label="Question"><Input2 value={q} onChange={e=>{setQ(e.target.value); setRes(null);}} placeholder="Which field identifies the buyer?"/></OntField></div>
+        <div style={{marginBottom:13}}><Btn variant="primary" onClick={()=>run()}>Ask</Btn></div>
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+        {["Which field identifies the buyer?","Which field identifies the billing customer?","Which customer is related to the order?"].map(s=>(
+          <button key={s} onClick={()=>{setQ(s); setRes(null);}} style={{fontSize:11,padding:"3px 10px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",fontFamily:"inherit"}}>{s}</button>))}
+      </div>
+      <div style={{fontSize:11.5,color:T.textMuted,marginBottom:8}}>Tool <OntMono c={T.text}>get_relationship_field</OntMono> · access {audience.length?audience.join(", "):"none"} · published {o.publishedN?`v${o.publishedN}`:"—"}</div>
+      {res && <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+        <Row k="Status"><span style={{fontWeight:700,color:res.status==="ok"?T.green:res.status==="unavailable"?T.textMuted:T.amber}}>{({ok:"Answered",unavailable:"Unavailable",ambiguous:"Needs clarification",no_match:"No matching relationship",not_mapped:"Not mapped"})[res.status]}</span></Row>
+        {res.status==="ok" && <>
+          <Row k="Field"><OntMono c={T.text}>{res.field}</OntMono></Row>
+          <Row k="Catalog reference"><OntMono>{res.catalog.fieldIri}</OntMono></Row>
+          <Row k="Relationship"><OntMono>{ontCurie(o, res.relationship.iri)}</OntMono> · {res.relationship.name}</Row>
+          <Row k="Published version">v{res.version}</Row>
+          <Row k="Named graph"><OntMono>{res.graph}</OntMono> · {ONT_STORE}</Row>
+        </>}
+        {res.status==="ambiguous" && <Row k="Options"><div style={{display:"flex",gap:6}}>{res.options.map(x=><Btn key={x.id} small onClick={()=>run(x.id)}>{x.name}</Btn>)}</div></Row>}
+        {res.status==="unavailable" && <Row k="Response">No answer, mapping or evidence returned</Row>}
+      </div>}
+    </div>);
+};
+
+// ── Configuration: the files, and a round-trip check ──
+const OntConfigTab = ({o}) => {
+  const [file, setFile] = useState("ontology.ttl");
+  const [rt, setRt] = useState(null);
+  const files = OMD.exportFiles(o, ontMdCtx());
+  const NAMES = ["ontology.ttl","shapes.ttl","mappings.ttl","mapping-shapes.ttl","report.ttl"];
+  return (<>
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+      <SegTabs tabs={NAMES.map(n=>({key:n,label:n}))} active={file} onChange={setFile}/>
+      <span style={{flex:1}}/>
+      <Btn small onClick={()=>setRt(OMD.roundTrip(o, ontMdCtx()))}>Verify round trip</Btn>
+      <OntDlBtn title={`Download ${o.prefix}-${file}`} onClick={()=>ontDownload(`${o.prefix}-${file}`, files[file])}/>
+    </div>
+    {rt && <div style={{background:T.bgSurface,border:`1px solid ${rt.ok?T.green+"55":T.rose+"55"}`,borderRadius:10,overflow:"hidden",marginBottom:12}}>
+      {rt.checks.map((c,i)=>(
+        <div key={c.k} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 14px",borderBottom:i<rt.checks.length-1?`1px solid ${T.border}`:"none"}}>
+          <span style={{color:c.ok?T.green:T.rose,fontWeight:800,width:14}}>{c.ok?"✓":"✕"}</span>
+          <span style={{fontSize:12,fontWeight:600,color:T.text,width:260}}>{c.l}</span><span style={{fontSize:11.5,color:T.textMuted}}>{c.detail}</span>
+        </div>))}
+    </div>}
+    <pre style={{margin:0,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace",maxHeight:560,overflow:"auto"}}>{files[file]}</pre>
+  </>);
+};
+
+// ── Publications: active version, failed attempts, store ──
+const OntPublicationsTab = ({o}) => {
+  const [cmpN, setCmpN] = useState(null);
+  const pubs = o.publications || [];
+  const rows = [...pubs].sort((a,b)=>b.at.localeCompare(a.at));
+  return (<>
+    {rows.length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
+    <OntTable empty="" onRow={r=>r.p.n && setCmpN(cmpN===r.p.n?null:r.p.n)}
+      cols={[{l:"Version",w:".6fr"},{l:"Status",w:".8fr"},{l:"At",w:"1fr"},{l:"By",w:".8fr"},{l:"Approved by",w:".8fr"},{l:"Store",w:"1fr"},{l:"Named graph",w:"1.6fr"},{l:"Result",w:"1.6fr"}]}
+      rows={rows.map((p,i)=>{ const active = p.status==="published" && p.n===o.publishedN; return {key:i, p, cells:[p.n?`v${p.n}`:"—",
+        <span style={{fontWeight:700,color:p.status==="failed"?T.rose:active?T.green:T.textMuted}}>{p.status==="failed"?"Failed":active?"Active":"Superseded"}</span>,
+        p.at.slice(0,16).replace("T"," "), p.by, p.approvedBy||"—", ONT_STORE, p.n?<OntMono>{ontGraphIri(o, p.n)}</OntMono>:"—",
+        p.status==="failed" ? <span style={{color:T.rose}}>{p.reason}{o.publishedN?` · v${o.publishedN} still active`:""}</span> : (p.note||"—")]}; })}/>}
+    {cmpN && (()=>{ const v = (o.versions||[]).find(x=>x.n===cmpN); if(!v) return null; const lines = ONT.diff(v.snapshot, ONT.snapshot(o)); return (
+      <div style={{marginTop:12}}><div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>Draft compared with v{cmpN}</div>
+        {lines.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ Identical</div> : lines.map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}>· {l.text}</div>)}</div>); })()}
+  </>);
+};
+
+// Publish: runs the mapping shapes and the expected answers on the approved
+// draft. A failure is recorded and the active version keeps serving.
+const ontTryPublish = (o, me, note) => {
+  const ctx = ontMdCtx();
+  const rep = OMD.validateMetadata(o, ctx), tests = OMD.runTests(o, ctx);
+  const failed = tests.filter(t=>!t.pass);
+  const at = new Date().toISOString(), approvedBy = (o.review||{}).approvedBy||null;
+  if(rep.violations || failed.length){
+    const reason = [rep.violations?`${rep.violations} SHACL violation${rep.violations===1?"":"s"}`:null, failed.length?`${failed.length} expected answer${failed.length===1?"":"s"} failing`:null].filter(Boolean).join(" · ");
+    ontPatch(o.id, x=>({...x, publications:[...(x.publications||[]), {status:"failed", at, by:me, approvedBy, reason}]}));
+    return {ok:false, reason};
+  }
+  const r = ONT.publish(o, me, note);
+  if(!r.ok) return {ok:false, reason:r.error};
+  ontPatch(o.id, {...r.ontology, publications:[...(o.publications||[]), {status:"published", n:r.version.n, at:r.version.at, by:me, approvedBy, note}]});
+  return {ok:true, n:r.version.n};
+};
+
+const ontShaclOf = (k) => {
+  const [lo, hi] = String(k.value||"").split(/\s*\.\.\s*/);
+  const t = ({required:"sh:minCount 1", unique:"dash:uniqueValueForClass true", pattern:`sh:pattern "${k.value}"`,
+    values:`sh:in ( ${String(k.value||"").split(/\s*,\s*/).filter(Boolean).map(v=>`"${v}"`).join(" ")} )`,
+    range:[lo&&`sh:minInclusive ${lo}`, hi&&`sh:maxInclusive ${hi}`].filter(Boolean).join(" · "),
+    cardinality:[lo&&`sh:minCount ${lo}`, hi&&hi!=="*"&&`sh:maxCount ${hi}`].filter(Boolean).join(" · ")})[k.kind]||"";
+  return t + (k.severity==="warning" ? " · sh:severity sh:Warning" : "");
+};
 // ── The screen ──
 const OntologyView = ({onToast, onNav, onAsset}) => {
   const st = useOnt();
@@ -43315,6 +43637,8 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const [wiz, setWiz] = useState(null);   // "new" | "edit"
   const [listQ, setListQ] = useState("");
   const [relView, setRelView] = useState("diagram");   // Relationships tab: diagram | list
+  const [reviewOpen, setReviewOpen] = useState(null);  // "submit" | "approve" | "changes"
+  const [reviewNote, setReviewNote] = useState("");
   useEffect(()=>{ setListQ(""); },[tab, selId]);
   const o = selId ? st.ontologies.find(x=>x.id===selId) : null;
   const drawers = <>
@@ -43394,13 +43718,22 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
   const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
-    {key:"constraints",label:`Constraints · ${o.constraints.length}`},
+    {key:"constraints",label:`Shapes · ${o.constraints.length}`},
+    {key:"validation",label:(()=>{ const r = OMD.validateMetadata(o, ontMdCtx()), f = OMD.runTests(o, ontMdCtx()).filter(t=>!t.pass).length; const n = r.violations + f; return n ? `Validation · ${n}` : "Validation"; })()},
     ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
-    {key:"versions",label:`Versions · ${(o.versions||[]).length}`},{key:"source",label:"Configuration"}];
+    {key:"versions",label:`Publications · ${(o.publications||[]).length}`},{key:"query",label:"Query"},{key:"source",label:"Configuration"}];
   const nm = (id) => (ontClass(o,id)||{}).name||"—";
-  const doPublish = () => { const r = ONT.publish(o, me, pubNote);
-    if(!r.ok){ onToast&&onToast(r.error,"error"); return; }
-    ontPatch(o.id, r.ontology); setPubOpen(false); setPubNote(""); onToast&&onToast(`${o.name} published as v${r.version.n}`,"success"); };
+  const doPublish = () => { const r = ontTryPublish(o, me, pubNote); setPubOpen(false); setPubNote("");
+    if(!r.ok){ onToast&&onToast(`Publication failed · ${r.reason}${o.publishedN?` · v${o.publishedN} still active`:""}`,"error"); setTab("versions"); return; }
+    onToast&&onToast(`${o.name} published as v${r.n} · ${ONT_STORE}`,"success"); };
+  const doReview = () => { const at = new Date().toISOString();
+    if(reviewOpen==="changes" && !reviewNote.trim()){ onToast&&onToast("Add a comment for the author","error"); return; }
+    ontPatch(o.id, x=>({...x, review: reviewOpen==="submit" ? {state:"in_review", submittedBy:me, submittedAt:at, note:reviewNote.trim(), hash:OMD.draftHash(x)}
+      : reviewOpen==="approve" ? {...(x.review||{}), state:"approved", approvedBy:me, approvedAt:at, comment:reviewNote.trim(), hash:OMD.draftHash(x)}
+      : {...(x.review||{}), state:"changes_requested", reviewedBy:me, reviewedAt:at, comment:reviewNote.trim(), hash:OMD.draftHash(x)}}));
+    onToast&&onToast(reviewOpen==="submit"?`${o.name} submitted for review`:reviewOpen==="approve"?`${o.name} approved`:"Changes requested","success");
+    setReviewOpen(null); setReviewNote(""); };
+  const rState = OMD.reviewState(o), rApprove = OMD.canApprove(o, me);
   const download = (name, text) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:"text/turtle"})); a.download = name; a.click(); };
   const cls = selClass ? ontClass(o, selClass) : null;
   return (
@@ -43412,12 +43745,16 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
           <div style={{flex:1,minWidth:0}}>
             <h1 style={{fontSize:22,fontWeight:800,color:T.text,margin:"0 0 5px",lineHeight:1.2}}>{o.name}</h1>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <OntStatusChip o={o}/>
+              <OntStatusChip o={o}/><OntReviewChip o={o}/>
               <span style={{fontSize:11,color:T.textMuted}}>{o.domain} · {o.owner}</span>
               <span style={{fontSize:11,color:T.textMuted}}>· {o.classes.length} class{o.classes.length===1?"":"es"} · {o.rels.length} relationship{o.rels.length===1?"":"s"}</span>
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexShrink:0,alignItems:"center"}} onClick={e=>e.stopPropagation()}>
+            {(rState==="draft"||rState==="changes_requested") && <Btn variant="primary" onClick={()=>setReviewOpen("submit")}>Submit for review</Btn>}
+            {rState==="in_review" && (rApprove.ok ? <><Btn ghost onClick={()=>setReviewOpen("changes")}>Request changes</Btn><Btn variant="primary" onClick={()=>setReviewOpen("approve")}>Approve</Btn></>
+              : <span title={rApprove.why} style={{fontSize:11.5,color:T.textMuted,padding:"0 6px"}}>Awaiting approval · {(o.owners||[o.owner]).filter(Boolean).join(", ")}</span>)}
+            {rState==="approved" && <Btn variant="primary" disabled={(o.versions||[]).length>0 && !ONT.isDirty(o)} onClick={()=>setPubOpen(true)}>{(o.versions||[]).length>0 && !ONT.isDirty(o) ? `Published · v${o.publishedN}` : "Publish"}</Btn>}
             <div style={{position:"relative"}}>
               <button onClick={()=>{setMenuOpen(v=>!v);setStyleOpen(false);}}
                 style={{width:34,height:34,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700}}
@@ -43426,8 +43763,6 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
                 <div style={{position:"absolute",top:"calc(100% + 6px)",right:0,zIndex:500,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:12,boxShadow:"0 24px 56px rgba(15,23,42,.26), 0 4px 12px rgba(15,23,42,.12)",overflow:"hidden"}}>
                   {[{icon:"🖊️",label:"Edit Details",sub:"Details, classes, relationships and constraints",action:()=>{setMenuOpen(false);setWiz("edit");}},
                     {icon:"🎨",label:"Style",sub:"Change icon and colour",action:()=>{setStyleOpen(true);setMenuOpen(false);}},
-                    {icon:"🚀",label:"Publish",sub:(o.versions||[]).length && !ONT.isDirty(o) ? `No changes since v${o.publishedN}` : `Publish as v${((o.versions||[])[0]||{n:0}).n+1}`,
-                      disabled:(o.versions||[]).length>0 && !ONT.isDirty(o), action:()=>{setMenuOpen(false);setPubOpen(true);}},
                   ].map(item=>(
                     <button key={item.label} onClick={item.disabled?undefined:item.action} disabled={!!item.disabled}
                       style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"none",border:"none",cursor:item.disabled?"not-allowed":"pointer",opacity:item.disabled?.45:1,textAlign:"left",borderBottom:`1px solid ${T.border}`}}
@@ -43476,7 +43811,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
               return <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
                 <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>Data coverage</div>
                 <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-                  <MapBar label="Classes with a data source" c={cv.classes}/><MapBar label="Properties with a column" c={cv.props}/><MapBar label="Relationships with a join" c={cv.rels}/>
+                  <MapBar label="Classes with a data source" c={cv.classes}/><MapBar label="Properties with a column" c={cv.props}/><MapBar label="Relationships with a catalog field" c={(()=>{ const t = o.rels.length, m = o.rels.filter(r=>((ontRelField(o,r.id)||{}).target||{}).column).length; return {total:t, mapped:m, pct:t?Math.round(m/t*100):0}; })()}/>
                 </div>
               </div></Card2>; })()}
             <Card2 style={{marginBottom:16}}><div style={{padding:"14px 16px"}}>
@@ -43510,12 +43845,12 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setClassEdit("new")}>Add class</Btn></div>
           <OntTable empty={listQ?"No classes match":"No classes yet"} onRow={r=>setClassEdit(r.c)}
-            cols={[{l:"Class",w:"1.2fr"},{l:"Parent class",w:"1fr"},{l:"Data sources",w:"1.2fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:"1fr"},{l:"Definition",w:"2fr"}]}
+            cols={[{l:"Class",w:"1.1fr"},{l:"IRI",w:"1.2fr"},{l:"Parent class",w:".9fr"},{l:"Data sources",w:"1.1fr"},{l:"Properties",w:".6fr"},{l:"Glossary term",w:".9fr"},{l:"Definition",w:"1.8fr"}]}
             rows={o.classes.slice().sort((a,b)=>a.name.localeCompare(b.name))
               .filter(c=>!listQ || `${c.name} ${(c.synonyms||[]).join(" ")} ${c.desc||""} ${c.parent?nm(c.parent):""} ${MAP.sourcesOf(o,c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(" ")} ${(c.props||[]).map(p=>p.name).join(" ")}`.toLowerCase().includes(listQ.toLowerCase()))
               .map(c=>({key:c.id, c, cells:[
               <span>{c.name}{c.prov&&c.prov.by==="ai"?<span style={{marginLeft:6}}><SmaiChip conf={c.prov.conf||0.8} why={c.prov.why}/></span>:null}</span>,
-              c.parent?nm(c.parent):"—",
+              <OntMono>{ontCurie(o, c.iri)}</OntMono>, c.parent?nm(c.parent):"—",
               MAP.sourcesOf(o, c.id).length ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.sourcesOf(o, c.id).map(m=>MAP.sourceTable(m, mapCtx())).join(", ")}</span> : <span style={{color:T.amber}}>None</span>,
               String((c.props||[]).length), c.termId?((_gtState.find(t=>t.id===c.termId)||{}).term||"—"):"—",
               c.desc||<span style={{color:T.amber}}>No definition</span>]}))}/>
@@ -43528,50 +43863,54 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
             <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setRelEdit("new")} disabled={o.classes.length<2}>Add relationship</Btn></div>
           {relView==="diagram" && <OntRelCanvas o={o} selected={selClass} onSelect={setSelClass} onEditClass={c=>setClassEdit(c)} onAsset={onAsset}/>}
           {relView==="list" && <OntTable empty={listQ?"No relationships match":"No relationships yet"} onRow={r=>setRelEdit(r.r)}
-            cols={[{l:"Source class"},{l:"Relationship"},{l:"Target class"},{l:"Inverse"},{l:"Cardinality"},{l:"Join",w:"1.3fr"}]}
-            rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
-              (()=>{ const m = MAP.mappingsOf(o).find(x=>x.kind==="join" && x.relId===r.id); return m ? <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{MAP.describeTarget(m, mapCtx())}</span> : <span style={{color:T.amber}}>Not mapped</span>; })()]}))}/>}
+            cols={[{l:"Source class"},{l:"Relationship"},{l:"IRI",w:"1.1fr"},{l:"Target class"},{l:"Cardinality"},{l:"Catalog field",w:"1.3fr"}]}
+            rows={o.rels.filter(r=>!listQ || `${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`.toLowerCase().includes(listQ.toLowerCase())).map(r=>({key:r.id, r, cells:[nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, <OntMono>{ontCurie(o, r.iri)}</OntMono>, nm(r.to), ONT.CARDINALITY[r.cardinality]||<span style={{color:T.amber}}>Not set</span>,
+              (()=>{ const m = ontRelField(o, r.id); return m && m.target.column ? <OntMono>{m.target.table}.{m.target.column}</OntMono> : m ? <span style={{color:T.rose}}>{m.target.table} · no field</span> : <span style={{color:T.amber}}>Not mapped</span>; })()]}))}/>}
         </>}
         {tab==="constraints" && <>
           <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add constraint</Btn></div>
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setConEdit("new")} disabled={!o.classes.length}>Add shape</Btn></div>
           <OntTable empty={listQ?"No constraints match":"No constraints yet"} onRow={r=>setConEdit(r.k)}
-            cols={[{l:"Class"},{l:"Property"},{l:"Constraint type"},{l:"Value",w:"1.4fr"},{l:"Severity",w:".7fr"}]}
-            rows={o.constraints.filter(k=>!listQ || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(listQ.toLowerCase())).map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"Entire class", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, k.severity==="warning"?"Warning":"Violation"]}))}/>
+            cols={[{l:"Class · sh:targetClass"},{l:"Path · sh:path"},{l:"Constraint type"},{l:"Value",w:"1.1fr"},{l:"SHACL",w:"1.8fr"},{l:"Severity",w:".7fr"}]}
+            rows={o.constraints.filter(k=>!listQ || `${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`.toLowerCase().includes(listQ.toLowerCase())).map(k=>({key:k.id, k, cells:[nm(k.classId), k.prop||"—", ONT.CONSTRAINT_KINDS[k.kind], <span style={{fontFamily:"ui-monospace,monospace",fontSize:11}}>{k.value||"—"}</span>, <OntMono>{ontShaclOf(k)}</OntMono>, k.severity==="warning"?"Warning":"Violation"]}))}/>
         </>}
         {tab==="ai" && <OntAiTab o={o} onToast={onToast} onOpenClass={(id)=>setClassEdit(ontClass(o,id))}/>}
-        {tab==="versions" && <>
-          {(o.versions||[]).length===0 ? <div style={{padding:"30px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>Not published yet</div> :
-            <OntTable empty="" onRow={r=>setCmpN(cmpN===r.v.n?null:r.v.n)} cols={[{l:"Version",w:".5fr"},{l:"Published"},{l:"By"},{l:"Note",w:"2fr"},{l:"Classes",w:".6fr"}]}
-              rows={o.versions.map(v=>({key:v.n, v, cells:[`v${v.n}${o.publishedN===v.n?" · current":""}`, v.at.slice(0,16).replace("T"," "), v.by, v.note||"—", String(v.snapshot.classes.length)]}))}/>}
-          {cmpN && (()=>{ const v = o.versions.find(x=>x.n===cmpN); const lines = ONT.diff(v.snapshot, ONT.snapshot(o)); return (
-            <div style={{marginTop:12}}><div style={{fontSize:12,color:T.textMuted,marginBottom:8}}>Draft compared with v{cmpN}</div>
-              {lines.length===0 ? <div style={{fontSize:12.5,color:T.green}}>✓ Identical</div> : lines.map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub,padding:"3px 0"}}>· {l.text}</div>)}</div>); })()}
-        </>}
-        {tab==="source" && <>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <SegTabs tabs={[{key:"owl",label:"OWL (Turtle)"},{key:"shacl",label:"SHACL"}]} active={srcTab} onChange={setSrcTab}/>
-            <span style={{flex:1}}/>
-            <button title={`Download ${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`} aria-label="Download"
-              onClick={()=>download(`${o.prefix}${srcTab==="shacl"?"-shapes":""}.ttl`, srcTab==="owl"?ONT.toTurtle(o):ONT.toShacl(o))}
-              style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
-              onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2v8m0 0L5 7m3 3l3-3M3 12.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </div>
-          <pre style={{margin:0,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9,fontSize:11,color:T.textSub,whiteSpace:"pre-wrap",fontFamily:"ui-monospace,monospace",maxHeight:560,overflow:"auto"}}>
-            {srcTab==="owl" ? ONT.toTurtle(o) : (ONT.toShacl(o).split("\n").filter(Boolean).length>4 ? ONT.toShacl(o) : "# No constraints yet")}</pre>
-        </>}
+        {tab==="validation" && <OntValidationTab o={o} me={me} onToast={onToast} onOpenMapping={(r)=>{ const rr = o.rels.find(x=>ontNodeLabel(o, r.focusNode).endsWith(`${nm(x.from)} ${x.name}`) || x.iri===r.focusNode); if(rr) setRelEdit(rr); }}/>}
+        {tab==="versions" && <OntPublicationsTab o={o}/>}
+        {tab==="query" && <OntQueryTab key={o.id+":"+(o.publishedN||0)} o={o}/>}
+        {tab==="source" && <OntConfigTab o={o}/>}
       </div>
       {drawers}
       <Modal open={pubOpen} onClose={()=>setPubOpen(false)} title={`Publish ${o.name}`}>
-        {errs>0 ? <div style={{fontSize:12.5,color:T.rose,marginBottom:12}}>{errs} error{errs===1?"":"s"} must be fixed first — see AI suggestions › Checks.</div> : <>
-          <div style={{fontSize:12,color:T.textSub,marginBottom:10}}>v{((o.versions||[])[0]||{n:0}).n+1} · {o.classes.length} classes · {o.rels.length} relationships · {o.constraints.length} constraints</div>
+        {(()=>{ const rep = OMD.validateMetadata(o, ontMdCtx()), tests = OMD.runTests(o, ontMdCtx()), failing = tests.filter(t=>!t.pass).length; const n = ((o.versions||[])[0]||{n:0}).n+1; return <>
+          <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden",marginBottom:12}}>
+            {[["Version", `v${n}`], ["Approved by", (o.review||{}).approvedBy||"—"], ["SHACL", rep.violations?`${rep.violations} violation${rep.violations===1?"":"s"} · blocks publication`:`Conforms${rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}`],
+              ["Expected answers", failing?`${failing} of ${tests.length} failing · blocks publication`:`${tests.length} of ${tests.length} passing`], ["Store", ONT_STORE], ["Named graph", ontGraphIri(o, n)],
+              ["If it fails", o.publishedN?`v${o.publishedN} stays active`:"Nothing is published"]].map(([k,v],i)=>(
+              <div key={k} style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:10,padding:"8px 12px",borderTop:i?`1px solid ${T.border}`:"none"}}>
+                <span style={{fontSize:11.5,color:T.textMuted}}>{k}</span><span style={{fontSize:12,color:/blocks/.test(v)?T.rose:T.text,fontFamily:k==="Named graph"?"ui-monospace,monospace":"inherit"}}>{v}</span></div>))}
+          </div>
           {(o.versions||[])[0] && <div style={{marginBottom:10}}>{ONT.diff(o.versions[0].snapshot, ONT.snapshot(o)).slice(0,8).map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}>· {l.text}</div>)}</div>}
           <OntField label="Note"><Input2 value={pubNote} onChange={e=>setPubNote(e.target.value)} placeholder="What changed"/></OntField>
-        </>}
+        </>; })()}
         <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setPubOpen(false)}>Cancel</Btn><Btn variant="primary" disabled={errs>0} onClick={doPublish}>Publish</Btn></div>
+      </Modal>
+      <Modal open={!!reviewOpen} onClose={()=>setReviewOpen(null)} title={reviewOpen==="submit"?`Submit ${o.name} for review`:reviewOpen==="approve"?`Approve ${o.name}`:`Request changes to ${o.name}`}>
+        {(()=>{ const rep = OMD.validateMetadata(o, ontMdCtx()), tests = OMD.runTests(o, ontMdCtx()); const base = (o.versions||[])[0];
+          const lines = base ? ONT.diff(base.snapshot, ONT.snapshot(o)) : [];
+          return <div style={{marginBottom:12}}>
+            <div style={{display:"flex",gap:14,fontSize:12,color:T.textSub,marginBottom:8,flexWrap:"wrap"}}>
+              <span>SHACL: <b style={{color:rep.violations?T.rose:T.green}}>{rep.violations?`${rep.violations} violation${rep.violations===1?"":"s"}`:"conforms"}</b>{rep.warnings?` · ${rep.warnings} warning${rep.warnings===1?"":"s"}`:""}</span>
+              <span>Expected answers: <b style={{color:tests.every(t=>t.pass)?T.green:T.rose}}>{tests.filter(t=>t.pass).length} / {tests.length}</b></span>
+              {(o.review||{}).submittedBy && reviewOpen!=="submit" && <span>Submitted by {(o.review||{}).submittedBy}</span>}
+            </div>
+            {base && <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",margin:"8px 0 4px"}}>Changes since v{base.n} · {lines.length}</div>}
+            {lines.slice(0,10).map((l,i)=><div key={i} style={{fontSize:11.5,color:T.textSub}}>· {l.text}</div>)}
+          </div>; })()}
+        <OntField label={reviewOpen==="changes"?"Comment for the author":"Comment"}><Input2 multiline rows={2} value={reviewNote} onChange={e=>setReviewNote(e.target.value)}/></OntField>
+        <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn ghost onClick={()=>setReviewOpen(null)}>Cancel</Btn>
+          <Btn variant="primary" onClick={doReview}>{reviewOpen==="submit"?"Submit":reviewOpen==="approve"?"Approve":"Request changes"}</Btn></div>
       </Modal>
       <Modal open={delOpen} onClose={()=>setDelOpen(false)} title={`Delete ${o.name}`}>
         <div style={{fontSize:12.5,color:T.textSub,marginBottom:14}}>{o.classes.length} classes, {o.rels.length} relationships and {(o.versions||[]).length} versions are removed. This cannot be undone.</div>
