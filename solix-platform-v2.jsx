@@ -14,6 +14,7 @@ import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
 import * as OMD from "./src/ontology/metadata.js";
+import * as GLG from "./src/glossary/graph.js";
 import * as KG from "./src/kg/engine.js";
 import * as KGOPS from "./src/kg/ops.js";
 import * as AXM from "./src/access/model.js";
@@ -2936,6 +2937,177 @@ const LIFECYCLE_TRANSITIONS = {
   Deprecated:  [],
 };
 
+// ═══ Glossary graph ═══════════════════════════════════════════════════════════
+// The glossary as one picture: each glossary a box of its terms, lines for the
+// relationships between terms. View modes, relationship-type filter, isolated
+// terms and "with data" work like a vocabulary explorer. src/glossary/graph.js
+// builds it; terms keep their link to the ontology class that defines them.
+const glClassesOf = (termId) => ontLoad().ontologies.flatMap(o=>(o.classes||[]).filter(c=>c.termId===termId).map(c=>({o, c})));
+const GlChecks = ({label, items, value, onChange}) => {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [draft, setDraft] = useState(value);
+  useEffect(()=>{ if(open) setDraft(value); },[open]);
+  const all = !value || value.length===items.length;
+  const shown = items.filter(x=>!q || x.l.toLowerCase().includes(q.toLowerCase()));
+  const cur = draft || items.map(x=>x.k);
+  return (
+    <div style={{position:"relative"}}>
+      <button onClick={()=>setOpen(v=>!v)} style={{height:32,padding:"0 10px",borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,color:all?T.textSub:T.accent,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit"}}>
+        {label}{all?"":` · ${value.length}`} <span style={{fontSize:9}}>▾</span></button>
+      {open && <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:50,width:300,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:10,boxShadow:"0 18px 40px rgba(15,23,42,.2)",padding:10}}>
+        <Input2 placeholder="Search…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/>
+        <div style={{maxHeight:240,overflowY:"auto",margin:"8px 0"}}>
+          {shown.map(x=>(
+            <label key={x.k} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 2px",fontSize:12.5,color:T.text,cursor:"pointer"}}>
+              <input type="checkbox" checked={cur.includes(x.k)} onChange={e=>setDraft(e.target.checked?[...cur, x.k]:cur.filter(k=>k!==x.k))}/>{x.l}</label>))}
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <Btn small variant="primary" onClick={()=>{ onChange(cur.length===items.length?null:cur); setOpen(false); }}>Update</Btn>
+          <Btn small ghost onClick={()=>setDraft(items.map(x=>x.k))}>Select all</Btn>
+          <span style={{flex:1}}/><Btn small ghost onClick={()=>setOpen(false)}>Close</Btn>
+        </div>
+      </div>}
+    </div>);
+};
+const GlTermNode = ({data}) => {
+  const tt = GLOSSARY_TERM_TYPES[data.termType]||GLOSSARY_TERM_TYPES.Term;
+  return (
+    <div style={{width:156,padding:"6px 9px",borderRadius:7,background:data.asset?"#f8fafc":"#fff",border:`1.5px ${data.asset?"dashed":"solid"} ${data.hit?"#ee2424":data.focus?"#6366f1":data.asset?"#cbd5e1":tt.c+"66"}`,
+      boxShadow:data.focus?"0 0 0 3px rgba(99,102,241,.15)":"0 1px 2px rgba(15,23,42,.05)",fontFamily:"'Geist Sans','Inter',sans-serif"}}>
+      <Handle type="target" position={Position.Left} style={{opacity:0,width:1,height:1}}/>
+      <Handle type="source" position={Position.Right} style={{opacity:0,width:1,height:1}}/>
+      <div style={{display:"flex",alignItems:"center",gap:5}}>
+        <span style={{fontSize:9,fontWeight:800,color:data.asset?"#64748b":tt.c}}>{data.asset?"▦":tt.icon}</span>
+        <span style={{fontSize:11,fontWeight:600,color:"#0f172a",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{data.label}</span>
+        {data.classes>0 && <span title="Defined by an ontology class" style={{fontSize:9,color:"#7c3aed",fontWeight:800}}>◆</span>}
+      </div>
+      {!data.asset && data.status && data.status!=="Approved" && <div style={{fontSize:9,color:data.status==="Deprecated"?"#7c3aed":"#d97706",marginTop:2}}>{data.status}</div>}
+      {data.asset && <div style={{fontSize:9,color:"#64748b",marginTop:2}}>{data.assetType}</div>}
+    </div>);
+};
+const GlGroupNode = ({data}) => (
+  <div style={{width:"100%",height:"100%",borderRadius:10,border:"1px solid #e2e8f0",background:"rgba(248,250,252,.85)",overflow:"hidden"}}>
+    <div style={{height:3,background:data.color}}/>
+    <div style={{padding:"6px 10px",fontSize:11,fontWeight:700,color:"#334155"}}>{data.icon} {data.name} <span style={{color:"#94a3b8",fontWeight:500}}>· {data.n}</span></div>
+  </div>);
+const GL_NODE_TYPES = {glTerm: GlTermNode, glGroup: GlGroupNode};
+const GL_EDGE_C = {broader:"#7c3aed", is_a:"#7c3aed", part_of:"#0891b2", related_to:"#94a3b8", describes:"#cbd5e1"};
+
+const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
+  useOnt();
+  const [mode, setMode] = useState("overview");
+  const [gIds, setGIds] = useState(null);
+  const [types, setTypes] = useState(null);
+  const [isolated, setIsolated] = useState(true);
+  const [data, setData] = useState("terms");
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(null);
+  const [rf, setRf] = useState(null);
+  const crels = _slState.crels || [];
+  const typeItems = GLG.relationTypes(crels, CTX.REL_TYPES);
+  const gScope = mode==="glossary" ? (gIds || [initialGlossary].filter(Boolean)) : gIds;
+  const g = GLG.glossaryGraph({glossaries, terms, crels, REL_TYPES:CTX.REL_TYPES}, {mode, glossaryIds:gScope, types, isolated, withData:data==="data", q});
+  const colours = ["#0ea5e9","#7c3aed","#16a34a","#f59e0b","#e11d48","#0891b2","#84cc16","#ec4899"];
+  const layout = useMemo(()=>{
+    const nodes = [];
+    const pos = {};
+    if(mode==="hierarchy"){
+      // Layered: parents on the left, children to the right.
+      const parentOf = {}; g.edges.filter(e=>GLG.HIERARCHY_TYPES.includes(e.type)).forEach(e=>{ (parentOf[e.from] = parentOf[e.from] || []).push(e.to); });
+      const depth = (id, seen=new Set()) => { if(seen.has(id)) return 0; seen.add(id); const ps = parentOf[id]||[]; return ps.length ? 1 + Math.max(...ps.map(p=>depth(p, seen))) : 0; };
+      const cols = {}; g.nodes.filter(n=>n.kind==="term").forEach(n=>{ const d = depth(n.id); (cols[d] = cols[d] || []).push(n); });
+      Object.entries(cols).forEach(([d, list])=>list.sort((a,b)=>a.label.localeCompare(b.label)).forEach((n,i)=>{ pos[n.id] = {x:Number(d)*230, y:i*54}; }));
+      g.nodes.filter(n=>n.kind==="term").forEach(n=>nodes.push({id:n.id, type:"glTerm", position:pos[n.id], data:{...n, classes:glClassesOf(n.id).length, focus:sel===n.id}}));
+    } else {
+      // One box per glossary, terms in a grid inside it.
+      let x = 0, y = 0, rowH = 0; const W = 3, CW = 168, RH = 52, maxRow = 1180;
+      g.groups.forEach((gr, gi)=>{
+        const cols = Math.min(W, Math.max(1, gr.terms.length)), rows = Math.ceil(gr.terms.length/cols);
+        const w = cols*CW + 24, h = rows*RH + 40;
+        if(x + w > maxRow && x > 0){ x = 0; y += rowH + 40; rowH = 0; }
+        nodes.push({id:`grp:${gr.id}`, type:"glGroup", position:{x, y}, style:{width:w, height:h}, data:{name:gr.name, icon:gr.icon, n:gr.terms.length, color:colours[gi%colours.length]}, selectable:false, draggable:false});
+        gr.terms.forEach((tid, i)=>{ const n = g.nodes.find(z=>z.id===tid);
+          nodes.push({id:tid, type:"glTerm", parentId:`grp:${gr.id}`, extent:"parent", position:{x:12 + (i%cols)*CW, y:32 + Math.floor(i/cols)*RH},
+            data:{...n, classes:glClassesOf(tid).length, focus:sel===tid}}); });
+        x += w + 40; rowH = Math.max(rowH, h);
+      });
+      var assetY = y + rowH + 60;
+      g.nodes.filter(n=>n.kind==="asset").forEach((n,i)=>nodes.push({id:n.id, type:"glTerm", position:{x:(i%6)*180, y:assetY + Math.floor(i/6)*56}, data:{...n, asset:true}}));
+    }
+    if(mode==="hierarchy") g.nodes.filter(n=>n.kind==="asset").forEach((n,i)=>nodes.push({id:n.id, type:"glTerm", position:{x:-240, y:i*54}, data:{...n, asset:true}}));
+    return nodes;
+  },[JSON.stringify(g.nodes.map(n=>n.id+(n.hit?"*":""))), JSON.stringify(g.groups.map(x=>x.id+x.terms.length)), mode, sel]);
+  const edges = useMemo(()=>g.edges.map(e=>{ const dim = sel && e.from!==sel && e.to!==sel; const c = GL_EDGE_C[e.type] || "#6366f1";
+    return {id:e.id, source:e.from, target:e.to, type:"default", label:e.type==="describes"?undefined:e.label,
+      labelStyle:{fontSize:9, fill:dim?"#cbd5e1":"#475569", fontWeight:600}, labelBgStyle:{fill:"#f8fafc"}, labelBgPadding:[3,2],
+      style:{stroke:dim?"#e2e8f0":c, strokeWidth:1.3, strokeDasharray:e.type==="related_to"||e.type==="describes"?"4 4":undefined},
+      markerEnd:{type:MarkerType.ArrowClosed, color:dim?"#e2e8f0":c, width:11, height:11}}; }),[JSON.stringify(g.edges), sel]);
+  const t = sel ? terms.find(x=>x.id===sel) : null;
+  const rels = t ? g.edges.filter(e=>(e.from===t.id||e.to===t.id) && e.type!=="describes") : [];
+  const nameOf = (id) => (terms.find(x=>x.id===id)||{}).term || id;
+  const Sec = ({h, children}) => <div style={{padding:"12px 16px",borderTop:"1px solid #e2e8f0"}}><div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".08em",marginBottom:7}}>{h}</div>{children}</div>;
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        <div style={{width:150}}><SLSelect value={mode} onChange={e=>{ setMode(e.target.value); setSel(null); }} options={[{v:"overview",l:"Overview"},{v:"glossary",l:"Glossary"},{v:"hierarchy",l:"Hierarchy"}]}/></div>
+        <GlChecks label="Glossary" items={glossaries.map(x=>({k:x.id,l:x.name}))} value={gIds} onChange={setGIds}/>
+        <GlChecks label="Relationship type" items={typeItems} value={types} onChange={setTypes}/>
+        <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.textSub}}><Toggle on={isolated} onChange={setIsolated}/> Isolated</label>
+        <SegTabs tabs={[{key:"terms",label:"Terms"},{key:"data",label:"Terms and data"}]} active={data} onChange={setData}/>
+        <div style={{width:220}}><Input2 placeholder="Search in graph…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+        <span style={{flex:1}}/>
+        <span style={{fontSize:11.5,color:T.textMuted}}>{g.stats.terms} terms · {g.stats.relations} relationships · {g.stats.isolated} isolated{q?` · ${g.stats.matches} found`:""}</span>
+      </div>
+      <div style={{display:"flex",height:600,border:"1px solid #e2e8f0",borderRadius:10,overflow:"hidden"}}>
+        <div style={{flex:1,minWidth:0,position:"relative",background:"#f8fafc"}}>
+          {layout.length===0 ? <div style={{padding:"80px 0",textAlign:"center",fontSize:12.5,color:"#64748b"}}>No terms match these filters</div> :
+          <ReactFlow nodes={layout} edges={edges} nodeTypes={GL_NODE_TYPES} onInit={setRf} onNodeClick={(_e,n)=>{ if(n.type==="glTerm" && !n.data.asset) setSel(sel===n.id?null:n.id); }}
+            fitView fitViewOptions={{padding:0.15}} minZoom={0.1} maxZoom={2} nodesDraggable={false} nodesConnectable={false} proOptions={{hideAttribution:true}} colorMode="light" style={{background:"#f8fafc"}}>
+            <Background color="#cbd5e1" gap={22} size={1.2} variant="dots"/>
+            <Controls showInteractive={false} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}/>
+          </ReactFlow>}
+          <button onClick={()=>rf?.fitView({padding:0.15,duration:400})} style={{position:"absolute",top:10,right:10,padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Fit</button>
+          <div style={{position:"absolute",left:10,bottom:10,display:"flex",gap:10,flexWrap:"wrap",padding:"5px 9px",background:"#fff",border:"1px solid #e2e8f0",borderRadius:7,fontSize:10.5,color:"#64748b"}}>
+            <span><span style={{color:"#7c3aed",fontWeight:800}}>—</span> parent / kind of</span><span><span style={{color:"#94a3b8",fontWeight:800}}>- -</span> related</span>
+            <span><span style={{color:"#6366f1",fontWeight:800}}>—</span> other relationships</span><span><span style={{color:"#7c3aed",fontWeight:800}}>◆</span> defined by an ontology class</span>
+          </div>
+        </div>
+        <div style={{width:300,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",overflowY:"auto"}}>
+          {!t ? <div style={{padding:"22px 18px",fontSize:11.5,color:"#64748b"}}>Select a term</div> : <>
+            <div style={{padding:"16px"}}>
+              <div style={{fontSize:15,fontWeight:700,color:"#0f172a"}}>{t.term}</div>
+              <div style={{fontSize:11,color:"#64748b",marginTop:3}}>{(GLOSSARY_TERM_TYPES[t.termType||"Term"]||{}).l} · {(glossaries.find(x=>x.id===t.glossary)||{}).name} · {t.status||t.cert}</div>
+              <div style={{fontSize:11.5,color:"#475569",lineHeight:1.55,marginTop:8}}>{t.definition||"No definition"}</div>
+              {(t.synonyms||[]).length>0 && <div style={{fontSize:11,color:"#64748b",marginTop:6}}>Also called: {t.synonyms.join(", ")}</div>}
+              <div style={{marginTop:10}}><Btn small onClick={()=>onOpenTerm&&onOpenTerm(t.id)}>Open term</Btn></div>
+            </div>
+            <Sec h={`Relationships · ${rels.length}`}>
+              {rels.length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>None</div> : rels.map(e=>{ const out = e.from===t.id; const other = out?e.to:e.from;
+                const inv = e.type==="broader" ? "child term" : (CTX.REL_TYPES[e.type]||{}).inv || e.label;
+                return <div key={e.id} onClick={()=>setSel(other)} style={{display:"flex",gap:6,fontSize:11.5,padding:"3px 0",cursor:"pointer"}}>
+                  <span style={{color:"#64748b",width:110,flexShrink:0}}>{out?e.label:inv}</span><span style={{color:"#0f172a",fontWeight:600}}>{nameOf(other)}</span></div>; })}
+            </Sec>
+            <Sec h="Ontology class">
+              {glClassesOf(t.id).length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>Not defined by an ontology class</div> :
+                glClassesOf(t.id).map(({o, c})=><div key={o.id+c.id} style={{fontSize:11.5,padding:"2px 0"}}><span style={{color:"#7c3aed",fontWeight:800}}>◆ </span>{o.name} › <b>{c.name}</b></div>)}
+            </Sec>
+            <Sec h={`Linked assets · ${(t.linkedAssets||[]).length}`}>
+              {(t.linkedAssets||[]).length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>None</div> :
+                t.linkedAssets.slice(0,8).map((a,i)=><div key={i} style={{fontSize:11.5,padding:"2px 0",color:"#0f172a",fontFamily:"ui-monospace,monospace"}}>{a.name||a} <span style={{color:"#94a3b8",fontFamily:"inherit"}}>· {a.type||""}</span></div>)}
+            </Sec>
+          </>}
+        </div>
+      </div>
+    </div>);
+};
+
+const glDownloadSkos = (glossary, fmt) => {
+  const text = GLG.exportSkos(glossary, _gtState, _slState.crels||[], CTX.REL_TYPES, fmt);
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:fmt==="turtle"?"text/turtle":"application/rdf+xml"}));
+  a.download = `${(glossary.name||"glossary").toLowerCase().replace(/[^a-z0-9]+/g,"-")}-skos.${fmt==="turtle"?"ttl":"rdf"}`; a.click();
+};
+
 const GlossaryView = ({onToast, deepLinkTermId}) => {
   const {role:gvRole, roleCfg:gvRoleCfg} = useRole();
   const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
@@ -2962,6 +3134,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
   const [q,          setQ]          = useState("");
   const [termTab,    setTermTab]    = useState("overview");
   const [typeF,      setTypeF]      = useState("all");   // Term / Concept / Metric / Dimension
+  const [glView,     setGlView]     = useState("list");  // list | graph
   const [mapCon,     setMapCon]     = useState(null);   // concept opened from the map
   const [commentText,setCommentText]= useState("");
   const [aiLoading,  setAiLoading]  = useState(false);
@@ -3492,7 +3665,8 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               </div>
             </div>
             <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-              <KebabMenu items={[{label:"Add Term",onClick:()=>openModal("newTerm",{glossary:selG})},{label:"Edit",onClick:()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}]}/>
+              <KebabMenu items={[{label:"Add Term",onClick:()=>openModal("newTerm",{glossary:selG})},
+                {label:"Download SKOS (RDF/XML)",onClick:()=>glDownloadSkos(glossary,"rdfxml")},{label:"Download SKOS (Turtle)",onClick:()=>glDownloadSkos(glossary,"turtle")},{label:"Edit",onClick:()=>openModal("editGlossary",{id:glossary.id,name:glossary.name,icon:glossary.icon,desc:glossary.desc})}]}/>
             </div>
           </div>
         </div>
@@ -3612,29 +3786,19 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                   </button>
                 );
               })}
+              <span style={{flex:1}}/>
+              <SegTabs tabs={[{key:"list",label:"List"},{key:"graph",label:"Graph"}]} active={glView} onChange={setGlView}/>
             </div>
             <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,maxWidth:820}}>
               One register for everything the business names. A <b style={{color:T.textSub}}>Concept</b> is a thing, a <b style={{color:T.textSub}}>Metric</b> is a number, a <b style={{color:T.textSub}}>Dimension</b> is a way to slice one — all sharing one owner, one approval and one conflict check.
             </div>
           </div>
 
-          {typeF==="Concept" && (()=>{
-            const {concepts, crels, entities, metrics} = slStore;
-            const unrealised = concepts.filter(c=>slConceptCoverage(c, entities, metrics).state==="unrealised").length;
-            return (
-              <div style={{padding:"0 28px 20px"}}>
-                <SH title="Concept map"
-                    sub={`How the business fits together, independent of any table. Solid lines are taxonomy — what is a kind of what. Dashed lines are business relationships, which stay true however a given system joins them.${unrealised?` ${unrealised} concept${unrealised===1?" is":"s are"} agreed but implemented by nothing.`:""}`}/>
-                <SLConceptCanvas concepts={concepts} crels={crels} entities={entities} metrics={metrics}
-                  selected={mapCon} onSelect={setMapCon}/>
-                <SLConceptDrawer concept={concepts.find(c=>c.id===mapCon)} concepts={concepts} crels={crels}
-                  entities={entities} metrics={metrics} models={slStore.models} gTerms={terms}
-                  onClose={()=>setMapCon(null)} onNav={()=>{}}/>
-              </div>
-            );
-          })()}
+          {glView==="graph" && <div style={{padding:"0 28px 28px"}}>
+            <GlossaryExplorer glossaries={glossaries} terms={terms.filter(t=>typeF==="all" || (t.termType||"Term")===typeF)} initialGlossary={selG} onOpenTerm={(id)=>{ setGlView("list"); goToTerm(id); }}/>
+          </div>}
 
-          {allTermsInGlossary.length===0?(
+          {glView==="graph" ? null : allTermsInGlossary.length===0?(
             <div style={{textAlign:"center",padding:"32px 20px",color:T.textMuted}}><div style={{fontSize:15,fontWeight:600,color:T.textSub,marginBottom:8}}>No terms yet</div><Btn small variant="primary" onClick={()=>openModal("newTerm",{})}>+ New Term</Btn></div>
           ):(
             <div style={{padding:"0 28px 28px",display:"flex",flexDirection:"column",gap:16}}>
@@ -3969,6 +4133,18 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 <span style={{fontSize:12,fontWeight:500,color:T.textSub}}>{termGlossary?.name||term.domain}</span>
               </div>
             </div>
+
+            {(()=>{ const cls = glClassesOf(term.id); return (
+              <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
+                <SideLabel ch="Ontology class"/>
+                {cls.length===0 ? <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not defined by an ontology class</div> :
+                  <div style={{display:"flex",flexDirection:"column",gap:5}}>{cls.map(({o,c})=>(
+                    <button key={o.id+c.id} onClick={()=>{ _ontJump = {id:o.id, tab:"classes"}; glNav("ontologies"); }}
+                      style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                      <span style={{color:T.violet,fontWeight:800,fontSize:11}}>◆</span>
+                      <span style={{fontSize:12,color:T.text,fontWeight:600}}>{c.name}</span>
+                      <span style={{fontSize:11,color:T.textMuted}}>· {o.name}</span></button>))}</div>}
+              </div>); })()}
 
             {/* BUILT BY — the reverse of the link the model already holds. A term could
                 always point INTO a model; nothing pointed back, so the Glossary could not
