@@ -3172,30 +3172,68 @@ const GlTermRelationsTab = ({term, terms, glossaries, canEdit, me, onOpenTerm, o
       </OntDrawerShell>}
     </div>);
 };
-const glModelRows = (term, slStore) => {
+// Everything a term is linked to, in one list: catalog assets, semantic model
+// items and ontology classes. Search, and a filter by object and by type.
+const glLinkedRows = (term, slStore) => {
   const models = slStore.models||[];
-  const modelOf = (id) => models.find(m=>m.id===id);
+  const inModels = (eid) => models.filter(m=>(m.entityIds||[]).includes(eid)).map(m=>m.name).join(", ");
   return [
-    ...(slStore.metrics||[]).filter(m=>m.termId===term.id).map(m=>({key:m.id, kind:"Metric", name:m.name, model:(modelOf(m.model)||{}).name||"—"})),
-    ...(slStore.dims||[]).filter(d=>d.termId===term.id).map(d=>{ const e = (slStore.entities||[]).find(x=>x.id===d.entity)||{};
-      return {key:d.id, kind:"Dimension", name:d.name, model:models.filter(m=>(m.entityIds||[]).includes(e.id)).map(m=>m.name).join(", ")||"—"}; }),
-    ...(slStore.entities||[]).filter(e=>e.concept===term.id).map(e=>({key:e.id, kind:"Dataset", name:`${e.name} · ${e.table}`, model:models.filter(m=>(m.entityIds||[]).includes(e.id)).map(m=>m.name).join(", ")||"—"})),
+    ...(term.linkedAssets||[]).map((a,i)=>({key:`a${i}`, object:"Catalog", type:a.type||"Asset", name:a.name||a, where:"Catalog"})),
+    ...(slStore.metrics||[]).filter(m=>m.termId===term.id).map(m=>({key:m.id, object:"Semantic model", type:"Metric", name:m.name, where:(models.find(x=>x.id===m.model)||{}).name||"—"})),
+    ...(slStore.dims||[]).filter(d=>d.termId===term.id).map(d=>({key:d.id, object:"Semantic model", type:"Dimension", name:d.name, where:inModels(d.entity)||"—"})),
+    ...(slStore.entities||[]).filter(e=>e.concept===term.id).map(e=>({key:e.id, object:"Semantic model", type:"Dataset", name:`${e.name} · ${e.table}`, where:inModels(e.id)||"—"})),
+    ...glClassesOf(term.id).map(({o,c})=>({key:`o_${o.id}_${c.id}`, object:"Ontology", type:"Class", name:c.name, where:o.name, ont:o})),
   ];
 };
-const GlTermModelsTab = ({term, slStore, onNav}) => {
-  const rows = glModelRows(term, slStore);
-  return <OntTable empty="No semantic model implements this term yet" onRow={()=>onNav&&onNav("semanticlayer")}
-    cols={[{l:"Kind",w:".7fr"},{l:"Name",w:"1.6fr"},{l:"Semantic model",w:"1.6fr"}]}
-    rows={rows.map(r=>({key:r.key, cells:[r.kind, <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, r.model]}))}/>;
-};
-const GlTermOntologiesTab = ({term, onNav}) => {
+const GlTermLinkedTab = ({term, slStore, onNav, onToast}) => {
   useOnt();
-  const rows = glClassesOf(term.id);
-  return <OntTable empty="No ontology class is defined by this term" onRow={r=>{ _ontJump = {id:r.o.id, tab:"classes"}; onNav&&onNav("ontologies"); }}
-    cols={[{l:"Class",w:"1fr"},{l:"Ontology",w:"1.2fr"},{l:"Definition",w:"2fr"},{l:"Status",w:".8fr"}]}
-    rows={rows.map(({o,c})=>({key:o.id+c.id, o, cells:[<span style={{fontWeight:600,color:T.text}}>{c.name}</span>, o.name, c.desc||"—", OMD.statusOf(o)]}))}/>;
+  const rows = glLinkedRows(term, slStore);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [objs, setObjs] = useState([]);
+  const [types, setTypes] = useState([]);
+  const allObjs = [...new Set(rows.map(r=>r.object))], allTypes = [...new Set(rows.map(r=>r.type))].sort();
+  const shown = rows.filter(r=>(!objs.length || objs.includes(r.object)) && (!types.length || types.includes(r.type))
+    && (!q || `${r.name} ${r.type} ${r.where}`.toLowerCase().includes(q.toLowerCase())));
+  const active = objs.length + types.length;
+  const tog = (list, set, v) => set(list.includes(v) ? list.filter(x=>x!==v) : [...list, v]);
+  const Group = ({h, items, sel, set}) => (
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:".05em",marginBottom:6}}>{h}</div>
+      {items.map(v=>(
+        <label key={v} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",fontSize:12.5,color:T.text,cursor:"pointer"}}>
+          <input type="checkbox" checked={sel.includes(v)} onChange={()=>tog(sel, set, v)}/>{v}
+          <span style={{marginLeft:"auto",fontSize:11,color:T.textMuted}}>{rows.filter(r=>(h==="Object"?r.object:r.type)===v).length}</span></label>))}
+    </div>);
+  const openRow = (r) => {
+    if(r.object==="Ontology"){ _ontJump = {id:r.ont.id, tab:"classes"}; onNav&&onNav("ontologies"); }
+    else if(r.object==="Semantic model") onNav&&onNav("semanticlayer");
+  };
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{width:300}}><Input2 placeholder="Search linked assets…" value={q} onChange={e=>setQ(e.target.value)} icon={Ic.search(12)}/></div>
+        <div style={{position:"relative"}}>
+          <button onClick={()=>setOpen(v=>!v)} title="Filter"
+            style={{height:34,padding:"0 10px",borderRadius:8,background:active?T.accentDim:T.bgSurface,border:`1px solid ${active?T.accent:T.border}`,color:active?T.accent:T.textSub,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,fontFamily:"inherit"}}>
+            {Ic.filter(13)}{active?<span>{active}</span>:null}</button>
+          {open && <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,zIndex:50,width:260,background:T.bgSurface,border:`1px solid ${T.borderLight}`,borderRadius:10,boxShadow:"0 18px 40px rgba(15,23,42,.2)",padding:12}}>
+            <Group h="Object" items={allObjs} sel={objs} set={setObjs}/>
+            <Group h="Type" items={allTypes} sel={types} set={setTypes}/>
+            <div style={{display:"flex",gap:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+              <Btn small ghost onClick={()=>{ setObjs([]); setTypes([]); }}>Clear</Btn><span style={{flex:1}}/><Btn small onClick={()=>setOpen(false)}>Done</Btn>
+            </div>
+          </div>}
+        </div>
+        <span style={{fontSize:12,color:T.textMuted}}>{shown.length} of {rows.length}</span>
+        <span style={{flex:1}}/>
+        <Btn icon={Ic.plus(10)} onClick={()=>onToast&&onToast("Open the catalog to link an asset","success")}>Link asset</Btn>
+      </div>
+      <OntTable empty={rows.length?"No linked assets match":"No linked assets yet"} onRow={r=>openRow(r.r)}
+        cols={[{l:"Name",w:"1.6fr"},{l:"Type",w:".8fr"},{l:"Object",w:".9fr"},{l:"In",w:"1.4fr"}]}
+        rows={shown.map(r=>({key:r.key, r, cells:[<span style={{fontWeight:600,color:T.text}}>{r.name}</span>, r.type, r.object, r.where]}))}/>
+    </div>);
 };
-
 const GlossaryView = ({onToast, deepLinkTermId}) => {
   const {role:gvRole, roleCfg:gvRoleCfg} = useRole();
   const meHandle = ((gvRoleCfg&&gvRoleCfg.email)||"you@jnj").split("@")[0];
@@ -4082,8 +4120,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
               {[{id:"overview",l:"Overview"},{id:"relationships",l:`Relationships (${GLG.relationsOf((glRelTerms(terms).find(x=>x.id===term.id)||term), glRelTerms(terms)).length})`},
-                {id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"models",l:`Semantic Models (${glModelRows(term, slStore).length})`},
-                {id:"ontologies",l:`Ontologies (${glClassesOf(term.id).length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
+                {id:"assets",l:`Linked Assets (${glLinkedRows(term, slStore).length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -4116,11 +4153,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 {term.readme?<p style={{fontSize:13.5,color:T.textSub,lineHeight:1.75,margin:0}}>{term.readme}</p>:<div style={{fontSize:13,color:T.textMuted,fontStyle:"italic"}}>No notes yet.</div>}
               </div>
             )}
-            {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
+            {termTab==="assets"&&<GlTermLinkedTab term={term} slStore={slStore} onNav={glNav} onToast={onToast}/>}
             {/* Activity tab is hidden for now (Sprint 7); its content stays so it can be switched back on from the tab list above. */}
             {termTab==="relationships"&&<GlTermRelationsTab term={term} terms={terms} glossaries={glossaries} canEdit={canSetTermStatus(term)} me={meHandle} onOpenTerm={goToTerm} onToast={onToast} patchTerm={patchTerm}/>}
-            {termTab==="models"&&<GlTermModelsTab term={term} slStore={slStore} onNav={glNav}/>}
-            {termTab==="ontologies"&&<GlTermOntologiesTab term={term} onNav={glNav}/>}
             {termTab==="kg"&&<KgObjectTab ids={[`term:${term.id}`]} name={term.term}/>}
             {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
             {termTab==="auditlog"&&(
