@@ -860,6 +860,7 @@ const INITIAL_ASSIGNMENTS = {
     { id:'a12s',tagId:'t1',  assetId:ASSETS[4].id, origin:'synced',              sourceSystem:'Snowflake', sourceSystems:['Snowflake','BigID'], status:'active', appliedBy:'system',  appliedAt:'2026-04-20T09:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a12', tagId:'t8',  assetId:ASSETS[4].id, origin:'propagated_hierarchy',sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'system',  appliedAt:'2026-04-02T07:00:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a13', tagId:'t9',  assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Rahul M.',appliedAt:'2026-04-05T10:00:00Z', stewardNote:'', propagationChain:[]             },
+    { id:'a15', tagId:'t6',  assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Priya K.',appliedAt:'2026-11-19T15:10:00Z', stewardNote:'', propagationChain:[]             },
     { id:'a14', tagId:'t13', assetId:ASSETS[4].id, origin:'manual',              sourceSystem:null,        sourceSystems:[],                  status:'active',   appliedBy:'Analyst', appliedAt:'2026-04-19T16:00:00Z', stewardNote:'', propagationChain:[]             },
   ],
   12: [
@@ -925,7 +926,13 @@ const BIGID_ATTR_VALUES = {
 };
 
 const INITIAL_CONNECTOR_CONFIGS = {
-  snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
+  snowflake:  { connectorId:'snowflake',  syncEnabled:true,  reverseSyncEnabled:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T10:00:00Z', lastSyncStatus:'partial',  lastSyncNewTags:1, lastSyncConflicts:2,
+    // Write-back: tags EDG creates in Snowflake live in this schema. Each classification is one
+    // Snowflake tag; its tags are that tag's allowed values.
+    tagSchema:'GOVERNANCE.TAGS',
+    sourceClassTags:{ SENSITIVITY:['PII','PHI','PCI-DSS'], REGULATORY:['GDPR'] },
+    // Tag-based masking in Snowflake. Unsetting one of these would switch the masking off.
+    maskingPolicies:{ 'SENSITIVITY=PII':'GOVERNANCE.POLICIES.MASK_PII', 'SENSITIVITY=PCI-DSS':'GOVERNANCE.POLICIES.MASK_PAN' },
     nameMappings:[
       { id:'m1',  sourceTagName:'PII',       edgTagId:'t1', reverseSyncAlias:'PII',       status:'mapped'   },
       { id:'m3',  sourceTagName:'PHI',       edgTagId:'t2', reverseSyncAlias:'PHI',       status:'mapped'   },
@@ -978,7 +985,9 @@ const INITIAL_CONNECTOR_CONFIGS = {
       { id:'m10', sourceTagName:'PII', edgTagId:'t1', reverseSyncAlias:'PII', status:'mapped' },
       { id:'m11', sourceTagName:'PHI', edgTagId:'t2', reverseSyncAlias:'PHI', status:'mapped' },
     ]},
-  databricks: { connectorId:'databricks', syncEnabled:true,  reverseSyncEnabled:true,  reverseSyncApproval:true,  conflictRule:'flag_always',  lastSyncAt:'2026-04-20T08:15:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
+  databricks: { connectorId:'databricks', syncEnabled:true,  reverseSyncEnabled:true,  conflictRule:'flag_always',
+    // Unity Catalog tags are key/value pairs set on the object - nothing to create first.
+    sourceClassTags:{ sensitivity:['PII','PHI'] }, maskingPolicies:{},  lastSyncAt:'2026-04-20T08:15:00Z', lastSyncStatus:'success',  lastSyncNewTags:1, lastSyncConflicts:0,
     nameMappings:[
       { id:'m12', sourceTagName:'PII',       edgTagId:'t1', reverseSyncAlias:'PII',       status:'mapped' },
       { id:'m14', sourceTagName:'PHI',       edgTagId:'t2', reverseSyncAlias:'PHI',       status:'mapped' },
@@ -1124,6 +1133,45 @@ const AI_NEW_TAG_CAT_DEFAULTS = {
 };
 
 // ─────────────────────────────────────────────
+// TAG WRITE-BACK (reverse sync)
+// A classification is written as the source tag's NAME and the EDG tag as its VALUE
+// (SENSITIVITY = 'PII'). A source object holds one value per tag, so only a mutually
+// exclusive classification can be written back; the others stay in EDG.
+// Nothing is written until someone runs the push (Run now) on the connection.
+// ─────────────────────────────────────────────
+const INITIAL_CLASS_SYNC = {
+  sensitivity:{mutuallyExclusive:true}, regulatory:{mutuallyExclusive:true},
+  business:{mutuallyExclusive:false},   custom:{mutuallyExclusive:false},
+};
+const WRITE_BACK_CONNECTORS = ['snowflake','databricks'];
+const srcTagName = (connId, category) => connId==='databricks'
+  ? String(category||'').toLowerCase().replace(/[^a-z0-9_]/g,'_')
+  : String(category||'').toUpperCase().replace(/[^A-Z0-9_]/g,'_');
+const pushedAs = (connId, def) => `${srcTagName(connId, def.category)} = '${def.name}'`;
+const pushObjPath = (asset) => String(asset.db||asset.name).split(' / ').join('.');
+const pushObjKeyword = (asset) => ({'View':'VIEW','Semantic View':'SEMANTIC VIEW','Schema':'SCHEMA','Database':'DATABASE','Catalog':'CATALOG'}[asset.type]||'TABLE');
+// The statements a push runs for one change. Snowflake needs the tag to exist (and the value
+// to be allowed) before it can be set; Unity Catalog sets the key/value directly.
+const pushStatements = (connId, cfg, asset, def, op) => {
+  const name = srcTagName(connId, def.category), path = pushObjPath(asset), kw = pushObjKeyword(asset);
+  if (connId==='databricks') return [op==='set'
+    ? `ALTER ${kw} ${path} SET TAGS ('${name}' = '${def.name}')`
+    : `ALTER ${kw} ${path} UNSET TAGS ('${name}')`];
+  const full = `${(cfg&&cfg.tagSchema)||'GOVERNANCE.TAGS'}.${name}`;
+  const vals = ((cfg&&cfg.sourceClassTags)||{})[name];
+  const out = [];
+  if (op==='set') {
+    if (!vals) out.push(`CREATE TAG ${full} ALLOWED_VALUES '${def.name}'`);
+    else if (!vals.includes(def.name)) out.push(`ALTER TAG ${full} ADD ALLOWED_VALUES '${def.name}'`);
+    out.push(`ALTER ${kw} ${path} SET TAG ${full} = '${def.name}'`);
+  } else out.push(`ALTER ${kw} ${path} UNSET TAG ${full}`);
+  return out;
+};
+const INITIAL_PUSH_QUEUE = [
+  { id:'pq1', connId:'snowflake', assetId:ASSETS[4].id, assetName:ASSETS[4].name, tagId:'t6', op:'set', by:'Priya K.', at:'2026-11-19T15:10:00Z', status:'pending', blockReason:null },
+];
+
+// ─────────────────────────────────────────────
 // TAG PROVIDER
 // ─────────────────────────────────────────────
 function TagProvider({ children }) {
@@ -1134,6 +1182,32 @@ function TagProvider({ children }) {
   const [tagPolicies,      setTagPolicies]      = useState(INITIAL_TAG_POLICIES);
   const [propagationJobs,  setPropagationJobs]  = useState(INITIAL_PROP_JOBS);
   const [reverseSyncRuns,  setReverseSyncRuns]  = useState(INITIAL_REVERSE_SYNC_RUNS);
+  const [classSync,        setClassSync]        = useState(INITIAL_CLASS_SYNC);
+  const [pushQueue,        setPushQueue]        = useState(INITIAL_PUSH_QUEUE);
+
+  const isExclusive  = (cat) => !!(classSync[cat]&&classSync[cat].mutuallyExclusive);
+  const setClassMutex = (cat, v) => setClassSync(prev=>({...prev,[cat]:{...(prev[cat]||{}),mutuallyExclusive:v}}));
+  const canWriteBack = (connId) => WRITE_BACK_CONNECTORS.includes(connId) && !!(connectorConfigs[connId]&&connectorConfigs[connId].reverseSyncEnabled);
+  const catLabelOf   = (cat) => String(cat||'').charAt(0).toUpperCase()+String(cat||'').slice(1);
+
+  // Record one EDG change for the next push. An add and a remove of the same tag on the same
+  // object before a run cancel out. Removing a value that drives masking in the source is held.
+  const queueChange = (assetId, tagId, op, by='Current User') => {
+    const asset = ASSETS.find(a=>String(a.id)===String(assetId)); if (!asset) return;
+    const connId = asset.service; const cfg = connectorConfigs[connId];
+    const def = tagDefs.find(t=>t.id===tagId);
+    if (!def || !canWriteBack(connId) || !isExclusive(def.category)) return;
+    const mask = op==='unset' && ((cfg.maskingPolicies||{})[`${srcTagName(connId,def.category)}=${def.name}`]);
+    setPushQueue(prev=>{
+      const open = prev.filter(q=>(q.status==='pending'||q.status==='blocked') && String(q.assetId)===String(assetId) && q.tagId===tagId);
+      const opp = open.find(q=>q.op!==op);
+      if (opp) return prev.filter(q=>q!==opp);
+      if (open.some(q=>q.op===op)) return prev;
+      return [{ id:'pq'+Date.now()+Math.random().toString(36).slice(2,5), connId, assetId, assetName:asset.name, tagId, op, by,
+        at:new Date().toISOString(), status:mask?'blocked':'pending',
+        blockReason: mask ? `Masking policy ${mask} is attached to ${pushedAs(connId,def)}` : null }, ...prev];
+    });
+  };
 
   const unresolvedCount = inbox.filter(i => !i.resolvedAt).length;
   const conflictCount   = Object.values(assignments).flat().filter(a => a.status==='conflict').length;
@@ -1147,7 +1221,12 @@ function TagProvider({ children }) {
     const tagDef = tagDefs.find(t=>t.id===tagId);
     if (!tagDef) return;
     const existing = (assignments[assetId]||[]).find(a=>a.tagId===tagId && a.status!=='rejected');
-    if (existing) return;
+    if (existing) return {ok:true, status:existing.status};
+    // A mutually exclusive classification allows one of its tags per object.
+    if (isExclusive(tagDef.category)) {
+      const clash = (assignments[assetId]||[]).find(a=>a.status!=='rejected' && a.tagId!==tagId && (tagDefs.find(t=>t.id===a.tagId)||{}).category===tagDef.category);
+      if (clash) return {blocked:true, reason:`${catLabelOf(tagDef.category)} allows one tag per object · ${(tagDefs.find(t=>t.id===clash.tagId)||{}).name} is already attached`};
+    }
     const status = !direct && (tagDef.governanceRequired || requireApproval) ? 'pending' : 'active';
     const newA = { id:'a'+Date.now(), tagId, assetId, origin, sourceSystem, sourceSystems:sourceSystem?[sourceSystem]:[], status, appliedBy, appliedAt:new Date().toISOString(), stewardNote:'', propagationChain:[] };
     setAssignments(prev=>({...prev,[assetId]:[...(prev[assetId]||[]),newA]}));
@@ -1155,6 +1234,8 @@ function TagProvider({ children }) {
       setInbox(prev=>[{ id:'i'+Date.now(), type:'pending_approval', tagName:tagDef.name, assetId, assetName:assetName||String(assetId), domain:'Unknown', sourceSystem:origin==='ai'?'AI Classification':null, note:note||`Applied by ${appliedBy}. Awaiting steward approval.`, metadata:{appliedBy, propagationMode:tagDef.propagationMode, downstreamCount:0}, createdAt:new Date().toISOString(), resolvedAt:null, resolvedBy:null, resolution:null },...prev]);
     }
     setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,usageCount:t.usageCount+1}:t));
+    if (status==='active') queueChange(assetId, tagId, 'set', appliedBy);
+    return {ok:true, status};
   };
 
   // A column tag request: lands pending on the column and as an approval in the Inbox.
@@ -1230,7 +1311,9 @@ function TagProvider({ children }) {
   };
 
   const removeTag = (assetId, assignmentId, stewardNote='') => {
+    const was = (assignments[assetId]||[]).find(a=>a.id===assignmentId);
     setAssignments(prev=>({...prev,[assetId]:(prev[assetId]||[]).map(a=>a.id===assignmentId?{...a,status:'rejected',stewardNote}:a)}));
+    if (was && was.status!=='pending' && was.status!=='rejected') queueChange(assetId, was.tagId, 'unset');
   };
 
   const resolveInboxItem = (itemId, resolution, note='') => {
@@ -1250,6 +1333,8 @@ function TagProvider({ children }) {
         if(resolution==='reject') return {...a,status:'rejected',stewardNote:note};
         return a;
       })}));
+      const d = tagDefs.find(t=>t.name===item.tagName);
+      if (d && (resolution==='approve'||resolution==='approve_propagate')) queueChange(item.assetId, d.id, 'set', (item.metadata||{}).appliedBy);
     }
     // One decision for a new AI tag and every object it was put on.
     if (item.type==='new_tag_approval') {
@@ -1283,6 +1368,8 @@ function TagProvider({ children }) {
         if(resolution==='keep_override') return {...a,status:'rejected',stewardNote:note||item.metadata?.stewardNote||''};
         return a;
       })}));
+      const d = tagDefs.find(t=>t.name===item.tagName);
+      if (d && resolution==='keep_override') queueChange(item.assetId, d.id, 'unset');
     }
   };
 
@@ -1337,16 +1424,55 @@ function TagProvider({ children }) {
 
   // Which connectors this tag actively reverse-syncs to (push-enabled connection + an on source-tag mapping).
   const pushTargetsForTag = (tagId) => {
-    const def = tagDefs.find(t=>t.id===tagId); if(!def) return [];
-    const tagDefault = def.reverseSyncEnabled ?? (def.category==='sensitivity'||def.category==='regulatory');
-    const out=[];
-    Object.entries(connectorConfigs).forEach(([connId,cfg])=>{
-      if(!cfg.reverseSyncEnabled) return;
-      const ms=(cfg.nameMappings||[]).filter(m=>m.edgTagId===tagId);
-      const onM=ms.find(m=>(m.reverseSync ?? tagDefault));
-      if(onM) out.push({connId, alias: onM.reverseSyncAlias||onM.sourceTagName});
+    const def = tagDefs.find(t=>t.id===tagId);
+    if(!def || !isExclusive(def.category)) return [];
+    return WRITE_BACK_CONNECTORS.filter(canWriteBack).map(connId=>({connId, alias:pushedAs(connId,def)}));
+  };
+
+  // Undo a change that has not been pushed: the EDG edit is reverted, so EDG and the source agree again.
+  const discardChange = (id) => {
+    const q = pushQueue.find(x=>x.id===id); if (!q) return;
+    setPushQueue(prev=>prev.filter(x=>x.id!==id));
+    setAssignments(prev=>{
+      const list = prev[q.assetId]||[];
+      if (q.op==='set') return {...prev,[q.assetId]:list.map(a=>a.tagId===q.tagId && a.status!=='rejected' ? {...a,status:'rejected',stewardNote:'Change discarded before push'} : a)};
+      const last = [...list].reverse().find(a=>a.tagId===q.tagId && a.status==='rejected');
+      return last ? {...prev,[q.assetId]:list.map(a=>a===last?{...a,status:'active',stewardNote:''}:a)} : prev;
     });
-    return out;
+  };
+
+  // Run now: push every pending change for one connection. Held (blocked) changes stay.
+  const runPush = (connId, by='Current User') => {
+    const cfg = connectorConfigs[connId];
+    const items = pushQueue.filter(q=>q.connId===connId && q.status==='pending');
+    const held = pushQueue.filter(q=>q.connId===connId && q.status==='blocked').length;
+    if (!cfg || !canWriteBack(connId) || !items.length) return {done:0, held};
+    const now = new Date().toISOString();
+    const vals = Object.fromEntries(Object.entries(cfg.sourceClassTags||{}).map(([k,v])=>[k,[...v]]));
+    let created = 0;
+    const done = items.slice().reverse().map(q=>{
+      const asset = ASSETS.find(a=>String(a.id)===String(q.assetId)) || {name:q.assetName};
+      const def = tagDefs.find(t=>t.id===q.tagId) || {name:q.tagId, category:''};
+      const statements = pushStatements(connId, {...cfg, sourceClassTags:vals}, asset, def, q.op);
+      if (q.op==='set') { const n=srcTagName(connId,def.category); if(!vals[n]||!vals[n].includes(def.name)) created++; vals[n]=[...new Set([...(vals[n]||[]),def.name])]; }
+      return {...q, status:'done', statements, ranAt:now, ranBy:by, result:'success', pushedAs:pushedAs(connId,def)};
+    });
+    setPushQueue(prev=>prev.map(q=>done.find(d=>d.id===q.id)||q));
+    setConnectorConfigs(prev=>({...prev,[connId]:{...prev[connId], sourceClassTags:vals, lastPushAt:now, lastPushBy:by}}));
+    setAssignments(prev=>{ const n={...prev};
+      done.filter(d=>d.op==='set').forEach(d=>{ n[d.assetId]=(n[d.assetId]||[]).map(a=>a.tagId===d.tagId&&a.status!=='rejected'?{...a,inSource:connId}:a); });
+      return n; });
+    const byTag = {}; done.forEach(d=>{ (byTag[d.tagId]=byTag[d.tagId]||[]).push(d); });
+    setReverseSyncRuns(prev=>[...Object.entries(byTag).map(([tagId,list])=>({ id:'rs'+Date.now()+'_'+tagId, connId, tagId, trigger:'manual', startedAt:now, finishedAt:now, status:'done',
+      objects:list.map(d=>({name:d.assetName, alias:(d.op==='unset'?'UNSET ':'')+d.pushedAs, result:'success'})) })), ...prev]);
+    return {done:done.length, held, created};
+  };
+
+  // Pull: source tags come in, but an object with an EDG change waiting to be pushed keeps the EDG side.
+  const pullTags = (connId) => {
+    const kept = pushQueue.filter(q=>q.connId===connId && (q.status==='pending'||q.status==='blocked')).length;
+    setConnectorConfigs(prev=>({...prev,[connId]:{...prev[connId], lastSyncAt:new Date().toISOString()}}));
+    return {kept};
   };
 
   // Rollup for provenance chips: how many objects pushed for a tag (optionally to one connector) + last push time.
@@ -1376,10 +1502,6 @@ function TagProvider({ children }) {
     setTimeout(()=>setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'running',updated:Math.ceil(target/2)}:j)), 600);
     setTimeout(()=>{
       setPropagationJobs(prev=>prev.map(j=>j.id===id?{...j,status:'done',updated:target,finishedAt:new Date().toISOString()}:j));
-      // ── Incremental chain: newly-propagated objects that carry a reverse-sync tag get pushed back automatically (event-driven) ──
-      const base = meta.baseName || 'object';
-      const names = (meta.targets&&meta.targets.length) ? meta.targets : Array.from({length:Math.min(target,4)},(_,i)=>`${base}.downstream_${i+1}`);
-      logReverseSync(tagId, names, 'scheduled');
     }, 1500);
     return id;
   };
@@ -1388,7 +1510,7 @@ function TagProvider({ children }) {
   const setTagReverseSync = (tagId, enabled) => setTagDefs(prev=>prev.map(t=>t.id===tagId?{...t,reverseSyncEnabled:enabled}:t));
 
   return (
-    <TagContext.Provider value={{ tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, requestNewTag, withdrawNewTag, requestColumnTag, withdrawPending, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
+    <TagContext.Provider value={{ classSync, setClassMutex, isExclusive, canWriteBack, pushQueue, discardChange, runPush, pullTags, tagDefs, assignments, connectorConfigs, inbox, tagPolicies, propagationJobs, reverseSyncRuns, unresolvedCount, conflictCount, pendingCount, getAssetAssignments, getTagDef, applyTag, removeTag, requestNewTag, withdrawNewTag, requestColumnTag, withdrawPending, resolveInboxItem, createTagDef, updateTagDef, deleteTagDef, updateConnectorConfig, upsertNameMapping, upsertAttrMapping, updateTagPolicies, getPropagationJobs, startPropagation, setTagReverseSync, getReverseSyncRuns, pushSummaryForTag, logReverseSync }}>
       {children}
     </TagContext.Provider>
   );
@@ -28182,6 +28304,38 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                   style={{width:"100%",padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
                   onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/>
               </div>
+              {_tagCtx&&(_tagCtx.getAssetAssignments(asset.id).length>0||WRITE_BACK_CONNECTORS.includes(asset.service)) ? (()=>{
+                // Governed tags: attach/remove go through the tag model, so a write-back
+                // connection records each change for the next Run now.
+                const asns = _tagCtx.getAssetAssignments(asset.id).filter(a=>a.status!=='rejected');
+                const q = tagsSearch.toLowerCase();
+                const groups = ['sensitivity','regulatory','business','custom'].map(c=>({c, tags:_tagCtx.tagDefs.filter(td=>td.category===c && td.cert!=='Deprecated' && (!q||td.name.toLowerCase().includes(q)))})).filter(g=>g.tags.length);
+                return (
+                  <div style={{padding:"6px 8px",maxHeight:220,overflowY:"auto"}}>
+                    {groups.map(g=>(
+                      <div key={g.c} style={{marginBottom:6}}>
+                        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",margin:"4px 2px"}}>{g.c}{_tagCtx.isExclusive(g.c)?' · one per object':''}</div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                          {g.tags.map(td=>{
+                            const cur = asns.find(a=>a.tagId===td.id);
+                            return <button key={td.id} onClick={()=>{
+                                if(cur){ _tagCtx.removeTag(asset.id, cur.id, 'Removed from asset profile'); onToast&&onToast(`${td.name} removed`,'success'); return; }
+                                const r = _tagCtx.applyTag(asset.id, td.id, {origin:'manual', appliedBy:'Current User', assetName:asset.name});
+                                if(r&&r.blocked) onToast&&onToast(r.reason,'error');
+                                else onToast&&onToast(r&&r.status==='pending'?`${td.name} submitted for approval`:`${td.name} attached`,'success');
+                              }}
+                              style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,fontSize:11.5,cursor:"pointer",background:cur?T.bgHover:T.bgElevated,border:`1px solid ${cur?T.textMuted:T.border}`,color:cur?T.text:T.textSub,fontWeight:cur?600:400}}>
+                              <GovIcon kind="tag"/>
+                              {cur&&<svg width="10" height="10" viewBox="0 0 14 14" fill="none"><path d="M2.5 7.5l3 3 6-6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              {td.name}
+                            </button>;
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })() :
               <div style={{padding:"8px",display:"flex",flexWrap:"wrap",gap:5,maxHeight:160,overflowY:"auto"}}>
                 {["PII","revenue","finance","KPI","events","sensitive","dimension","model","etl","marketing"]
                   .filter(s=>!tagsSearch||s.toLowerCase().includes(tagsSearch.toLowerCase()))
@@ -28193,7 +28347,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                       {s}
                     </button>;
                   })}
-              </div>
+              </div>}
               <div style={{padding:"6px 8px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end"}}>
                 <button onClick={()=>setTagsOpen(false)} style={{padding:"4px 12px",borderRadius:5,background:T.accent,border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Done</button>
               </div>
@@ -28269,7 +28423,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
                 </div>
                 <div style={{padding:'12px 18px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end'}}>
                   <button onClick={()=>setPropTag(null)} style={{padding:'8px 14px',background:'transparent',border:`1px solid ${T.border}`,color:T.textSub,borderRadius:7,fontSize:12.5,cursor:'pointer'}}>Cancel</button>
-                  <button onClick={()=>{ _tagCtx?.startPropagation(asset.id, pTagId, scope, {target:est, by:meHandle, baseName:asset.name}); onToast&&onToast(`Propagating ${propTag} (${scope}) — running in background${pDef&&_tagCtx?.pushSummaryForTag ? '. Reverse-sync-enabled objects will push automatically.' : ''}`,'success'); setPropTag(null); }}
+                  <button onClick={()=>{ _tagCtx?.startPropagation(asset.id, pTagId, scope, {target:est, by:meHandle, baseName:asset.name}); onToast&&onToast(`Propagating ${propTag} (${scope}) — running in background`,'success'); setPropTag(null); }}
                     style={{padding:'8px 18px',background:T.accent,border:'none',color:'#fff',borderRadius:7,fontSize:12.5,fontWeight:700,cursor:'pointer'}}>Propagate now</button>
                 </div>
               </div>
@@ -37718,7 +37872,10 @@ const AttributeMappingTab = ({connectorId, connectorName}) => {
 // TAG SYNC TAB — used inside connector config modal
 // ─────────────────────────────────────────────
 const TagSyncTab = ({connectorId, connectorName}) => {
-  const { tagDefs, connectorConfigs, updateConnectorConfig, upsertNameMapping, getTagDef } = useTagCtx();
+  const { tagDefs, connectorConfigs, updateConnectorConfig, upsertNameMapping, getTagDef, isExclusive, pushQueue, discardChange, runPush, pullTags } = useTagCtx();
+  const { role:tsRole } = useRole();
+  const [tsToast,   setTsToast]   = useState(null);
+  const [showDone,  setShowDone]  = useState(false);
   // Resolve against the actual config map rather than a hardcoded allowlist. The old
   // version fell back to 'snowflake', so a connector with no tag-sync config silently
   // showed Snowflake's settings and Snowflake's tag mappings as if they were its own.
@@ -37767,15 +37924,56 @@ const TagSyncTab = ({connectorId, connectorName}) => {
     </div>
   );
 
+  // Write-back is offered only where EDG can write tags (Snowflake, Databricks), never for a
+  // discovery tool or a source that only declares tags in code.
+  const canWB   = WRITE_BACK_CONNECTORS.includes(cfgKey) && !cfg.neverWritesBack;
+  const wbOn    = canWB && cfg.reverseSyncEnabled;
+  const qOf     = pushQueue.filter(q=>q.connId===cfgKey);
+  const openQ   = qOf.filter(q=>q.status==='pending'||q.status==='blocked');
+  const pendQ   = qOf.filter(q=>q.status==='pending');
+  const doneQ   = qOf.filter(q=>q.status==='done').sort((a,b)=>(b.ranAt||'').localeCompare(a.ranAt||''));
+  const isAdminTS = tsRole==='admin';
+  const flash   = (m)=>{ setTsToast(m); setTimeout(()=>setTsToast(null),3200); };
+  const relTime = (iso)=>{ if(!iso) return '—'; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
+  const doRun   = ()=>{ const r=runPush(cfgKey,'Current User'); flash(r.done?`Pushed ${r.done} change${r.done!==1?'s':''} to ${connectorName}${r.created?` · ${r.created} new tag value${r.created!==1?'s':''} created`:''}${r.held?` · ${r.held} held`:''}`:'Nothing to push'); };
+  const doPull  = ()=>{ const r=pullTags(cfgKey); flash(`Pulled tags from ${connectorName}${r.kept?` · ${r.kept} pending EDG change${r.kept!==1?'s':''} kept`:''}`); };
+  const SQL = ({lines})=>(
+    <div style={{marginTop:6,display:'flex',flexDirection:'column',gap:2}}>
+      {lines.map((l,i)=><code key={i} style={{fontFamily:"'Geist Mono',monospace",fontSize:10.5,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:'2px 7px',whiteSpace:'pre-wrap',wordBreak:'break-all'}}>{l}</code>)}
+    </div>
+  );
+  const ChangeRow = ({q,last})=>{
+    const def = getTagDef(q.tagId) || {name:q.tagId, category:''};
+    const asset = ASSETS.find(a=>String(a.id)===String(q.assetId)) || {name:q.assetName};
+    const lines = q.statements || pushStatements(cfgKey, cfg, asset, def, q.op);
+    const tone = q.status==='blocked'?T.rose:q.status==='done'?T.green:T.amber;
+    return (
+      <div style={{padding:'10px 14px',borderBottom:last?'none':`1px solid ${T.border}`}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span style={{fontSize:10,fontWeight:700,padding:'1px 7px',borderRadius:4,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,textTransform:'uppercase',letterSpacing:'0.04em'}}>{q.op==='set'?'Attach':'Remove'}</span>
+          <span style={{fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.text,fontWeight:500}}>{q.assetName}</span>
+          <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub}}>{q.pushedAs||pushedAs(cfgKey,def)}</span>
+          <span style={{flex:1}}/>
+          <span style={{fontSize:10.5,color:T.textMuted}}>{q.status==='done'?`${q.ranBy||'—'} · ${relTime(q.ranAt)}`:`${q.by||'—'} · ${relTime(q.at)}`}</span>
+          <span style={{fontSize:10.5,fontWeight:600,color:tone}}>● {q.status==='blocked'?'Held':q.status==='done'?'Pushed':'Pending'}</span>
+          {q.status!=='done'&&<button onClick={()=>{discardChange(q.id);flash(`Discarded · ${def.name} on ${q.assetName} reverted in EDG`);}} style={{fontSize:11,color:T.textSub,background:'none',border:`1px solid ${T.border}`,borderRadius:5,padding:'2px 8px',cursor:'pointer'}}>Discard</button>}
+        </div>
+        {q.status==='blocked'&&<div style={{fontSize:11,color:T.rose,marginTop:5}}>{q.blockReason}</div>}
+        <SQL lines={lines}/>
+      </div>
+    );
+  };
+
   return (
     <div className="fadeIn" style={{display:'flex',flexDirection:'column',gap:20}}>
+      {tsToast&&<div style={{position:'sticky',top:0,zIndex:5,padding:'8px 12px',borderRadius:7,background:T.bgElevated,border:`1px solid ${T.green}55`,color:T.text,fontSize:12}}>{tsToast}</div>}
       {/* Summary cards */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10}}>
         {[
           {label:'Pull tags',   v:cfg.syncEnabled?'Enabled':'Disabled',   color:cfg.syncEnabled?T.green:T.textMuted},
-          {label:'Push tags',   v:cfg.reverseSyncEnabled?'Enabled':'Disabled', color:cfg.reverseSyncEnabled?T.green:T.textMuted},
+          {label:'Write-back',  v:!canWB?'Not supported':cfg.reverseSyncEnabled?'Allowed':'Off', color:canWB&&cfg.reverseSyncEnabled?T.green:T.textMuted},
+          {label:'Pending changes', v:canWB?openQ.length:'—', color:openQ.length>0?T.amber:T.textSub},
           {label:'Mapped',      v:mapped,   color:T.text},
-          {label:'Unmapped',    v:unmapped, color:unmapped>0?T.amber:T.textSub},
         ].map(s=>(
           <div key={s.label} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,padding:'10px 12px'}}>
             <div style={{fontSize:10,color:T.textMuted,marginBottom:4,textTransform:'uppercase',letterSpacing:'0.06em'}}>{s.label}</div>
@@ -37798,25 +37996,40 @@ const TagSyncTab = ({connectorId, connectorName}) => {
             <Toggle on={cfg.syncEnabled} onChange={()=>updateConnectorConfig(cfgKey,{syncEnabled:!cfg.syncEnabled})}/>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <span style={{fontSize:11,color:T.textMuted}}>Last sync: {cfg.lastSyncAt?'2h ago':'Never'} · {cfg.lastSyncNewTags} new tags · {cfg.lastSyncConflicts} conflicts</span>
-            <button style={{padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:'pointer'}}>Sync now</button>
+            <span style={{fontSize:11,color:T.textMuted}}>Last sync: {cfg.lastSyncAt?relTime(cfg.lastSyncAt):'Never'} · {cfg.lastSyncNewTags} new tags · {cfg.lastSyncConflicts} conflicts</span>
+            <button onClick={doPull} style={{padding:'3px 10px',borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11,cursor:'pointer'}}>Sync now</button>
           </div>
+          {canWB&&<div style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:8,marginTop:8,fontSize:11.5}}>
+            <span style={{color:T.textMuted}}>Pending EDG changes</span><span style={{color:T.textSub}}>Kept on pull until pushed or discarded</span>
+          </div>}
         </div>
 
-        {/* Push */}
+        {/* Write-back */}
         <div style={{padding:'12px 16px',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:canWB?10:0}}>
             <div>
-              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Push tags to {connectorName} (reverse sync)</div>
-              <div style={{fontSize:11.5,color:T.textMuted}}>Write EDG tag changes back to source system</div>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Allow write-back to {connectorName}</div>
+              <div style={{fontSize:11.5,color:T.textMuted}}>{canWB?'Runs only on Run now':'Not supported for this connector'}</div>
             </div>
-            <Toggle on={cfg.reverseSyncEnabled} onChange={()=>updateConnectorConfig(cfgKey,{reverseSyncEnabled:!cfg.reverseSyncEnabled})}/>
+            {canWB&&<Toggle on={cfg.reverseSyncEnabled} onChange={()=>isAdminTS&&updateConnectorConfig(cfgKey,{reverseSyncEnabled:!cfg.reverseSyncEnabled})}/>}
           </div>
-          <div style={{fontSize:11,color:T.amber,marginBottom:8}}>⚠ Requires write permissions on service account</div>
-          <label style={{display:'flex',alignItems:'center',gap:8,fontSize:12,color:T.textSub,cursor:'pointer'}}>
-            <Toggle on={cfg.reverseSyncApproval} onChange={()=>updateConnectorConfig(cfgKey,{reverseSyncApproval:!cfg.reverseSyncApproval})}/>
-            Require steward approval before each push
-          </label>
+          {canWB&&<div style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:'7px 8px',alignItems:'center',fontSize:11.5}}>
+            <span style={{color:T.textMuted}}>Written as</span>
+            <span style={{fontFamily:"'Geist Mono',monospace",color:T.textSub}}>{cfgKey==='databricks'?"classification = 'tag'  (e.g. sensitivity = 'PII')":"CLASSIFICATION = 'TAG'  (e.g. SENSITIVITY = 'PII')"}</span>
+            <span style={{color:T.textMuted}}>Classifications</span>
+            <span style={{color:T.textSub}}>Mutually exclusive only</span>
+            <span style={{color:T.textMuted}}>{cfgKey==='databricks'?'Tag location':'Tag schema'}</span>
+            {cfgKey==='databricks'
+              ? <span style={{color:T.textSub}}>Set on the object · no create step</span>
+              : <input value={cfg.tagSchema||''} disabled={!isAdminTS} onChange={e=>updateConnectorConfig(cfgKey,{tagSchema:e.target.value})} placeholder="DATABASE.SCHEMA"
+                  style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,padding:'4px 8px',borderRadius:5,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text,outline:'none',width:220}}/>}
+            <span style={{color:T.textMuted}}>Service account</span>
+            <span style={{color:T.textSub}}>{cfgKey==='databricks'?'APPLY TAG':'CREATE TAG · APPLY TAG'}</span>
+            <span style={{color:T.textMuted}}>Deleting a tag in EDG</span>
+            <span style={{color:T.textSub}}>Never drops it in {connectorName}</span>
+            <span style={{color:T.textMuted}}>Masked values</span>
+            <span style={{color:T.textSub}}>{Object.keys(cfg.maskingPolicies||{}).length?`Removal held · ${Object.keys(cfg.maskingPolicies).map(k=>k.replace('=',' = ')).join(', ')}`:'None'}</span>
+          </div>}
         </div>
 
         {/* Conflict rule */}
@@ -37830,6 +38043,33 @@ const TagSyncTab = ({connectorId, connectorName}) => {
         </div>
       </div>
 
+      {/* Pending changes — nothing reaches the source until Run now */}
+      {canWB&&<div>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+          <div style={{fontSize:13,fontWeight:600,color:T.text}}>Pending changes</div>
+          <span style={{fontSize:10.5,fontWeight:700,padding:'1px 8px',borderRadius:99,background:openQ.length?T.amberDim:T.bgElevated,color:openQ.length?T.amber:T.textMuted}}>{openQ.length}</span>
+          <span style={{flex:1}}/>
+          {cfg.lastPushAt&&<span style={{fontSize:11,color:T.textMuted}}>Last push {relTime(cfg.lastPushAt)} · {cfg.lastPushBy}</span>}
+          <button onClick={doRun} disabled={!wbOn||!pendQ.length||!isAdminTS}
+            title={!isAdminTS?'Connection Admin or Admin':!wbOn?'Write-back is off':!pendQ.length?'Nothing pending':`Push ${pendQ.length} change${pendQ.length!==1?'s':''}`}
+            style={{padding:'5px 14px',borderRadius:6,border:'none',fontSize:12,fontWeight:600,background:(wbOn&&pendQ.length&&isAdminTS)?T.accent:T.border,color:(wbOn&&pendQ.length&&isAdminTS)?'#fff':T.textMuted,cursor:(wbOn&&pendQ.length&&isAdminTS)?'pointer':'not-allowed'}}>Run now</button>
+        </div>
+        {openQ.length===0
+          ? <div style={{padding:'18px',textAlign:'center',border:`1px solid ${T.border}`,borderRadius:8,fontSize:12,color:T.textMuted}}>No pending changes</div>
+          : <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden',background:T.bgSurface}}>
+              {openQ.map((q,i)=><ChangeRow key={q.id} q={q} last={i===openQ.length-1}/>)}
+            </div>}
+        {doneQ.length>0&&<div style={{marginTop:10}}>
+          <button onClick={()=>setShowDone(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,background:'none',border:'none',color:T.textSub,fontSize:12,cursor:'pointer',padding:0,marginBottom:8}}>
+            <span style={{transform:showDone?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'inline-block'}}>▼</span>
+            Pushed ({doneQ.length})
+          </button>
+          {showDone&&<div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden',background:T.bgSurface}}>
+            {doneQ.slice(0,10).map((q,i,arr)=><ChangeRow key={q.id} q={q} last={i===arr.length-1}/>)}
+          </div>}
+        </div>}
+      </div>}
+
       {/* Name mapping table */}
       <div>
         <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:2}}>Tag name mappings</div>
@@ -37837,7 +38077,7 @@ const TagSyncTab = ({connectorId, connectorName}) => {
         <table style={{width:'100%',borderCollapse:'collapse',border:`1px solid ${T.border}`,borderRadius:8,overflow:'hidden'}}>
           <thead>
             <tr style={{background:T.bgElevated}}>
-              {['Source tag','EDG tag','Reverse sync alias','Status','Actions'].map(h=>(
+              {['Source tag','EDG tag','Written back as','Status','Actions'].map(h=>(
                 <th key={h} style={{padding:'7px 10px',textAlign:'left',fontSize:10,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.06em'}}>{h}</th>
               ))}
             </tr>
@@ -37872,17 +38112,15 @@ const TagSyncTab = ({connectorId, connectorName}) => {
                     ) : <span style={{fontSize:11.5,color:T.rose}}>Needs review</span>}
                   </td>
                   <td style={{padding:'9px 10px'}}>
-                    {editAlias===m.id ? (
-                      <input value={aliasVal} onChange={e=>setAliasVal(e.target.value)} onBlur={()=>{upsertNameMapping(cfgKey,{...m,reverseSyncAlias:aliasVal});setEditAlias(null);}} onKeyDown={e=>{if(e.key==='Enter'){upsertNameMapping(cfgKey,{...m,reverseSyncAlias:aliasVal});setEditAlias(null);}}} autoFocus style={{fontFamily:"'Geist Mono',monospace",fontSize:11,padding:'3px 6px',borderRadius:4,border:`1px solid ${T.accent}`,background:T.bgElevated,color:T.text,outline:'none',width:140}}/>
-                    ) : (
-                      <span onClick={()=>{setEditAlias(m.id);setAliasVal(m.reverseSyncAlias);}} style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub,cursor:'pointer'}}>{m.reverseSyncAlias}</span>
-                    )}
+                    {!canWB||!tagDef ? <span style={{fontSize:11.5,color:T.textMuted}}>—</span>
+                      : isExclusive(tagDef.category)
+                        ? <span style={{fontFamily:"'Geist Mono',monospace",fontSize:11.5,color:T.textSub}}>{pushedAs(cfgKey,tagDef)}</span>
+                        : <span title={`${tagDef.category} is not mutually exclusive`} style={{fontSize:11.5,color:T.textMuted}}>EDG only</span>}
                   </td>
                   <td style={{padding:'9px 10px'}}>
                     <span style={{fontSize:11,color:{mapped:T.green,unmapped:T.amber,ambiguous:T.rose}[m.status]||T.textMuted}}>● {m.status}</span>
                   </td>
                   <td style={{padding:'9px 10px'}}>
-                    <button onClick={()=>{setEditAlias(m.id);setAliasVal(m.reverseSyncAlias);}} style={{fontSize:11.5,color:T.textSub,background:'none',border:'none',cursor:'pointer',marginRight:8}}>Edit</button>
                     <button style={{fontSize:11.5,color:T.textMuted,background:'none',border:'none',cursor:'pointer'}}>Remove</button>
                   </td>
                 </tr>
@@ -52222,7 +52460,7 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
         </div>
         {/* tabs */}
         <div style={{display:"flex",gap:0}}>
-          {["overview","configuration","assets",...(connContributesAttrs(svc.name)?["attribute mapping"]:[])].map(t=>(
+          {["overview","configuration","assets",...(INITIAL_CONNECTOR_CONFIGS[connAttrKey(svc.name)]?["tag sync"]:[]),...(connContributesAttrs(svc.name)?["attribute mapping"]:[])].map(t=>(
             <button key={t} onClick={()=>setCfgTab(t)} style={{padding:"7px 14px",background:"transparent",border:"none",marginBottom:-1,
               borderBottom:`2px solid ${cfgTab===t?T.accent:"transparent"}`,
               color:cfgTab===t?T.text:T.textSub,fontSize:12,fontWeight:cfgTab===t?600:400,cursor:"pointer",
@@ -52232,6 +52470,11 @@ const ServicePanel = ({svc, tick, onToast, setSvcSel}) => {
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:18}}>
+
+        {cfgTab==="tag sync"&&(
+          <TagSyncTab connectorId={connAttrKey(svc.name)}
+            connectorName={CONN_DISPLAY_NAME[connAttrKey(svc.name)]||svc.displayName||svc.name}/>
+        )}
 
         {cfgTab==="attribute mapping"&&(
           <AttributeMappingTab connectorId={connAttrKey(svc.name)}
@@ -63272,12 +63515,15 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
   // ── source provenance: an object shows ONLY its own connection's synced tag (same-name mapping) ──
   const origin   = assignment?.origin || 'manual';
   const isProp   = !!(origin.startsWith && origin.startsWith('propagated'));
-  const isSynced = origin === 'synced';
-  const nice     = s => s ? s.charAt(0).toUpperCase()+s.slice(1) : s;
+  const nice     = s => s ? (CONN_DISPLAY_NAME[s]||s.charAt(0).toUpperCase()+s.slice(1)) : s;
   const srcConn  = sourceScope || null;              // the object's own connection
+  // In the source = came in from it, or EDG wrote it there on a Run now.
+  const isSynced = origin === 'synced' || (!!srcConn && assignment?.inSource===srcConn);
+  const pushedHere = origin !== 'synced' && isSynced;
+  const pendingPush = !!(tagCtx && assignment && srcConn && (tagCtx.pushQueue||[]).some(q=>q.connId===srcConn && String(q.assetId)===String(assignment.assetId) && q.tagId===assignment.tagId && q.op==='set' && q.status==='pending'));
   const showSrcLogo = isSynced && !!srcConn;
   const logoSz   = size==='sm'?11:13;
-  const showPopover = hovered && (showSrcLogo || isProp || isConflict);
+  const showPopover = hovered && (showSrcLogo || isProp || isConflict || pendingPush);
   const propKind  = origin.includes('both') ? 'hierarchy & lineage' : origin.includes('lineage') ? 'lineage' : origin.includes('hierarchy') ? 'hierarchy' : 'propagation';
 
   return (
@@ -63287,11 +63533,13 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
       onClick={onClick}
       style={{ position:'relative', display:'inline-flex', alignItems:'center', gap, padding:pad, borderRadius:99, background:bg, color:baseColor, border, fontSize:fs, fontWeight:500, cursor:onClick?'pointer':'default', opacity, userSelect:'none', transition:'all 0.15s', whiteSpace:'nowrap' }}
     >
-      <GovIcon kind="tag" size={size==='lg'?13:11}/>
+      {showSrcLogo
+        ? <span title={`In ${nice(srcConn)}`} style={{display:'inline-flex'}}><ServiceIcon service={srcConn} size={logoSz}/></span>
+        : <GovIcon kind="tag" size={size==='lg'?13:11}/>}
       {statusDot}
       {tagDef.name}
       {tagDef.propagationLocked && <span style={{fontSize:9,opacity:.7}}>🔒</span>}
-      {showSrcLogo && <span title={`Synced from ${nice(srcConn)}`} style={{display:'inline-flex',marginLeft:2}}><ServiceIcon service={srcConn} size={logoSz}/></span>}
+      {pendingPush && <span title={`Pending push to ${nice(srcConn)}`} style={{fontSize:10,color:T.amber,fontWeight:700,marginLeft:1}}>↑</span>}
       {!isSynced && isProp && <span style={{fontSize:10,opacity:.65,marginLeft:1}}>⤳</span>}
       {onRemove && hovered && (
         <span onClick={e=>{e.stopPropagation();onRemove();}} style={{fontSize:12,cursor:'pointer',opacity:0.6,lineHeight:1,marginLeft:1}} onMouseEnter={e=>e.currentTarget.style.opacity='1'} onMouseLeave={e=>e.currentTarget.style.opacity='.6'}>×</span>
@@ -63307,8 +63555,9 @@ function TagPill({ tagDef, assignment, size='md', onRemove=null, onClick=null, s
             {isConflict&&<span style={{display:'block',fontSize:11,color:T.rose,marginBottom:showSrcLogo?6:0}}>⚠ Source conflict — the source and the steward decision disagree. Resolve in the asset's Tags view.</span>}
             {showSrcLogo&&<span style={{display:'flex',alignItems:'center',gap:7}}>
               <span style={{display:'flex',flexShrink:0}}><ServiceIcon service={srcConn} size={15}/></span>
-              <span style={{fontSize:11.5,color:T.textSub}}>Synced from <b style={{color:T.text}}>{nice(srcConn)}</b></span>
+              <span style={{fontSize:11.5,color:T.textSub}}>{pushedHere?'Written to':'Synced from'} <b style={{color:T.text}}>{nice(srcConn)}</b></span>
             </span>}
+            {pendingPush&&<span style={{display:'block',fontSize:11,color:T.amber}}>↑ Pending push to {nice(srcConn)} · runs on Run now</span>}
             {!isSynced&&isProp&&<span style={{display:'block',fontSize:11,color:T.textSub}}>↳ Inherited via {propKind} propagation</span>}
           </span>
         </span>
@@ -63385,7 +63634,7 @@ const PersonPicker = ({value, onChange, placeholder='Unassigned', disabled=false
 };
 
 const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
-  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig, logReverseSync, pushSummaryForTag } = useTagCtx();
+  const { tagDefs, assignments, connectorConfigs, inbox, createTagDef, updateTagDef, deleteTagDef, upsertNameMapping, setTagReverseSync, updateConnectorConfig, logReverseSync, pushSummaryForTag, isExclusive, canWriteBack, pushQueue, classSync, setClassMutex } = useTagCtx();
   const colTagsLive = useColTags();   // column-level tags (e.g. accepted from AI Classification) count as linked assets too
   const relTime = (iso)=>{ if(!iso) return null; const d=(Date.now()-new Date(iso).getTime())/1000; if(d<3600) return Math.max(1,Math.round(d/60))+'m ago'; if(d<86400) return Math.round(d/3600)+'h ago'; return Math.round(d/86400)+'d ago'; };
   const navigate = useNav();
@@ -63491,6 +63740,8 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
     const name = newCatDraft.name.trim();
     if(!name) return;
     const meta = {description:newCatDraft.description||'', color:newCatDraft.color, owners:newCatDraft.owners||[], stewards:newCatDraft.stewards||[]};
+    if(editingCat && editingCat!==name) setClassMutex(editingCat,false);
+    setClassMutex(name, !!newCatDraft.mutuallyExclusive);
     if(editingCat && editingCat!==name){
       tagDefs.filter(td=>td.category===editingCat).forEach(td=>updateTagDef(td.id,{category:name}));
       setCustomCategories(p=>[...new Set([...p.filter(c=>c!==editingCat),name])]);
@@ -63527,7 +63778,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
   };
   const getCatStyle = () => ({color:T.textSub, bg:T.bgElevated});
 
-  const openEditCat = (cat) => { const m=catMeta[cat]||{}; setEditingCat(cat); setNewCatDraft({name:cat,description:m.description||'',color:m.color||'#6366f1',owners:m.owners||[],stewards:m.stewards||[]}); setNewPanelOpen(false); setNewCatPanelOpen(true); };
+  const openEditCat = (cat) => { const m=catMeta[cat]||{}; setEditingCat(cat); setNewCatDraft({name:cat,description:m.description||'',color:m.color||'#6366f1',owners:m.owners||[],stewards:m.stewards||[],mutuallyExclusive:!!(classSync[cat]&&classSync[cat].mutuallyExclusive)}); setNewPanelOpen(false); setNewCatPanelOpen(true); };
   const openAddTagIn = (cat) => { setNewDraft(d=>({...d,category:cat})); setNewCatInput(''); setNewCatPanelOpen(false); setSelTagId(null); setNewPanelOpen(true); };
 
   const PROP_LABELS = { both:'Both directions', lineage:'Lineage only', hierarchy:'Hierarchy only', none:'No propagation' };
@@ -63845,6 +64096,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                         <span><strong style={{color:T.text}}>{total}</strong> tag{total!==1?'s':''}</span>
                         <span style={{display:'flex',alignItems:'center',gap:6}}>Owner(s) <PeopleCircles people={catOwners}/></span>
                         {(meta.stewards||[]).length>0&&<span style={{display:'flex',alignItems:'center',gap:6}}>Steward(s) <PeopleCircles people={meta.stewards} tone={T.amber}/></span>}
+                        <span>{isExclusive(selCatId)?'Mutually exclusive':'Multiple tags per object'}</span>
                       </div>
                     </div>
                   </div>
@@ -64058,9 +64310,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                       <div>
                         <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:10}}>Source tags</div>
                         {(()=>{
-                          const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
-                          const tagDefault = selTag.reverseSyncEnabled ?? rsDefault;
-                          const onCount = tagSyncRows.filter(({connId,m})=>(m.reverseSync ?? tagDefault) && connectorConfigs[connId]?.reverseSyncEnabled).length;
+                          const onCount = isExclusive(selTag.category) ? tagSyncRows.filter(({connId})=>canWriteBack(connId)).length : 0;
                           return (
                             <div onClick={()=>setDetailTab('sources')} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,cursor:'pointer',transition:'border-color .15s'}}
                               onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent+'66'} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
@@ -64266,12 +64516,11 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                   {detailTab==='kg'&&<KgObjectTab ids={[`tag:${selTag.name}`, `tag:${selTag.displayName||selTag.name}`]} name={selTag.displayName||selTag.name}/>}
                   {detailTab==='sources'&&(()=>{
                     const nice = id => id.charAt(0).toUpperCase()+id.slice(1);
-                    const rsDefault = selTag.category==='sensitivity'||selTag.category==='regulatory';
-                    const tagDefault = selTag.reverseSyncEnabled ?? rsDefault;
-                    const canPushOf = connId => !!connectorConfigs[connId]?.reverseSyncEnabled;
-                    const isOn = (connId,m) => (m.reverseSync ?? tagDefault) && canPushOf(connId);
-                    const onCount = tagSyncRows.filter(({connId,m})=>isOn(connId,m)).length;
-                    const toggleRS = (connId,m) => { if(!canPushOf(connId)) return; const cur=(m.reverseSync ?? tagDefault); upsertNameMapping(connId,{...m,reverseSync:!cur}); if(!cur){ const objs=affectedAssets.map(a=>a.name); logReverseSync(selTag.id, objs.length?objs:[selTag.name], 'manual', connId); onToast(`Reverse sync on — pushed ${affectedAssets.length||0} object(s) to ${nice(connId)} as ${m.reverseSyncAlias||m.sourceTagName}`,'success'); } else { onToast(`Reverse sync off — ${m.sourceTagName} (${nice(connId)})`,'success'); } };
+                    const excl = isExclusive(selTag.category);
+                    const canPushOf = connId => canWriteBack(connId);
+                    const isOn = (connId) => excl && canPushOf(connId);
+                    const onCount = tagSyncRows.filter(({connId})=>isOn(connId)).length;
+                    const pendingOf = connId => pushQueue.filter(q=>q.connId===connId && q.tagId===selTag.id && (q.status==='pending'||q.status==='blocked')).length;
                     return (
                     <div style={{maxWidth:680}}>
                       <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
@@ -64289,7 +64538,7 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                             <div style={{fontSize:12,color:T.textMuted}}>Map same-named source tags to this tag from a connector's Tag sync tab.</div>
                           </div>
                         : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:'hidden',background:T.bgSurface}}>
-                            {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId,m); const ps=pushSummaryForTag(selTag.id,connId); return (
+                            {tagSyncRows.map(({connId,m},i)=>{ const canPush=canPushOf(connId); const on=isOn(connId); const ps=pushSummaryForTag(selTag.id,connId); const pend=pendingOf(connId); return (
                               <div key={m.id} style={{display:'flex',alignItems:'center',gap:11,padding:'11px 14px',borderBottom:i<tagSyncRows.length-1?`1px solid ${T.border}`:'none'}}>
                                 <span title={nice(connId)} style={{flexShrink:0,display:'flex'}}><ServiceIcon service={connId} size={20}/></span>
                                 {/* Name the source. On PII this list is six rows, five of
@@ -64303,19 +64552,16 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                                 {m.classifier&&(m.onColumns||[]).length>0&&(
                                   <span title={(m.onColumns||[]).join(', ')} style={{fontSize:10,fontWeight:700,padding:'1px 6px',borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,flexShrink:0}}>{m.onColumns.length} column{m.onColumns.length!==1?'s':''}</span>
                                 )}
-                                {on&&<span style={{fontSize:10.5,color:T.accent}}>↗ writes back</span>}
+                                {on&&<span style={{fontSize:10.5,color:T.accent,fontFamily:"'Geist Mono',monospace"}}>↗ {pushedAs(connId,selTag)}</span>}
+                                {canPush&&!excl&&<span title={`${selTag.category} is not mutually exclusive`} style={{fontSize:10.5,color:T.textMuted}}>EDG only</span>}
                                 <span style={{flex:1}}/>
+                                {on&&pend>0&&<span style={{fontSize:10.5,fontWeight:600,color:T.amber}}>{pend} pending</span>}
                                 {on&&ps.lastAt&&<span style={{fontSize:10,color:T.textMuted}} title={`${ps.objects} object write(s) logged`}>pushed {relTime(ps.lastAt)}</span>}
                                 {/* A discovery tool is not "push disabled" pending a setting:
                                     EDG never writes a classification back into it. */}
                                 {!canPush&&(connectorConfigs[connId]?.neverWritesBack
                                   ? <span title="EDG never writes a classification back into a discovery tool - the classifier is theirs" style={{fontSize:10.5,color:T.textMuted}}>read-only source</span>
-                                  : <span title="Enable push on this connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>push disabled</span>)}
-                                {!connectorConfigs[connId]?.neverWritesBack&&
-                                <div onClick={()=>toggleRS(connId,m)} title={canPush?'Reverse sync this source tag':'Connection push is disabled'}
-                                  style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,position:'relative',cursor:canPush?'pointer':'not-allowed',opacity:canPush?1:0.45,transition:'background .2s',flexShrink:0}}>
-                                  <div style={{position:'absolute',top:3,left:on?18:3,width:13,height:13,borderRadius:'50%',background:'#fff',transition:'left .2s'}}/>
-                                </div>}
+                                  : <span title="Write-back is set on the connection's Tag sync tab" style={{fontSize:10.5,color:T.textMuted}}>write-back off</span>)}
                               </div>
                             );})}
                           </div>
@@ -64470,6 +64716,13 @@ const TagManagementView = ({onToast, deepLinkTagId, tabBar}) => {
                     <TagPeoplePicker label="Steward(s)" addLabel="Add steward" people={newCatDraft.stewards||[]} setPeople={v=>setNewCatDraft(d=>({...d,stewards:v}))}/>
                   </div>
                 </div>
+                <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
+                  <input type="checkbox" checked={!!newCatDraft.mutuallyExclusive} onChange={e=>setNewCatDraft(d=>({...d,mutuallyExclusive:e.target.checked}))} style={{accentColor:T.accent,width:15,height:15}}/>
+                  <span>
+                    <span style={{display:'block',fontSize:12,fontWeight:600,color:T.text}}>Mutually exclusive</span>
+                    <span style={{display:'block',fontSize:11,color:T.textMuted}}>One tag per object · required for write-back</span>
+                  </span>
+                </label>
                               </div>
             </div>
             <div style={{padding:'14px 20px',borderTop:`1px solid ${T.border}`,display:'flex',gap:8,justifyContent:'flex-end',background:T.bgSurface,flexShrink:0}}>
