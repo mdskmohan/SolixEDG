@@ -2,47 +2,65 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as G from "../src/glossary/graph.js";
 
-const REL_TYPES = { is_a: { l: "is a kind of" }, part_of: { l: "is part of" }, placed_by: { l: "is placed by" }, related_to: { l: "is related to" } };
 const glossaries = [{ id: "g1", name: "Commerce Glossary", icon: "🛒", desc: "Commerce" }, { id: "g2", name: "Finance Glossary", icon: "💰" }];
-const terms = [
-  { id: "p", term: "Party", glossary: "g1", termType: "Concept", status: "Approved" },
-  { id: "c", term: "Customer", glossary: "g1", termType: "Concept", broader: "p", synonyms: ["Client"], status: "Approved", linkedAssets: [{ name: "customers", type: "Table" }] },
-  { id: "o", term: "Order", glossary: "g1", termType: "Concept", status: "Approved" },
-  { id: "x", term: "Lonely", glossary: "g1", status: "Draft" },
-  { id: "r", term: "Revenue", glossary: "g2", termType: "Metric", relatedTerms: ["o"], status: "Deprecated" },
+const terms = () => [
+  { id: "p", term: "Party", glossary: "g1", status: "Approved", relations: [] },
+  { id: "c", term: "Customer", glossary: "g1", broader: "p", synonyms: ["Client"], status: "Approved", linkedAssets: [{ name: "customers", type: "Table" }],
+    relations: [{ id: "r1", type: "sameAs", to: "cl", note: "", status: "approved" }] },
+  { id: "cl", term: "Client", glossary: "g2", status: "Approved", relations: [{ id: "r2", type: "sameAs", to: "c", status: "approved" }] },
+  { id: "x", term: "Lonely", glossary: "g1", status: "Draft", relations: [] },
+  { id: "gm", term: "Gross Margin", glossary: "g2", termType: "Metric", status: "Approved", relations: [{ id: "r3", type: "calculatedFrom", to: "rev", status: "approved" }] },
+  { id: "rev", term: "Revenue", glossary: "g2", termType: "Metric", status: "Deprecated", relations: [{ id: "r4", type: "replacedBy", to: "gm", status: "proposed" }] },
 ];
-const crels = [{ id: "cr1", from: "o", to: "c", type: "placed_by", status: "approved" }, { id: "cr2", from: "c", to: "p", type: "is_a", status: "approved" },
-  { id: "cr3", from: "o", to: "p", type: "part_of", status: "rejected" }];
-const input = { glossaries, terms, crels, REL_TYPES };
 
-test("overview: all glossaries, typed edges, parent stated twice draws once, rejected ignored", () => {
-  const g = G.glossaryGraph(input);
-  assert.equal(g.stats.terms, 5);
-  assert.deepEqual(g.edges.map((e) => e.type).sort(), ["broader", "placed_by", "related_to"]);
+test("relationsOf: both directions in words, symmetric shown once, child terms", () => {
+  const ts = terms();
+  const c = G.relationsOf(ts[1], ts);
+  assert.deepEqual(c.map((r) => r.label).sort(), ["Parent term", "Same meaning as"]);
+  const p = G.relationsOf(ts[0], ts);
+  assert.deepEqual(p.map((r) => [r.label, r.other.term]), [["Child term", "Customer"]]);
+  const rev = G.relationsOf(ts[5], ts);
+  assert.ok(rev.some((r) => r.label === "Used to calculate" && r.other.term === "Gross Margin"));
+  assert.ok(rev.some((r) => r.label === "Replaced by" && r.status === "proposed"));
+});
+
+test("checkRelation: self, duplicate, metric-only, parent cycle", () => {
+  const ts = terms();
+  assert.equal(G.checkRelation(ts[0], ts, { type: "related", to: "p" }), "A term cannot relate to itself");
+  assert.equal(G.checkRelation(ts[2], ts, { type: "sameAs", to: "c" }), "This relationship already exists");
+  assert.match(G.checkRelation(ts[0], ts, { type: "calculatedFrom", to: "c" }), /metric/);
+  assert.equal(G.checkRelation(ts[0], ts, { type: "broader", to: "c" }), "That would make the term its own parent");
+  assert.equal(G.checkRelation(ts[3], ts, { type: "related", to: "c" }), null);
+});
+
+test("graph: glossary boxes, typed edges, filters, isolated, with data, search", () => {
+  const ts = terms();
+  const g = G.glossaryGraph({ glossaries, terms: ts });
+  assert.deepEqual(g.edges.map((e) => e.type).sort(), ["broader", "calculatedFrom", "replacedBy", "sameAs"]);
   assert.equal(g.stats.isolated, 1);
   assert.equal(g.groups.length, 2);
+  assert.deepEqual(G.glossaryGraph({ glossaries, terms: ts }, { mode: "hierarchy", isolated: false }).edges.map((e) => e.type), ["broader"]);
+  assert.deepEqual(G.glossaryGraph({ glossaries, terms: ts }, { types: ["sameAs"] }).edges.map((e) => e.type), ["sameAs"]);
+  assert.ok(G.glossaryGraph({ glossaries, terms: ts }, { withData: true }).nodes.some((n) => n.id === "asset:customers"));
+  assert.equal(G.glossaryGraph({ glossaries, terms: ts }, { q: "client" }).stats.matches, 2);
 });
 
-test("filters: glossary, relationship type, isolated, hierarchy, with data, search", () => {
-  assert.equal(G.glossaryGraph(input, { glossaryIds: ["g1"] }).stats.terms, 4);
-  assert.deepEqual(G.glossaryGraph(input, { types: ["placed_by"] }).edges.map((e) => e.type), ["placed_by"]);
-  assert.ok(!G.glossaryGraph(input, { isolated: false }).nodes.some((n) => n.id === "x"));
-  assert.deepEqual(G.glossaryGraph(input, { mode: "hierarchy", isolated: false }).edges.map((e) => e.type), ["broader"]);
-  const d = G.glossaryGraph(input, { withData: true });
-  assert.ok(d.nodes.some((n) => n.id === "asset:customers") && d.edges.some((e) => e.type === "describes"));
-  assert.equal(G.glossaryGraph(input, { q: "client" }).stats.matches, 1);
-  assert.ok(G.relationTypes(crels, REL_TYPES).some((t) => t.k === "placed_by"));
+test("legacy data: related terms and vocabulary links become relationships; business links do not", () => {
+  const crels = [{ id: "k1", from: "a", to: "b", type: "placed_by", status: "approved" }, { id: "k2", from: "a", to: "c", type: "calculated_from", status: "approved" },
+    { id: "k3", from: "a", to: "d", type: "related_to", status: "proposed" }];
+  const rs = G.legacyRelations({ id: "a", relatedTerms: ["e"] }, crels);
+  assert.deepEqual(rs.map((r) => [r.type, r.to, r.status]), [["related", "e", "approved"], ["calculatedFrom", "c", "approved"], ["related", "d", "proposed"]]);
 });
 
-test("SKOS export: scheme, concepts, labels, broader, related, typed and deprecated", () => {
-  const ttl = G.exportSkos(glossaries[0], terms, crels, REL_TYPES, "turtle");
+test("SKOS: scheme, concepts, broader, exactMatch across glossaries, approved only, deprecated", () => {
+  const ts = terms();
+  const ttl = G.exportSkos(glossaries[0], ts, glossaries, "turtle");
   assert.match(ttl, /a skos:ConceptScheme/);
   assert.match(ttl, /gl:Customer a skos:Concept/);
-  assert.match(ttl, /skos:altLabel "Client"/);
   assert.match(ttl, /skos:broader gl:Party/);
-  assert.match(ttl, /edg:placed_by gl:Customer/);
-  assert.ok(!/part_of/.test(ttl), "rejected relationships are not exported");
-  const fin = G.exportSkos(glossaries[1], terms, crels, REL_TYPES, "turtle");
+  assert.match(ttl, /skos:exactMatch <https:\/\/glossary.jnj.com\/financeGlossary#Client>/);
+  const fin = G.exportSkos(glossaries[1], ts, glossaries, "turtle");
   assert.match(fin, /owl:deprecated "true"/);
-  assert.match(G.exportSkos(glossaries[0], terms, crels, REL_TYPES), /^<\?xml/);
+  assert.ok(!/isReplacedBy/.test(fin), "proposed relationships are not exported");
+  assert.match(G.exportSkos(glossaries[0], ts, glossaries), /^<\?xml/);
 });

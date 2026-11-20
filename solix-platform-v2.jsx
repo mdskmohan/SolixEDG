@@ -2827,7 +2827,6 @@ const GLOSSARY_TERMS = [
 // in a Semantic Model; the Glossary calls the business-facing number a Metric.
 const GLOSSARY_TERM_TYPES = {
   Term:      {l:"Term",      c:"#0284c7", icon:"A", d:"A word with an agreed definition."},
-  Concept:   {l:"Concept",   c:"#7c3aed", icon:"◆", d:"A business thing — Customer, Order. Carries synonyms, taxonomy and relationships."},
   Metric:    {l:"Metric",    c:"#16a34a", icon:"∑", d:"A number you can compute. Implemented by a Semantic Model."},
   Dimension: {l:"Dimension", c:"#d97706", icon:"⊞", d:"A way to slice a number."},
 };
@@ -2915,7 +2914,10 @@ const STATUS_META = CERT_META;
 // One source the Glossary view and the Inbox share, so approving a submitted term
 // from the inbox publishes it (status → Approved) in the Glossary section.
 const _gtSubs = new Set();
-let _gtState = GLOSSARY_TERMS.map(t => ({...t}));
+// The business things the first ontology was seeded from. They are ordinary terms
+// now (structure lives in the ontology); their ids are kept for the seeds.
+const GT_CONCEPT_IDS = new Set(GLOSSARY_TERMS.filter(t => t.termType === "Concept").map(t => t.id));
+let _gtState = GLOSSARY_TERMS.map(t => ({...t, termType: t.termType === "Concept" ? "Term" : t.termType}));
 const gtSet = (updater) => {
   _gtState = typeof updater === "function" ? updater(_gtState) : updater;
   _gtSubs.forEach(fn => fn());
@@ -2992,7 +2994,7 @@ const GlGroupNode = ({data}) => (
     <div style={{padding:"6px 10px",fontSize:11,fontWeight:700,color:"#334155"}}>{data.icon} {data.name} <span style={{color:"#94a3b8",fontWeight:500}}>· {data.n}</span></div>
   </div>);
 const GL_NODE_TYPES = {glTerm: GlTermNode, glGroup: GlGroupNode};
-const GL_EDGE_C = {broader:"#7c3aed", is_a:"#7c3aed", part_of:"#0891b2", related_to:"#94a3b8", describes:"#cbd5e1"};
+const GL_EDGE_C = {broader:"#7c3aed", related:"#94a3b8", sameAs:"#0891b2", closeMatch:"#0891b2", calculatedFrom:"#16a34a", replacedBy:"#d97706", describes:"#cbd5e1"};
 
 const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
   useOnt();
@@ -3004,10 +3006,9 @@ const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(null);
   const [rf, setRf] = useState(null);
-  const crels = _slState.crels || [];
-  const typeItems = GLG.relationTypes(crels, CTX.REL_TYPES);
+  const typeItems = GLG.relationTypes(terms);
   const gScope = mode==="glossary" ? (gIds || [initialGlossary].filter(Boolean)) : gIds;
-  const g = GLG.glossaryGraph({glossaries, terms, crels, REL_TYPES:CTX.REL_TYPES}, {mode, glossaryIds:gScope, types, isolated, withData:data==="data", q});
+  const g = GLG.glossaryGraph({glossaries, terms}, {mode, glossaryIds:gScope, types, isolated, withData:data==="data", q});
   const colours = ["#0ea5e9","#7c3aed","#16a34a","#f59e0b","#e11d48","#0891b2","#84cc16","#ec4899"];
   const layout = useMemo(()=>{
     const nodes = [];
@@ -3041,10 +3042,10 @@ const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
   const edges = useMemo(()=>g.edges.map(e=>{ const dim = sel && e.from!==sel && e.to!==sel; const c = GL_EDGE_C[e.type] || "#6366f1";
     return {id:e.id, source:e.from, target:e.to, type:"default", label:e.type==="describes"?undefined:e.label,
       labelStyle:{fontSize:9, fill:dim?"#cbd5e1":"#475569", fontWeight:600}, labelBgStyle:{fill:"#f8fafc"}, labelBgPadding:[3,2],
-      style:{stroke:dim?"#e2e8f0":c, strokeWidth:1.3, strokeDasharray:e.type==="related_to"||e.type==="describes"?"4 4":undefined},
+      style:{stroke:dim?"#e2e8f0":c, strokeWidth:1.3, strokeDasharray:e.type==="related"||e.type==="describes"||e.status==="proposed"?"4 4":undefined},
       markerEnd:{type:MarkerType.ArrowClosed, color:dim?"#e2e8f0":c, width:11, height:11}}; }),[JSON.stringify(g.edges), sel]);
   const t = sel ? terms.find(x=>x.id===sel) : null;
-  const rels = t ? g.edges.filter(e=>(e.from===t.id||e.to===t.id) && e.type!=="describes") : [];
+  const rels = t ? GLG.relationsOf(t, terms) : [];
   const nameOf = (id) => (terms.find(x=>x.id===id)||{}).term || id;
   const Sec = ({h, children}) => <div style={{padding:"12px 16px",borderTop:"1px solid #e2e8f0"}}><div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:".08em",marginBottom:7}}>{h}</div>{children}</div>;
   return (
@@ -3069,8 +3070,9 @@ const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
           </ReactFlow>}
           <button onClick={()=>rf?.fitView({padding:0.15,duration:400})} style={{position:"absolute",top:10,right:10,padding:"4px 12px",borderRadius:6,background:"#fff",border:"1px solid #e2e8f0",color:"#64748b",fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>Fit</button>
           <div style={{position:"absolute",left:10,bottom:10,display:"flex",gap:10,flexWrap:"wrap",padding:"5px 9px",background:"#fff",border:"1px solid #e2e8f0",borderRadius:7,fontSize:10.5,color:"#64748b"}}>
-            <span><span style={{color:"#7c3aed",fontWeight:800}}>—</span> parent / kind of</span><span><span style={{color:"#94a3b8",fontWeight:800}}>- -</span> related</span>
-            <span><span style={{color:"#6366f1",fontWeight:800}}>—</span> other relationships</span><span><span style={{color:"#7c3aed",fontWeight:800}}>◆</span> defined by an ontology class</span>
+            <span><span style={{color:"#7c3aed",fontWeight:800}}>—</span> parent term</span><span><span style={{color:"#94a3b8",fontWeight:800}}>- -</span> related</span>
+            <span><span style={{color:"#0891b2",fontWeight:800}}>—</span> same / close meaning</span><span><span style={{color:"#16a34a",fontWeight:800}}>—</span> calculated from</span>
+            <span><span style={{color:"#d97706",fontWeight:800}}>—</span> replaced by</span><span><span style={{color:"#7c3aed",fontWeight:800}}>◆</span> defined by an ontology class</span>
           </div>
         </div>
         <div style={{width:300,flexShrink:0,borderLeft:"1px solid #e2e8f0",background:"#fff",overflowY:"auto"}}>
@@ -3083,10 +3085,10 @@ const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
               <div style={{marginTop:10}}><Btn small onClick={()=>onOpenTerm&&onOpenTerm(t.id)}>Open term</Btn></div>
             </div>
             <Sec h={`Relationships · ${rels.length}`}>
-              {rels.length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>None</div> : rels.map(e=>{ const out = e.from===t.id; const other = out?e.to:e.from;
-                const inv = e.type==="broader" ? "child term" : (CTX.REL_TYPES[e.type]||{}).inv || e.label;
-                return <div key={e.id} onClick={()=>setSel(other)} style={{display:"flex",gap:6,fontSize:11.5,padding:"3px 0",cursor:"pointer"}}>
-                  <span style={{color:"#64748b",width:110,flexShrink:0}}>{out?e.label:inv}</span><span style={{color:"#0f172a",fontWeight:600}}>{nameOf(other)}</span></div>; })}
+              {rels.length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>None</div> : rels.map(r=>(
+                <div key={r.key} onClick={()=>setSel(r.other.id)} style={{display:"flex",gap:6,fontSize:11.5,padding:"3px 0",cursor:"pointer"}}>
+                  <span style={{color:"#64748b",width:120,flexShrink:0}}>{r.label}</span><span style={{color:"#0f172a",fontWeight:600}}>{r.other.term}</span>
+                  {r.status==="proposed" && <span style={{color:"#d97706",fontSize:10}}>pending</span>}</div>))}
             </Sec>
             <Sec h="Ontology class">
               {glClassesOf(t.id).length===0 ? <div style={{fontSize:11.5,color:"#94a3b8"}}>Not defined by an ontology class</div> :
@@ -3103,9 +3105,95 @@ const GlossaryExplorer = ({glossaries, terms, onOpenTerm, initialGlossary}) => {
 };
 
 const glDownloadSkos = (glossary, fmt) => {
-  const text = GLG.exportSkos(glossary, _gtState, _slState.crels||[], CTX.REL_TYPES, fmt);
+  const text = GLG.exportSkos(glossary, glRelTerms(_gtState), GLOSSARY_DATA, fmt);
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text],{type:fmt==="turtle"?"text/turtle":"application/rdf+xml"}));
   a.download = `${(glossary.name||"glossary").toLowerCase().replace(/[^a-z0-9]+/g,"-")}-skos.${fmt==="turtle"?"ttl":"rdf"}`; a.click();
+};
+
+// ── Term page tabs: Relationships · Semantic models · Ontologies ──
+// Terms carry vocabulary relationships only (src/glossary/graph.js GL_REL);
+// older related terms and vocabulary links are read in once.
+const glRelTerms = (terms) => terms.map(t => t.relations ? t : {...t, relations: GLG.legacyRelations(t, _slState.crels||[])});
+const GL_REL_C = {broader:"#7c3aed", related:"#94a3b8", sameAs:"#0891b2", closeMatch:"#0891b2", calculatedFrom:"#16a34a", replacedBy:"#d97706"};
+const GlTermRelationsTab = ({term, terms, glossaries, canEdit, me, onOpenTerm, onToast, patchTerm}) => {
+  const all = glRelTerms(terms);
+  const t = all.find(x=>x.id===term.id) || term;
+  const rows = GLG.relationsOf(t, all);
+  const [adding, setAdding] = useState(false);
+  const [f, setF] = useState({type:"related", to:"", note:""});
+  const err = adding ? GLG.checkRelation(t, all, f) : null;
+  const gName = (id) => (glossaries.find(g=>g.id===id)||{}).name || "—";
+  const types = Object.entries(GLG.GL_REL).filter(([,v])=>!v.fromTypes || v.fromTypes.includes(t.termType||"Term"));
+  // Write the relationships of a term explicitly the first time one changes.
+  const relsOf = (x) => (all.find(y=>y.id===x.id)||x).relations || [];
+  const save = () => {
+    if(err){ onToast&&onToast(err,"error"); return; }
+    if(f.type==="broader"){
+      if(!canEdit){ onToast&&onToast("Only an owner or steward sets the parent term","error"); return; }
+      patchTerm(t.id, {broader:f.to, relations:relsOf(t)});
+    } else patchTerm(t.id, {relations:[...relsOf(t), {id:ONT.uid("gr"), type:f.type, to:f.to, note:f.note.trim(), status:canEdit?"approved":"proposed", by:me, at:new Date().toISOString()}]});
+    onToast&&onToast(canEdit||f.type==="broader"?"Relationship added":"Relationship proposed · an owner or steward approves it","success");
+    setAdding(false); setF({type:"related", to:"", note:""});
+  };
+  const holder = (r) => r.dir==="out" ? t : r.other;
+  const remove = (r) => {
+    if(r.type==="broader"){ const h = r.dir==="out" ? t : r.other; patchTerm(h.id, {broader:null, relations:relsOf(h)}); }
+    else { const h = holder(r); patchTerm(h.id, {relations:relsOf(h).filter(x=>x.id!==r.rel.id)}); }
+    onToast&&onToast("Relationship removed","success");
+  };
+  const decide = (r, ok) => { const h = holder(r); patchTerm(h.id, {relations:relsOf(h).map(x=>x.id===r.rel.id?{...x, status:ok?"approved":"rejected", decidedBy:me}:x)});
+    onToast&&onToast(ok?"Relationship approved":"Relationship rejected","success"); };
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <span style={{fontSize:12,color:T.textMuted}}>{rows.length} relationship{rows.length===1?"":"s"}</span>
+        <span style={{flex:1}}/>
+        <Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setAdding(true)} disabled={(t.status||t.cert)==="Deprecated"}>Add relationship</Btn>
+      </div>
+      <OntTable empty="No relationships yet" onRow={r=>onOpenTerm&&onOpenTerm(r.r.other.id)}
+        cols={[{l:"Relationship",w:"1.1fr"},{l:"Term",w:"1.2fr"},{l:"Glossary",w:"1fr"},{l:"Note",w:"1.6fr"},{l:"Status",w:".8fr"},{l:"",w:"1.1fr"}]}
+        rows={rows.map(r=>({key:r.key, r, cells:[
+          <span style={{display:"inline-flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:2,background:GL_REL_C[r.type]||T.textMuted}}/>{r.label}</span>,
+          <span style={{fontWeight:600,color:T.text}}>{r.other.term}</span>, gName(r.other.glossary), r.note||"—",
+          <span style={{fontWeight:600,color:r.status==="proposed"?T.amber:T.green}}>{r.status==="proposed"?"Pending":"Approved"}</span>,
+          <span onClick={e=>e.stopPropagation()} style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+            {r.status==="proposed" && canEdit && <><Btn small ghost onClick={()=>decide(r,false)}>Reject</Btn><Btn small onClick={()=>decide(r,true)}>Approve</Btn></>}
+            {(canEdit || (r.status==="proposed" && r.rel && r.rel.by===me)) && <Btn small ghost onClick={()=>remove(r)}>Remove</Btn>}
+          </span>]}))}/>
+      {adding && <OntDrawerShell title={`Add relationship · ${t.term}`} width={520} onClose={()=>setAdding(false)} footer={<>
+          <span style={{flex:1,fontSize:11.5,color:err?T.rose:T.textMuted}}>{f.to?(err||""):""}</span>
+          <Btn ghost onClick={()=>setAdding(false)}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>Add</Btn></>}>
+        <OntField label="Relationship"><SLSelect value={f.type} onChange={e=>setF({...f, type:e.target.value})} options={types.map(([k,v])=>({v:k,l:v.l}))}/></OntField>
+        <OntField label="Term"><SLSelect value={f.to} onChange={e=>setF({...f, to:e.target.value})} placeholder="Select a term"
+          options={all.filter(x=>x.id!==t.id && (x.status||x.cert)!=="Rejected").sort((a,b)=>a.term.localeCompare(b.term)).map(x=>({v:x.id, l:`${x.term} · ${gName(x.glossary)}`}))}/></OntField>
+        {f.type!=="broader" && <OntField label="Note"><Input2 multiline rows={2} value={f.note} onChange={e=>setF({...f, note:e.target.value})} placeholder="Why the two are linked"/></OntField>}
+        {f.to && !err && <div style={{fontSize:12,color:T.textSub,padding:"10px 12px",background:T.bgElevated,borderRadius:8}}>
+          <b>{t.term}</b> · {GLG.GL_REL[f.type].l.toLowerCase()} · <b>{(all.find(x=>x.id===f.to)||{}).term}</b></div>}
+      </OntDrawerShell>}
+    </div>);
+};
+const glModelRows = (term, slStore) => {
+  const models = slStore.models||[];
+  const modelOf = (id) => models.find(m=>m.id===id);
+  return [
+    ...(slStore.metrics||[]).filter(m=>m.termId===term.id).map(m=>({key:m.id, kind:"Metric", name:m.name, model:(modelOf(m.model)||{}).name||"—"})),
+    ...(slStore.dims||[]).filter(d=>d.termId===term.id).map(d=>{ const e = (slStore.entities||[]).find(x=>x.id===d.entity)||{};
+      return {key:d.id, kind:"Dimension", name:d.name, model:models.filter(m=>(m.entityIds||[]).includes(e.id)).map(m=>m.name).join(", ")||"—"}; }),
+    ...(slStore.entities||[]).filter(e=>e.concept===term.id).map(e=>({key:e.id, kind:"Dataset", name:`${e.name} · ${e.table}`, model:models.filter(m=>(m.entityIds||[]).includes(e.id)).map(m=>m.name).join(", ")||"—"})),
+  ];
+};
+const GlTermModelsTab = ({term, slStore, onNav}) => {
+  const rows = glModelRows(term, slStore);
+  return <OntTable empty="No semantic model implements this term yet" onRow={()=>onNav&&onNav("semanticlayer")}
+    cols={[{l:"Kind",w:".7fr"},{l:"Name",w:"1.6fr"},{l:"Semantic model",w:"1.6fr"}]}
+    rows={rows.map(r=>({key:r.key, cells:[r.kind, <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, r.model]}))}/>;
+};
+const GlTermOntologiesTab = ({term, onNav}) => {
+  useOnt();
+  const rows = glClassesOf(term.id);
+  return <OntTable empty="No ontology class is defined by this term" onRow={r=>{ _ontJump = {id:r.o.id, tab:"classes"}; onNav&&onNav("ontologies"); }}
+    cols={[{l:"Class",w:"1fr"},{l:"Ontology",w:"1.2fr"},{l:"Definition",w:"2fr"},{l:"Status",w:".8fr"}]}
+    rows={rows.map(({o,c})=>({key:o.id+c.id, o, cells:[<span style={{fontWeight:600,color:T.text}}>{c.name}</span>, o.name, c.desc||"—", OMD.statusOf(o)]}))}/>;
 };
 
 const GlossaryView = ({onToast, deepLinkTermId}) => {
@@ -3789,13 +3877,10 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
               <span style={{flex:1}}/>
               <SegTabs tabs={[{key:"list",label:"List"},{key:"graph",label:"Graph"}]} active={glView} onChange={setGlView}/>
             </div>
-            <div style={{fontSize:11,color:T.textMuted,lineHeight:1.5,maxWidth:820}}>
-              One register for everything the business names. A <b style={{color:T.textSub}}>Concept</b> is a thing, a <b style={{color:T.textSub}}>Metric</b> is a number, a <b style={{color:T.textSub}}>Dimension</b> is a way to slice one — all sharing one owner, one approval and one conflict check.
-            </div>
           </div>
 
           {glView==="graph" && <div style={{padding:"0 28px 28px"}}>
-            <GlossaryExplorer glossaries={glossaries} terms={terms.filter(t=>typeF==="all" || (t.termType||"Term")===typeF)} initialGlossary={selG} onOpenTerm={(id)=>{ setGlView("list"); goToTerm(id); }}/>
+            <GlossaryExplorer glossaries={glossaries} terms={glRelTerms(terms).filter(t=>typeF==="all" || (t.termType||"Term")===typeF)} initialGlossary={selG} onOpenTerm={(id)=>{ setGlView("list"); goToTerm(id); }}/>
           </div>}
 
           {glView==="graph" ? null : allTermsInGlossary.length===0?(
@@ -3996,7 +4081,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             {/* Deprecation banner */}
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
-              {[{id:"overview",l:"Overview"},{id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
+              {[{id:"overview",l:"Overview"},{id:"relationships",l:`Relationships (${GLG.relationsOf((glRelTerms(terms).find(x=>x.id===term.id)||term), glRelTerms(terms)).length})`},
+                {id:"assets",l:`Linked Assets (${term.linkedAssets.length})`},{id:"models",l:`Semantic Models (${glModelRows(term, slStore).length})`},
+                {id:"ontologies",l:`Ontologies (${glClassesOf(term.id).length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -4010,9 +4097,6 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                         related:aidUniq([term.abbr, ...(term.synonyms||[])]), linked:(term.linkedAssets||[]).map(x=>x.name||x),
                         tags:(term.tags||[]).map(x=>x.name||x), domain:term.domain, owner:term.owner, owners:term.owners||[term.owner],
                         stewards:term.stewards||term.reviewers||[], description:term.definition}}/>
-                <Divider/>
-                <CtxTermRelations term={term} onToast={onToast} onOpenTerm={goToTerm}/>
-                <CtxTermLinks term={term} onToast={onToast} onNav={glNav}/>
                 <Divider/>
                 <SectionLabel label="References" action={<button onClick={()=>setAddingRef(p=>!p)} style={{fontSize:12,color:T.accent,background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcPlus/> Add Link</button>}/>
                 {addingRef&&(<div style={{padding:"12px",background:T.bgElevated,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:12,display:"flex",flexDirection:"column",gap:8}}><GlInput placeholder="Label" value={refForm.label} onChange={e=>setRefForm(f=>({...f,label:e.target.value}))} style={{fontSize:12}}/><GlInput placeholder="URL https://…" value={refForm.url} onChange={e=>setRefForm(f=>({...f,url:e.target.value}))} style={{fontSize:12}}/><div style={{display:"flex",gap:6,justifyContent:"flex-end"}}><button onClick={()=>{setAddingRef(false);setRefForm({label:"",url:""}); }} style={{padding:"5px 12px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Cancel</button><button onClick={()=>doAddRef(term.id)} disabled={!refForm.url.trim()} style={{padding:"5px 12px",borderRadius:6,background:refForm.url.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:11.5,fontWeight:600,cursor:refForm.url.trim()?"pointer":"default"}}>Add</button></div></div>)}
@@ -4034,6 +4118,9 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             )}
             {termTab==="assets"&&(<div><div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>{["All",...new Set(term.linkedAssets.map(a=>a.type))].map(type=>(<span key={type} style={{fontSize:12,padding:"4px 12px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{type}{type==="All"?` (${term.linkedAssets.length})`:""}</span>))}</div>{term.linkedAssets.length===0?<div style={{padding:"40px 0",textAlign:"center",color:T.textMuted,fontSize:13}}>No linked assets yet.</div>:(<div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{term.linkedAssets.map((a,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",borderBottom:i<term.linkedAssets.length-1?`1px solid ${T.border}`:"none",transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.accent,flexShrink:0}}>{{"Table":"⊞","Dashboard":"⊟","Pipeline":"⇢","ML Model":"◈"}[a.type]||"○"}</div><div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{a.name}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:1}}>{a.type}</div></div><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 2l4 3-4 3" stroke={T.textMuted} strokeWidth="1.3" strokeLinecap="round"/></svg></div>))}</div>)}<button onClick={()=>onToast("Open catalog to link assets","success")} style={{marginTop:12,display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}><IcPlus/> Link Asset</button></div>)}
             {/* Activity tab is hidden for now (Sprint 7); its content stays so it can be switched back on from the tab list above. */}
+            {termTab==="relationships"&&<GlTermRelationsTab term={term} terms={terms} glossaries={glossaries} canEdit={canSetTermStatus(term)} me={meHandle} onOpenTerm={goToTerm} onToast={onToast} patchTerm={patchTerm}/>}
+            {termTab==="models"&&<GlTermModelsTab term={term} slStore={slStore} onNav={glNav}/>}
+            {termTab==="ontologies"&&<GlTermOntologiesTab term={term} onNav={glNav}/>}
             {termTab==="kg"&&<KgObjectTab ids={[`term:${term.id}`]} name={term.term}/>}
             {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
             {termTab==="auditlog"&&(
@@ -4133,69 +4220,6 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                 <span style={{fontSize:12,fontWeight:500,color:T.textSub}}>{termGlossary?.name||term.domain}</span>
               </div>
             </div>
-
-            {(()=>{ const cls = glClassesOf(term.id); return (
-              <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-                <SideLabel ch="Ontology class"/>
-                {cls.length===0 ? <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>Not defined by an ontology class</div> :
-                  <div style={{display:"flex",flexDirection:"column",gap:5}}>{cls.map(({o,c})=>(
-                    <button key={o.id+c.id} onClick={()=>{ _ontJump = {id:o.id, tab:"classes"}; glNav("ontologies"); }}
-                      style={{display:"flex",alignItems:"center",gap:7,padding:"5px 10px",borderRadius:6,background:T.bgElevated,border:`1px solid ${T.border}`,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
-                      <span style={{color:T.violet,fontWeight:800,fontSize:11}}>◆</span>
-                      <span style={{fontSize:12,color:T.text,fontWeight:600}}>{c.name}</span>
-                      <span style={{fontSize:11,color:T.textMuted}}>· {o.name}</span></button>))}</div>}
-              </div>); })()}
-
-            {/* BUILT BY — the reverse of the link the model already holds. A term could
-                always point INTO a model; nothing pointed back, so the Glossary could not
-                answer the question everyone arrives with: is this built, and where. */}
-            {(()=>{
-              const mets = (slStore.metrics||[]).filter(m=>m.termId===term.id);
-              const dims = (slStore.dims||[]).filter(d=>d.termId===term.id);
-              const ents = (slStore.entities||[]).filter(e=>e.concept===term.id);
-              const modelOf   = (id) => (slStore.models||[]).find(m=>m.id===id);
-              const modelsFor = (e)  => (slStore.models||[]).filter(m=>(m.entityIds||[]).includes(e.id));
-              const any = mets.length || dims.length || ents.length;
-              return (
-                <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
-                  <SideLabel ch="Built by"/>
-                  {!any
-                    ? <div style={{fontSize:11.5,color:T.amber,lineHeight:1.55}}>
-                        Nothing computes this yet. It is agreed and owned, but no semantic model implements it.
-                      </div>
-                    : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                        {mets.map(m=>{
-                          const md = modelOf(m.model);
-                          const tg = md ? (md.targets||[]).filter(t=>t!=="ossie") : [];
-                          return (
-                            <div key={m.id} style={{fontSize:11.5,lineHeight:1.5}}>
-                              <span style={{color:T.text,fontWeight:600}}>{m.name}</span>
-                              <span style={{color:T.textMuted}}> · metric in {md?md.name:"a model"}</span>
-                              {tg.length>0 && <div style={{color:T.textMuted,fontSize:10.5,marginTop:1}}>
-                                published to {tg.map(t=>(SL_PLATFORMS[t]||{}).label||t).join(", ")}
-                              </div>}
-                            </div>
-                          );
-                        })}
-                        {dims.map(d=>{
-                          const e = (slStore.entities||[]).find(x=>x.id===d.entity);
-                          return (
-                            <div key={d.id} style={{fontSize:11.5,lineHeight:1.5}}>
-                              <span style={{color:T.text,fontWeight:600}}>{d.name}</span>
-                              <span style={{color:T.textMuted}}> · dimension on {e?e.name:"a dataset"}</span>
-                            </div>
-                          );
-                        })}
-                        {ents.map(e=>(
-                          <div key={e.id} style={{fontSize:11.5,lineHeight:1.5}}>
-                            <span style={{color:T.text,fontWeight:600}}>{e.name}</span>
-                            <span style={{color:T.textMuted}}> · dataset {e.table}{modelsFor(e).length?` in ${modelsFor(e).map(m=>m.name).join(", ")}`:""}</span>
-                          </div>
-                        ))}
-                      </div>}
-                </div>
-              );
-            })()}
 
             {/* LINKED ASSETS */}
             <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>
@@ -40941,7 +40965,7 @@ const OAI_KEY = "solix-edg.prototype.oai.v1";
 // relationships Context already holds, published as v1; and one imported from
 // Palantir so overlap across ontologies is visible.
 const ontSeed = () => {
-  const concepts = _gtState.filter(t=>t.termType==="Concept");
+  const concepts = _gtState.filter(t=>GT_CONCEPT_IDS.has(t.id));
   const cid = (tid) => "c_"+tid;
   const props = (tid) => {
     const ents = _slState.entities.filter(e=>e.concept===tid);
@@ -41833,7 +41857,7 @@ const OntNewDrawer = ({open, mode0, target, onClose, onCreated, onToast}) => {
     if(method==="generate"){
       const models = _slState.models.filter(m=>mdlIds.includes(m.id));
       const r = OAI.draftFromMetadata({models, entities:_slState.entities, joins:_slState.rels, dims:_slState.dims, facts:_slState.facts,
-        concepts: useGlossary && _oai.settings.inputs.glossary ? _gtState.filter(t=>t.termType==="Concept").map(t=>({id:t.id, name:t.term, definition:t.definition, synonyms:t.synonyms, broader:t.broader})) : [],
+        concepts: useGlossary && _oai.settings.inputs.glossary ? _gtState.filter(t=>GT_CONCEPT_IDS.has(t.id)).map(t=>({id:t.id, name:t.term, definition:t.definition, synonyms:t.synonyms, broader:t.broader})) : [],
         schemaOf:t=>SCHEMA[t]||[]});
       out = {classes:r.classes.map(c=>({...c, key:"c:"+c.id, source:"Semantic model"})), rels:r.rels.map(x=>({...x, key:"r:"+x.id, source:"Join"})), constraints:[], concepts:[]};
     } else if(method==="file" || method==="connection"){
@@ -46241,7 +46265,7 @@ const SLModelSidebar = ({mdl, ents, dims, facts, mets, gTerms, onPatch, onToast}
   const terms    = mdl.terms    || [];
   const USERS = ["sarah.kim","maya.chen","alex.wu","dev.patel","james.oh","priya.nair","lisa.ray"];
   const TAGS  = ["revenue","KPI","finance","commerce","PII","certified","board-pack"];
-  const TERMS = (gTerms||[]).filter(t=>t.termType==="Metric"||t.termType==="Concept").map(t=>t.term);
+  const TERMS = (gTerms||[]).filter(t=>t.termType==="Metric"||GT_CONCEPT_IDS.has(t.id)).map(t=>t.term);
   const toggle = (key, list, v) => onPatch({[key]: list.includes(v) ? list.filter(x=>x!==v) : [...list, v]});
   const Sec = ({children, last}) => (
     <div style={{padding:"16px",borderBottom:last?"none":`1px solid ${T.border}`}}>{children}</div>
@@ -48238,7 +48262,7 @@ const CtxAsk = ({onToast, seedQuestion}) => {
   const [payload, setPayload] = useState("");
   const [apiOut, setApiOut] = useState(null);
   const w = ctxWorld();
-  const concepts = w.terms.filter(t=>t.termType==="Concept" && ctxTermVisible(t));
+  const concepts = w.terms.filter(t=>GT_CONCEPT_IDS.has(t.id) && ctxTermVisible(t));
   const domains = [...new Set(_slState.models.map(m=>m.domain))].filter(d=>CTX.canSeeDomain(persona,d));
   const reqOf = (extra) => ({question:f.question, personaId:persona.id, profileId:f.profileId, ...(f.domain?{domain:f.domain}:{}), ...(f.conceptId?{conceptId:f.conceptId}:{}), ...(f.purpose?{purpose:f.purpose}:{}), ...(extra||{})});
   useEffect(()=>{ setPayload(JSON.stringify(reqOf(), null, 2)); }, [f.question, f.profileId, f.domain, f.conceptId, f.purpose, persona.id]);
