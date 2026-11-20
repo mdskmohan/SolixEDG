@@ -3178,7 +3178,8 @@ const glLinkedRows = (term, slStore) => {
   const models = slStore.models||[];
   const inModels = (eid) => models.filter(m=>(m.entityIds||[]).includes(eid)).map(m=>m.name).join(", ");
   return [
-    ...(term.linkedAssets||[]).map((a,i)=>({key:`a${i}`, object:"Catalog", type:a.type||"Asset", name:a.name||a, where:"Catalog"})),
+    ...(term.linkedAssets||[]).map((a,i)=>{ const x = ASSETS.find(y=>y.name===(a.name||a)) || {};
+      return {key:`a${i}`, object:"Catalog", type:a.type||x.type||"Asset", name:a.name||a, where:x.db||x.connectionLabel||x.domain||"—"}; }),
     ...(slStore.metrics||[]).filter(m=>m.termId===term.id).map(m=>({key:m.id, object:"Semantic model", type:"Metric", name:m.name, where:(models.find(x=>x.id===m.model)||{}).name||"—"})),
     ...(slStore.dims||[]).filter(d=>d.termId===term.id).map(d=>({key:d.id, object:"Semantic model", type:"Dimension", name:d.name, where:inModels(d.entity)||"—"})),
     ...(slStore.entities||[]).filter(e=>e.concept===term.id).map(e=>({key:e.id, object:"Semantic model", type:"Dataset", name:`${e.name} · ${e.table}`, where:inModels(e.id)||"—"})),
