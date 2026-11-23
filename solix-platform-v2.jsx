@@ -14,6 +14,7 @@ import * as ONT from "./src/ontology/engine.js";
 import * as OAI from "./src/ontology/ai.js";
 import * as MAP from "./src/ontology/mapping.js";
 import * as OMD from "./src/ontology/metadata.js";
+import { exampleOntologies as ontExamples, EXAMPLE_TABLES as ONT_EXAMPLE_TABLES } from "./src/ontology/examples.js";
 import * as GLG from "./src/glossary/graph.js";
 import * as KG from "./src/kg/engine.js";
 import * as KGOPS from "./src/kg/ops.js";
@@ -1540,6 +1541,16 @@ const SCHEMA = {
     {name:"updated_at",type:"TIMESTAMP",desc:"Last modification",pii:false,nullable:false,quality:"Freshness",pk:false},
   ],
 };
+// Catalog views the example ontologies are bound to (src/ontology/examples.js).
+{ const SRC = {snowflake_prod:["snowflake","Snowflake DWH"], oracle_erp:["oracle","Oracle ERP"], postgresql_prod:["postgres","PostgreSQL Prod"]};
+  ONT_EXAMPLE_TABLES.forEach(t=>{
+    SCHEMA[t.name] = t.cols.map(c=>({...c, quality:"—"}));
+    if(ASSETS.some(a=>a.name===t.name)) return;
+    const [service, connectionLabel] = SRC[t.db.split(" / ")[0]];
+    ASSETS.push({id:t.id, name:t.name, type:"View", domain:t.domain, owner:t.owner, owners:[t.owner], steward:t.steward, stewards:[t.steward], cert:"Approved",
+      quality:93, usage:"High", updated:"2h ago", service, connectionLabel, db:t.db, tier:1, rows:t.rows, size:t.size,
+      tags:t.cols.some(c=>c.pii)?["PII"]:[], description:t.description, slaFreshness:"1h"});
+  }); }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // APPLICATION KNOWLEDGE GRAPHS (Solix EAI) — EDG x EAI PRD v11, EAI-US-03 / 05 / 06
@@ -41232,116 +41243,12 @@ const SmaiSettings = ({onToast}) => {
 // glossary keeps the word, the ontology keeps the thing. Logic lives in
 // src/ontology/ (engine.js, ai.js); this block is state and screens.
 
-const ONT_KEY = "solix-edg.prototype.ont.v1";
+const ONT_KEY = "solix-edg.prototype.ont.v2";
 const OAI_KEY = "solix-edg.prototype.oai.v1";
 
-// Seed: one ontology built from the glossary's Concept terms and the concept
-// relationships Context already holds, published as v1; and one imported from
-// Palantir so overlap across ontologies is visible.
-const ontSeed = () => {
-  const concepts = _gtState.filter(t=>GT_CONCEPT_IDS.has(t.id));
-  const cid = (tid) => "c_"+tid;
-  const props = (tid) => {
-    const ents = _slState.entities.filter(e=>e.concept===tid);
-    const seen = new Set();
-    return [..._slState.dims, ..._slState.facts].filter(f=>ents.some(e=>e.id===f.entity) && f.type!=="identifier"
-        && !ents.some(e=>e.id===f.entity && slKeys(e).includes(f.column)))
-      .filter(f=>!seen.has(f.name) && seen.add(f.name)).slice(0,6)
-      .map(f=>{ const e = ents.find(x=>x.id===f.entity); const col = (SCHEMA[e.table]||[]).find(c=>c.name===f.column)||{};
-        const t = String(col.type||"").toUpperCase();
-        return {id:"p_"+f.id, name:f.name, column:f.column, required:false, desc:f.desc||"",
-          datatype:/DATE$/.test(t)?"date":/TIME/.test(t)?"dateTime":/BOOL/.test(t)?"boolean":/DEC|NUMERIC|DOUBLE|FLOAT/.test(t)?"decimal":/INT|NUMBER|SERIAL/.test(t)?"integer":"string"}; });
-  };
-  // SKOS "broader" is either generic (Customer → Party: a kind of) or partitive
-  // (Order Line → Order: part of). A line, item or detail is the second kind.
-  const partOf = (t) => { const b = t.broader && concepts.find(x=>x.id===t.broader); return b && new RegExp(`^${b.term}\\s+(line|item|detail|entry)$`,"i").test(t.term) ? b : null; };
-  const classes = concepts.map(t=>({id:cid(t.id), name:t.term, desc:t.definition||"", synonyms:t.synonyms||[],
-    parent:t.broader && !partOf(t)?cid(t.broader):null, termId:t.id, sameAs:[], props:props(t.id)}));
-  const partRels = concepts.filter(partOf).map(t=>({id:"r_part_"+t.id, from:cid(t.id), to:cid(t.broader), name:"part of", inverse:"contains",
-    cardinality:"many_to_one", kind:"part_of", desc:""}));
-  const CARD = {placed_by:"many_to_one", paid_by:"many_to_one", supplied_by:"many_to_one", belongs_to:"many_to_one", part_of:"many_to_one"};
-  const rels = _slState.crels.filter(r=>r.status!=="removed" && r.status!=="rejected" && CTX.REL_TYPES[r.type] && r.type!=="related_to" && r.type!=="is_a")
-    .filter(r=>classes.some(c=>c.id===cid(r.from)) && classes.some(c=>c.id===cid(r.to)))
-    // Context's "part of" edges were shorthand for the taxonomy (now the
-    // hierarchy) or for links not yet modelled; the AI tab proposes the real ones.
-    .filter(r=>r.type!=="part_of")
-    .map(r=>({id:"r_"+r.id, from:cid(r.from), to:cid(r.to), name:CTX.REL_TYPES[r.type].l.replace(/^is /,""), inverse:CTX.REL_TYPES[r.type].inv.replace(/^is /,""),
-      cardinality:CARD[r.type]||"many_to_one", kind:r.type==="part_of"?"part_of":"association", desc:r.note||""})).concat(partRels);
-  // Mapped already: the three commerce datasets, their fields and the placed-by
-  // join. One column was renamed in the warehouse after mapping, so drift has
-  // something real to show. Retail is left for the AI to suggest.
-  let mn = 0;
-  const mk = (kind, classId, extra, target) => ({id:"map_seed_"+(++mn), kind, classId, ...extra, target, status:"approved", by:"maya.chen", at:"2026-09-18T09:00:00.000Z"});
-  const mappings = [];
-  _slState.entities.filter(e=>["e_order","e_customer","e_txn"].includes(e.id) && e.concept).forEach(e=>{
-    const c = classes.find(x=>x.termId===e.concept); if(!c) return;
-    mappings.push(mk("dataset", c.id, {}, {entityId:e.id, keys:slKeys(e)}));
-    c.props.forEach(pr=>{ const f = [..._slState.dims, ..._slState.facts].find(x=>"p_"+x.id===pr.id && x.entity===e.id);
-      if(f) mappings.push(mk("field", c.id, {propId:pr.id}, {entityId:e.id, table:e.table, column:f.column, fieldId:f.id})); });
-  });
-  const cust = classes.find(c=>c.termId==="tc1"), eCust = _slState.entities.find(e=>e.id==="e_customer");
-  if(cust && eCust){
-    cust.props = [...cust.props, {id:"p_cus_last_login", name:"Last Login", datatype:"dateTime", required:false, desc:"When the customer last signed in."}];
-    mappings.push(mk("field", cust.id, {propId:"p_cus_last_login"}, {entityId:eCust.id, table:eCust.table, column:"last_login_at", fieldId:null}));
-  }
-  const placed = rels.find(r=>r.id==="r_cr1"), j1 = _slState.rels.find(x=>x.from==="e_order" && x.to==="e_customer");
-  if(placed && j1) mappings.push(mk("join", placed.from, {relId:placed.id}, {joinId:j1.id}));
-  const commerce = {id:"ont_commerce", name:"Enterprise Commerce", prefix:"com", namespace:"https://ontology.jnj.com/commerce#",
-    domain:"Commerce", owner:"maya.chen", steward:"dev.patel", status:"Published", created:"2026-09-18",
-    desc:"The commercial concepts every model, report and agent in the group shares: who buys, what is bought, and how it is fulfilled.",
-    source:{kind:"native"}, classes, rels, constraints:[], mappings, versions:[]};
-  const pub = ONT.publish(commerce, "maya.chen", "Initial publication from the glossary concepts", "2026-09-18T09:00:00Z");
-  const imp = ONT.importPalantir(ONT_IMPORT_SAMPLES.palantir);
-  const supply = {id:"ont_supply", name:"Supply Chain", prefix:"sup", namespace:"https://ontology.jnj.com/supply#", domain:"Procurement",
-    owner:"sarah.kim", steward:"sarah.kim", status:"Draft", created:"2026-10-02",
-    desc:"Imported from the Palantir Foundry ontology the procurement team maintains.",
-    source:{kind:"import", format:"palantir", connector:"Palantir Foundry"},
-    classes:imp.classes, rels:imp.rels, constraints:imp.constraints, versions:[]};
-  return [pub.ok ? pub.ontology : commerce, supply];
-};
-// The plan's example, at the metadata level: Order and Customer, two distinct
-// relationships bound to ORDERS.BUYER_ID and ORDERS.BILL_TO_ID, two approved
-// expected answers, published as v1 after approval.
-const ontSalesSeed = () => {
-  const O = "c_sales_order", C = "c_sales_customer";
-  const mk = (id, kind, classId, extra, target) => ({id, kind, classId, ...extra, target, status:"approved", by:"dev.patel", at:"2026-11-10T09:00:00.000Z"});
-  let o = {id:"ont_sales", name:"Sales", prefix:"sales", namespace:"https://ontology.jnj.com/sales#", domain:"Commerce",
-    owner:"maya.chen", owners:["maya.chen"], steward:"dev.patel", stewards:["dev.patel"], status:"Draft", created:"2026-11-10", source:{kind:"native"},
-    desc:"Who buys and who is billed. The sales meaning agents use to find the right catalog field.",
-    classes:[
-      {id:O, name:"Order", desc:"A request from a customer to buy products, identified by its order number.", synonyms:["Sales order"], parent:null, termId:null, sameAs:[],
-        props:[{id:"p_so_id", name:"Order ID", datatype:"string", required:true, desc:"Order number, e.g. O-104."},
-          {id:"p_so_date", name:"Order date", datatype:"date", required:false, desc:"Date the order was placed."},
-          {id:"p_so_amount", name:"Amount", datatype:"decimal", required:false, desc:"Order total."}]},
-      {id:C, name:"Customer", desc:"A person or organization that buys from us or is invoiced by us.", synonyms:["Client"], parent:null, termId:null, sameAs:[],
-        props:[{id:"p_sc_id", name:"Customer ID", datatype:"string", required:true, desc:"Customer number, e.g. C-007."},
-          {id:"p_sc_name", name:"Name", datatype:"string", required:true, desc:""},
-          {id:"p_sc_email", name:"Email", datatype:"string", required:false, desc:""}]}],
-    rels:[
-      {id:"r_sales_placed", from:O, to:C, name:"placed by", inverse:"places", cardinality:"many_to_one", required:true, kind:"association",
-        synonyms:["buyer","purchaser"], desc:"The customer who placed the order (the buyer)."},
-      {id:"r_sales_billed", from:O, to:C, name:"billed to", inverse:"is billed for", cardinality:"many_to_one", required:false, kind:"association",
-        synonyms:["bill-to","billing customer","payer"], desc:"The customer who receives the invoice for the order."}],
-    constraints:[
-      {id:"k_sales_oid", classId:O, prop:"Order ID", kind:"pattern", value:"^O-[0-9]+$", severity:"violation", desc:""},
-      {id:"k_sales_email", classId:C, prop:"Email", kind:"pattern", value:"^[^@]+@[^@]+$", severity:"warning", desc:""}],
-    mappings:[
-      mk("map_s1","table",O,{},{table:"ORDERS", keys:["ORDER_ID"]}), mk("map_s2","table",C,{},{table:"CUSTOMERS", keys:["CUSTOMER_ID"]}),
-      mk("map_s3","field",O,{propId:"p_so_id"},{table:"ORDERS", column:"ORDER_ID"}), mk("map_s4","field",O,{propId:"p_so_date"},{table:"ORDERS", column:"ORDER_DATE"}),
-      mk("map_s5","field",O,{propId:"p_so_amount"},{table:"ORDERS", column:"AMOUNT"}),
-      mk("map_s6","field",C,{propId:"p_sc_id"},{table:"CUSTOMERS", column:"CUSTOMER_ID"}), mk("map_s7","field",C,{propId:"p_sc_name"},{table:"CUSTOMERS", column:"NAME"}),
-      mk("map_s8","field",C,{propId:"p_sc_email"},{table:"CUSTOMERS", column:"EMAIL"}),
-      mk("map_s9","relfield",O,{relId:"r_sales_placed"},{table:"ORDERS", column:"BUYER_ID"}),
-      mk("map_s10","relfield",O,{relId:"r_sales_billed"},{table:"ORDERS", column:"BILL_TO_ID"})],
-    tests:[
-      {id:"t_sales_buyer", question:"Which field identifies the buyer?", relId:"r_sales_placed", expect:"ORDERS.BUYER_ID", approvedBy:"maya.chen"},
-      {id:"t_sales_billto", question:"Which field identifies the billing customer?", relId:"r_sales_billed", expect:"ORDERS.BILL_TO_ID", approvedBy:"maya.chen"}],
-    audience:["Analytics","Governance"], versions:[]};
-  o = OMD.ensureIris(o);
-  const review = {state:"approved", submittedBy:"dev.patel", submittedAt:"2026-11-11T15:20:00.000Z", approvedBy:"maya.chen", approvedAt:"2026-11-12T09:40:00.000Z", hash:OMD.draftHash(o)};
-  const pub = ONT.publish(o, "maya.chen", "Buyer and billing customer", "2026-11-12T10:00:00Z");
-  return {...pub.ontology, review, publications:[{status:"published", n:1, at:pub.version.at, by:"maya.chen", approvedBy:"maya.chen", note:"Buyer and billing customer"}]};
-};
+// Seed: three worked examples (src/ontology/examples.js) — Order to Cash
+// (Approved, two versions), Procure to Pay (In review) and Product Catalog
+// (Draft, with a broken field link) — so every tab has something to show.
 // A relationship mapped through a semantic-model join also gets its catalog
 // field: the join key on the source class's side.
 const ontJoinToField = (o) => {
@@ -41369,9 +41276,8 @@ let _ontState = null;
 const ontLoad = () => {
   if(_ontState) return _ontState;
   let saved = null; try { saved = JSON.parse(localStorage.getItem(ONT_KEY)||"null"); } catch(e) {}
-  const base = saved && Array.isArray(saved.ontologies) ? saved : {ontologies: ontSeed()};
-  const list = base.ontologies.some(o=>o.id==="ont_sales") ? base.ontologies : [...base.ontologies, ontSalesSeed()];
-  _ontState = {...base, ontologies:list.map(ontMigrate)};
+  const base = saved && Array.isArray(saved.ontologies) ? saved : {ontologies: ontExamples()};
+  _ontState = {...base, ontologies:base.ontologies.map(ontMigrate)};
   return _ontState;
 };
 const _ontSubs = new Set();
@@ -41787,8 +41693,8 @@ const OntClassNode = ({data}) => {
           <div style={{fontSize:9.5,color:data.sources?"#94a3b8":"#d97706",marginTop:2,fontFamily:"ui-monospace,monospace"}}>{data.sources || "No data source"}</div>
           {(data.cols||[]).length>0 && (
             <div style={{marginTop:8,paddingTop:7,borderTop:"1px solid #e2e8f0"}}>
-              {data.cols.map(x=>(
-                <div key={x.name} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+              {data.cols.map((x,i)=>(
+                <div key={`${x.name}:${i}`} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
                   <span style={{width:6,height:6,borderRadius:2,background:x.color,flexShrink:0}}/>
                   <span style={{fontSize:9.5,color:"#475569",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.name}</span>
                   <span style={{fontSize:8.5,color:x.color,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.04em"}}>{x.role}</span>
@@ -42993,7 +42899,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
 // bindings to catalog assets and fields, and its SHACL report; the Enterprise
 // Metadata Graph is projected from the catalog, lineage, glossary, semantic
 // models and ontologies (buildMetadataGraph). Builds come from src/kg/ops.js.
-const KGS_KEY = "solix-edg.prototype.kgs.v2";
+const KGS_KEY = "solix-edg.prototype.kgs.v3";
 const KG_ALL_RULES = () => Object.fromEntries(Object.keys(KG.RULES).map(k=>[k,true]));
 const KG_SCHEDULES = {change:"When a source changes", hourly:"Hourly", daily:"Daily at 02:00", manual:"Manual only"};
 const KG_TARGETS = {tdb2:"Apache Jena TDB2"};
@@ -43080,9 +42986,9 @@ const kgSeed = () => {
       .map(([n,h,trigger,by])=>kgMetaRun(metaG,{n, at:ago(h), trigger, by, target:"tdb2"}))};
   const mk = (id, ontologyId, name, icon, color, desc, domain, owner, steward, created) => ({id, kind:"ontology", name, icon, color, ontologyId, classIds:null,
     desc, domain, owner, steward, owners:[owner], stewards:[steward], created, schedule:"daily", target:"tdb2", paused:false, builds:[]});
-  const sales = mk("kg_sales", "ont_sales", "Sales Knowledge Graph", "◆", "#0ea5e9", "Order, customer, buyer and bill-to as published definitions, bound to the ORDERS and CUSTOMERS catalog views.", "Commerce", "maya.chen", "dev.patel", "2026-11-12");
-  const com = mk("kg_commerce", "ont_commerce", "Commerce Knowledge Graph", "◈", "#10b981", "The Enterprise Commerce ontology's published definitions, bound to catalog assets and fields.", "Commerce", "maya.chen", "dev.patel", "2026-10-20");
-  const sup = mk("kg_supply", "ont_supply", "Supply Chain Knowledge Graph", "⬡", "#f59e0b", "Suppliers, purchase orders and shipments from the Supply Chain ontology.", "Procurement", "sarah.kim", "sarah.kim", "2026-11-03");
+  const sales = mk("kg_o2c", "ont_o2c", "Order to Cash Knowledge Graph", "◆", "#0ea5e9", "Orders, customers, invoices, statuses and channels as published definitions, bound to the ORDERS, CUSTOMERS and INVOICES catalog views.", "Commerce", "maya.chen", "dev.patel", "2026-11-12");
+  const com = mk("kg_p2p", "ont_p2p", "Procure to Pay Knowledge Graph", "◈", "#10b981", "Suppliers, purchase orders and risk tiers from the Procure to Pay ontology.", "Finance", "dev.patel", "sarah.kim", "2026-11-07");
+  const sup = mk("kg_product", "ont_product", "Product Catalog Knowledge Graph", "⬡", "#f59e0b", "Products, categories and brands from the Product Catalog ontology.", "Product", "priya.nair", "james.oh", "2026-11-20");
   // Earlier builds ran before a warehouse column was renamed: they conformed.
   const clean = (b, graph) => ({...b, status:"Succeeded", errors:0, warnings:0,
     steps:b.steps.map(x=>x.k==="shacl"?{...x,status:"ok",detail:"Conforms"}:x.k==="tests"?{...x,status:"ok"}:x.k==="publish"?{...x,status:"ok",detail:`${ONT_STORE} · ${graph}`}:x.k==="bind"?{...x,status:"ok"}:x)});
