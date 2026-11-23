@@ -1792,38 +1792,48 @@ const AKG_TABLE_ASSETS = [];
 ASSETS.push(...AKG_ASSETS, ...AKG_TABLE_ASSETS);
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AI AGENTS, MCP SERVERS AND THE AI GATEWAY
+// AI AGENTS, MCP SERVERS AND AI GATEWAYS
 // ═══════════════════════════════════════════════════════════════════════════
-// The AI Gateway connector catalogs what the gateway routes: the agents behind it, the
-// MCP servers and tools they call, and which tables and views those calls touch. EDG
-// keeps metadata only - agent, tool, asset, call counts, last used. Prompts, answers and
-// rows never leave the gateway.
+// Two kinds of gateway put agents in the catalog:
+//
+//   Solix AI Gateway (native) - Solix's own runtime, controlled by EDG the way CDP is.
+//     EDG is the control plane: an agent must be approved in EDG before the gateway
+//     routes it, and every MCP tool call is decided against runtime rules that come from
+//     the Policies section (allow / mask / block), then logged. Built on an open-source
+//     core (agentgateway, Apache 2.0). MCP tool traffic only - LLM calls are not proxied.
+//   Third-party gateway (connector) - agentgateway, Kong, Azure APIM, Databricks. EDG
+//     reads what it routes and its traces; it decides nothing.
+//
+// Either way EDG keeps metadata only: agent, user, tool, asset, decision, call counts.
+// Prompts, answers and rows are inspected in flight by the native gateway (to mask) and
+// never stored.
 //
 // Every agent -> asset use says where it came from:
-//   configured - the agent platform's own definition (tools, knowledge sources,
-//                semantic views it was given): what the agent CAN use.
-//   observed   - gateway traces (OpenTelemetry GenAI), SQL parsed to tables: what the
-//                agent DID use, how often and when last.
-// A generic SQL tool names no tables, so for it only "observed" can say which.
+//   configured - the agent platform's own definition: what the agent CAN use.
+//   observed   - gateway calls, SQL parsed to tables: what the agent DID use.
 const AI_TYPES = ["AI Gateway","MCP Server","MCP Tool","AI Agent"];
 const isAiType = t => AI_TYPES.includes(t);
 const AI_USE_SRC = {
   observed:  {l:"Observed",   c:"#16a34a"},
   configured:{l:"Configured", c:"#64748b"},
 };
+const AI_NATIVE_GW = "solix-ai-gateway";
 const AI_GATEWAY_META = {
-  "agentgateway-prod":{vendor:"agentgateway", version:"0.9.2", env:"Production", endpoint:"https://ai-gw.corp.local",
+  "solix-ai-gateway":{native:true, vendor:"Solix AI Gateway", core:"agentgateway · Apache 2.0", version:"1.0.0", env:"Production",
+    endpoint:"https://agents.corp.local/mcp", controlPlane:"Solix EDG", traffic:"MCP tool calls",
+    telemetry:"Every call decided and logged", window:"Last 7 days", synced:"Live"},
+  "agentgateway-prod":{native:false, vendor:"agentgateway", version:"0.9.2", env:"Production", endpoint:"https://ai-gw.corp.local",
     telemetry:"OpenTelemetry GenAI traces", window:"Last 7 days", synced:"2026-11-23 06:00",
-    policies:["OAuth 2.0 token required on every call","PII redaction on tool responses","Tool quarantined when its schema changes","Rate limit · 600 calls/min per agent"]},
+    policies:["OAuth 2.0 token required on every call","PII redaction on tool responses","Rate limit · 600 calls/min per agent"]},
 };
 const MCP_SERVER_META = {
-  "snowflake-mcp":   {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/snowflake",   auth:"OAuth 2.0",        conn:"Snowflake DWH",
+  "snowflake-mcp":    {gateway:AI_NATIVE_GW,        transport:"Streamable HTTP", endpoint:"/mcp/snowflake",  auth:"OAuth 2.0",     conn:"Snowflake DWH",
     tools:["snowflake.run_sql","snowflake.query_semantic_view"]},
-  "oracle-hr-mcp":   {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/oracle-hr",   auth:"OAuth 2.0",        conn:"Oracle ERP",
+  "oracle-hr-mcp":    {gateway:AI_NATIVE_GW,        transport:"Streamable HTTP", endpoint:"/mcp/oracle-hr",  auth:"OAuth 2.0",     conn:"Oracle ERP",
     tools:["oracle_hr.get_employee","oracle_hr.list_org_chart"]},
-  "ecs-docs-mcp":    {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/ecs-docs",    auth:"Service token",    conn:"Solix ECS",
+  "ecs-docs-mcp":     {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/ecs-docs",   auth:"Service token", conn:"Solix ECS",
     tools:["ecs.search_contracts"]},
-  "databricks-uc-mcp":{gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/databricks", auth:"OAuth 2.0",        conn:"Databricks",
+  "databricks-uc-mcp":{gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/databricks", auth:"OAuth 2.0",     conn:"Databricks",
     tools:["databricks.get_features"]},
 };
 const MCP_TOOL_META = {
@@ -1834,17 +1844,22 @@ const MCP_TOOL_META = {
   "oracle_hr.get_employee":       {server:"oracle-hr-mcp",     kind:"Lookup",         scope:"HR.EMPLOYEES",  configured:["employees"],
     desc:"Returns one employee record by employee id or email."},
   "oracle_hr.list_org_chart":     {server:"oracle-hr-mcp",     kind:"Lookup",         scope:"HR.EMPLOYEES",  configured:["employees"],
-    desc:"Returns the reporting line above and below an employee."},
+    desc:"Returns the reporting line above and below an employee.",
+    quarantine:{since:"2026-11-22 18:05", change:"New output field home_address"}},
   "ecs.search_contracts":         {server:"ecs-docs-mcp",      kind:"Retrieval",      scope:"Finance contracts", configured:["contracts_2025.pdf"],
     desc:"Searches archived contract documents and returns matching passages."},
   "databricks.get_features":      {server:"databricks-uc-mcp", kind:"Feature lookup", scope:"ml_features.feature_store", configured:["feature_store"],
     desc:"Returns churn and lifetime-value features for one customer."},
 };
 // uses: {asset, configured, observed:{calls,last}|null, via:tool}
+// purpose: what the agent is for, and whether it is approved for personal data.
+// decisions7d: the native gateway's decisions over the usage window.
 const _obs = (calls,last) => ({calls,last});
 const AGENT_META = {
   "Sales Insights Agent":{platform:"Snowflake Cortex Agents", model:"Claude Sonnet 5.5", identity:"Delegated · end user",
-    gateway:"agentgateway-prod", firstSeen:"2026-08-04", lastActive:"12 min ago",
+    gateway:AI_NATIVE_GW, firstSeen:"2026-08-04", lastActive:"12 min ago",
+    purpose:{text:"Store sales reporting", personalData:false},
+    decisions7d:{allowed:3409, masked:1984, blocked:0},
     tools:["snowflake.query_semantic_view","snowflake.run_sql"],
     uses:[
       {asset:"store_sales_sv",   configured:true,  observed:_obs(2410,"12 min ago"), via:"snowflake.query_semantic_view"},
@@ -1854,55 +1869,108 @@ const AGENT_META = {
       {asset:"customers",        configured:false, observed:_obs(142,"1d ago"),      via:"snowflake.run_sql"},
     ]},
   "HR Helpdesk Agent":{platform:"Microsoft Copilot Studio", model:"GPT-4o", identity:"Service principal · svc-hr-helpdesk",
-    gateway:"agentgateway-prod", firstSeen:"2026-09-22", lastActive:"4 min ago",
+    gateway:AI_NATIVE_GW, firstSeen:"2026-09-22", lastActive:"4 min ago",
+    purpose:{text:"Employee self-service", personalData:true},
+    decisions7d:{allowed:3693, masked:0, blocked:212},
     tools:["oracle_hr.get_employee","oracle_hr.list_org_chart"],
     uses:[
       {asset:"employees", configured:true, observed:_obs(3905,"4 min ago"), via:"oracle_hr.get_employee"},
     ]},
   "Contract Review Agent":{platform:"Amazon Bedrock Agents", model:"Claude Haiku 5.5", identity:"Delegated · end user",
     gateway:"agentgateway-prod", firstSeen:"2026-10-01", lastActive:"2h ago",
+    purpose:{text:"Contract clause search", personalData:false},
     tools:["ecs.search_contracts"],
     uses:[
       {asset:"contracts_2025.pdf", configured:true, observed:_obs(276,"2h ago"), via:"ecs.search_contracts"},
     ]},
   "Churn Model Assistant":{platform:"Databricks Mosaic AI", model:"Llama 3.3 70B", identity:"Service principal · svc-churn",
     gateway:"agentgateway-prod", firstSeen:"2026-07-15", lastActive:"35 min ago",
+    purpose:{text:"Churn score explanation", personalData:false},
     tools:["databricks.get_features"],
     uses:[
       {asset:"feature_store", configured:true, observed:_obs(954,"35 min ago"), via:"databricks.get_features"},
     ]},
   "Finance Close Agent":{platform:"Custom · LangGraph", model:"Claude Opus 5.5", identity:"Service principal · svc-fin-close",
-    gateway:"agentgateway-prod", firstSeen:"2026-10-28", lastActive:"6h ago",
+    gateway:AI_NATIVE_GW, firstSeen:"2026-10-28", lastActive:"6h ago",
+    purpose:{text:"Month-end close reconciliation", personalData:true},
+    decisions7d:{allowed:1550, masked:0, blocked:0},
     tools:["snowflake.run_sql"],
     uses:[
       {asset:"transactions", configured:false, observed:_obs(1120,"6h ago"), via:"snowflake.run_sql"},
       {asset:"orders",       configured:false, observed:_obs(430,"6h ago"),  via:"snowflake.run_sql"},
     ]},
   "Support Triage Agent":{platform:"Microsoft Copilot Studio", model:"GPT-4o", identity:"Delegated · end user",
-    gateway:"agentgateway-prod", firstSeen:"2026-11-20", lastActive:"No calls yet",
+    gateway:AI_NATIVE_GW, firstSeen:"2026-11-20", lastActive:"20 min ago · refused",
+    purpose:{text:"Support ticket routing", personalData:false},
+    decisions7d:{allowed:0, masked:0, blocked:14},
     tools:["snowflake.run_sql"],
     uses:[
       {asset:"customers", configured:true, observed:null, via:"snowflake.run_sql"},
       {asset:"orders",    configured:true, observed:null, via:"snowflake.run_sql"},
     ]},
 };
+
+// ── Native gateway: runtime rules, decisions, quarantine ──
+// A runtime rule either comes from a policy in the Policies section (so one policy
+// governs the data and the agents that use it) or is a gateway setting.
+const AIGW_ACTION = {
+  allowed:{l:"Allowed", c:"#16a34a"},
+  masked: {l:"Masked",  c:"#d97706"},
+  blocked:{l:"Blocked", c:"#e11d48"},
+};
+const AIGW_RULES = [
+  {id:"gw-admit", action:"blocked", setting:"admission", name:"Only agents approved in EDG are routed"},
+  {id:"gw-mask",  action:"masked",  policy:"p-P-MASK", tid:"P-MASK", name:"PII columns are masked for agents whose purpose is not approved for personal data"},
+  {id:"gw-own",   action:"blocked", policy:"p-P-OWN",  tid:"P-OWN",  name:"An agent with no owner may not read PII"},
+  {id:"gw-hold",  action:"blocked", policy:"p-P-HOLD", tid:"P-HOLD", name:"Agents may not write to assets under legal hold"},
+  {id:"gw-quar",  action:"blocked", setting:"quarantine", name:"A tool whose schema changed is blocked until its owner re-approves it"},
+];
+const AIGW_RULE_COUNTS = {"gw-admit":14, "gw-mask":1984, "gw-own":175, "gw-hold":0, "gw-quar":37};
+const AIGW_DECISIONS = [
+  {at:"4 min ago",  agent:"HR Helpdesk Agent",    user:"svc-hr-helpdesk", tool:"oracle_hr.get_employee",        asset:"employees",        decision:"blocked", rule:"gw-own",   detail:"No owner · employees has PII"},
+  {at:"12 min ago", agent:"Sales Insights Agent", user:"lena.ortiz",      tool:"snowflake.query_semantic_view", asset:"store_sales_sv",   decision:"allowed"},
+  {at:"12 min ago", agent:"Sales Insights Agent", user:"lena.ortiz",      tool:"snowflake.run_sql",             asset:"orders",           decision:"masked",  rule:"gw-mask",  detail:"customer_id, email, shipping_address"},
+  {at:"20 min ago", agent:"Support Triage Agent", user:"mia.chen",        tool:"snowflake.run_sql",             asset:"customers",        decision:"blocked", rule:"gw-admit", detail:"Status Draft"},
+  {at:"20 min ago", agent:"Support Triage Agent", user:"mia.chen",        tool:"snowflake.run_sql",             asset:"orders",           decision:"blocked", rule:"gw-admit", detail:"Status Draft"},
+  {at:"1h ago",     agent:"Sales Insights Agent", user:"raj.mehta",       tool:"snowflake.run_sql",             asset:"vw_order_summary", decision:"allowed"},
+  {at:"2h ago",     agent:"HR Helpdesk Agent",    user:"svc-hr-helpdesk", tool:"oracle_hr.list_org_chart",      asset:"employees",        decision:"blocked", rule:"gw-quar",  detail:"New output field home_address"},
+  {at:"3h ago",     agent:"Sales Insights Agent", user:"raj.mehta",       tool:"snowflake.run_sql",             asset:"dim_products",     decision:"allowed"},
+  {at:"6h ago",     agent:"Finance Close Agent",  user:"svc-fin-close",   tool:"snowflake.run_sql",             asset:"transactions",     decision:"allowed"},
+  {at:"6h ago",     agent:"Finance Close Agent",  user:"svc-fin-close",   tool:"snowflake.run_sql",             asset:"orders",           decision:"allowed", detail:"Purpose approved for personal data"},
+  {at:"1d ago",     agent:"Sales Insights Agent", user:"raj.mehta",       tool:"snowflake.run_sql",             asset:"customers",        decision:"masked",  rule:"gw-mask",  detail:"customer_id, first_name, last_name, dob"},
+];
+// Gateway settings (Settings › AI › AI Gateway) and live quarantine state.
+let _aigw = {
+  settings:{enabled:true, admission:true, quarantine:true, failMode:"closed", traffic:"mcp", retention:"90", storage:"metadata"},
+  quarantined: Object.fromEntries(Object.entries(MCP_TOOL_META).filter(([,m])=>m.quarantine).map(([t,m])=>[t,m.quarantine])),
+};
+const _aigwSubs = new Set();
+const aigwSet = (fn) => { _aigw = fn(_aigw); _aigwSubs.forEach(f=>f()); };
+const useAigw = () => { const [,f] = useState(0); useEffect(()=>{ const s=()=>f(x=>x+1); _aigwSubs.add(s); return ()=>_aigwSubs.delete(s); },[]); return _aigw; };
+const aiIsNative = gw => !!(AI_GATEWAY_META[gw]||{}).native;
+const aiRule = id => AIGW_RULES.find(r=>r.id===id);
+const aiRuleSource = r => r.policy ? `Policy · ${(typeof PM2_TPL!=="undefined" && PM2_TPL[r.tid] && PM2_TPL[r.tid].name) || r.tid}` : "Gateway setting";
+
 const AI_ASSETS = (()=>{
   const out = []; let id = 7900;
-  const base = (name,type,x) => ({id:id++, name, type, cert:"Approved", quality:0, usage:"", updated:"1h ago",
-    service:"aigateway", connectionLabel:"AI Gateway", tier:2, rows:"—", size:"—", tags:[], ...x});
-  out.push(base("agentgateway-prod","AI Gateway",{domain:"Platform", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"],
-    db:"agentgateway · Production", description:"Production AI gateway. Every agent and MCP call in the company is routed and traced here."}));
+  const conn = gw => aiIsNative(gw) ? {service:"solixgateway", connectionLabel:"Solix AI Gateway"} : {service:"aigateway", connectionLabel:"AI Gateway"};
+  const base = (name,type,gw,x) => ({id:id++, name, type, cert:"Approved", quality:0, usage:"", updated:"1h ago",
+    tier:2, rows:"—", size:"—", tags:[], ...conn(gw), ...x});
+  out.push(base(AI_NATIVE_GW,"AI Gateway",AI_NATIVE_GW,{domain:"Platform", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"],
+    db:"Solix AI Gateway · Production", description:"Solix's native AI gateway. Routes only agents approved in EDG and decides every MCP tool call against runtime rules from the Policies section."}));
+  out.push(base("agentgateway-prod","AI Gateway","agentgateway-prod",{domain:"Platform", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"],
+    db:"agentgateway · Production", description:"Third-party AI gateway. EDG reads the agents, MCP servers and tools it routes, and its traces."}));
   const SERVER_OWNER = {"snowflake-mcp":["maya.chen","Commerce"], "oracle-hr-mcp":["james.oh","Platform"], "ecs-docs-mcp":["sarah.kim","Finance"], "databricks-uc-mcp":["priya.nair","ML"]};
   Object.entries(MCP_SERVER_META).forEach(([n,m])=>{ const [o,d] = SERVER_OWNER[n];
-    out.push(base(n,"MCP Server",{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n}`,
+    out.push(base(n,"MCP Server",m.gateway,{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n}`,
       description:`MCP server over ${m.conn}.`}));
-    m.tools.forEach(t=>out.push(base(t,"MCP Tool",{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n} · ${t}`,
+    m.tools.forEach(t=>out.push(base(t,"MCP Tool",m.gateway,{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n} · ${t}`,
       description:MCP_TOOL_META[t].desc})));
   });
   const AG = {
     "Sales Insights Agent": {domain:"Commerce", owner:"maya.chen", steward:"dev.patel", cert:"Approved",
       description:"Answers sales questions for store and regional managers."},
-    "HR Helpdesk Agent":    {domain:"Platform", owner:"",          steward:"james.oh",  cert:"In Review",
+    "HR Helpdesk Agent":    {domain:"Platform", owner:"",          steward:"james.oh",  cert:"Approved",
       description:"Answers employee questions about colleagues, managers and the org chart."},
     "Contract Review Agent":{domain:"Finance",  owner:"sarah.kim", steward:"sarah.kim", cert:"Approved",
       description:"Finds clauses and renewal dates across archived contracts."},
@@ -1913,17 +1981,26 @@ const AI_ASSETS = (()=>{
     "Support Triage Agent": {domain:"Commerce", owner:"alex.wu",   steward:"alex.wu",   cert:"Draft",
       description:"Looks up a customer's recent orders to route support tickets."},
   };
-  Object.entries(AG).forEach(([n,x])=>out.push(base(n,"AI Agent",{domain:x.domain, owner:x.owner, owners:x.owner?[x.owner]:[],
+  Object.entries(AG).forEach(([n,x])=>out.push(base(n,"AI Agent",AGENT_META[n].gateway,{domain:x.domain, owner:x.owner, owners:x.owner?[x.owner]:[],
     steward:x.steward, stewards:[x.steward], cert:x.cert, db:`${AGENT_META[n].gateway} · ${AGENT_META[n].platform}`,
-    updated:AGENT_META[n].lastActive==="No calls yet"?"3d ago":"1h ago", description:x.description})));
+    updated:"1h ago", description:x.description})));
   return out;
 })();
 ASSETS.push(...AI_ASSETS);
 // Catalog lookups. A name can repeat across connections, so data assets resolve to the
 // first non-AI asset of that name.
 const aiDataAsset = n => ASSETS.find(a=>a.name===n && !isAiType(a.type));
+const aiAiAsset = n => ASSETS.find(a=>a.name===n && isAiType(a.type));
 const aiAssetPii = n => (SCHEMA[n]||[]).some(c=>c.pii) || ((aiDataAsset(n)||{}).tags||[]).includes("PII");
 const aiUseSrc = u => u.observed ? (u.configured ? "Configured · Observed" : "Observed") : "Configured";
+// Admission at the native gateway: an agent is routed only once it is Approved in EDG.
+// Third-party gateways decide nothing, so there is no admission to report.
+const aiAdmission = (name, cert) => {
+  const m = AGENT_META[name]; if(!m || !aiIsNative(m.gateway)) return null;
+  if(!_aigw.settings.admission) return {ok:true, l:"Routed", reason:"Admission check off"};
+  const st = cert || (aiAiAsset(name)||{}).cert || "Draft";
+  return st==="Approved" ? {ok:true, l:"Routed"} : {ok:false, l:"Blocked at gateway", reason:`Not approved in EDG · status ${st}`};
+};
 // Every use of every agent, flattened: {agent, asset, configured, observed, via}.
 const aiAllUses = () => Object.entries(AGENT_META).flatMap(([agent,m])=>m.uses.map(u=>({agent, ...u})));
 const aiAgentsOfTool = t => Object.keys(AGENT_META).filter(a=>AGENT_META[a].tools.includes(t));
@@ -1940,6 +2017,7 @@ const aiToolUses = t => {
   });
   return rows;
 };
+
 // Edges for the knowledge graph (by asset name; the graph drops any it cannot resolve).
 const aiKgEdges = () => {
   const e = [];
@@ -4950,6 +5028,7 @@ const SERVICE_LOGOS = {
   powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  solixgateway:<svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#ee2424"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><path d="M29 16l3 4-3 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   aigateway:  <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#334155"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><circle cx="31" cy="20" r="2.6" fill="white"/></svg>,
   eai:        <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   sap:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0FAAFF"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="Arial">SAP</text></svg>,
@@ -17474,6 +17553,7 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
               {scans.length>0&&<select value="" onChange={e=>e.target.value&&addToScan(e.target.value)} style={{...selStyle,fontSize:11.5}}><option value="">Add to a scan…</option>{scans.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
               <Btn small variant="primary" onClick={()=>openScanEditor(null,{policyIds:[p.id], name:`${p.name} scan`})}>New scan</Btn></div>}
             {results}
+            <AiGwPolicyCard pid={p.id}/>
             {secHd("Implementation rules", p.rules.length, <span style={{display:"flex",gap:10,alignItems:"center"}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}{p.rules.length>0&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</span>)}
             <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
               {vR.length>1&&(p.ruleLogic||"independent")!=="independent"&&<div style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,background:(p.ruleLogic==="and"?T.green:T.violet)+"18",color:p.ruleLogic==="and"?T.green:T.violet,border:`1px solid ${(p.ruleLogic==="and"?T.green:T.violet)}30`,alignSelf:"flex-start"}}>{p.ruleLogic==="and"?"AND — all rules must pass":"OR — any rule passing is enough"}</div>}
@@ -20537,6 +20617,7 @@ const PolicyManager3View = ({onToast, onNav, settingsOnly}) => {
                     regulations:(p.articles||[]).map(a=>{ const fw=pm3Fw(a.fw); return fw?`${fw.name} ${(fw.arts[a.i]||{}).ref||""}`.trim():null; }).filter(Boolean),
                     owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.purpose}}/>
             {results}
+            <AiGwPolicyCard pid={p.id}/>
             {secHd("Implementation rules", p.rules.length, <span style={{display:"flex",gap:10,alignItems:"center"}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}{p.rules.length>0&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</span>)}
             <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
               {vR.length>1&&(p.ruleLogic||"independent")!=="independent"&&<div style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,background:(p.ruleLogic==="and"?T.green:T.violet)+"18",color:p.ruleLogic==="and"?T.green:T.violet,border:`1px solid ${(p.ruleLogic==="and"?T.green:T.violet)}30`,alignSelf:"flex-start"}}>{p.ruleLogic==="and"?"AND — all rules must pass":"OR — any rule passing is enough"}</div>}
@@ -30776,7 +30857,7 @@ const akgMono = {fontFamily:"'Geist Mono',monospace",get color(){return T.text;}
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AI AGENT / MCP / AI GATEWAY PROFILES - Overview · Tools · Data Used · Routes
+// AI AGENT / MCP / AI GATEWAY PROFILES - Overview · Tools · Data Used · Decisions · Routes
 // ═══════════════════════════════════════════════════════════════════════════
 const AiSrcPill = ({src})=>{
   const m = AI_USE_SRC[src];
@@ -30787,12 +30868,17 @@ const AiSrcPills = ({u})=>(
     {u.configured&&<AiSrcPill src="configured"/>}{u.observed&&<AiSrcPill src="observed"/>}
   </span>
 );
+const AiActPill = ({a})=>{ const m = AIGW_ACTION[a];
+  return <span style={{fontSize:10.5,fontWeight:700,color:m.c,background:`${m.c}12`,border:`1px solid ${m.c}40`,borderRadius:4,padding:"1px 7px",whiteSpace:"nowrap"}}>{m.l}</span>; };
+const AiNativePill = ()=>(
+  <span style={{fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,textTransform:"uppercase",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>Native</span>
+);
 const AiPiiChip = ()=>(
   <span style={{fontSize:10.5,fontWeight:600,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px",whiteSpace:"nowrap"}}>PII</span>
 );
 // A catalog name that opens the asset. AI names are unique; data names resolve to the data asset.
 const AiLink = ({name, ai, onAsset})=>{
-  const a = ai ? ASSETS.find(x=>x.name===name && isAiType(x.type)) : aiDataAsset(name);
+  const a = ai ? aiAiAsset(name) : aiDataAsset(name);
   if(!a || !onAsset) return <span style={akgMono}>{name}</span>;
   return <button onClick={()=>onAsset(a)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.accent,textAlign:"left"}}>{name}</button>;
 };
@@ -30807,17 +30893,41 @@ const AiTable = ({cols, children, empty})=>(
 );
 const aiTr = {get borderBottom(){return `1px solid ${T.border}`;}};
 const aiCalls = n => n==null ? "—" : n.toLocaleString();
-const AiStat = ({l,v,warn})=>(
-  <div style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${warn?`${T.amber}55`:T.border}`,background:T.bgElevated}}>
+const AiStat = ({l,v,c})=>(
+  <div style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${c?`${c}55`:T.border}`,background:T.bgElevated}}>
     <div style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>{l}</div>
-    <div style={{fontSize:18,fontWeight:700,color:warn?T.amber:T.text,marginTop:3}}>{v}</div>
+    <div style={{fontSize:18,fontWeight:700,color:c||T.text,marginTop:3}}>{v}</div>
   </div>
 );
-const AiBanner = ({children})=>(
-  <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}40`,fontSize:12.5,color:T.textSub}}>{children}</div>
+const AiBanner = ({children, c})=>{ const k = c||T.amber;
+  return <div style={{padding:"10px 14px",borderRadius:8,background:`${k}12`,border:`1px solid ${k}40`,fontSize:12.5,color:T.textSub,display:"flex",alignItems:"center",gap:10}}>{children}</div>; };
+const aiOpenPolicy = (pid, onNav) => { _pm2Deep = {policy:pid, tab:"overview"}; onNav && onNav("policymanager2"); };
+const aiPolicyExists = pid => typeof _pm2!=="undefined" && (_pm2.policies||[]).some(p=>p.id===pid);
+// Where a runtime rule comes from: a policy (opens it) or a gateway setting (opens Settings).
+const AiRuleSource = ({r, onNav})=>{
+  const go = r.policy ? (aiPolicyExists(r.policy) ? ()=>aiOpenPolicy(r.policy, onNav) : null) : ()=>onNav&&onNav("settings",{section:"ai", aiTab:"gateway"});
+  const label = aiRuleSource(r);
+  return go ? <button onClick={go} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontSize:11.5,color:T.accent,textAlign:"left",fontFamily:"inherit"}}>{label}</button>
+            : <span style={{fontSize:11.5,color:T.textSub}}>{label}</span>;
+};
+const AiRuleRows = ({rules, onNav})=>(
+  <div>
+    {rules.map(r=>(
+      <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:`1px solid ${T.border}`}}>
+        <AiActPill a={r.action}/>
+        <span style={{flex:1,fontSize:12.5,color:T.text}}>{r.name}</span>
+        <span style={{width:220}}><AiRuleSource r={r} onNav={onNav}/></span>
+        <span style={{width:90,textAlign:"right",fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{aiCalls(AIGW_RULE_COUNTS[r.id]||0)}</span>
+      </div>
+    ))}
+  </div>
 );
+const aiRuleActive = r => !r.setting || _aigw.settings[r.setting];
 
-const AiOverview = ({asset,data,setData,onToast})=>{
+const AiOverview = ({asset,data,setData,onToast,onNav})=>{
+  const gw = useAigw();
+  const {role, roleCfg} = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"").split("@")[0];
   const t = asset.type;
   const desc = <DescSection key={asset.id} text={data.description} obj={{...asset, ...data}} onToast={onToast} onSave={x=>setData(d=>({...d,description:x}))}/>;
   if(t==="AI Agent"){
@@ -30825,20 +30935,32 @@ const AiOverview = ({asset,data,setData,onToast})=>{
     const pii = m.uses.filter(u=>aiAssetPii(u.asset));
     const calls = m.uses.reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
     const unowned = (data.owners||[]).length===0;
+    const adm = aiAdmission(asset.name, data.cert);
+    const d7 = m.decisions7d;
     return (
       <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
-        {unowned&&pii.length>0&&<AiBanner><b style={{color:T.amber}}>Unowned · reads PII</b> · {pii.map(u=>u.asset).join(", ")}. Inbox task “Assign an owner” sent to {(data.stewards||[])[0]||"the Connection Admin of AI Gateway"}.</AiBanner>}
+        {adm&&!adm.ok&&<AiBanner c={T.rose}><span><b style={{color:T.rose}}>Blocked at gateway</b> · {adm.reason}. {d7&&d7.blocked?`${d7.blocked} calls refused in the last 7 days.`:""}</span></AiBanner>}
+        {unowned&&pii.length>0&&<AiBanner><span><b style={{color:T.amber}}>Unowned · reads PII</b> · {pii.map(u=>u.asset).join(", ")}. Inbox task “Assign an owner” sent to {(data.stewards||[])[0]||"the Connection Admin"}.</span></AiBanner>}
         {desc}
         <Card2><div style={{padding:"14px 16px"}}>
           <SH title="Agent"/>
-          <DbtProps rows={[["Platform",m.platform],["Model",m.model],["Identity",m.identity],["Gateway",m.gateway],
+          <DbtProps rows={[["Platform",m.platform],["Model",m.model],["Identity",m.identity],
+            ["Gateway",<span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{m.gateway}{aiIsNative(m.gateway)&&<AiNativePill/>}</span>],
+            ["Purpose",m.purpose?`${m.purpose.text} · ${m.purpose.personalData?"approved for personal data":"not approved for personal data"}`:"—"],
+            ["Gateway access",adm?adm.l:"Not controlled by EDG"],
             ["First seen",m.firstSeen],["Last active",m.lastActive],["Calls · 7 days",aiCalls(calls)],["Tools",m.tools.length]]}/>
         </div></Card2>
+        {d7&&<Card2><div style={{padding:"14px 16px"}}>
+          <SH title="Gateway decisions" sub={AI_GATEWAY_META[m.gateway]?.window}/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+            {Object.keys(AIGW_ACTION).map(k=><AiStat key={k} l={AIGW_ACTION[k].l} v={aiCalls(d7[k])} c={d7[k]&&k!=="allowed"?AIGW_ACTION[k].c:null}/>)}
+          </div>
+        </div></Card2>}
         <Card2><div style={{padding:"14px 16px"}}>
           <SH title="Data used" sub={AI_GATEWAY_META[m.gateway]?.window}/>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             <AiStat l="Assets" v={m.uses.length}/>
-            <AiStat l="With PII" v={pii.length} warn={pii.length>0}/>
+            <AiStat l="With PII" v={pii.length} c={pii.length?T.amber:null}/>
             <AiStat l="Observed, not configured" v={m.uses.filter(u=>u.observed&&!u.configured).length}/>
             <AiStat l="Configured, never called" v={m.uses.filter(u=>u.configured&&!u.observed).length}/>
           </div>
@@ -30849,12 +30971,18 @@ const AiOverview = ({asset,data,setData,onToast})=>{
   if(t==="MCP Tool"){
     const m = MCP_TOOL_META[asset.name]; if(!m) return desc;
     const rows = aiToolUses(asset.name);
+    const q = gw.quarantined[asset.name];
+    const srv = MCP_SERVER_META[m.server]||{};
+    const canApprove = role==="admin" || (data.owners||[]).includes(me);
+    const reapprove = () => { aigwSet(x=>{ const n={...x.quarantined}; delete n[asset.name]; return {...x, quarantined:n}; }); onToast&&onToast(`${asset.name} re-approved · calls are routed again`,"success"); };
     return (
       <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+        {q&&<AiBanner c={T.rose}><span style={{flex:1}}><b style={{color:T.rose}}>Quarantined</b> · Schema changed {q.since} · {q.change}. Calls are blocked until the owner re-approves the tool.</span>
+          {canApprove&&<Btn small variant="primary" onClick={reapprove}>Re-approve</Btn>}</AiBanner>}
         {desc}
         <Card2><div style={{padding:"14px 16px"}}>
           <SH title="MCP tool"/>
-          <DbtProps rows={[["MCP server",m.server],["Kind",m.kind],["Scope",m.scope],["Agents calling",aiAgentsOfTool(asset.name).length],
+          <DbtProps rows={[["MCP server",m.server],["Gateway",srv.gateway||"—"],["Kind",m.kind],["Scope",m.scope],["Status",q?"Quarantined":"Active"],["Agents calling",aiAgentsOfTool(asset.name).length],
             ["Assets touched",rows.length],["Calls · 7 days",aiCalls(rows.reduce((s,r)=>s+(r.observed?r.observed.calls:0),0))]]}/>
         </div></Card2>
       </div>
@@ -30868,7 +30996,7 @@ const AiOverview = ({asset,data,setData,onToast})=>{
         <Card2><div style={{padding:"14px 16px"}}>
           <SH title="MCP server"/>
           <DbtProps rows={[["Gateway",m.gateway],["Transport",m.transport],["Endpoint",m.endpoint],["Authentication",m.auth],
-            ["Connection",m.conn],["Tools",m.tools.length]]}/>
+            ["Connection",m.conn],["Tools",m.tools.length],["Quarantined tools",m.tools.filter(x=>gw.quarantined[x]).length]]}/>
         </div></Card2>
       </div>
     );
@@ -30877,44 +31005,57 @@ const AiOverview = ({asset,data,setData,onToast})=>{
   const agents = Object.keys(AGENT_META).filter(a=>AGENT_META[a].gateway===asset.name);
   const servers = Object.keys(MCP_SERVER_META).filter(s=>MCP_SERVER_META[s].gateway===asset.name);
   const calls = aiAllUses().filter(u=>AGENT_META[u.agent].gateway===asset.name).reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
+  const sum = k => agents.reduce((s,a)=>s+((AGENT_META[a].decisions7d||{})[k]||0),0);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+      {m.native&&!gw.settings.enabled&&<AiBanner c={T.rose}><span><b style={{color:T.rose}}>Gateway off</b> · {gw.settings.failMode==="closed"?"All agent calls are blocked":"Agent calls pass through and are logged only"}.</span></AiBanner>}
       {desc}
       <Card2><div style={{padding:"14px 16px"}}>
-        <SH title="AI gateway"/>
-        <DbtProps rows={[["Vendor",m.vendor],["Version",m.version],["Environment",m.env],["Endpoint",m.endpoint],
-          ["Telemetry",m.telemetry],["Last synced",m.synced]]}/>
+        <SH title={m.native?"Solix AI Gateway":"AI gateway"} action={m.native&&<AiNativePill/>}/>
+        <DbtProps rows={m.native
+          ? [["Control plane",m.controlPlane],["Core",m.core],["Version",m.version],["Environment",m.env],["Endpoint",m.endpoint],["Traffic",m.traffic],
+             ["When unreachable",gw.settings.failMode==="closed"?"Block calls (fail closed)":"Allow and log (fail open)"],["Stored",gw.settings.storage==="metadata"?"Metadata only":gw.settings.storage]]
+          : [["Vendor",m.vendor],["Version",m.version],["Environment",m.env],["Endpoint",m.endpoint],["Telemetry",m.telemetry],["Last synced",m.synced]]}/>
       </div></Card2>
       <Card2><div style={{padding:"14px 16px"}}>
         <SH title="Traffic" sub={m.window}/>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${m.native?6:4},1fr)`,gap:8}}>
           <AiStat l="Agents" v={agents.length}/>
           <AiStat l="MCP servers" v={servers.length}/>
-          <AiStat l="Tools" v={servers.reduce((s,x)=>s+MCP_SERVER_META[x].tools.length,0)}/>
-          <AiStat l="Calls" v={aiCalls(calls)}/>
+          {!m.native&&<AiStat l="Tools" v={servers.reduce((s,x)=>s+MCP_SERVER_META[x].tools.length,0)}/>}
+          {!m.native&&<AiStat l="Calls" v={aiCalls(calls)}/>}
+          {m.native&&Object.keys(AIGW_ACTION).map(k=><AiStat key={k} l={AIGW_ACTION[k].l} v={aiCalls(sum(k))} c={sum(k)&&k!=="allowed"?AIGW_ACTION[k].c:null}/>)}
+          {m.native&&<AiStat l="Quarantined tools" v={Object.keys(gw.quarantined).length} c={Object.keys(gw.quarantined).length?T.rose:null}/>}
         </div>
       </div></Card2>
-      <Card2><div style={{padding:"14px 16px"}}>
-        <SH title="Policies enforced" sub="Read from the gateway"/>
-        {m.policies.map(p=><div key={p} style={{fontSize:12.5,color:T.textSub,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>{p}</div>)}
-      </div></Card2>
+      {m.native
+        ? <Card2><div style={{padding:"14px 16px"}}>
+            <SH title="Runtime rules" sub="Decisions · 7 days"/>
+            <AiRuleRows rules={AIGW_RULES.filter(aiRuleActive)} onNav={onNav}/>
+          </div></Card2>
+        : <Card2><div style={{padding:"14px 16px"}}>
+            <SH title="Policies enforced" sub="Read from the gateway"/>
+            {m.policies.map(p=><div key={p} style={{fontSize:12.5,color:T.textSub,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>{p}</div>)}
+          </div></Card2>}
     </div>
   );
 };
 
 // Tools of an agent, or of an MCP server.
 const AiToolsPanel = ({asset,onAsset})=>{
+  const gw = useAigw();
   const isAgent = asset.type==="AI Agent";
   const tools = isAgent ? (AGENT_META[asset.name]||{tools:[]}).tools : (MCP_SERVER_META[asset.name]||{tools:[]}).tools;
   const callsOf = t => aiAllUses().filter(u=>u.via===t && (!isAgent||u.agent===asset.name)).reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
   return (
-    <AiTable cols={["Tool","MCP server","Kind","Scope","Calls · 7 days"]} empty={tools.length?null:"No tools"}>
+    <AiTable cols={["Tool","MCP server","Kind","Scope","Status","Calls · 7 days"]} empty={tools.length?null:"No tools"}>
       {tools.map(t=>{ const m = MCP_TOOL_META[t]; return (
         <tr key={t} style={aiTr}>
           <td style={akgTd}><AiLink name={t} ai onAsset={onAsset}/></td>
           <td style={akgTd}><AiLink name={m.server} ai onAsset={onAsset}/></td>
           <td style={akgTd}>{m.kind}</td>
           <td style={akgTd}>{m.scope}</td>
+          <td style={akgTd}>{gw.quarantined[t]?<span style={{color:T.rose,fontWeight:600}}>Quarantined</span>:"Active"}</td>
           <td style={akgTd}>{aiCalls(callsOf(t))}</td>
         </tr>); })}
     </AiTable>
@@ -30944,32 +31085,118 @@ const AiDataUsedPanel = ({asset,onAsset})=>{
   );
 };
 
-// What a gateway routes: its agents and MCP servers.
-const AiRoutesPanel = ({asset,onAsset})=>{
-  const agents = Object.keys(AGENT_META).filter(a=>AGENT_META[a].gateway===asset.name);
-  const servers = Object.keys(MCP_SERVER_META).filter(s=>MCP_SERVER_META[s].gateway===asset.name);
+// The native gateway's per-call decisions, for one agent or for the whole gateway.
+const AiDecisionsPanel = ({asset,onAsset,onNav})=>{
+  const isAgent = asset.type==="AI Agent";
+  const [f, setF] = useState("all");
+  const rows = AIGW_DECISIONS.filter(d=>isAgent ? d.agent===asset.name : AGENT_META[d.agent] && AGENT_META[d.agent].gateway===asset.name)
+    .filter(d=>f==="all"||d.decision===f);
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:16}}>
-      <SH title="Agents" sub={`${agents.length}`}/>
-      <AiTable cols={["Agent","Platform","Model","Owner","Last active"]}>
-        {agents.map(g=>{ const m = AGENT_META[g], a = ASSETS.find(x=>x.name===g&&x.type==="AI Agent")||{}; return (
-          <tr key={g} style={aiTr}>
-            <td style={akgTd}><AiLink name={g} ai onAsset={onAsset}/></td>
-            <td style={akgTd}>{m.platform}</td><td style={akgTd}>{m.model}</td>
-            <td style={akgTd}>{(a.owners||[]).length?a.owners.join(", "):<span style={{color:T.amber}}>Unowned</span>}</td>
-            <td style={akgTd}>{m.lastActive}</td>
-          </tr>); })}
-      </AiTable>
-      <SH title="MCP servers" sub={`${servers.length}`}/>
-      <AiTable cols={["MCP server","Connection","Transport","Tools"]}>
-        {servers.map(s=>{ const m = MCP_SERVER_META[s]; return (
-          <tr key={s} style={aiTr}>
-            <td style={akgTd}><AiLink name={s} ai onAsset={onAsset}/></td>
-            <td style={akgTd}>{m.conn}</td><td style={akgTd}>{m.transport}</td><td style={akgTd}>{m.tools.length}</td>
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{width:220}}><SLSelect value={f} onChange={e=>setF(e.target.value)} options={[{v:"all",l:"All decisions"},...Object.keys(AIGW_ACTION).map(k=>({v:k,l:AIGW_ACTION[k].l}))]}/></div>
+      <AiTable cols={["Time",...(isAgent?[]:["Agent"]),"User","Tool","Asset","Decision","Rule","Detail"]} empty={rows.length?null:"No decisions"}>
+        {rows.map((d,i)=>{ const r = d.rule && aiRule(d.rule); return (
+          <tr key={i} style={aiTr}>
+            <td style={{...akgTd,whiteSpace:"nowrap"}}>{d.at}</td>
+            {!isAgent&&<td style={akgTd}><AiLink name={d.agent} ai onAsset={onAsset}/></td>}
+            <td style={akgTd}>{d.user}</td>
+            <td style={akgTd}><AiLink name={d.tool} ai onAsset={onAsset}/></td>
+            <td style={akgTd}><AiLink name={d.asset} onAsset={onAsset}/></td>
+            <td style={akgTd}><AiActPill a={d.decision}/></td>
+            <td style={akgTd}>{r?<div><div style={{color:T.text}}>{r.name}</div><AiRuleSource r={r} onNav={onNav}/></div>:"—"}</td>
+            <td style={akgTd}>{d.detail||"—"}</td>
           </tr>); })}
       </AiTable>
     </div>
   );
+};
+
+// What a gateway routes: its agents and MCP servers.
+const AiRoutesPanel = ({asset,onAsset})=>{
+  const gw = useAigw();
+  const agents = Object.keys(AGENT_META).filter(a=>AGENT_META[a].gateway===asset.name);
+  const servers = Object.keys(MCP_SERVER_META).filter(s=>MCP_SERVER_META[s].gateway===asset.name);
+  const native = aiIsNative(asset.name);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <SH title="Agents" sub={`${agents.length}`}/>
+      <AiTable cols={["Agent","Platform","Model","Owner",...(native?["Access"]:[]),"Last active"]}>
+        {agents.map(g=>{ const m = AGENT_META[g], a = aiAiAsset(g)||{}, adm = aiAdmission(g); return (
+          <tr key={g} style={aiTr}>
+            <td style={akgTd}><AiLink name={g} ai onAsset={onAsset}/></td>
+            <td style={akgTd}>{m.platform}</td><td style={akgTd}>{m.model}</td>
+            <td style={akgTd}>{(a.owners||[]).length?a.owners.join(", "):<span style={{color:T.amber}}>Unowned</span>}</td>
+            {native&&<td style={akgTd}>{adm&&!adm.ok?<span style={{color:T.rose,fontWeight:600}} title={adm.reason}>Blocked</span>:"Routed"}</td>}
+            <td style={akgTd}>{m.lastActive}</td>
+          </tr>); })}
+      </AiTable>
+      <SH title="MCP servers" sub={`${servers.length}`}/>
+      <AiTable cols={["MCP server","Connection","Transport","Tools","Quarantined"]}>
+        {servers.map(s=>{ const m = MCP_SERVER_META[s]; return (
+          <tr key={s} style={aiTr}>
+            <td style={akgTd}><AiLink name={s} ai onAsset={onAsset}/></td>
+            <td style={akgTd}>{m.conn}</td><td style={akgTd}>{m.transport}</td><td style={akgTd}>{m.tools.length}</td>
+            <td style={akgTd}>{m.tools.filter(x=>gw.quarantined[x]).length||"—"}</td>
+          </tr>); })}
+      </AiTable>
+    </div>
+  );
+};
+
+// On a policy in the Policies section: the runtime rules the native gateway enforces
+// from it, so one policy visibly governs both the data and the agents that use it.
+const AiGwPolicyCard = ({pid})=>{
+  const rules = AIGW_RULES.filter(r=>r.policy===pid);
+  if(!rules.length) return null;
+  return (
+    <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${T.border}`,background:T.bgSurface,padding:"12px 14px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>AI agents</span>
+        <span style={{fontSize:11.5,color:T.textSub}}>Enforced by Solix AI Gateway</span><AiNativePill/>
+        <span style={{flex:1}}/><span style={{fontSize:10.5,color:T.textMuted}}>Decisions · 7 days</span>
+      </div>
+      {rules.map(r=>(
+        <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderTop:`1px solid ${T.border}`}}>
+          <AiActPill a={r.action}/><span style={{flex:1,fontSize:12.5,color:T.text}}>{r.name}</span>
+          <span style={{fontSize:12,color:T.textSub,fontFamily:"'Geist Mono',monospace"}}>{aiCalls(AIGW_RULE_COUNTS[r.id]||0)}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Settings › AI › AI Gateway - how the native gateway runs. What it enforces comes from
+// the Policies section; only operational controls live here.
+const AiGatewaySettings = ({onToast})=>{
+  const gw = useAigw();
+  const s = gw.settings;
+  const set = (patch, msg) => { aigwSet(x=>({...x, settings:{...x.settings, ...patch}})); msg&&onToast&&onToast(msg,"success"); };
+  const m = AI_GATEWAY_META[AI_NATIVE_GW];
+  const sel = (l, v, opts, on) => (
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"9px 0",borderTop:`1px solid ${T.border}`}}>
+      <div style={{flex:1,fontSize:12,fontWeight:600,color:T.text}}>{l}</div>
+      <div style={{width:260}}><SLSelect value={v} onChange={e=>on(e.target.value)} options={opts}/></div>
+    </div>);
+  return (<>
+    <AIDCard title="Solix AI Gateway">
+      <AIDRow l="Enabled" on={s.enabled} set={v=>set({enabled:v}, v?"Solix AI Gateway on":"Solix AI Gateway off")}/>
+      {sel("Endpoint", m.endpoint, [m.endpoint], ()=>{})}
+      {sel("Core", m.core, [m.core], ()=>{})}
+      {sel("Traffic", s.traffic, [{v:"mcp",l:"MCP tool calls"}], ()=>{})}
+      {sel("When unreachable", s.failMode, [{v:"closed",l:"Block calls (fail closed)"},{v:"open",l:"Allow and log (fail open)"}], v=>set({failMode:v}, "Saved"))}
+    </AIDCard>
+    <AIDCard title="Admission">
+      <AIDRow l="Only route agents approved in EDG" on={s.admission} set={v=>set({admission:v}, "Saved")}/>
+      <AIDRow l="Quarantine a tool when its schema changes" on={s.quarantine} set={v=>set({quarantine:v}, "Saved")}/>
+    </AIDCard>
+    <AIDCard title="Runtime rules from policies">
+      <AiRuleRows rules={AIGW_RULES.filter(r=>r.policy)}/>
+    </AIDCard>
+    <AIDCard title="Decision log">
+      {sel("Stored", s.storage, [{v:"metadata",l:"Metadata only"}], ()=>{})}
+      {sel("Retention", s.retention, [{v:"30",l:"30 days"},{v:"90",l:"90 days"},{v:"365",l:"1 year"}], v=>set({retention:v}, "Saved"))}
+    </AIDCard>
+  </>);
 };
 
 const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
@@ -31477,7 +31704,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {key:"overview",label:"Overview"},
         ...(asset.type==="AI Agent"||asset.type==="MCP Server"?[{key:"aitools",label:"Tools"}]:[]),
         ...(asset.type==="AI Agent"||asset.type==="MCP Tool"?[{key:"aidata",label:"Data Used"},{key:"lineage",label:"Lineage"}]:[]),
-        ...(asset.type==="AI Gateway"?[{key:"airoutes",label:"Routes"}]:[]),
+        ...(asset.type==="AI Agent"&&aiIsNative((AGENT_META[asset.name]||{}).gateway)?[{key:"aidecisions",label:"Decisions"}]:[]),
+        ...(asset.type==="AI Gateway"?[{key:"airoutes",label:"Routes"},...(aiIsNative(asset.name)?[{key:"aidecisions",label:"Decisions"}]:[])]:[]),
         {key:"kg",label:"Knowledge Graph"},
         {key:"customprops",label:"Custom Properties"},
         {key:"activity",label:"Audit Logs"},
@@ -31647,7 +31875,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
         {tab==="overview"  && (isAI
-          ? <AiOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
+          ? <AiOverview asset={asset} data={data} setData={setData} onToast={onToast} onNav={onNav}/>
           : isAKG
           ? <AkgOverview asset={asset} data={data} setData={setData} onToast={onToast} onNav={onNav}/>
           : isPBI
@@ -31674,6 +31902,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="aitools"     && isAI && <AiToolsPanel asset={data} onAsset={onAsset}/>}
         {tab==="aidata"      && isAI && <AiDataUsedPanel asset={data} onAsset={onAsset}/>}
         {tab==="airoutes"    && isAI && <AiRoutesPanel asset={data} onAsset={onAsset}/>}
+        {tab==="aidecisions" && isAI && <AiDecisionsPanel asset={data} onAsset={onAsset} onNav={onNav}/>}
         {tab==="akgtables"   && isAKG && <AkgTablesPanel asset={data} onAsset={onAsset}/>}
         {tab==="akgrels"     && isAKG && <AkgRelationshipsPanel asset={data}/>}
         {tab==="akgversions" && isAKG && <AkgVersionsPanel asset={data}/>}
@@ -32758,7 +32987,7 @@ const CatalogView = ({onAsset})=>{
   const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",
     oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",
     gcs:"Google Cloud Storage",airflow:"Airflow",tableau:"Tableau",powerbi:"Power BI",
-    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery",eai:"Solix EAI",aigateway:"AI Gateway",sap:"SAP"};
+    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery",eai:"Solix EAI",aigateway:"AI Gateway",solixgateway:"Solix AI Gateway",sap:"SAP"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
@@ -41761,6 +41990,7 @@ const CONN_CONFIG_FIELDS = {
 
 // Inline SVG logo render functions — called inside components, zero CDN dependency
 const CONNECTOR_LOGOS = {
+  solixgateway: s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#ee2424"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><path d="M29 16l3 4-3 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>,
   aigateway:    s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#334155"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><circle cx="31" cy="20" r="2.6" fill="white"/></svg>,
   eai:          s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   postgres:     s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#336791"/><text x="20" y="26" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="monospace">PG</text></svg>,
@@ -41803,6 +42033,7 @@ const CONNECTOR_LOGOS = {
 const LOGO_KEY_MAP = {
   "Solix EAI":"eai",
   "AI Gateway":"aigateway",
+  "Solix AI Gateway":"solixgateway",
   "PostgreSQL":"postgres","MySQL":"mysql","Microsoft SQL":"mssql","Oracle":"oracle",
   "Snowflake":"snowflake","Google BigQuery":"bigquery","Amazon Redshift":"redshift",
   "Databricks":"databricks","Apache Airflow":"airflow","dbt":"dbt","dbt Cloud":"dbt",
@@ -54850,6 +55081,19 @@ const CONNECTOR_SCOPE = {
   // judgement made in the Knowledge Layer, never an import side effect.
   // An AI gateway brings what it routes. Usage arrives from its traces as metadata only:
   // agent, tool, asset, call count, last used. Prompts, answers and rows stay in the gateway.
+  // The native gateway: EDG is its control plane. Agents it routes, MCP servers and tools
+  // register here; every call is decided against runtime rules from the Policies section.
+  solixgateway:{
+    objectTypes:["Agents","MCP servers","MCP tools","Data usage","Decisions"],
+    note:"EDG is the control plane of the Solix AI Gateway: an agent is routed only once it is approved in EDG, and every MCP tool call is allowed, masked or blocked by runtime rules from the Policies section. Only metadata is kept \u2014 never prompts, answers or rows.",
+    dims:[],
+    auth:"Registering the gateway with EDG",
+    authName:"Registration token",
+    transport:"api",
+    discover:"Reading registered agents, MCP servers and tools",
+    discovery:{"Agents":4,"MCP servers":2,"MCP tools":4,"Assets used":7,"Decisions (7 days)":10848},
+    caps:{},
+  },
   aigateway:{
     objectTypes:["Agents","MCP servers","MCP tools","Data usage"],
     note:"Agents, MCP servers and tools are read from the gateway's registry. Which tables and views each agent uses comes from the agent's own configuration and from the gateway's traces. Only metadata is kept \u2014 never prompts, answers or rows.",
@@ -55170,9 +55414,10 @@ const scopeFor = (v) => CONNECTOR_SCOPE[connIdFrom(v)] || DEFAULT_CONNECTOR_SCOP
 const ADD_SERVICE_CONNECTORS = {
   AI: {
     color:"#c026d3", icon:"bot",
-    desc:"AI gateways. EDG catalogs the agents, MCP servers and tools they route, and which tables and views the agents use.",
+    desc:"AI gateways. EDG catalogs the agents, MCP servers and tools they route, and which tables and views the agents use. The Solix AI Gateway also enforces EDG policies on every call.",
     connectors:[
-      {id:"aigateway",  name:"AI Gateway",   logo:"\u26e9\ufe0f", color:"#334155", desc:"agentgateway, Kong AI Gateway, Azure API Management, Databricks AI Gateway"},
+      {id:"solixgateway", name:"Solix AI Gateway", logo:"\u26e9\ufe0f", color:"#ee2424", desc:"Native · routes agents approved in EDG and enforces policies on every MCP call"},
+      {id:"aigateway",  name:"AI Gateway",   logo:"\u26e9\ufe0f", color:"#334155", desc:"Third-party · agentgateway, Kong AI Gateway, Azure API Management, Databricks AI Gateway"},
     ],
   },
   Knowledge: {
@@ -55258,6 +55503,12 @@ const ADD_SERVICE_CONNECTORS = {
 // What must already be true before any credential works. These are the steps connector
 // setups actually fail on, and they are quoted from each vendor's own documentation.
 const CONNECTOR_PREREQS = {
+  solixgateway:[
+    "The Solix AI Gateway deployed in your network (container or Kubernetes) and reachable from EDG.",
+    "Agents pointed at the gateway's MCP endpoint instead of at MCP servers directly.",
+    "Each MCP server registered on the gateway, with the EDG connection it reads from.",
+    "EDG keeps metadata only: agent, user, tool, asset and decision. Prompts, answers and rows are inspected in flight to mask and never stored.",
+  ],
   aigateway:[
     "A read-only token for the gateway's admin API, to list its agents, MCP servers and tools.",
     "Traces exported in OpenTelemetry GenAI format, or the gateway's own access log. Without traces EDG shows only what each agent is configured to use.",
@@ -55303,6 +55554,13 @@ const CONNECTOR_PREREQS = {
 };
 
 const CONNECTOR_FIELDS = {
+  solixgateway:[
+    {k:"host", grp:"conn",         l:"Gateway URL",          ph:"https://agents.corp.local", type:"text", req:true, help:"Where the Solix AI Gateway runs. Agents call its /mcp endpoint."},
+    {k:"token", grp:"auth",        l:"Registration token",   ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Issued by EDG. Stored encrypted; never shown again after saving."},
+    {k:"failMode", grp:"scope",    l:"When unreachable",     type:"select", opts:["Block calls (fail closed)","Allow and log (fail open)"], help:"What the gateway does when it cannot reach EDG for a decision."},
+    {k:"admission", grp:"scope",   l:"Only route agents approved in EDG", type:"toggle", val:true},
+    {k:"quarantine", grp:"scope",  l:"Quarantine a tool when its schema changes", type:"toggle", val:true},
+  ],
   aigateway:[
     {k:"vendor", grp:"conn",       l:"Gateway",              type:"select", req:true, opts:["agentgateway","Kong AI Gateway","Azure API Management","Databricks AI Gateway","Other (OpenTelemetry)"], help:"Any gateway that exports OpenTelemetry GenAI traces works through Other."},
     {k:"host", grp:"conn",         l:"Admin API URL",        ph:"https://ai-gw.corp.local", type:"text", req:true, help:"Where EDG reads the registry of agents, MCP servers and tools."},
@@ -69652,7 +69910,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI", aigateway:"AI Gateway", sap:"SAP"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI", aigateway:"AI Gateway", solixgateway:"Solix AI Gateway", sap:"SAP"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.
@@ -72946,6 +73204,7 @@ const AISettingsSection = ({onToast}) => {
           {key:"descriptions",   label:"Descriptions"},
           {key:"semantic",       label:"Semantic Models"},
           ...(ONT_AI_UI ? [{key:"ontology",       label:"Ontologies"}] : []),
+          {key:"gateway",        label:"AI Gateway"},
         ]} active={tab} onChange={setTab}/>
       </div>
       {tab==="copilot"        && <CopilotSettingsSection onToast={onToast} embedded/>}
@@ -72953,6 +73212,7 @@ const AISettingsSection = ({onToast}) => {
       {tab==="descriptions"   && <AIDescSettings onToast={onToast}/>}
       {tab==="semantic"       && <SmaiSettings onToast={onToast}/>}
       {ONT_AI_UI && tab==="ontology" && <OaiSettings/>}
+      {tab==="gateway"        && <AiGatewaySettings onToast={onToast}/>}
     </>
   );
 };
