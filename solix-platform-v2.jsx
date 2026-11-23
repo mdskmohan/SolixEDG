@@ -6322,6 +6322,7 @@ const GROUPS = [
   {section:"Governance",items:[
     {key:"policymanager",  icon:"policies",      label:"Policies"},
     {key:"policymanager2", icon:"shield",        label:"Policy Manager 2"},
+    {key:"policymanager3", icon:"shield",        label:"Policy Manager 3"},
     {key:"tags",           icon:"tag",           label:"Classifications"},
   ]},
   {section:"Knowledge",items:[
@@ -6340,7 +6341,7 @@ const GROUPS = [
 const Sidebar = ({active, onNav, exp, setExp, onHelp}) => {
   const {roleCfg} = useRole();
   const inboxBadgeCount = INBOX_DATA.filter(i=>!i.readAt).length;
-  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags"];
+  const allowedNav = roleCfg?.nav || ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags"];
   return (
     <div style={{position:"fixed",top:0,left:0,height:"100vh",width:exp?EXPANDED_W:COLLAPSED_W,background:T.bgSurface,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",zIndex:100,transition:"width .2s ease",overflow:"hidden"}}>
       {/* Logo */}
@@ -17920,6 +17921,2834 @@ const PolicyManager2View = ({onToast, onNav, settingsOnly}) => {
           onRunNow={()=>{ setSchedScan(null); runScan(sp); }} running={runningScan===schedScan}
           onRemove={sp?.schedule?()=>{ updScan(schedScan,x=>({...x,sched:null,schedule:null,nextRun:null,schedEnabled:false})); setSchedScan(null); onToast("Schedule removed","info"); }:undefined}
           onSave={sched=>{ updScan(schedScan,x=>({...x,sched,schedule:contractCron(sched),nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled})); setSchedScan(null); onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success"); }}/>; })()}
+      {confirm&&<>
+        <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
+        <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{confirm.title}</div>
+          <div style={{fontSize:12.5,color:T.textSub,marginTop:8,lineHeight:1.6}}>{confirm.body}</div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}>
+            <Btn ghost onClick={()=>setConfirm(null)}>Cancel</Btn>
+            <Btn variant={confirm.danger?"danger":"primary"} onClick={()=>{ const f=confirm.onYes; setConfirm(null); f(); }}>{confirm.yesLabel}</Btn>
+          </div>
+        </div></>}
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════
+// POLICY MANAGER 3 — Policy Manager 2 without scans: every policy runs on its own
+//   (Run now, a schedule, a Runs history), the way the original Policy Manager runs policies.
+//   Framework — a built-in regulation (22) or a custom framework you define.
+//   Article   — what the framework asks, in plain language.
+//   Policy    — your commitment that satisfies one or more articles, shared across
+//               frameworks. Owned (owner + stewards), versioned, approved:
+//               Draft → In review → Active. Source: Regulation (prebuilt) or Custom.
+//   Rule      — what actually runs. Each rule is one of three types:
+//                 Validation  — checks catalog metadata and raises findings.
+//                 Enforcement — retention or legal hold, executed through CDP.
+//                 Attestation — a named form a person fills in; a reviewer approves.
+//               Rules are Prebuilt (shipped, locked except the values the law leaves
+//               open) or Custom (added by you — to your own policies or to prebuilt ones).
+//   Articles point at exact rules: HIPAA §164.514(b) counts the "non-production
+//   copies are masked" rule, not everything the Masking policy contains.
+// ═════════════════════════════════════════════════════════════════════════
+const PM3_CLASS_META = {
+  PII:  {label:"Personal data",               color:"#8b5cf6"},
+  SPI:  {label:"Sensitive personal data",     color:"#ec4899"},
+  PHI:  {label:"Protected health information",color:"#ef4444"},
+  PCI:  {label:"Cardholder data",             color:"#f59e0b"},
+  FIN:  {label:"Financial records",           color:"#0ea5e9"},
+  AUDIT:{label:"Audit & access logs",         color:"#64748b"},
+};
+const PM3_TYPE_META = {
+  validation: {label:"Validation",  color:"#2563eb", hint:"Checks catalog metadata continuously and raises findings. Changes no data."},
+  enforcement:{label:"Enforcement", color:"#16a34a", hint:"Retention or legal hold, executed through CDP after approval and each table owner's sign-off."},
+  attestation:{label:"Evidence", color:"#7c3aed", hint:"Something EDG can't observe. A person fills in a form; a reviewer approves; it comes due again."},
+  outside:    {label:"Outside EDG", color:"#64748b", hint:"Another system's job — listed so nothing is hidden, never scored."},
+};
+
+// ── Validation vocabulary: every field is something the catalog or a connector knows.
+const PM3_FIELDS = {
+  env:      {label:"Environment",          type:"enum", opts:["prod","dev"], get:a=>a.env},
+  access:   {label:"Access",               type:"enum", opts:["Broad","Restricted"], get:a=>a.access},
+  domain:   {label:"Domain",               type:"enum", opts:["Commerce","Finance","Platform","Product"], get:a=>a.domain},
+  masking:  {label:"Masking (reported by source)", type:"enum", opts:["Applied","Not applied"], get:a=>a.masking},
+  sens:     {label:"Has sensitive-category columns", type:"bool", get:a=>Object.values(a.cols||{}).some(c=>["SPI","PHI","PCI"].includes(c))},
+  enc:      {label:"Encrypted at rest",    type:"bool", get:a=>!!a.enc},
+  hold:     {label:"Under legal hold",     type:"bool", get:a=>!!a.hold},
+  suspect:  {label:"Unclassified sensitive-looking columns", type:"bool", get:a=>!!a.suspect},
+  owner:    {label:"Owner",                type:"presence", get:a=>!!a.owner},
+  steward:  {label:"Steward",              type:"presence", get:a=>!!a.steward},
+  purpose:  {label:"Processing purpose",   type:"presence", get:a=>!!a.purpose},
+  transfer: {label:"Transfer mechanism",   type:"presence", get:a=>!!a.transfer},
+  retention:{label:"Retention schedule",   type:"presence", get:a=>!!a.retention},
+  region:   {label:"Region",               type:"list", get:a=>a.region},
+  idle:     {label:"Days since last read", type:"number", get:a=>a.idle},
+  quality:  {label:"Quality score",        type:"number", get:a=>a.quality},
+};
+const PM3_OPS = {enum:["is","is not"], bool:["is yes","is no"], presence:["is set","is not set"], list:["is one of","is not one of"], number:["greater than","less than"]};
+const pm3CondTest = (c,a) => {
+  const F = PM3_FIELDS[c.f]; if(!F) return false; const x = F.get(a);
+  switch(c.op){
+    case "is": return x===c.v; case "is not": return x!==c.v;
+    case "is yes": return x===true; case "is no": return x===false;
+    case "is set": return !!x; case "is not set": return !x;
+    case "is one of": case "is not one of": { const l=String(c.v||"").split(",").map(s=>s.trim()).filter(Boolean); return c.op==="is one of"?l.includes(x):!l.includes(x); }
+    case "greater than": return Number(x)>Number(c.v);
+    case "less than": return Number(x)<Number(c.v);
+    default: return false;
+  }
+};
+const pm3CondText = c => { const F=PM3_FIELDS[c.f]; if(!F) return "?"; return F.type==="bool"||F.type==="presence" ? `${F.label} ${c.op}` : `${F.label} ${c.op} ${c.v}`; };
+const PM3_FORM_TYPES = {text:"Short text", long:"Long text", date:"Date", yesno:"Yes / no", select:"Dropdown", person:"Person", doc:"Document link"};
+const pm3Field = (label, type, required, help, opts) => ({id:"f-"+label.toLowerCase().replace(/[^a-z0-9]+/g,"_").slice(0,24), label, type, required:!!required, help:help||"", opts:opts||[]});
+const pm3V = (key, name, finding, severity, conds, extra) => ({key, type:"validation", name, finding, severity, conds, ...(extra||{})});
+const pm3E = (key, name, enf) => ({key, type:"enforcement", name, enf});
+const pm3A = (key, name, instructions, every, form, extra) => ({key, type:"attestation", name, att:{instructions, every, remind:every<=3?14:30, assignee:"owner", reviewer:"approver", form, ...(extra||{})}});
+
+// ── The prebuilt policy library. Each policy groups the rules a regulation asks for under
+// one commitment: one rule where the law asks one thing, several where it asks several.
+// Validation and enforcement policies are shared across frameworks; policies whose evidence
+// is framework-specific (an impact assessment, a rights-request log) are one per framework.
+const PM3_TEMPLATES = [
+  {id:"P-DISCOVER", name:"Sensitive data discovery & inventory", category:"Governance",
+    why:"You can't protect data you haven't found. Finds regulated data that isn't classified yet, and has the inventory of in-scope systems confirmed on a schedule.",
+    rules:[pm3V("unclassified","Sensitive-looking columns are classified","Sensitive-looking columns are unclassified","High",[{f:"suspect",op:"is yes"}],{scopeBy:"suspect"}),
+           pm3A("inventory","Inventory of in-scope systems confirmed","Confirm the inventory of systems and datasets that hold in-scope data is complete — including any source added since the last review — and that each has an owner.",12,
+             [pm3Field("Review date","date",true),pm3Field("Systems in scope","long",true,"EDG's in-scope asset list is a starting point"),pm3Field("Sources added since last review","long",false),pm3Field("Confirmed by","person",true)])]},
+  {id:"P-OWN", name:"Ownership & accountability", category:"Governance",
+    why:"Every in-scope asset has an owner, who approves enforcement on it, and a steward, who fixes what's found.",
+    rules:[pm3V("owner","Every in-scope asset has an owner","No owner","Medium",[{f:"owner",op:"is not set"}]),
+           pm3V("steward","Every in-scope asset has a steward","No steward","Medium",[{f:"steward",op:"is not set"}])]},
+  {id:"P-ROPA", name:"Records of processing", category:"Privacy",
+    why:"The catalog doubles as your record of processing: every personal-data asset states why it's processed, and the record is reviewed each year.",
+    rules:[pm3V("purpose","Processing purpose is recorded","No processing purpose recorded","Medium",[{f:"purpose",op:"is not set"}]),
+           pm3A("review","Record of processing reviewed","Review the record of processing activities: for each activity, its purpose, lawful basis, data categories, recipients and retention. Record what changed since the last review.",12,
+             [pm3Field("Review date","date",true),pm3Field("Activities reviewed","long",true),pm3Field("Changes made","long",false),pm3Field("Approved by","person",true),pm3Field("Record","doc",true)])]},
+  {id:"P-ENC", name:"Encryption", category:"Security",
+    why:"Sensitive data is encrypted at rest. EDG reads the status from each source connector; the standard and key management are documented, and so is any justified exception.",
+    rules:[pm3V("enc","Sensitive data is encrypted at rest","Not encrypted at rest","Critical",[{f:"enc",op:"is no"}]),
+           pm3A("keys","Encryption standard and key management documented","Document the encryption standard used at rest, how keys are managed and rotated, and — where encryption isn't used — the equivalent measure and why it's reasonable.",12,
+             [pm3Field("Encryption standard","text",true,"e.g. AES-256, provider-managed keys"),pm3Field("Key management and rotation","long",true),pm3Field("Exceptions and compensating measures","long",false),pm3Field("Evidence","doc",true),pm3Field("Verified by","person",true)])]},
+  {id:"P-ACC", name:"Access control (need to know)", category:"Access",
+    why:"Regulated data is granted only to need-to-know groups, and access is reviewed and signed off every quarter.",
+    rules:[pm3V("broad","Sensitive data is not granted to broad roles","Granted to a broad role","High",[{f:"access",op:"is",v:"Broad"}]),
+           pm3A("review","Quarterly access review signed off","Review who can access each in-scope system, remove access that is no longer needed, and record any exception you approved.",3,
+             [pm3Field("Quarter reviewed","select",true,"",["Q1 2026","Q2 2026","Q3 2026","Q4 2026"]),pm3Field("Systems reviewed","long",true,"Every system and how many accounts were reviewed"),pm3Field("Access removed","text",false),pm3Field("Exceptions approved","long",false),pm3Field("Review evidence","doc",true)])]},
+  {id:"P-XB", name:"International transfers", category:"Privacy", version:2, changelog:"v2 adds eu-north-1 (Stockholm) to the default approved regions.",
+    why:"Personal data stored outside your approved regions has a transfer mechanism on record, and each transfer has an impact assessment.",
+    rules:[pm3V("region","Data outside approved regions has a transfer mechanism","Outside approved regions with no transfer mechanism","High",[{f:"region",op:"is not one of",v:"eu-west-1, eu-central-1, eu-north-1",edit:true},{f:"transfer",op:"is not set"}]),
+           pm3A("tia","Transfer impact assessment on file","For each transfer outside approved regions, record the destination, the mechanism relied on (SCCs, adequacy, BCRs, security assessment) and the assessment of the destination's laws.",12,
+             [pm3Field("Transfers covered","long",true),pm3Field("Mechanism","select",true,"",["Standard contractual clauses","Adequacy decision","Binding corporate rules","Security assessment","Consent"]),pm3Field("Assessment document","doc",true),pm3Field("Approved by","person",true)])]},
+  {id:"P-MIN", name:"Data minimisation", category:"Privacy",
+    why:"Personal data nobody reads is a sign it may no longer be needed. A person reviews it — EDG never deletes on this signal alone.",
+    rules:[pm3V("idle","Unused personal data is reviewed","Not read in a long time — confirm it's still needed","Medium",[{f:"idle",op:"greater than",v:180,edit:true},{f:"hold",op:"is no"}])]},
+  {id:"P-DQ", name:"Data accuracy", category:"Quality",
+    why:"Accuracy obligations and reporting integrity: in-scope data meets the quality threshold.",
+    rules:[pm3V("quality","In-scope data meets the quality bar","Below the quality bar","Medium",[{f:"quality",op:"less than",v:85,edit:true}])]},
+  {id:"P-MASK", name:"Masking of sensitive data", category:"Privacy",
+    why:"Real identifiers never appear in dev, test or analytics copies, and sensitive-category columns are masked in production for anyone outside the entitled group. EDG verifies masking at the source.",
+    rules:[pm3V("nonprod","Non-production copies are masked","Non-production copy is not masked","High",[{f:"env",op:"is not",v:"prod"},{f:"masking",op:"is",v:"Not applied"}]),
+           pm3V("entitled","Sensitive columns are masked for non-entitled users","Sensitive columns are not masked","High",[{f:"env",op:"is",v:"prod"},{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}])]},
+  {id:"P-RET", name:"Retention & disposal", category:"Retention",
+    why:"Personal data has a retention schedule, is disposed of when it ends, and the schedule is reviewed each year. Records under a mandated minimum keep the longer period; a legal hold suspends disposal.",
+    rules:[pm3E("dispose","Dispose of personal data when its retention ends",{action:"retention", mode:"dispose", period:36, unit:"months", trigger:"Last use", disposal:"Delete permanently", select:"flag", assets:[]}),
+           pm3V("set","Every personal-data asset has a retention schedule","No retention schedule","Medium",[{f:"retention",op:"is not set"}]),
+           pm3A("review","Retention schedule reviewed","Review the retention schedule: each data category's period and the reason for it, and confirm disposal ran as scheduled since the last review.",12,
+             [pm3Field("Review date","date",true),pm3Field("Categories reviewed","long",true),pm3Field("Disposal ran as scheduled","yesno",true),pm3Field("Changes made","long",false),pm3Field("Approved by","person",true)])]},
+  {id:"P-RECORDS", name:"Mandated records retention", category:"Retention", scopeFrom:"records",
+    why:"Records a regulation says you must keep are locked for the minimum period so nothing disposes of them early. The longest requirement among your frameworks wins.",
+    rules:[pm3E("retain","Keep mandated records for the required minimum",{action:"retention", mode:"minimum", period:3, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete", select:"flag", assets:[]})]},
+  {id:"P-HOLD", name:"Legal hold", category:"Retention",
+    why:"Records under a legal matter are frozen — retention and erasure can't touch them — and every custodian has been told to preserve them.",
+    rules:[pm3E("hold","Freeze records under a legal matter",{action:"hold", matter:"LIT-2026-014 · Vendor dispute", select:"flag", assets:[]}),
+           pm3A("notice","Hold notice issued to custodians","Record the legal matter, every custodian notified, and their acknowledgement that the records must be preserved.",6,
+             [pm3Field("Matter","text",true),pm3Field("Custodians notified","long",true),pm3Field("All custodians acknowledged","yesno",true),pm3Field("Hold notice","doc",true)])]},
+  {id:"P-DSR", name:"Individual rights requests", category:"Privacy",
+    why:"Access, correction and deletion requests are fulfilled across every system that holds the person's data, within the law's deadline. EDG supplies the map; the log is the evidence.",
+    rules:[pm3A("log","Rights requests completed on time","Document every access, correction and deletion request received in the period, confirm each was completed within the statutory deadline across every system holding the person's data, and explain any that were late or partial.",3,
+             [pm3Field("Reporting period","text",true,"e.g. Q3 2026"),pm3Field("Requests received","text",true,"Access, deletion and correction requests, by count"),pm3Field("All completed within the deadline","yesno",true),pm3Field("Late or partial requests and why","long",false),pm3Field("Request log","doc",true,"Link to the log or ticket export")])]},
+  {id:"P-AUDIT", name:"Access logging", category:"Security",
+    why:"Source systems log reads of sensitive data and keep the logs long enough to investigate. EDG has no audit-logging field yet, so each source's logging is attested.",
+    rules:[pm3A("logging","Read access to sensitive data is logged","For every source system holding in-scope data, confirm that reads of sensitive tables are written to an audit log, state how long the log is kept, and attach the configuration as evidence.",12,
+             [pm3Field("Systems covered","long",true),pm3Field("Read access is logged on every in-scope table","yesno",true),pm3Field("Log retention period","select",true,"",["90 days","12 months","6 years","7 years"]),pm3Field("Configuration evidence","doc",true),pm3Field("Verified by","person",true)],{assignee:"steward"})]},
+  {id:"P-RISK", name:"Risk / impact assessment", category:"Governance",
+    why:"The framework's own assessment — a DPIA, a HIPAA risk analysis, a PIA — is completed and reviewed on schedule. EDG pre-fills the in-scope asset list.",
+    rules:[pm3A("assessment","Impact assessment completed and signed off","Record the assessment the framework requires: what processing and systems it covered, the high risks found, the residual risk accepted, and who signed it off. Attach the signed document.",12,
+             [pm3Field("Assessment date","date",true),pm3Field("Processing or systems assessed","long",true,"EDG's in-scope asset list is a starting point"),pm3Field("High risks identified","long",false),pm3Field("Residual risk accepted","select",true,"",["Low","Medium","High"]),pm3Field("Signed off by","person",true,"DPO, privacy officer or security officer"),pm3Field("Assessment document","doc",true)])]},
+];
+const PM3_TPL = Object.fromEntries(PM3_TEMPLATES.map(t=>[t.id,t]));
+// An article's `c` entry: "P-MASK" (the whole policy) or "P-MASK:nonprod" / "P-RET:dispose,set" (exact rules).
+const pm3ParseRef = ref => { const [tid, keys] = String(ref).split(":"); return {tid, keys: keys ? keys.split(",") : null}; };
+const pm3RuleId = (tid, key) => `${tid}-${key}`;
+
+const PM3_FW = [
+  {id:"gdpr", name:"GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 5(1)(d)", t:"Accuracy", ask:"Personal data must be accurate and, where necessary, kept up to date.", c:["P-DQ"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data in identifiable form longer than the purpose requires.", c:["P-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to show compliance — someone is answerable for each dataset.", c:["P-OWN"]},
+    {ref:"Art. 9",       t:"Special categories", ask:"Health, biometric, religious and similar data need extra protection and a specific legal condition.", c:["P-DISCOVER:unclassified","P-MASK:entitled"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased, generally within one month.", c:["P-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"Build protection in; by default only the data each purpose needs is accessible.", c:["P-MASK"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what personal data you process, why, and where it lives.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk — encryption, pseudonymisation, access control.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["P-RISK"]},
+    {ref:"Art. 44–46",   t:"International transfers", ask:"Personal data leaving the EU needs an adequacy decision or safeguards such as SCCs.", c:["P-XB"]},
+    {ref:"Art. 33–34",   t:"Breach notification", ask:"Report breaches to the authority within 72 hours, and to people when the risk is high.", out:"Incident response"},
+    {ref:"Art. 6–7",     t:"Lawful basis and consent", ask:"Every processing activity needs a lawful basis; consent must be provable.", out:"Consent management"}]},
+  {id:"ukgdpr", name:"UK GDPR", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Art. 5(1)(c)", t:"Data minimisation", ask:"Collect and keep only the personal data you actually need.", c:["P-MIN"]},
+    {ref:"Art. 5(1)(e)", t:"Storage limitation", ask:"Don't keep personal data longer than the purpose requires.", c:["P-RET"]},
+    {ref:"Art. 5(2)",    t:"Accountability", ask:"You must be able to demonstrate compliance.", c:["P-OWN"]},
+    {ref:"Art. 15, 17",  t:"Right of access and erasure", ask:"People can get a copy of their data and have it erased.", c:["P-DSR"]},
+    {ref:"Art. 25",      t:"Data protection by design and by default", ask:"By default only the data each purpose needs is accessible.", c:["P-MASK"]},
+    {ref:"Art. 30",      t:"Records of processing activities", ask:"Keep a record of what you process, why, and where.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 32",      t:"Security of processing", ask:"Apply security appropriate to the risk.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 35",      t:"Data protection impact assessment", ask:"Assess high-risk processing before you start it.", c:["P-RISK"]},
+    {ref:"Art. 44–46",   t:"Restricted transfers", ask:"Transfers out of the UK need adequacy regulations or appropriate safeguards (e.g. the IDTA).", c:["P-XB"]},
+    {ref:"Art. 33",      t:"Breach reporting", ask:"Report notifiable breaches to the ICO within 72 hours.", out:"Incident response"}]},
+  {id:"ccpa", name:"CCPA / CPRA", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"§1798.100(a)(3)", t:"Retention limits", ask:"Disclose how long you keep each category, and keep it no longer than reasonably necessary.", c:["P-RET"]},
+    {ref:"§1798.100(c)", t:"Proportionate collection", ask:"Collection and use must be reasonably necessary and proportionate to the disclosed purpose.", c:["P-MIN","P-ROPA:purpose"]},
+    {ref:"§1798.105",    t:"Right to delete", ask:"Consumers can have their personal information deleted, including by your service providers.", c:["P-DSR"]},
+    {ref:"§1798.110",    t:"Right to know", ask:"Consumers can learn what personal information you hold about them.", c:["P-DSR"]},
+    {ref:"§1798.121",    t:"Limit use of sensitive personal information", ask:"Consumers can limit use of sensitive personal information to what the service needs.", c:["P-MASK:entitled"]},
+    {ref:"§1798.150",    t:"Reasonable security", ask:"A breach caused by unreasonable security exposes you to private lawsuits.", c:["P-ENC","P-ACC"]},
+    {ref:"§1798.185(a)(15)", t:"Risk assessments", ask:"Processing with significant risk needs a documented risk assessment.", c:["P-RISK"]},
+    {ref:"§1798.120",    t:"Opt-out of sale or sharing", ask:"Consumers can opt out of the sale or sharing of their personal information.", out:"Consent & preference platform"}]},
+  {id:"lgpd", name:"LGPD", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Art. 6 (III)", t:"Necessity", ask:"Limit processing to the minimum necessary for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 16",      t:"Deletion at the end of processing", ask:"Delete personal data once processing ends, unless an exception applies.", c:["P-RET"]},
+    {ref:"Art. 18",      t:"Data subject rights", ask:"Data subjects can confirm, access, correct and delete their data.", c:["P-DSR"]},
+    {ref:"Art. 33",      t:"International transfer", ask:"Transfers abroad are allowed only under the mechanisms the law lists.", c:["P-XB"]},
+    {ref:"Art. 37",      t:"Record of processing operations", ask:"Controllers and processors keep records of their processing operations.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"Art. 38",      t:"Data protection impact report", ask:"The ANPD can require a data protection impact report (RIPD).", c:["P-RISK"]},
+    {ref:"Art. 46",      t:"Security measures", ask:"Adopt measures that protect data from unauthorised access, loss and leakage.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 48",      t:"Incident communication", ask:"Notify the ANPD and data subjects of incidents that may cause relevant risk.", out:"Incident response"}]},
+  {id:"pipl", name:"PIPL", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Art. 6",       t:"Minimum necessary", ask:"Processing is limited to the minimum scope needed for the purpose.", c:["P-MIN"]},
+    {ref:"Art. 19",      t:"Retention", ask:"Keep personal information only for the shortest period necessary.", c:["P-RET"]},
+    {ref:"Art. 28–29",   t:"Sensitive personal information", ask:"Sensitive data needs a specific purpose, strict protection and separate consent.", c:["P-DISCOVER:unclassified","P-MASK:entitled"]},
+    {ref:"Art. 38–40",   t:"Cross-border provision", ask:"Sending data out of China needs a security assessment, certification or standard contract.", c:["P-XB"]},
+    {ref:"Art. 44–47",   t:"Individual rights", ask:"Individuals can access, copy, correct and delete their personal information.", c:["P-DSR"]},
+    {ref:"Art. 51",      t:"Security measures", ask:"Use technical measures such as encryption and de-identification, and manage access.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 55–56",   t:"Impact assessment", ask:"Assess impact before sensitive or cross-border processing.", c:["P-RISK"]},
+    {ref:"Art. 57",      t:"Incident notification", ask:"Remediate incidents and notify the authorities and the individuals affected.", out:"Incident response"}]},
+  {id:"pipeda", name:"PIPEDA", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Sch. 1 §4.1",  t:"Accountability", ask:"Designate someone accountable for the organisation's personal information.", c:["P-OWN"]},
+    {ref:"Sch. 1 §4.4",  t:"Limiting collection", ask:"Collect only what the identified purposes need.", c:["P-MIN"]},
+    {ref:"Sch. 1 §4.5",  t:"Limiting use, disclosure and retention", ask:"Keep personal information only as long as the purpose needs it.", c:["P-RET"]},
+    {ref:"Sch. 1 §4.6",  t:"Accuracy", ask:"Keep personal information accurate, complete and up to date.", c:["P-DQ"]},
+    {ref:"Sch. 1 §4.7",  t:"Safeguards", ask:"Protect personal information with safeguards suited to its sensitivity.", c:["P-ENC","P-ACC"]},
+    {ref:"Sch. 1 §4.9",  t:"Individual access", ask:"Individuals can access their personal information on request.", c:["P-DSR"]},
+    {ref:"Sch. 1 §4.3",  t:"Consent", ask:"Meaningful consent is required for collection, use and disclosure.", out:"Consent management"},
+    {ref:"§10.1",        t:"Breach reporting", ask:"Report breaches with a real risk of significant harm to the Commissioner.", out:"Incident response"}]},
+  {id:"pdpa_sg", name:"PDPA (Singapore)", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"s.18",   t:"Purpose limitation", ask:"Use personal data only for appropriate purposes that were notified.", c:["P-ROPA:purpose"]},
+    {ref:"s.21–22",t:"Access and correction", ask:"Individuals can access and correct their personal data.", c:["P-DSR"]},
+    {ref:"s.23",   t:"Accuracy", ask:"Make a reasonable effort to keep personal data accurate and complete.", c:["P-DQ"]},
+    {ref:"s.24",   t:"Protection", ask:"Make reasonable security arrangements to protect personal data.", c:["P-ENC","P-ACC"]},
+    {ref:"s.25",   t:"Retention limitation", ask:"Stop retaining personal data once it no longer serves the purpose.", c:["P-RET"]},
+    {ref:"s.26",   t:"Transfer limitation", ask:"Transfers out of Singapore need comparable protection.", c:["P-XB"]},
+    {ref:"s.13",   t:"Consent", ask:"Obtain consent before collecting, using or disclosing personal data.", out:"Consent management"},
+    {ref:"Part 6A",t:"Breach notification", ask:"Notify the PDPC within 3 days of assessing a breach as notifiable.", out:"Incident response"}]},
+  {id:"appi", name:"APPI", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"Art. 17",   t:"Purpose of use", ask:"Specify the purpose of use as concretely as possible.", c:["P-ROPA:purpose"]},
+    {ref:"Art. 22",   t:"Accuracy and deletion", ask:"Keep data accurate, and try to delete it once it's no longer needed.", c:["P-DQ","P-RET:dispose,set"]},
+    {ref:"Art. 23",   t:"Security control measures", ask:"Take the measures needed to prevent leakage, loss or damage.", c:["P-ENC","P-ACC"]},
+    {ref:"Art. 28",   t:"Third parties in foreign countries", ask:"Providing data to a party abroad needs consent or an equivalent-protection basis.", c:["P-XB"]},
+    {ref:"Art. 33–35",t:"Individual requests", ask:"Individuals can request disclosure, correction and cessation of use.", c:["P-DSR"]},
+    {ref:"Art. 26",   t:"Leak reporting", ask:"Report harmful leaks to the PPC and notify the individuals.", out:"Incident response"}]},
+  {id:"popia", name:"POPIA", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"s.8",    t:"Accountability", ask:"The responsible party ensures the conditions for lawful processing are met.", c:["P-OWN"]},
+    {ref:"s.10",   t:"Minimality", ask:"Process only what's adequate, relevant and not excessive.", c:["P-MIN"]},
+    {ref:"s.14",   t:"Retention and restriction of records", ask:"Keep records no longer than necessary, then destroy or de-identify them.", c:["P-RET"]},
+    {ref:"s.16",   t:"Quality of information", ask:"Keep personal information complete, accurate and updated.", c:["P-DQ"]},
+    {ref:"s.19",   t:"Security safeguards", ask:"Secure the integrity and confidentiality of personal information.", c:["P-ENC","P-ACC"]},
+    {ref:"s.23–24",t:"Access and correction", ask:"Data subjects can access and correct their personal information.", c:["P-DSR"]},
+    {ref:"s.72",   t:"Transfers outside the Republic", ask:"Transfers out of South Africa need adequate protection or consent.", c:["P-XB"]},
+    {ref:"s.22",   t:"Security compromises", ask:"Notify the Regulator and data subjects of security compromises.", out:"Incident response"}]},
+  {id:"dpdp", name:"DPDP Act", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"§8(3)",  t:"Completeness and accuracy", ask:"Data used for decisions or disclosed must be complete, accurate and consistent.", c:["P-DQ"]},
+    {ref:"§8(5)",  t:"Security safeguards", ask:"Take reasonable security safeguards to prevent breaches.", c:["P-ENC","P-ACC"]},
+    {ref:"§8(7)",  t:"Erasure", ask:"Erase data once consent is withdrawn or the purpose is no longer served.", c:["P-RET"]},
+    {ref:"§10",    t:"Significant Data Fiduciaries", ask:"Significant Data Fiduciaries run periodic DPIAs and independent audits.", c:["P-RISK"]},
+    {ref:"§11–12", t:"Access, correction and erasure", ask:"Data principals can get a summary of their data and have it corrected or erased.", c:["P-DSR"]},
+    {ref:"§16",    t:"Cross-border transfer", ask:"Transfers are allowed except to countries the government restricts.", c:["P-XB"]},
+    {ref:"§6",     t:"Consent", ask:"Consent must be free, specific, informed, unconditional and unambiguous.", out:"Consent management"},
+    {ref:"§8(6)",  t:"Breach intimation", ask:"Report personal data breaches to the Board and to affected data principals.", out:"Incident response"}]},
+  {id:"iso27701", name:"ISO 27701", type:"Privacy", covers:["PII","SPI"], arts:[
+    {ref:"7.2.5", t:"Privacy impact assessment", ask:"Assess privacy impact where processing is new or changed.", c:["P-RISK"]},
+    {ref:"7.2.8", t:"Records related to processing PII", ask:"Maintain records that support your PII processing obligations.", c:["P-ROPA","P-DISCOVER:unclassified"]},
+    {ref:"7.3.6", t:"Access, correction and erasure", ask:"Give PII principals a way to access, correct and erase their PII.", c:["P-DSR"]},
+    {ref:"7.4.1", t:"Limit collection", ask:"Limit PII collection to what's relevant and necessary.", c:["P-MIN"]},
+    {ref:"7.4.7", t:"Retention", ask:"Keep PII no longer than necessary for its purposes.", c:["P-RET"]},
+    {ref:"7.5.1", t:"Basis for transfer", ask:"Identify and document the basis for moving PII between jurisdictions.", c:["P-XB"]}]},
+  {id:"hipaa", name:"HIPAA", type:"Healthcare", covers:["PHI"], recordClasses:["AUDIT"], recordYears:6, arts:[
+    {ref:"§164.308(a)(1)(ii)(A)", t:"Risk analysis", ask:"Accurately assess risks to ePHI — which starts with knowing where it lives.", c:["P-RISK","P-DISCOVER"]},
+    {ref:"§164.312(a)(1)",        t:"Access control", ask:"Only authorised people and software can access ePHI.", c:["P-ACC","P-OWN"]},
+    {ref:"§164.312(a)(2)(iv)",    t:"Encryption and decryption", ask:"Encrypt ePHI where reasonable, or document the equivalent measure you use instead.", c:["P-ENC"]},
+    {ref:"§164.312(b)",           t:"Audit controls", ask:"Record and examine activity in systems that contain ePHI.", c:["P-AUDIT"]},
+    {ref:"§164.502(b)",           t:"Minimum necessary", ask:"Use and disclose only the minimum PHI necessary for the purpose.", c:["P-MASK:entitled"]},
+    {ref:"§164.514(b)",           t:"De-identification", ask:"Data counts as de-identified once the 18 Safe Harbor identifiers are removed.", c:["P-MASK:nonprod"]},
+    {ref:"§164.316(b)(2)(i)",     t:"Documentation retention", ask:"Keep required policies, procedures and records for 6 years.", c:["P-RECORDS"]},
+    {ref:"§164.524",              t:"Right of access", ask:"Patients can access and get copies of their PHI, generally within 30 days.", c:["P-DSR"]},
+    {ref:"§164.310",              t:"Physical safeguards", ask:"Control physical access to facilities, workstations and devices.", out:"Facilities & device management"},
+    {ref:"§164.404–410",          t:"Breach notification", ask:"Notify individuals, HHS and sometimes the media after a breach of unsecured PHI.", out:"Incident response"}]},
+  {id:"hitech", name:"HITECH", type:"Healthcare", covers:["PHI"], arts:[
+    {ref:"§13405(b)", t:"Minimum necessary", ask:"Limit uses and disclosures to a limited data set or the minimum necessary.", c:["P-MASK:entitled"]},
+    {ref:"§13405(c)", t:"Accounting of disclosures", ask:"Account for disclosures made through an electronic health record.", c:["P-AUDIT"]},
+    {ref:"§13405(e)", t:"Electronic access", ask:"Patients can get their PHI in electronic format.", c:["P-DSR"]},
+    {ref:"§13401",    t:"Business associates", ask:"Business associates must meet the Security Rule directly.", out:"Vendor contracts"},
+    {ref:"§13402",    t:"Breach notification", ask:"Notify individuals of breaches of unsecured PHI.", out:"Incident response"}]},
+  {id:"pci_dss", name:"PCI DSS", type:"Financial", covers:["PCI"], recordClasses:["AUDIT"], recordYears:1, arts:[
+    {ref:"Req. 3.2.1", t:"Minimise stored account data", ask:"Keep account data only as long as needed, then delete it securely.", c:["P-RET:dispose,set"]},
+    {ref:"Req. 3.4.1", t:"Mask the PAN when displayed", ask:"Only people with a business need see more than the BIN and last four digits.", c:["P-MASK:entitled"]},
+    {ref:"Req. 3.5.1", t:"PAN unreadable when stored", ask:"Make the PAN unreadable wherever it's stored — hashing, truncation, tokens or strong encryption.", c:["P-ENC","P-MASK:nonprod"]},
+    {ref:"Req. 7.2",   t:"Need-to-know access", ask:"Grant access to systems and cardholder data only by need to know.", c:["P-ACC"]},
+    {ref:"Req. 10.2",  t:"Audit logs", ask:"Audit logs capture every individual's access to cardholder data.", c:["P-AUDIT"]},
+    {ref:"Req. 10.5.1",t:"Audit log retention", ask:"Keep audit log history for at least 12 months, the last 3 immediately available.", c:["P-RECORDS"]},
+    {ref:"Req. 12.5.2",t:"Scope confirmed", ask:"Document and confirm PCI DSS scope at least every 12 months.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"Req. 8",     t:"Authentication", ask:"Authenticate users, including MFA into the cardholder data environment.", out:"Identity provider"},
+    {ref:"Req. 11",    t:"Security testing", ask:"Test the security of systems and networks regularly.", out:"Security testing"}]},
+  {id:"sox", name:"SOX", type:"Financial", covers:["FIN"], recordClasses:["FIN"], recordYears:7, arts:[
+    {ref:"§404",  t:"Internal control over financial reporting", ask:"Management assesses internal controls over financial reporting every year — the data must be owned and accurate.", c:["P-DQ","P-OWN"]},
+    {ref:"§802",  t:"Records retention", ask:"Audit workpapers and related records must be kept for 7 years.", c:["P-RECORDS"]},
+    {ref:"§802",  t:"No destruction under investigation", ask:"Destroying or altering records to obstruct an investigation is a crime.", c:["P-HOLD"]},
+    {ref:"§302",  t:"Officer certification", ask:"The CEO and CFO personally certify each periodic report.", out:"Finance leadership sign-off"},
+    {ref:"§409",  t:"Real-time disclosure", ask:"Disclose material changes in financial condition rapidly.", out:"Investor relations"}]},
+  {id:"glba", name:"GLBA", type:"Financial", covers:["PII","FIN"], retentionCeiling:24, arts:[
+    {ref:"16 CFR 314.4(b)",    t:"Written risk assessment", ask:"Base the information security programme on a written risk assessment.", c:["P-RISK"]},
+    {ref:"16 CFR 314.4(c)(1)", t:"Access controls", ask:"Limit access to customer information to authorised users who need it.", c:["P-ACC"]},
+    {ref:"16 CFR 314.4(c)(2)", t:"Data inventory", ask:"Identify and manage the data, systems and devices in your environment.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"16 CFR 314.4(c)(3)", t:"Encryption", ask:"Encrypt customer information at rest and in transit.", c:["P-ENC"]},
+    {ref:"16 CFR 314.4(c)(6)", t:"Secure disposal", ask:"Dispose of customer information no later than 2 years after last use, unless still needed.", c:["P-RET:dispose"]},
+    {ref:"16 CFR 314.4(c)(5)", t:"Multi-factor authentication", ask:"Require MFA for anyone accessing information systems.", out:"Identity provider"},
+    {ref:"§6802–6803",        t:"Privacy notices and opt-out", ask:"Give customers privacy notices and the right to opt out of some sharing.", out:"Customer communications"}]},
+  {id:"dora", name:"DORA", type:"Financial", covers:["ALL"], arts:[
+    {ref:"Art. 6",     t:"ICT risk management framework", ask:"Maintain a documented ICT risk management framework.", c:["P-RISK"]},
+    {ref:"Art. 8",     t:"Identification", ask:"Identify, classify and document information assets and their owners.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"Art. 9",     t:"Protection and prevention", ask:"Protect ICT systems and data with security policies and access controls.", c:["P-ACC","P-ENC:enc"]},
+    {ref:"Art. 12",    t:"Backup and restoration", ask:"Keep backup and restoration policies and procedures.", out:"Backup / DR"},
+    {ref:"Art. 17–19", t:"ICT incidents", ask:"Manage, classify and report major ICT incidents.", out:"Incident response"},
+    {ref:"Art. 28",    t:"ICT third-party risk", ask:"Manage risk from ICT third-party providers.", out:"Vendor risk"}]},
+  {id:"soc2", name:"SOC 2", type:"Security", covers:["ALL"], arts:[
+    {ref:"CC6.1", t:"Logical access security", ask:"Logical access controls protect information assets.", c:["P-ACC","P-ENC:enc"]},
+    {ref:"CC6.5", t:"Protections removed only when unrecoverable", ask:"Protections come off an asset only once its data can no longer be read or recovered.", c:["P-RET:dispose"]},
+    {ref:"CC7.2", t:"Monitoring for anomalies", ask:"Monitor systems for anomalies that indicate malicious acts or errors.", c:["P-AUDIT"]},
+    {ref:"C1.1",  t:"Confidential information identified", ask:"Identify and maintain confidential information to meet your commitments.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"C1.2",  t:"Confidential information disposed", ask:"Dispose of confidential information to meet your commitments.", c:["P-RET:dispose"]},
+    {ref:"CC8.1", t:"Change management", ask:"Authorise, test and approve changes before they go live.", out:"SDLC tooling"},
+    {ref:"A1.2",  t:"Backup and recovery", ask:"Back up data and test recovery.", out:"Backup / DR"}]},
+  {id:"iso27001", name:"ISO 27001", type:"Security", covers:["ALL"], recordClasses:["AUDIT","FIN"], arts:[
+    {ref:"6.1.2", t:"Risk assessment", ask:"Define and apply an information security risk assessment process.", c:["P-RISK"]},
+    {ref:"A.5.9", t:"Inventory of assets", ask:"Keep an inventory of information and assets, each with an owner.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"A.5.12",t:"Classification", ask:"Classify information by its confidentiality, integrity and availability needs.", c:["P-DISCOVER:unclassified"]},
+    {ref:"A.5.15",t:"Access control", ask:"Set and apply rules for physical and logical access.", c:["P-ACC"]},
+    {ref:"A.5.33",t:"Protection of records", ask:"Protect records from loss, destruction, falsification and unauthorised release.", c:["P-RECORDS","P-HOLD"]},
+    {ref:"A.8.10",t:"Information deletion", ask:"Delete information once it's no longer required.", c:["P-RET:dispose"]},
+    {ref:"A.8.11",t:"Data masking", ask:"Mask data in line with the access-control policy and business need.", c:["P-MASK"]},
+    {ref:"A.8.15",t:"Logging", ask:"Produce, store and review logs of activities and events.", c:["P-AUDIT"]},
+    {ref:"A.8.24",t:"Use of cryptography", ask:"Define and apply rules for effective use of cryptography.", c:["P-ENC"]},
+    {ref:"A.7",   t:"Physical controls", ask:"Physical perimeters, entry controls and equipment protection.", out:"Facilities"}]},
+  {id:"nistcsf", name:"NIST CSF", type:"Security", covers:["ALL"], arts:[
+    {ref:"ID.AM-07", t:"Data inventories", ask:"Maintain inventories of data and its metadata for designated data types.", c:["P-DISCOVER","P-OWN"]},
+    {ref:"ID.RA",    t:"Risk assessment", ask:"Understand the cybersecurity risk to your assets and operations.", c:["P-RISK"]},
+    {ref:"PR.AA-05", t:"Least privilege", ask:"Define, manage and review access permissions using least privilege.", c:["P-ACC"]},
+    {ref:"PR.DS-01", t:"Data at rest", ask:"Protect the confidentiality and integrity of data at rest.", c:["P-ENC:enc","P-MASK:nonprod"]},
+    {ref:"PR.PS-04", t:"Log records", ask:"Generate log records and make them available for monitoring.", c:["P-AUDIT"]},
+    {ref:"DE.CM",    t:"Continuous monitoring", ask:"Monitor networks and assets to find adverse events.", out:"SIEM / SOC"},
+    {ref:"RS.MA",    t:"Incident management", ask:"Manage responses to detected incidents.", out:"Incident response"}]},
+  {id:"nis2", name:"NIS2", type:"Security", covers:["ALL"], arts:[
+    {ref:"Art. 21(2)(a)", t:"Risk analysis and security policies", ask:"Have policies on risk analysis and information system security.", c:["P-RISK"]},
+    {ref:"Art. 21(2)(h)", t:"Cryptography", ask:"Have policies on the use of cryptography and encryption.", c:["P-ENC"]},
+    {ref:"Art. 21(2)(i)", t:"Access control and asset management", ask:"Apply access control and asset management.", c:["P-ACC","P-DISCOVER"]},
+    {ref:"Art. 21(2)(c)", t:"Business continuity", ask:"Maintain business continuity, backup and crisis management.", out:"Backup / DR"},
+    {ref:"Art. 21(2)(d)", t:"Supply chain security", ask:"Secure your supply chain.", out:"Vendor risk"},
+    {ref:"Art. 23",       t:"Incident reporting", ask:"Early warning within 24 hours, notification within 72 hours.", out:"Incident response"}]},
+  {id:"fedramp", name:"FedRAMP", type:"Security", covers:["ALL"], recordClasses:["AUDIT"], arts:[
+    {ref:"RA-2",  t:"Security categorization", ask:"Categorize information and systems by impact level.", c:["P-DISCOVER:unclassified"]},
+    {ref:"RA-3",  t:"Risk assessment", ask:"Assess risk and update the assessment regularly.", c:["P-RISK"]},
+    {ref:"AC-6",  t:"Least privilege", ask:"Grant only the access users need for their tasks.", c:["P-ACC"]},
+    {ref:"SC-28", t:"Protection at rest", ask:"Protect information at rest.", c:["P-ENC"]},
+    {ref:"AU-2",  t:"Event logging", ask:"Define and log the events the system must capture.", c:["P-AUDIT"]},
+    {ref:"AU-11", t:"Audit record retention", ask:"Keep audit records for the defined period to support investigations.", c:["P-RECORDS"]},
+    {ref:"SI-12", t:"Information retention", ask:"Manage and retain information per policy and legal requirements.", c:["P-RET"]},
+    {ref:"IA-2",  t:"Identification and authentication", ask:"Uniquely identify and authenticate users, with MFA.", out:"Identity provider"},
+    {ref:"IR-4",  t:"Incident handling", ask:"Prepare, detect, contain and recover from incidents.", out:"Incident response"}]},
+];
+const PM3_ASSETS = [
+  {name:"customers",        service:"snowflake", domain:"Commerce", owner:"dev.patel", steward:"maya.chen", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:1,   quality:91, purpose:true,  transfer:"SCCs", cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",date_of_birth:"PII",address:"PII"}},
+  {name:"users",            service:"postgres",  domain:"Platform", owner:"james.oh",  steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:3,   quality:88, purpose:false, transfer:"",     cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII"}},
+  {name:"app_users",        service:"mysql",     domain:"Platform", owner:"james.oh",  steward:"james.oh",  env:"dev",  region:"us-east-1",    enc:false, access:"Broad",      idle:12,  quality:80, purpose:false, transfer:"",     cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",address:"PII"}},
+  {name:"employees",        service:"oracle",    domain:"Platform", owner:"james.oh",  steward:"",          env:"prod", region:"eu-central-1", enc:true,  access:"Restricted", idle:4,   quality:93, purpose:true,  transfer:"",     cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",national_id:"SPI",salary:"SPI"}},
+  {name:"orders",           service:"snowflake", domain:"Commerce", owner:"maya.chen", steward:"dev.patel", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:1,   quality:88, purpose:true,  transfer:"SCCs", cols:{shipping_address:"PII"}},
+  {name:"user_sessions",    service:"postgres",  domain:"Product",  owner:"alex.wu",   steward:"",          env:"prod", region:"us-west-2",    enc:true,  access:"Broad",      idle:240, quality:76, purpose:false, transfer:"",     cols:{ip_address:"PII"}},
+  {name:"customers_archive",service:"cdp",       domain:"Finance",  owner:"dev.patel", steward:"sarah.kim", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:400, quality:90, purpose:true,  transfer:"SCCs", hold:true, classes:["FIN"], cols:{email:"PII",phone:"PII",first_name:"PII",last_name:"PII",date_of_birth:"PII",address:"PII"}},
+  {name:"transactions",     service:"snowflake", domain:"Finance",  owner:"sarah.kim", steward:"dev.patel", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:2,   quality:85, purpose:true,  transfer:"",     classes:["FIN"], cols:{}},
+  {name:"gl_accounts",      service:"oracle",    domain:"Finance",  owner:"sarah.kim", steward:"sarah.kim", env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:5,   quality:95, purpose:true,  transfer:"",     classes:["FIN"], cols:{}},
+  {name:"revenue",          service:"dbt",       domain:"Finance",  owner:"sarah.kim", steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:1,   quality:72, purpose:true,  transfer:"",     classes:["FIN"], cols:{}},
+  {name:"payments",         service:"postgresql",domain:"Finance",  owner:"sarah.kim", steward:"dev.patel", env:"prod", region:"us-east-1",    enc:false, access:"Restricted", idle:1,   quality:67, purpose:true,  transfer:"",     classes:["FIN"], cols:{card_number:"PCI",cardholder_name:"PCI",card_expiry:"PCI"}},
+  {name:"patient_events",   service:"snowflake", domain:"Commerce", owner:"lisa.ray",  steward:"priya.nair",env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:1,   quality:84, purpose:true,  transfer:"",     cols:{patient_id:"PHI",mrn:"PHI",diagnosis_code:"PHI",admit_date:"PHI",zip_code:"PHI"}},
+  {name:"patient_events_dev",service:"snowflake",domain:"Commerce", owner:"lisa.ray",  steward:"priya.nair",env:"dev",  region:"us-east-1",    enc:true,  access:"Broad",      idle:9,   quality:84, purpose:true,  transfer:"",     cols:{patient_id:"PHI",mrn:"PHI",diagnosis_code:"PHI",admit_date:"PHI"}},
+  {name:"user_health_data", service:"postgresql",domain:"Finance",  owner:"",          steward:"",          env:"prod", region:"us-east-1",    enc:false, access:"Broad",      idle:30,  quality:91, purpose:false, transfer:"",     cols:{member_id:"PHI",condition:"PHI",date_of_birth:"PHI"}},
+  {name:"audit_records",    service:"snowflake", domain:"Commerce", owner:"lisa.ray",  steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:14,  quality:79, purpose:true,  transfer:"",     classes:["AUDIT"], cols:{}},
+  {name:"raw_clickstream",  service:"glue",      domain:"Product",  owner:"james.oh",  steward:"",          env:"prod", region:"us-west-2",    enc:true,  access:"Broad",      idle:2,   quality:70, purpose:false, transfer:"",     cols:{}, suspect:{ip_address:"PII",user_agent:"PII"}},
+  {name:"user_events",      service:"databricks",domain:"Product",  owner:"alex.wu",   steward:"alex.wu",   env:"prod", region:"us-east-1",    enc:true,  access:"Broad",      idle:1,   quality:82, purpose:false, transfer:"",     cols:{}, suspect:{properties:"PII"}},
+  {name:"claims_staging",   service:"glue",      domain:"Finance",  owner:"sarah.kim", steward:"",          env:"prod", region:"us-east-1",    enc:true,  access:"Restricted", idle:6,   quality:77, purpose:false, transfer:"",     cols:{}, suspect:{member_id:"PHI",date_of_birth:"PHI"}},
+];
+// ── Custom frameworks: your own standards, same shape as a regulation. Mapping to them needs no approval.
+const PM3_CUSTOM_FW = [
+  {id:"cf-ids", custom:true, name:"Internal Data Standard", type:"Internal", jurisdiction:"Company-wide", owner:"maya.chen", covers:["ALL"], created:"2026-08-01",
+    fullName:"J&J Internal Data Handling Standard v3", arts:[
+    {ref:"IDS-1", t:"Every production table has an owner", ask:"No production table exists without a named owner and steward.", expect:"validation"},
+    {ref:"IDS-2", t:"HR compensation data is visible only to HR", ask:"Salary and national ID are masked for everyone outside the HR compensation team.", expect:"validation"},
+    {ref:"IDS-3", t:"Finance records are kept for 7 years", ask:"Ledger and transaction records are retained at least 7 years for audit.", expect:"enforcement"},
+    {ref:"IDS-4", t:"Vendor data sharing is reviewed", ask:"Every dataset shared with a vendor has a signed data-sharing review on file each year.", expect:"attestation"},
+    {ref:"IDS-5", t:"Vendor security questionnaires", ask:"Every data vendor completes the security questionnaire before onboarding.", out:"Vendor risk"}]},
+];
+const pm3AllFw = () => [...PM3_FW, ...PM3_CUSTOM_FW];
+const pm3Fw = id => pm3AllFw().find(f=>f.id===id);
+
+// Governance attributes each source reports (masking, like encryption) and the retention schedule on record.
+const PM3_MASKING = {customers:"Applied", orders:"Applied", patient_events:"Applied", payments:"Applied", customers_archive:"Applied"};
+const PM3_RETENTION = ["customers","orders","customers_archive","transactions","gl_accounts","payments","patient_events","audit_records"];
+PM3_ASSETS.forEach(a=>{ a.masking = PM3_MASKING[a.name]||"Not applied"; a.retention = PM3_RETENTION.includes(a.name); });
+const PM3_PERSONAL = ["PII","SPI","PHI","PCI"];
+const PM3_USERS = ["alex.rivera","maya.chen","lisa.ray","sarah.kim","priya.nair","james.oh","dev.patel","alex.wu"];
+const PM3_DOMAINS = [...new Set(PM3_ASSETS.map(a=>a.domain))];
+const PM3_CATEGORIES = ["Privacy","Security","Retention","Access","Quality","Governance"];
+const pm3Vals = (form, arr) => Object.fromEntries(form.map((f,i)=>[f.id, arr[i]]));
+const pm3Today = () => new Date().toISOString().slice(0,10);
+const pm3AddMonths = (d, m) => { const x=new Date(d+"T00:00:00Z"); x.setUTCMonth(x.getUTCMonth()+Number(m||0)); return x.toISOString().slice(0,10); };
+const pm3AddDays = (d, n) => { const x=new Date(d+"T00:00:00Z"); x.setUTCDate(x.getUTCDate()+Number(n||0)); return x.toISOString().slice(0,10); };
+const pm3Classes = a => [...new Set([...(a.classes||[]),...Object.values(a.cols||{})])];
+const pm3InScope = (a, covers) => covers.includes("ALL") ? pm3Classes(a).length>0 : pm3Classes(a).some(c=>covers.includes(c));
+const pm3SuspectIn = (a, covers) => !!a.suspect && Object.values(a.suspect).some(c=>covers.includes("ALL")||covers.includes(c));
+// Source and object type scoping, as in the original Policy Manager's Scope step.
+const PM3_SOURCES = ["CDP","ECS","Snowflake","Databricks","PostgreSQL","MySQL","Oracle","BigQuery","Redshift","AWS Glue","dbt","Amazon S3","ADLS","Google Cloud Storage"];
+const PM3_SRC_OF = {cdp:"CDP", ecs:"ECS", snowflake:"Snowflake", databricks:"Databricks", postgres:"PostgreSQL", postgresql:"PostgreSQL", mysql:"MySQL", oracle:"Oracle", bigquery:"BigQuery", redshift:"Redshift", glue:"AWS Glue", dbt:"dbt", s3:"Amazon S3", adls:"ADLS", gcs:"Google Cloud Storage"};
+const PM3_SRC_OBJ = {"Amazon S3":["Bucket","Iceberg Table"], "ADLS":["Container","Iceberg Table"], "Google Cloud Storage":["Bucket","Iceberg Table"], "dbt":["Model"]};
+const PM3_OBJ_ORDER = ["Table","View","Model","Iceberg Table","Bucket","Container"];
+const pm3SourceOf = a => PM3_SRC_OF[a.service]||a.service;
+const pm3ObjOf = a => a.service==="dbt" ? "Model" : ["s3","gcs"].includes(a.service) ? "Bucket" : a.service==="adls" ? "Container" : "Table";
+const pm3ObjFor = srcs => [...new Set((srcs.length?srcs:PM3_SOURCES).flatMap(x=>PM3_SRC_OBJ[x]||["Table","View"]))].sort((x,y)=>PM3_OBJ_ORDER.indexOf(x)-PM3_OBJ_ORDER.indexOf(y));
+const PM3_TAGS = ["PII","PHI","financial","sensitive","regulated","internal","public","confidential","customer-data","healthcare"];
+const PM3_DATE_COLS = ["created_at","updated_at","last_activity_at","closed_at","transaction_date","contract_end_date"];
+const pm3AssetInPolicy = (a, p, r) => {
+  if((p.domains||[]).length && !p.domains.includes(a.domain)) return false;
+  if((p.sources||[]).length && !p.sources.includes(pm3SourceOf(a))) return false;
+  if((p.objectTypes||[]).length && !p.objectTypes.includes(pm3ObjOf(a))) return false;
+  return r&&r.scopeBy==="suspect" ? pm3SuspectIn(a,p.scope) : pm3InScope(a,p.scope);
+};
+const pm3AssetInFw = (a, p, fw, r) => r&&r.scopeBy==="suspect" ? pm3SuspectIn(a,fw.covers)
+  : pm3InScope(a, p.template==="P-RECORDS" ? (fw.recordClasses||[]) : fw.covers);
+const pm3LinkedFws = (p, all) => [...new Set((p.articles||[]).filter(x=>all||x.ok!==false).map(x=>x.fw))].map(pm3Fw).filter(Boolean);
+const pm3Types = p => [...new Set((p.rules||[]).map(r=>r.type))];
+// The rules an article counts: the exact prebuilt rules it points at (or all of them), plus any custom rule.
+const pm3RulesForLink = (p, link) => (p.rules||[]).filter(r=> !link || !link.rules || r.origin==="custom" || link.rules.includes(r.id));
+
+// Enforcement periods — the strictest requirement wins when frameworks overlap.
+const pm3Months = e => e.unit==="years" ? Number(e.period)*12 : Number(e.period);
+function pm3EffectivePeriod(p, r){
+  const e = r&&r.enf; if(!e||e.action!=="retention") return null;
+  const fws = pm3LinkedFws(p);
+  if(e.mode==="dispose"){
+    const caps = fws.filter(f=>f.retentionCeiling).map(f=>({fw:f.name,m:f.retentionCeiling})).sort((a,b)=>a.m-b.m);
+    const own = pm3Months(e);
+    return caps[0]&&caps[0].m<own ? {months:caps[0].m, label:`${caps[0].m} months`, why:`${caps[0].fw} caps disposal at ${caps[0].m} months after last use`}
+                                  : {months:own, label:`${e.period} ${e.unit}`, why:"your retention schedule — the linked regulations set no fixed number"};
+  }
+  const reqs = fws.filter(f=>f.recordYears).map(f=>({fw:f.name,y:f.recordYears})).sort((a,b)=>b.y-a.y);
+  const ownY = e.unit==="years" ? Number(e.period) : Number(e.period)/12;
+  if(reqs[0]&&reqs[0].y>ownY) return {years:reqs[0].y, label:`${reqs[0].y} years`, why:`${reqs[0].fw} requires ${reqs[0].y} years — longer than the ${e.period} ${e.unit} you set`, floor:reqs[0].y};
+  return {years:ownY, label:`${e.period} ${e.unit}`, why:reqs[0]?`meets ${reqs[0].fw}'s ${reqs[0].y}-year minimum`:"your schedule — no linked regulation sets a number", floor:reqs[0]?.y||0};
+}
+
+// ── One evaluator for every rule, whatever policy it sits in.
+function pm3EvalRule(p, r){
+  const out = {findings:[], targets:[], held:[]};
+  if(r.type==="validation"){
+    const fails = (v, a) => pm3AssetInPolicy(a,p,v) && (v.conds||[]).length && v.conds.every(c=>pm3CondTest(c,a));
+    // OR: an asset is flagged only when every validation rule that covers it fails. Independent and AND flag any failure.
+    const others = p.ruleLogic==="or" ? (p.rules||[]).filter(v=>v.type==="validation"&&v.id!==r.id) : [];
+    PM3_ASSETS.forEach(a=>{ if(fails(r,a) && others.every(v=>!pm3AssetInPolicy(a,p,v)||!(v.conds||[]).length||fails(v,a))) out.findings.push({asset:a, rule:r, msg:r.finding||r.name, severity:r.severity||"Medium"}); });
+  } else if(r.type==="enforcement" && r.enf){
+    const e = r.enf; const eff = pm3EffectivePeriod(p, r);
+    const clsOk = a => !(e.classes||[]).length || pm3Classes(a).some(c=>e.classes.includes(c));
+    PM3_ASSETS.forEach(a=>{
+      if(e.action==="hold"){
+        const pick = e.select==="assets" ? (e.assets||[]).includes(a.name) : (a.hold && pm3AssetInPolicy(a,p) && clsOk(a));
+        if(pick) out.targets.push({asset:a, rule:r, verb:"Legal hold", detail:`${e.matter||"Matter"} — retention and erasure suspended`});
+        return;
+      }
+      if(e.select==="assets" ? !(e.assets||[]).includes(a.name) : (!pm3AssetInPolicy(a,p)||!clsOk(a))) return;
+      if(e.mode==="dispose"){
+        if(a.env!=="prod") return;
+        const personalScope = e.select!=="assets" && (p.scope.includes("ALL")||p.scope.some(c=>PM3_PERSONAL.includes(c)));
+        if(personalScope && !pm3Classes(a).some(c=>PM3_PERSONAL.includes(c))) return;
+        if(a.hold){ out.held.push(a); return; }
+        const longer = pm3Classes(a).some(c=>["FIN","AUDIT"].includes(c));
+        out.targets.push({asset:a, rule:r, verb:"Set disposition", detail:longer?"Keeps the longer mandated period, then disposal applies":`${e.disposal} ${eff.label} after ${e.trigger.toLowerCase()}`});
+      } else {
+        out.targets.push({asset:a, rule:r, verb:"Retain", detail:`Locked for at least ${eff.label} from ${e.trigger.toLowerCase()}`});
+      }
+    });
+  }
+  return out;
+}
+const PM3_LOGIC = {
+  independent:{label:"Each rule independently", short:"INDEPENDENT", hint:"Each rule is checked and reported on its own — an asset can pass some and fail others."},
+  and:{label:"All rules must pass (AND)", short:"AND", hint:"All rules must pass — one failure flags the asset as non-compliant."},
+  or:{label:"At least one rule must pass (OR)", short:"OR", hint:"At least one rule must pass — an asset fails only when every rule fails."},
+};
+function pm3Eval(p, rules){
+  const out = {findings:[], targets:[], held:[], attest:[]};
+  (rules||p.rules||[]).forEach(r=>{ if(r.type==="attestation"){ out.attest.push(r); return; } const x=pm3EvalRule(p,r); out.findings.push(...x.findings); out.targets.push(...x.targets); out.held.push(...x.held); });
+  return out;
+}
+
+// ── Attestation schedule for one rule: current / due soon / due / overdue / in review.
+function pm3AttState(p, r){
+  const subs = r.submissions||[]; const a = r.att||{};
+  const pending = subs.find(s=>s.status==="pending");
+  const lastOk = subs.filter(s=>s.status==="approved").sort((x,y)=>y.decidedAt.localeCompare(x.decidedAt))[0];
+  const lastRej = subs.filter(s=>s.status==="rejected").sort((x,y)=>y.at.localeCompare(x.at))[0];
+  const today = pm3Today();
+  const due = lastOk ? pm3AddMonths(lastOk.decidedAt, a.every||12) : (p.activatedAt||p.created||today);
+  if(pending) return {state:"review", label:`Submitted — awaiting ${pending.reviewer}`, due, pending, lastOk};
+  if(lastOk && due>today){ const soon = pm3AddDays(today, a.remind||14) >= due; return {state:soon?"soon":"current", label:soon?`Due ${due}`:`Current until ${due}`, due, lastOk}; }
+  if(lastRej && (!lastOk || lastRej.at>lastOk.decidedAt)) return {state:"rejected", label:`Rejected by ${lastRej.decidedBy} — resubmit`, due, lastOk, lastRej};
+  return {state:lastOk?"overdue":"due", label:lastOk?`Overdue since ${due}`:"Due now — never submitted", due, lastOk};
+}
+const pm3Assignee = (p, r) => { const x=r.att?.assignee||"owner"; return x==="owner"?p.owner : x==="steward"?((p.stewards||[])[0]||p.owner) : x; };
+
+// ── Build a Regulation policy from a template for a framework.
+const PM3_TPL_OWNER = {"P-DISCOVER":"maya.chen","P-OWN":"maya.chen","P-ROPA":"maya.chen","P-ENC":"james.oh","P-ACC":"james.oh","P-XB":"maya.chen","P-MIN":"maya.chen","P-DQ":"sarah.kim","P-MASK":"james.oh","P-RET":"dev.patel","P-RECORDS":"sarah.kim","P-HOLD":"sarah.kim","P-DSR":"maya.chen","P-AUDIT":"james.oh","P-RISK":"maya.chen"};
+const PM3_TPL_STEWARD = {"P-ENC":"alex.wu","P-ACC":"alex.wu","P-AUDIT":"alex.wu","P-MASK":"alex.wu","P-DQ":"dev.patel","P-RECORDS":"dev.patel","P-HOLD":"dev.patel","P-RET":"sarah.kim"};
+const pm3TplPolicyId = (tid, fw) => PM3_TPL[tid].perFramework ? `p-${tid}-${fw.id}` : `p-${tid}`;
+const pm3RuleFromTpl = (tid, r) => ({id:pm3RuleId(tid,r.key), key:r.key, origin:"prebuilt", type:r.type, name:r.name, finding:r.finding, severity:r.severity, scopeBy:r.scopeBy,
+  conds:(r.conds||[]).map(c=>({...c})), enf:r.enf?{...r.enf, assets:[...(r.enf.assets||[])]}:null,
+  att:r.att?{...r.att, form:r.att.form.map(f=>({...f, opts:[...f.opts]}))}:null, submissions:[]});
+function pm3PolicyFromTemplate(tid, fw, owner, stewards){
+  const t = PM3_TPL[tid];
+  return {id:pm3TplPolicyId(tid,fw), template:tid, tplVersion:t.version||1, source:"regulation",
+    name: t.perFramework ? `${fw.name} · ${t.name}` : t.name, purpose:t.why, category:t.category,
+    scope:[], domains:[], articles:[], rules:t.rules.map(r=>pm3RuleFromTpl(tid,r)),
+    owner, stewards:stewards||[], status:"Draft", version:1, reqId:null, draft:null, history:[], created:pm3Today()};
+}
+// Link a policy to every article of `fw` that names its template, recording exactly which rules each article counts.
+function pm3LinkToFw(p, fw){
+  const arts = [];
+  fw.arts.forEach((a,i)=>(a.c||[]).forEach(ref=>{ const {tid,keys}=pm3ParseRef(ref); if(tid!==p.template) return;
+    arts.push({fw:fw.id, i, ok:true, rules: keys ? keys.map(k=>pm3RuleId(tid,k)) : null}); }));
+  const add = p.template==="P-RECORDS" ? (fw.recordClasses||[]) : fw.covers;
+  return {...p, scope:[...new Set([...p.scope, ...add])], articles:[...p.articles, ...arts.filter(x=>!p.articles.some(y=>y.fw===x.fw&&y.i===x.i))]};
+}
+
+// What one evaluation run of a policy finds — recorded in its Runs history.
+function pm3RunStats(p){
+  const ev = pm3Eval(p); const inS = PM3_ASSETS.filter(a=>pm3AssetInPolicy(a,p)); const fail = new Set(ev.findings.map(f=>f.asset.name));
+  const vR = (p.rules||[]).some(r=>r.type==="validation");
+  return {assetsScanned:inS.length, rulesEval:(p.rules||[]).filter(r=>r.type!=="attestation").length, violations:ev.findings.length, score: vR ? (inS.length?Math.round((inS.length-fail.size)/inS.length*100):100) : null};
+}
+let _pm3 = (()=>{
+  // The same regulations the original Policy Manager has enabled (REGS_META), so both screens agree.
+  const FW_OWNER = {Privacy:"maya.chen", Security:"james.oh", Healthcare:"sarah.kim", Financial:"dev.patel"};
+  const adopted = {gdpr:{owner:"maya.chen", at:"2026-06-02"}, soc2:{owner:"james.oh", at:"2026-06-20"}};
+  REGS_META.filter(r=>r.enabled&&pm3Fw(r.id)&&!adopted[r.id]).forEach(r=>{ adopted[r.id]={owner:FW_OWNER[pm3Fw(r.id).type]||"maya.chen", at:"2026-07-01"}; });
+  const byId = {};
+  Object.keys(adopted).forEach(fid=>{
+    const fw = pm3Fw(fid);
+    [...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm3ParseRef(r).tid)))].forEach(tid=>{
+      const id = pm3TplPolicyId(tid, fw);
+      if(!byId[id]) byId[id] = pm3PolicyFromTemplate(tid, fw, PM3_TPL_OWNER[tid], [PM3_TPL_STEWARD[tid]||"priya.nair"]);
+      byId[id] = pm3LinkToFw(byId[id], fw);
+    });
+  });
+  const policies = Object.values(byId).map(p=>({...p, status:"Active", activatedAt:"2026-06-20", history:[
+    {when:"2026-06-20", who:"maya.chen", what:"Approved — v1 active"},
+    {when:"2026-06-02", who:p.owner, what:`Created from the ${pm3LinkedFws(p).map(f=>f.name).join(" / ")} template`}]}));
+  const pol = id => policies.find(p=>p.id===id); const rule = (id, key) => pol(id)?.rules.find(r=>r.key===key);
+  // Seeded one template version behind, to show "update available".
+  const xb = pol("p-P-XB"); if(xb){ xb.tplVersion=1; xb.rules[0].conds[0].v="eu-west-1, eu-central-1"; }
+  // Evidence already on file: GDPR's DPIA is approved; SOC 2 logging is waiting for review; last quarter's access review is approved.
+  const risk = rule("p-P-RISK","assessment");
+  if(risk) risk.submissions=[{id:"sub-seed-1", by:"maya.chen", at:"2026-06-08", status:"approved", reviewer:"alex.rivera", decidedBy:"alex.rivera", decidedAt:"2026-06-10",
+    values:pm3Vals(risk.att.form,["2026-06-05","Customer analytics: customers, orders, customers_archive","Re-identification through joins in analytics copies","Low","maya.chen","https://sharepoint/privacy/DPIA-2026-03.pdf"])}];
+  const aud = rule("p-P-AUDIT","logging");
+  if(aud) aud.submissions=[{id:"sub-seed-2", by:"alex.wu", at:"2026-09-21", status:"pending", reviewer:"maya.chen",
+    values:pm3Vals(aud.att.form,["Snowflake, Postgres, Oracle, MySQL, Databricks","yes","12 months","https://confluence/sec/audit-logging-2026","alex.wu"])}];
+  const acr = rule("p-P-ACC","review");
+  if(acr) acr.submissions=[{id:"sub-seed-3", by:"james.oh", at:"2026-07-02", status:"approved", reviewer:"maya.chen", decidedBy:"maya.chen", decidedAt:"2026-07-03",
+    values:pm3Vals(acr.att.form,["Q2 2026","Snowflake (412), Postgres (88), Oracle (64)","17","Two break-glass accounts kept","https://jira/ACR-Q2-2026"])}];
+  // Reviews already signed off this year, so only the genuinely open forms come due.
+  const seedOk = (r, id, by, reviewer, at, decidedAt) => { if(!r) return; r.submissions=[{id, by, at, status:"approved", reviewer, decidedBy:reviewer, decidedAt,
+    values:Object.fromEntries(r.att.form.map(f=>[f.id, f.type==="date"?at:f.type==="yesno"?"yes":f.type==="doc"?`https://sharepoint/governance/${id}.pdf`:f.type==="person"?by:f.type==="select"?(f.opts[0]||""):f.type==="number"?"12":"Reviewed — no changes needed"]))}]; };
+  seedOk(rule("p-P-ROPA","review"), "sub-seed-4", "maya.chen", "alex.rivera", "2026-04-14", "2026-04-16");
+  seedOk(rule("p-P-RET","review"), "sub-seed-5", "dev.patel", "maya.chen", "2026-03-02", "2026-03-04");
+  seedOk(rule("p-P-ENC","keys"), "sub-seed-6", "james.oh", "maya.chen", "2026-05-11", "2026-05-12");
+  seedOk(rule("p-P-DISCOVER","inventory"), "sub-seed-7", "maya.chen", "alex.rivera", "2026-06-22", "2026-06-24");
+  // A custom rule added to a prebuilt policy — your organisation asks for more than the regulation.
+  const acc = pol("p-P-ACC");
+  if(acc){ acc.rules.push({id:"r-cust-fin-broad", key:null, origin:"custom", type:"validation", name:"Finance data is never granted to broad roles", finding:"Finance data granted to a broad role", severity:"Critical",
+    conds:[{f:"domain",op:"is",v:"Finance"},{f:"access",op:"is",v:"Broad"}], enf:null, att:null, submissions:[]});
+    acc.history.unshift({when:"2026-09-02", who:"james.oh", what:"Added custom rule “Finance data is never granted to broad roles” — approved by maya.chen, v2 active"}); acc.version=2; }
+  // Your framework reuses a regulation policy for IDS-1 — no approval needed, it's your standard.
+  const own = pol("p-P-OWN"); if(own) own.articles.push({fw:"cf-ids", i:0, ok:true, rules:null});
+  // Custom policies — built by your organisation.
+  policies.push({id:"p-cust-hr", template:null, source:"custom", name:"HR compensation masking", category:"Privacy",
+    purpose:"Salary and national ID are masked for everyone outside the HR compensation team, in every environment.",
+    scope:["SPI"], domains:[], rules:[{id:"r-hr-1", key:null, origin:"custom", type:"validation", name:"HR sensitive columns are masked", finding:"HR sensitive columns are not masked", severity:"High",
+      conds:[{f:"sens",op:"is yes"},{f:"masking",op:"is",v:"Not applied"}], enf:null, att:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:1, ok:true, rules:null},{fw:"gdpr", i:8, ok:false, rules:null}],
+    owner:"james.oh", stewards:["maya.chen"], status:"Active", activatedAt:"2026-09-12", version:1, reqId:null, draft:null, created:"2026-09-12",
+    history:[{when:"2026-09-12", who:"EDG", what:"Activated without approval — validation-only policies change no data"},{when:"2026-09-12", who:"james.oh", what:"Created (custom policy)"}]});
+  policies.push({id:"p-cust-fin", template:null, source:"custom", name:"Finance records 7-year retention", category:"Retention",
+    purpose:"Ledger and transaction records are locked for 7 years so audit evidence can't be disposed of early, and the lock is confirmed each year.",
+    scope:["FIN"], domains:["Finance"], rules:[
+      {id:"r-fin-1", key:null, origin:"custom", type:"enforcement", name:"Keep finance records for 7 years", enf:{action:"retention", mode:"minimum", period:7, unit:"years", trigger:"Creation", disposal:"Archive to CDP, then delete", select:"flag", assets:[]}, conds:[], att:null, submissions:[]},
+      {id:"r-fin-2", key:null, origin:"custom", type:"attestation", name:"Finance retention lock confirmed", att:{instructions:"Confirm every ledger and transaction store has the 7-year lock applied and that nothing was disposed of early.", every:12, remind:30, assignee:"owner", reviewer:"approver",
+        form:[pm3Field("Stores checked","long",true),pm3Field("Lock applied on every store","yesno",true),pm3Field("Evidence","doc",true)]}, conds:[], enf:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:2, ok:true, rules:null}],
+    owner:"sarah.kim", stewards:["dev.patel"], status:"Draft", version:1, reqId:null, draft:null, created:"2026-09-20",
+    history:[{when:"2026-09-20", who:"sarah.kim", what:"Created (custom policy)"}]});
+  policies.push({id:"p-cust-vendor", template:null, source:"custom", name:"Vendor data sharing review", category:"Governance",
+    purpose:"Every dataset shared with a vendor is reviewed and signed off each year.",
+    scope:["ALL"], domains:[], rules:[{id:"r-vendor-1", key:null, origin:"custom", type:"attestation", name:"Vendor data-sharing review signed off",
+      att:{instructions:"List every dataset shared with a vendor, the purpose, the contract that covers it, and confirm the vendor still needs it.", every:12, remind:30, assignee:"sarah.kim", reviewer:"owner",
+        form:[pm3Field("Vendors and datasets","long",true),pm3Field("Contracts in place","yesno",true),pm3Field("Sharing stopped","long",false),pm3Field("Evidence","doc",true)]}, conds:[], enf:null, submissions:[]}],
+    articles:[{fw:"cf-ids", i:3, ok:true, rules:null}],
+    owner:"maya.chen", stewards:["sarah.kim"], status:"Active", activatedAt:"2026-09-01", version:1, reqId:null, draft:null, created:"2026-09-01",
+    history:[{when:"2026-09-01", who:"alex.rivera", what:"Approved — v1 active"},{when:"2026-08-28", who:"maya.chen", what:"Created (custom policy)"}]});
+  const approved = {};
+  policies.filter(p=>p.status==="Active").forEach(p=>pm3Eval(p).targets.forEach(t=>{ approved[`${p.id}:${t.rule.id}:${t.asset.name}`]=true; }));
+  // Each active policy with checks runs on its own daily schedule, the way the original Policy Manager runs policies.
+  policies.forEach((p,k)=>{ if(p.status!=="Active"||!(p.rules||[]).some(r=>r.type!=="attestation")) return; const x=pm3RunStats(p);
+    p.sched = {freq:"daily", time:"08:00", day:"monday", cron:"0 8 * * *", tz:"UTC", enabled:true}; p.schedule="0 8 * * *"; p.schedEnabled=true; p.nextRun=scheduleNextRun(p.sched);
+    p.runs = [1,2,3].map((d,j)=>({id:`run-${p.id}-${j}`, ts:`${pm3AddDays(pm3Today(),-d)} 08:00`, trigger:"Schedule", duration:`${1+((k+j)%3)}m ${10+((k*7+j*13)%49)}s`,
+      assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:j===2?x.violations:0, score:x.score, status:"success"})); });
+  return {
+    adopted:{...adopted, "cf-ids":{owner:"maya.chen", at:"2026-08-01"}}, policies, approved, exceptions:{}, lastRun:{}, fwVer:0,
+    approvalPolicy:{activation:{approver:"maya.chen", autoValidation:true}, enforcement:{fallback:"alex.rivera"}, attest:{reviewer:"maya.chen"}, mapping:{approver:"maya.chen"},
+      exceptions:{approver:"policy owner", named:"maya.chen", maxDays:90}, hold:{twoPerson:true}, sod:true},
+  };
+})();
+const _pm3Subs = new Set();
+const pm3Set = (u)=>{ _pm3 = typeof u==="function"?u(_pm3):u; _pm3Subs.forEach(f=>f()); };
+const usePM3 = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_pm3Subs.add(fn);return()=>{_pm3Subs.delete(fn);};},[]); return _pm3; };
+
+const pm3TargetStatus = (polId, ruleId, asset) => {
+  if(_pm3.approved[`${polId}:${ruleId}:${asset}`]) return "approved";
+  const r = _enfReqs.filter(x=>x.policyId==="pm3:"+polId&&x.ruleId===`pm3:${polId}:${ruleId}:${asset}`).slice(-1)[0];
+  return r ? r.status : "none";
+};
+const pm3Approver = (named, requester) => {
+  const ap = _pm3.approvalPolicy;
+  if(ap.sod && named===requester) return named===ap.enforcement.fallback ? "maya.chen" : ap.enforcement.fallback;
+  return named;
+};
+const pm3Reviewer = (p, r) => { const x=r.att?.reviewer||"approver"; return x==="approver"?_pm3.approvalPolicy.attest.reviewer : x==="owner"?p.owner : x; };
+
+// Once a policy is Active, every enforcement target without a decision goes to its table owner.
+function pm3RequestTargets(){
+  const ap = _pm3.approvalPolicy; let approved = null;
+  _pm3.policies.filter(p=>p.status==="Active").forEach(p=>{
+    pm3Eval(p).targets.forEach(t=>{
+      if(pm3TargetStatus(p.id,t.rule.id,t.asset.name)!=="none") return;
+      const owner = t.asset.owner;
+      if(owner && owner===p.owner){ approved = approved||{..._pm3.approved}; approved[`${p.id}:${t.rule.id}:${t.asset.name}`]=true; return; }
+      const approver = owner || ap.enforcement.fallback;
+      addEnfApproval({id:`er-pm3-${p.id}-${t.rule.id}-${t.asset.name}-${Date.now()}`, policyId:"pm3:"+p.id, policyName:`${p.name} · ${t.rule.name}`, ruleId:`pm3:${p.id}:${t.rule.id}:${t.asset.name}`, action:t.verb, table:t.asset.name, approver, requestedBy:p.owner});
+      pushNotif({category:"Policy", type:"policy", event:"enf_requested", asset:t.asset.name, title:`Enforcement approval requested · ${t.asset.name}`, body:`"${t.rule.name}" (${p.name}) needs ${approver} to approve "${t.verb}" on ${t.asset.name}`, nav:"stewardship"});
+    });
+  });
+  if(approved) pm3Set(s=>({...s, approved}));
+}
+// Apply decisions made anywhere (Workspace inbox or here), then open whatever work is now due.
+let _pm3Syncing = false;
+function pm3Sync(){
+  if(_pm3Syncing) return; _pm3Syncing = true;
+  try{
+    const reqOf = id => id && _statusReqs.find(r=>r.id===id);
+    const decided = r => r && (r.status==="approved"||r.status==="rejected"); // a withdrawn request is simply gone
+    const who = r => r.decidedBy || r.approver || "approver";
+    let changed = false;
+    let policies = _pm3.policies.map(p=>{
+      let q = p;
+      const rid = q.draft ? q.draft.reqId : q.reqId; const r = reqOf(rid);
+      if(decided(r)){
+        changed = true;
+        if(r.status==="approved"){
+          const base = q.draft ? {...q, ...q.draft.fields, version:q.draft.version, draft:null} : {...q};
+          q = {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm3Today(), history:[{when:pm3Today(), who:who(r), what:`Approved — v${base.version} active`}, ...(q.history||[])]};
+        } else if(q.draft) q = {...q, draft:null, history:[{when:pm3Today(), who:who(r), what:`Change to v${q.draft.version} rejected — v${q.version} keeps running`}, ...(q.history||[])]};
+        else q = {...q, status:"Rejected", reqId:null, history:[{when:pm3Today(), who:who(r), what:"Rejected — back to the owner"}, ...(q.history||[])]};
+      }
+      const mr = reqOf(q.mapReqId);
+      if(decided(mr)){
+        changed = true; const ok = mr.status==="approved"; const n = q.articles.filter(x=>x.ok===false).length;
+        q = {...q, mapReqId:null, articles: ok ? q.articles.map(x=>({...x, ok:true})) : q.articles.filter(x=>x.ok!==false),
+             history:[{when:pm3Today(), who:who(mr), what: ok?`Approved ${n} regulation article mapping${n>1?"s":""} — they now count toward readiness`:"Regulation article mapping rejected — removed"}, ...(q.history||[])]};
+      }
+      // attestation reviews, rule by rule
+      if(q.rules.some(rl=>(rl.submissions||[]).some(s=>s.status==="pending"&&decided(reqOf(s.reqId))))){
+        changed = true; const notes = [];
+        q = {...q, rules:q.rules.map(rl=>({...rl, submissions:(rl.submissions||[]).map(s=>{ const sr=reqOf(s.reqId); if(s.status!=="pending"||!decided(sr)) return s;
+          notes.push(`${rl.name}: ${sr.status==="approved"?`approved — next due ${pm3AddMonths(pm3Today(), rl.att?.every||12)}`:"rejected — back to the assignee"}`);
+          return {...s, status:sr.status, decidedBy:who(sr), decidedAt:pm3Today(), comment:sr.comment||s.comment}; })}))};
+        q = {...q, history:[...notes.map(n=>({when:pm3Today(), who:"reviewer", what:`Evidence ${n}`})), ...(q.history||[])]};
+      }
+      return q;
+    });
+    const exceptions = {..._pm3.exceptions};
+    Object.entries(exceptions).forEach(([k,e])=>{
+      const r = reqOf(e.reqId); if(e.status!=="pending"||!decided(r)) return;
+      changed = true;
+      exceptions[k] = r.status==="approved" ? {...e, status:"accepted", until:pm3AddDays(pm3Today(), _pm3.approvalPolicy.exceptions.maxDays||90), decidedBy:who(r)} : {...e, status:"rejected", decidedBy:who(r)};
+    });
+    // open the requests that are now owed
+    policies = policies.map(p=>{
+      let q = p;
+      q.rules.forEach((rl,ri)=>(rl.submissions||[]).forEach((s,si)=>{ if(s.status==="pending"&&!s.reqId){
+        const reviewer = pm3Approver(s.reviewer||pm3Reviewer(q,rl), s.by); const id = `sr-pm3-att-${q.id}-${rl.id}-${si}-${Date.now()}`;
+        requestStatusChange({id, kind:"pm3attest", targetId:q.id, ruleId:rl.id, name:`Evidence · ${rl.name}`, requestedStatus:"Approved", requestedBy:s.by, approver:reviewer, note:"Review the submitted evidence"});
+        q = {...q, rules:q.rules.map((x,xi)=>xi!==ri?x:{...x, submissions:x.submissions.map((y,yi)=>yi===si?{...y, reqId:id, reviewer}:y)})}; changed = true; } }));
+      if(q.status!=="Draft" && q.articles.some(x=>x.ok===false) && !q.mapReqId){
+        const n = q.articles.filter(x=>x.ok===false).length; const approver = pm3Approver(_pm3.approvalPolicy.mapping.approver, q.owner);
+        const id = `sr-pm3-map-${q.id}-${Date.now()}`;
+        requestStatusChange({id, kind:"pm3mapping", targetId:q.id, name:`Article mapping · ${q.name}`, requestedStatus:"Approved", requestedBy:q.owner, approver, note:`${n} regulation article${n>1?"s":""} this custom policy claims to satisfy`});
+        q = {...q, mapReqId:id}; changed = true;
+      }
+      if(q.status==="Active") q.rules.filter(rl=>rl.type==="attestation").forEach(rl=>{
+        const s = pm3AttState(q, rl); const owed = ["due","overdue","rejected"].includes(s.state); const tid = `${q.id}|${rl.id}`;
+        const open = _statusReqs.find(r=>r.kind==="pm3attestdue"&&r.targetId===tid&&r.status==="pending");
+        if(owed && !open) requestStatusChange({id:`sr-pm3-due-${q.id}-${rl.id}-${Date.now()}`, kind:"pm3attestdue", targetId:tid, name:`Submit evidence · ${rl.name}`, requestedStatus:"Submitted", requestedBy:"EDG", approver:pm3Assignee(q,rl), note:s.label});
+        if(!owed && open) srSet(prev=>prev.map(r=>r.id===open.id?{...r, status:"approved", decidedBy:"EDG"}:r));
+      });
+      return q;
+    });
+    if(changed) pm3Set(s=>({...s, policies, exceptions}));
+    pm3RequestTargets();
+  } finally { _pm3Syncing = false; }
+}
+let _pm3Hooked = false;
+// Set by the Workspace inbox so "Open in Policy Manager 3" lands on the exact policy and tab.
+let _pm3Deep = null;
+
+
+const PolicyManager3View = ({onToast, onNav, settingsOnly}) => {
+  const st = usePM3();
+  const enfReqs = useEnfApprovals();
+  const statusReqs = useStatusReqs();
+  const {role, roleCfg} = useRole();
+  const me = ((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+  const isAdmin = role==="admin";
+  const ap = st.approvalPolicy;
+  // Decisions taken in the Workspace inbox flow back through the shared request store.
+  useEffect(()=>{ if(!_pm3Hooked){ _srSubs.add(pm3Sync); _pm3Hooked=true; } pm3Sync(); },[]);
+
+  const [tab, setTab]         = useState("policies");
+  const [selFw, setSelFw]     = useState(null);
+  const [fwTab, setFwTab]     = useState("overview");
+  useEffect(()=>{ setFwTab("overview"); },[selFw]);
+  const [selPol, setSelPol]   = useState(()=>_pm3Deep?_pm3Deep.policy:null);
+  const [pdTab, setPdTab]     = useState(()=>_pm3Deep?.tab||"overview");
+  useEffect(()=>{ if(_pm3Deep){ const d=_pm3Deep; _pm3Deep=null; if(d.folder) setExpCat(x=>({...x,[d.folder]:true})); } },[]);
+  const [wiz, setWiz]         = useState(null);    // adopt a regulation
+  const [ed, setEd]           = useState(null);    // create / edit a policy
+  const [runningPol, setRunningPol] = useState(null);  // policy being evaluated by Run now
+  const [schedFor, setSchedFor] = useState(null);       // policy whose evaluation schedule is open
+  const hasChecks = p => (p.rules||[]).some(r=>r.type!=="attestation");   // validation or enforcement — something to run
+  const [pvQ, setPvQ] = useState(""); const [pvStat, setPvStat] = useState("All"); const [pvSev, setPvSev] = useState("All"); const [pvExp, setPvExp] = useState(null); // policy Violations table
+  const [ruleEd, setRuleEd]   = useState(null);    // add / edit one rule on an existing policy
+  const [fwEd, setFwEd]       = useState(null);    // create / edit a custom framework
+  const [addPol, setAddPol]   = useState(null);    // {fw,i,sel,q} — pick existing policies for an article
+  const [q, setQ]             = useState("");
+  const [polQ, setPolQ]       = useState("");
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [findFilter, setFindFilter] = useState("all");
+  const [excDraft, setExcDraft] = useState(null);   // {key, reason}
+  const [fill, setFill]       = useState(null);     // {polId, ruleId, values}
+  const [review, setReview]   = useState(null);     // {reqId, comment}
+  const [openSub, setOpenSub] = useState(null);
+  const [confirm, setConfirm] = useState(null);     // {title, body, yesLabel, onYes, danger}
+  const [menu, setMenu]       = useState(null);     // which ⋮ menu is open
+  const [hovPol, setHovPol]   = useState(null);
+  const [selFolder, setSelFolder] = useState(null); // which framework folder the selected policy was opened from
+  const [sideEdit, setSideEdit] = useState(null);
+  const [expCat, setExpCat]   = useState({});
+  const [expFind, setExpFind] = useState(null);
+  const [findQ, setFindQ]     = useState("");
+  const [findSev, setFindSev] = useState("All");
+  const [findStat, setFindStat] = useState("Open");
+  const [expArt, setExpArt]   = useState({});
+
+  // ── permissions ──
+  const canEdit   = p => isAdmin || p.owner===me || (p.stewards||[]).includes(me);
+  const canSubmit = p => isAdmin || p.owner===me;
+  const canDecide = r => (r.approver===me || isAdmin) && !(ap.sod && r.requestedBy===me);
+
+  // ── derived ──
+  const allFws     = pm3AllFw();
+  const adoptedFws = allFws.filter(f=>st.adopted[f.id]);
+  const livePols   = st.policies.filter(p=>p.status!=="Retired");
+  const evalOf     = (p, rules) => pm3Eval(p, rules);
+  const excKey     = (p,r,a) => `${p.id}|${r.id}|${a.name}`;
+  const excOf      = (p,r,a) => st.exceptions[excKey(p,r,a)];
+  const isExcepted = (p,r,a) => excOf(p,r,a)?.status==="accepted";
+  const linkOf     = (p,fw,i) => p.articles.find(x=>x.fw===fw.id&&x.i===i);
+  const polsForArt = (fw,i,incPending) => livePols.filter(p=>p.articles.some(x=>x.fw===fw.id&&x.i===i&&(incPending||x.ok!==false)));
+  const artsOfPol  = (p,incPending) => p.articles.filter(x=>incPending||x.ok!==false).map(x=>{ const fw=pm3Fw(x.fw); return fw&&{fw, i:x.i, ok:x.ok!==false, link:x, art:fw.arts[x.i]}; }).filter(x=>x&&x.art);
+  const artsOfRule = (p,r) => artsOfPol(p,true).filter(x=>!x.link.rules||r.origin==="custom"||x.link.rules.includes(r.id));
+  const reqById    = id => statusReqs.find(r=>r.id===id);
+  const pendingReqOf = p => { const r = reqById(p.draft?p.draft.reqId:p.reqId); return r&&r.status==="pending"?r:null; };
+  const tplUpdate  = p => p.source==="regulation" && p.template && (PM3_TPL[p.template].version||1) > (p.tplVersion||1) ? PM3_TPL[p.template] : null;
+
+  // Health of one rule, optionally within one framework's scope.
+  const ruleHealth = (p, r, fw) => {
+    const inFw = a => !fw || pm3AssetInFw(a,p,fw,r);
+    if(r.type==="attestation"){ const s=pm3AttState(p,r); return {state:{current:"met",soon:"met",review:"review2",due:"evidence",overdue:"findings",rejected:"findings"}[s.state], label:s.label}; }
+    const ev = pm3EvalRule(p,r);
+    if(r.type==="validation"){ const f=ev.findings.filter(x=>inFw(x.asset)&&!isExcepted(p,r,x.asset)); return f.length?{state:"findings",label:`${f.length} finding${f.length>1?"s":""}`,n:f.length}:{state:"met",label:"Passing"}; }
+    const tg = ev.targets.filter(t=>inFw(t.asset)); const ts = tg.map(t=>pm3TargetStatus(p.id,r.id,t.asset.name));
+    if(ts.includes("rejected")) return {state:"findings", label:"A table owner rejected it"};
+    const pend = ts.filter(s=>s!=="approved").length;
+    return pend?{state:"pending",label:`${pend} of ${tg.length} table${tg.length>1?"s":""} awaiting owner`}:{state:"met",label:tg.length?`Running on ${tg.length} table${tg.length===1?"":"s"}`:"No tables in scope"};
+  };
+  const ART_ORDER = ["uncovered","norules","rejected","findings","draft","review","pending","review2","evidence","met"];
+  const ART_META  = {uncovered:{l:"No policy",c:T.rose}, norules:{l:"No rules",c:T.rose}, rejected:{l:"Policy rejected",c:T.rose}, findings:{l:"Findings",c:T.rose}, draft:{l:"Policy in draft",c:T.textMuted},
+    review:{l:"Policy awaiting approval",c:T.amber}, pending:{l:"Awaiting table owner",c:T.amber}, review2:{l:"Evidence in review",c:T.amber}, evidence:{l:"Evidence due",c:T.violet}, met:{l:"Met",c:T.green}, outside:{l:"Outside EDG",c:T.textMuted}};
+  // Health of a policy — for one article (its exact rules) or overall.
+  const polHealth = (p, fw, link) => {
+    if(p.status==="Draft")    return {state:"draft", label:"Draft — not submitted"};
+    if(p.status==="Rejected") return {state:"rejected", label:"Rejected"};
+    if(p.status==="Retired")  return {state:"draft", label:"Retired"};
+    if(p.status==="In review"){ const r=pendingReqOf(p); return {state:"review", label:`In review with ${r?.approver||"approver"}`}; }
+    const rules = pm3RulesForLink(p, link); if(!rules.length) return {state:"norules", label:"No rules"};
+    const hs = rules.map(r=>ruleHealth(p,r,fw)); const worst = ART_ORDER.find(s=>hs.some(h=>h.state===s))||"met";
+    const nF = hs.filter(h=>h.state==="findings").reduce((n,h)=>n+(h.n||1),0);
+    return {state:worst, label: worst==="met" ? `${rules.length} rule${rules.length>1?"s":""} met` : worst==="findings" ? `${nF} finding${nF>1?"s":""}` : hs.find(h=>h.state===worst).label};
+  };
+  const artState = (fw,i) => {
+    const art = fw.arts[i]; if(art.out) return "outside";
+    const pols = polsForArt(fw,i); if(!pols.length) return "uncovered";
+    const states = pols.map(p=>polHealth(p,fw,linkOf(p,fw,i)).state);
+    return ART_ORDER.find(s=>states.includes(s))||"met";
+  };
+  const fwScore = fw => { const ins=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out); return ins.length?Math.round(ins.filter(i=>artState(fw,i)==="met").length/ins.length*100):0; };
+  const scoreColor = s => s>=80?T.green:s>=50?T.amber:T.rose;
+  const typeColor  = k => PM3_TYPE_META[k]?.color||T.textMuted;
+  const fwTypeColor = t => ({Privacy:T.violet, Healthcare:T.rose, Financial:T.amber, Security:T.blue, Internal:T.accent}[t]||T.accent);
+  const statusColor = s => ({Active:T.green, "In review":T.amber, Draft:T.textMuted, Rejected:T.rose, Retired:T.textMuted}[s]||T.textMuted);
+  const regMeta = id => { const f=pm3Fw(id); return f&&f.custom ? {fullName:f.fullName, jurisdiction:f.jurisdiction} : (REGS_META.find(r=>r.id===id)||{}); };
+
+  const allFindings = livePols.filter(p=>p.status==="Active").flatMap(p=>evalOf(p).findings.map(f=>({
+    ...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset),
+    refs: artsOfRule(p,f.rule).filter(x=>x.ok&&st.adopted[x.fw.id]&&pm3AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name, ref:x.art.ref})),
+  })));
+  const openFindings = allFindings.filter(f=>f.exc?.status!=="accepted");
+  const pm3StatusPending = statusReqs.filter(r=>(r.kind||"").startsWith("pm3")&&r.status==="pending");
+  const pm3EnfPending    = enfReqs.filter(r=>(r.policyId||"").startsWith("pm3:")&&r.status==="pending");
+  const attDue = livePols.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm3AttState(p,r).state)).map(r=>({p,r})));
+
+  // ── actions ──
+  const addHist = (p, what) => ({...p, history:[{when:pm3Today(), who:me, what}, ...(p.history||[])]});
+  const updPol  = (id, fn) => pm3Set(s=>({...s, policies:s.policies.map(p=>p.id===id?fn(p):p)}));
+  // Validation rules change no data, so a policy (or a change) made only of validation rules can activate on its own.
+  const onlyValidation = (rules) => rules.length>0 && rules.every(r=>r.type==="validation");
+  const submitPolicy = (id, note, quiet) => {
+    const p = _pm3.policies.find(x=>x.id===id); if(!p) return;
+    const newRules = p.draft ? (p.draft.fields.rules||p.rules) : p.rules;
+    const logicChanged = p.draft && (p.draft.fields.ruleLogic||"independent")!==(p.ruleLogic||"independent");
+    const changed = p.draft ? [...newRules.filter(r=>JSON.stringify(r)!==JSON.stringify(p.rules.find(x=>x.id===r.id)||null)), ...(logicChanged?newRules.filter(r=>r.type==="validation"):[])] : newRules;
+    if(_pm3.approvalPolicy.activation.autoValidation && onlyValidation(changed) && newRules.length){
+      updPol(id, x=>{ const base = x.draft?{...x, ...x.draft.fields, version:x.draft.version, draft:null}:x;
+        return {...base, status:"Active", reqId:null, activatedAt:base.activatedAt||pm3Today(), history:[{when:pm3Today(), who:"EDG", what:`v${base.version} active without approval — ${p.draft?"the change only touches":"it only has"} validation rules, which change no data`}, ...(x.history||[])]}; });
+      if(!quiet) onToast(`"${p.name}" is active — validation rules change no data, so no approval needed`,"success");
+      setTimeout(pm3Sync,0); return;
+    }
+    const approver = pm3Approver(_pm3.approvalPolicy.activation.approver, me);
+    const reqId = `sr-pm3-${p.id}-${Date.now()}`; const isChange = !!p.draft;
+    requestStatusChange({id:reqId, kind:"pm3policy", targetId:p.id, name:isChange?`${p.name} (v${p.draft.version} change)`:p.name, requestedStatus:"Active", requestedBy:me, note:note||(isChange?"Change to an active policy":"New policy"), approver});
+    pushNotif({category:"Policy", type:"policy", event:"policy_review", title:`Policy approval requested · ${p.name}`, body:`${me} asks ${approver} to approve ${isChange?`v${p.draft.version} of `:""}"${p.name}"`, nav:"stewardship"});
+    updPol(id, x=> isChange ? addHist({...x, draft:{...x.draft, reqId}}, `v${x.draft.version} submitted to ${approver} — v${x.version} keeps running meanwhile`)
+                            : addHist({...x, status:"In review", reqId}, `Submitted to ${approver} for approval`));
+    if(!quiet) onToast(`Sent to ${approver} for approval`,"success");
+  };
+  // Change a policy's rules: in place for a draft; as the next version (with approval) for an active one.
+  const changeRules = (p, rules, what) => {
+    if(p.status==="Active"){
+      updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{rules}}}, `${what} — drafted as v${x.version+1}`));
+      setTimeout(()=>submitPolicy(p.id, what),0);
+    } else { updPol(p.id, x=>addHist({...x, rules}, what)); onToast(what,"success"); }
+  };
+  const saveRule = (p, rule, isNew) => {
+    const rules = isNew ? [...p.rules, rule] : p.rules.map(r=>r.id===rule.id?rule:r);
+    changeRules(p, rules, isNew ? `Added ${rule.origin} ${rule.type} rule “${rule.name}”` : `Edited rule “${rule.name}”`);
+  };
+  const removeRule = (p, rule) => changeRules(p, p.rules.filter(r=>r.id!==rule.id), `Removed custom rule “${rule.name}”`);
+  const decideReq = (r, ok, comment) => {
+    srSet(prev=>prev.map(x=>x.id===r.id?{...x, status:ok?"approved":"rejected", decidedBy:me, comment:comment||x.comment}:x));
+    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`${ok?"Approved":"Rejected"} · ${r.name}`, body:`${me} ${ok?"approved":"rejected"} ${r.requestedBy}'s request${comment?` — "${comment}"`:""}`, nav:"policymanager3"});
+    setReview(null); onToast(ok?"Approved":"Rejected — the requester is notified", ok?"success":"info");
+  };
+  const decideEnf = (r, ok) => {
+    resolveEnfApproval(r.id, ok?"approved":"rejected");
+    pushNotif({category:"Policy", type:ok?"cert":"field_updated", title:`Enforcement ${ok?"approved":"rejected"} · ${r.table}`, body:`${r.action} on ${r.table} — ${ok?"now running":"sent back to the policy owner"}`, nav:"policymanager3"});
+    onToast(ok?`${r.action} on ${r.table} is now running`:`${r.action} on ${r.table} rejected`, ok?"success":"info");
+  };
+  const requestException = (f, reason) => {
+    const named = ap.exceptions.approver==="policy owner" ? f.pol.owner : ap.exceptions.named;
+    const approver = pm3Approver(named, me); const reqId = `sr-pm3x-${Date.now()}`;
+    requestStatusChange({id:reqId, kind:"pm3exception", targetId:f.key, name:`Exception · ${f.asset.name} · ${f.rule.name}`, requestedStatus:"Exception", requestedBy:me, note:reason, approver});
+    pushNotif({category:"Policy", type:"policy", title:`Exception requested · ${f.asset.name}`, body:`${me}: "${reason}"`, nav:"stewardship"});
+    pm3Set(s=>({...s, exceptions:{...s.exceptions, [f.key]:{status:"pending", reqId, reason, by:me, approver}}}));
+    setExcDraft(null); onToast(`Exception sent to ${approver}`,"success");
+  };
+  const submitAttestation = () => {
+    const p = st.policies.find(x=>x.id===fill.polId); const r = p.rules.find(x=>x.id===fill.ruleId);
+    const miss = r.att.form.filter(f=>f.required&&!String(fill.values[f.id]||"").trim());
+    if(miss.length){ onToast(`Fill in: ${miss.map(f=>f.label).join(", ")}`,"info"); return; }
+    const reviewer = pm3Approver(pm3Reviewer(p,r), me);
+    updPol(p.id, x=>addHist({...x, rules:x.rules.map(rl=>rl.id!==r.id?rl:{...rl, submissions:[{id:`sub-${Date.now()}`, by:me, at:pm3Today(), status:"pending", reviewer, values:{...fill.values}}, ...(rl.submissions||[])]})}, `“${r.name}” submitted to ${reviewer}`));
+    setFill(null); setTimeout(pm3Sync,0); onToast(`Submitted — ${reviewer} reviews it`,"success");
+  };
+  const duplicateAsCustom = p => {
+    const id = "p-cust-"+Date.now();
+    const copy = {...p, id, source:"custom", template:null, tplVersion:null, basedOn:p.id, name:`${p.name} (${p.source==="regulation"?"custom":"copy"})`, status:"Draft", version:1, reqId:null, draft:null, mapReqId:null,
+      articles:p.articles.map(x=>({...x, ok:!!pm3Fw(x.fw)?.custom, rules:null})), created:pm3Today(), owner:me, stewards:[...(p.stewards||[])],
+      rules:(p.rules||[]).map((r,i)=>({...r, id:`${id}-r${i+1}`, origin:"custom", submissions:[], conds:(r.conds||[]).map(c=>{ const {edit, ...rest}=c; return rest; }), enf:r.enf?{...r.enf,assets:[...(r.enf.assets||[])]}:null, att:r.att?{...r.att,form:r.att.form.map(f=>({...f}))}:null})),
+      history:[{when:pm3Today(), who:me, what:`Duplicated from "${p.name}" — regulation mappings need approval before they count`}]};
+    pm3Set(s=>({...s, policies:[...s.policies, copy]}));
+    onToast(`Duplicated as a custom draft — every rule is now yours to edit`,"success");
+    setSelPol(id); setPdTab("overview"); setTimeout(()=>openEditor(copy),0);
+  };
+  const applyTplUpdate = p => {
+    const t = PM3_TPL[p.template];
+    const pre = t.rules.map(r=>pm3RuleFromTpl(t.id,r)).map(nr=>{ const old=p.rules.find(x=>x.id===nr.id); return old?{...nr, submissions:old.submissions||[]}:nr; });
+    const rules = [...pre, ...p.rules.filter(r=>r.origin==="custom")];
+    updPol(p.id, x=>addHist({...x, draft:{version:x.version+1, fields:{tplVersion:t.version, rules}}}, `Template v${t.version} drafted for review: ${t.changelog}`));
+    setTimeout(()=>submitPolicy(p.id, `Template update to v${t.version}: ${t.changelog}`),0);
+  };
+  const setAp = (path, v) => pm3Set(s=>{ const a={...s.approvalPolicy}; const [k1,k2]=path; a[k1]= k2?{...a[k1],[k2]:v}:v; return {...s, approvalPolicy:a}; });
+  const openPolicy = (id, fwId, tab2) => { setTab("policies"); setSelFw(null); setSelPol(id); setPdTab(tab2||"overview"); const f=fwId?"fw:"+fwId:null; setSelFolder(f); if(f) setExpCat(x=>({...x,[f]:true})); };
+
+  // ── The rest of CRUD ──
+  const ask = (title, body, yesLabel, onYes, danger) => setConfirm({title, body, yesLabel, onYes, danger});
+  const cancelReq = id => srSet(prev=>prev.map(r=>r.id===id&&r.status==="pending"?{...r, status:"withdrawn", decidedBy:me}:r));
+  const canFw = fw => isAdmin || st.adopted[fw.id]?.owner===me || fw.owner===me;
+  const withdrawRequest = p => {
+    const r = pendingReqOf(p); if(!r) return;
+    updPol(p.id, x=> x.draft ? addHist({...x, draft:null}, `Withdrew v${x.draft.version} — v${x.version} keeps running`) : addHist({...x, status:"Draft", reqId:null}, "Withdrew the approval request — back to Draft"));
+    cancelReq(r.id); onToast("Request withdrawn — the policy is editable again","info");
+  };
+  const retirePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Retired"}, "Retired — stopped running")); onToast(`"${p.name}" retired — restore it any time`,"info"); };
+  const restorePolicy = p => { updPol(p.id, x=>addHist({...x, status:"Draft", reqId:null}, "Restored as a draft — submit it to run again")); setSelPol(p.id); onToast("Restored as a draft","success"); };
+  const deletePolicy = p => {
+    [p.reqId, p.draft?.reqId, p.mapReqId, ...p.rules.flatMap(r=>(r.submissions||[]).map(s=>s.reqId))].filter(Boolean).forEach(cancelReq);
+    statusReqs.filter(r=>String(r.targetId||"").split("|")[0]===p.id&&r.status==="pending").forEach(r=>cancelReq(r.id));
+    pm3Set(s=>({...s, policies:s.policies.filter(x=>x.id!==p.id), exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>!k.startsWith(p.id+"|")))}));
+    setSelPol(null); onToast(`"${p.name}" deleted`,"info");
+  };
+  const unmap = (p, fwId, i) => { const f=pm3Fw(fwId); updPol(p.id, x=>addHist({...x, articles:x.articles.filter(a=>!(a.fw===fwId&&a.i===i))}, `Detached from ${f?.name} ${f?.arts[i]?.ref}`)); onToast("Detached from the article","info"); };
+  const withdrawSubmission = (p, r, sb) => { updPol(p.id, x=>addHist({...x, rules:x.rules.map(rl=>rl.id!==r.id?rl:{...rl, submissions:rl.submissions.filter(s=>s.id!==sb.id)})}, `Withdrew a pending submission for “${r.name}”`)); if(sb.reqId) cancelReq(sb.reqId); setTimeout(pm3Sync,0); onToast("Submission withdrawn — the form is due again","info"); };
+  const revokeException = f => { pm3Set(s=>({...s, exceptions:Object.fromEntries(Object.entries(s.exceptions).filter(([k])=>k!==f.key))})); onToast("Exception revoked — the finding counts again","info"); };
+  const removeFramework = fw => {
+    pm3Set(s=>{
+      const adopted = {...s.adopted}; delete adopted[fw.id];
+      const policies = s.policies.map(p=>{
+        if(!p.articles.some(a=>a.fw===fw.id)) return p;
+        const rest = p.articles.filter(a=>a.fw!==fw.id);
+        const orphan = p.source==="regulation" && !rest.some(a=>!pm3Fw(a.fw)?.custom);
+        return {...p, articles:rest, status:orphan&&p.status!=="Retired"?"Retired":p.status,
+          history:[{when:pm3Today(), who:me, what:orphan?`Retired — ${fw.name} was removed and no other regulation uses it`:`Detached from ${fw.name}`}, ...(p.history||[])]};
+      });
+      return {...s, adopted, policies, fwVer:(s.fwVer||0)+1};
+    });
+    if(fw.custom){ const i=PM3_CUSTOM_FW.findIndex(f=>f.id===fw.id); if(i>=0) PM3_CUSTOM_FW.splice(i,1); }
+    setSelFw(null); onToast(fw.custom?`${fw.name} deleted`:`${fw.name} removed — adopt it again any time`,"info");
+  };
+  const artCount = p => p.articles.length;
+  const policyMenu = p => {
+    const pr = pendingReqOf(p);
+    return [
+      {label:"Open", on:()=>openPolicy(p.id)},
+      {label:"Edit", on:()=>openEditor(p), disabled:!canEdit(p)?`Only ${p.owner} or a steward can edit it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
+      {label:"Add rule", on:()=>openRuleEditor(p,null), disabled:!canEdit(p)?`Only ${p.owner} or a steward can change it`:p.status==="Retired"?"Restore it first":pr?"Withdraw the approval request first":null},
+      p.status==="Active"&&hasChecks(p)&&{label:"Run now", on:()=>runNow(p), disabled:runningPol?"A run is in progress":null},
+      {label:p.source==="regulation"?"Duplicate as custom":"Duplicate", on:()=>duplicateAsCustom(p)},
+      "-",
+      (p.status==="Draft"||p.status==="Rejected")&&{label:"Submit for approval", on:()=>submitPolicy(p.id), disabled:!canSubmit(p)?`Only the owner (${p.owner}) submits it`:!p.rules.length?"Add at least one rule first":null},
+      pr&&{label:"Withdraw approval request", on:()=>withdrawRequest(p), disabled:(pr.requestedBy===me||canSubmit(p))?null:"Only the requester or the owner can withdraw it"},
+      p.status==="Active"&&{label:"Retire", on:()=>ask(`Retire "${p.name}"?`, `It stops running. The ${artCount(p)} article${artCount(p)===1?"":"s"} it satisfies will read "No policy" unless another policy covers ${artCount(p)===1?"it":"them"}. You can restore it later.`, "Retire", ()=>retirePolicy(p)), disabled:!canSubmit(p)?`Only the owner (${p.owner}) retires it`:null},
+      p.status==="Retired"&&{label:"Restore as draft", on:()=>restorePolicy(p), disabled:!canSubmit(p)?`Only the owner (${p.owner}) restores it`:null},
+      "-",
+      {label:"Delete", danger:true, on:()=>ask(`Delete "${p.name}"?`, `This permanently removes the policy, its ${p.rules.length} rule${p.rules.length===1?"":"s"}, their submissions and the history. Articles it covered will read "No policy". It can't be undone.`, "Delete", ()=>deletePolicy(p), true),
+        disabled:!canSubmit(p)?`Only the owner (${p.owner}) or an admin deletes it`:(p.status==="Active"||p.status==="In review")?"Retire it (or withdraw its request) first — a running policy can't be deleted":null},
+    ];
+  };
+  const fwMenu = fw => {
+    const attached = st.policies.filter(p=>p.articles.some(a=>a.fw===fw.id));
+    const orphans = attached.filter(p=>p.source==="regulation"&&!p.articles.some(a=>a.fw!==fw.id&&!pm3Fw(a.fw)?.custom));
+    const who = canFw(fw)?null:`Only the framework owner (${st.adopted[fw.id]?.owner||fw.owner}) or an admin`;
+    return [
+      {label:"Open", on:()=>setSelFw(fw.id)},
+      fw.custom ? {label:"Edit framework", on:()=>openFwEditor(fw), disabled:who} : {label:"Review its policies", on:()=>startAdopt(fw.id,2), disabled:who},
+      "-",
+      fw.custom
+        ? {label:"Delete framework", danger:true, disabled:who, on:()=>ask(`Delete ${fw.name}?`, `Its ${fw.arts.length} articles are removed. The ${attached.length} polic${attached.length===1?"y":"ies"} attached to it stay, but lose these mappings. It can't be undone.`, "Delete", ()=>removeFramework(fw), true)}
+        : {label:"Remove framework", danger:true, disabled:who, on:()=>ask(`Remove ${fw.name}?`, `EDG stops tracking ${fw.name} readiness. ${orphans.length} regulation polic${orphans.length===1?"y":"ies"} only ${fw.name} uses will be retired; policies shared with other frameworks keep running, and custom policies stay. You can adopt it again later.`, "Remove", ()=>removeFramework(fw), true)},
+    ];
+  };
+
+  // ── small render helpers (plain functions — nothing remounts) ──
+  const pill = (c, text, title) => <span title={title} style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${c}15`,color:c,border:`1px solid ${c}30`,whiteSpace:"nowrap",flexShrink:0}}>{text}</span>;
+  const typePill = k => pill(typeColor(k), PM3_TYPE_META[k].label, PM3_TYPE_META[k].hint);
+  const originPill = r => r.origin==="custom" ? <span title="Added by your organisation" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,letterSpacing:"0.04em",flexShrink:0}}>CUSTOM</span>
+    : <span title="Shipped with the regulation — locked except the values the law leaves open" style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${T.blue}14`,color:T.blue,border:`1px solid ${T.blue}30`,letterSpacing:"0.04em",flexShrink:0}}>PREBUILT</span>;
+  const typeDots = p => <span style={{display:"flex",gap:2,flexShrink:0}}>{["validation","enforcement","attestation"].filter(k=>pm3Types(p).includes(k)).map(k=><span key={k} title={PM3_TYPE_META[k].label} style={{width:7,height:7,borderRadius:"50%",background:typeColor(k)}}/>)}{!p.rules.length&&<span style={{width:7,height:7,borderRadius:"50%",border:`1px solid ${T.border}`}}/>}</span>;
+  const classChip = c => <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:99,background:T.bgElevated,color:T.textSub,border:`1px solid ${T.border}`,whiteSpace:"nowrap",flexShrink:0}}><GovIcon kind="tag" size={10}/>{c==="ALL"?"All classified data":PM3_CLASS_META[c].label}</span>;
+  const refTag = (text, c) => <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:c||T.textSub,background:T.bgElevated,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0,whiteSpace:"nowrap"}}>{text}</span>;
+  const secLabel = (t, extra) => <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",margin:"20px 0 8px",display:"flex",alignItems:"center",gap:8}}>{t}{extra}</div>;
+  const selStyle = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12};
+  const inStyle  = {padding:"5px 8px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:6,color:T.text,fontSize:12,outline:"none"};
+  const inp = {width:"100%",padding:"8px 11px",background:T.bgElevated,border:`1.5px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const lbl = {display:"block",fontSize:11,fontWeight:600,color:T.textSub,marginBottom:5};
+  const secHead = (title, desc) => <div style={{marginBottom:14}}><div style={{fontSize:13,fontWeight:700,color:T.text}}>{title}</div>{desc&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:3,lineHeight:1.6}}>{desc}</div>}</div>;
+  const userSel = (v, on, opts) => <select value={v} onChange={e=>on(e.target.value)} style={selStyle}>{(opts||PM3_USERS).map(u=><option key={u} value={u}>{u}</option>)}</select>;
+  const card = (children, extra) => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px 16px",...extra}}>{children}</div>;
+  const scopePhrase = (p, r) => r&&r.scopeBy==="suspect"
+    ? <>an asset that <b>looks like</b> {p.scope.includes("ALL")?"regulated":p.scope.map(c=>PM3_CLASS_META[c]?.label.toLowerCase()).join(" / ")} data but <b>isn't classified</b></>
+    : <>an asset holding {p.scope.length?p.scope.map((c,i)=><React.Fragment key={c}>{i>0&&" or "}<b>{c==="ALL"?"any classified data":PM3_CLASS_META[c]?.label.toLowerCase()}</b></React.Fragment>):<i>no data class yet</i>}{(p.domains||[]).length>0&&<> in <b>{p.domains.join(" / ")}</b></>}</>;
+  // One sentence for any rule — what it does, in plain language.
+  const ruleSentence = (p, r) => {
+    if(r.type==="validation") return <>When {scopePhrase(p,r)}{(r.conds||[]).length?<> and {r.conds.map(pm3CondText).join(" and ")}</>:""}, raise a finding — <i>“{r.finding||r.name}”</i></>;
+    if(r.type==="enforcement") return enfText(p, r);
+    return <>{r.att?.instructions||"—"} <span style={{color:T.textMuted}}>· {r.att?.form.length} field{r.att?.form.length===1?"":"s"}, every {r.att?.every} months, filled in by {pm3Assignee(p,r)}</span></>;
+  };
+  const enfText = (p, r) => {
+    const e = r.enf; if(!e) return "—";
+    const where = e.select==="assets" ? <b>{(e.assets||[]).join(", ")||"no assets picked"}</b> : null;
+    if(e.action==="hold") return <>Place a <b>legal hold</b> for <b>{e.matter||"a matter"}</b> on {where||<>every in-scope asset flagged for the matter</>}. Retention and erasure can't act on held records; releasing the hold takes {ap.hold.twoPerson?"two people":"the policy owner"}.</>;
+    const eff = pm3EffectivePeriod(p, r);
+    return e.mode==="dispose"
+      ? <>For {where||<>{scopePhrase(p)} in production</>}, <b>{e.disposal.toLowerCase()}</b> <b>{eff.label}</b> after <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>.</>
+      : <>For {where||scopePhrase(p)}, <b>keep records for at least {eff.label}</b> from <b>{e.trigger.toLowerCase()}</b> <span style={{color:T.textMuted}}>— {eff.why}</span>. Then: {e.disposal.toLowerCase()}.</>;
+  };
+  const formView = (form, vals, setVal) => (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {form.map(f=>{ const v = vals?.[f.id]??""; const dis = !setVal; const on = x=>setVal&&setVal(f.id,x);
+        return (<div key={f.id}>
+          <label style={lbl}>{f.label}{f.required&&<span style={{color:T.rose}}> *</span>}</label>
+          {f.type==="long" ? <textarea rows={3} disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...inp,resize:"vertical"}}/>
+          : f.type==="date" ? <input type="date" disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...inp,width:180}}/>
+          : f.type==="yesno" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,width:140}}><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select>
+          : f.type==="select" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,minWidth:180}}><option value="">Choose…</option>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+          : f.type==="person" ? <select disabled={dis} value={v} onChange={e=>on(e.target.value)} style={{...selStyle,minWidth:180}}><option value="">Choose a person…</option>{PM3_USERS.map(u=><option key={u}>{u}</option>)}</select>
+          : <input disabled={dis} value={v} onChange={e=>on(e.target.value)} placeholder={f.type==="doc"?"https://…":""} style={inp}/>}
+          {f.help&&<div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{f.help}</div>}
+        </div>); })}
+    </div>
+  );
+  const valText = (f, v) => f.type==="yesno" ? (v==="yes"?"Yes":v==="no"?"No":"—") : (v||"—");
+  const menuBtn = (id, items, align, horiz) => (
+    <div style={{position:"relative",flexShrink:0}} onClick={e=>e.stopPropagation()}>
+      <button onClick={()=>setMenu(menu===id?null:id)} title="Actions" style={{width:horiz?20:28,height:horiz?20:28,borderRadius:horiz?4:7,background:menu===id?T.bgElevated:"transparent",border:`1px solid ${menu===id?T.border:"transparent"}`,color:T.textMuted,cursor:"pointer",display:"flex",flexDirection:horiz?"row":"column",alignItems:"center",justifyContent:"center",gap:horiz?2:2.5,padding:0}}
+        onMouseEnter={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.borderColor=T.border;}} onMouseLeave={e=>{if(menu!==id){e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor="transparent";}}}>
+        {[0,1,2].map(i=><span key={i} style={{width:horiz?3:3.5,height:horiz?3:3.5,borderRadius:"50%",background:T.textMuted,display:"block",flexShrink:0}}/>)}
+      </button>
+      {menu===id&&<>
+        <div onClick={()=>setMenu(null)} style={{position:"fixed",inset:0,zIndex:60}}/>
+        <div style={{position:"absolute",top:"calc(100% + 4px)",[align==="left"?"left":"right"]:0,width:250,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:61,padding:"4px 0"}}>
+          {items.filter(Boolean).map((it,i,arr)=> it==="-" ? (i>0&&i<arr.length-1&&arr[i-1]!=="-"?<div key={i} style={{borderTop:`1px solid ${T.border}`,margin:"4px 0"}}/>:null) : (
+            <button key={i} disabled={!!it.disabled} onClick={()=>{setMenu(null); it.on();}}
+              style={{width:"100%",display:"block",padding:"7px 12px",background:"transparent",border:"none",textAlign:"left",cursor:it.disabled?"not-allowed":"pointer",fontSize:12.5,color:it.disabled?T.textMuted:it.danger?T.rose:T.text}}
+              onMouseEnter={e=>{if(!it.disabled)e.currentTarget.style.background=it.danger?T.roseDim:T.bgHover;}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              {it.label}{it.disabled&&<div style={{fontSize:10.5,color:T.textMuted,marginTop:1,lineHeight:1.4}}>{it.disabled}</div>}
+            </button>))}
+        </div></>}
+    </div>);
+  // Where a policy is in its life, and who acts next.
+  const nextText = p => {
+    const pr = pendingReqOf(p);
+    if(p.status==="Draft") return <>Next: <b>{canSubmit(p)?"you submit it":`${p.owner} submits it`}</b>. {p.rules.length?routeText(p.rules):"Add at least one rule first"}.</>;
+    if(p.status==="Rejected") return <>Rejected. Next: <b>{p.owner}</b> edits it and submits again — or deletes it.</>;
+    if(p.status==="In review") return <>Next: <b>{pr?.approver||"the approver"}</b> approves or rejects it. Nothing runs until then{(pr?.requestedBy===me||canSubmit(p))?" — you can withdraw the request to make changes":""}.</>;
+    if(p.status==="Retired") return <>Not running. Restore it as a draft to use it again, or delete it.</>;
+    if(p.draft) return <>v{p.version} is running. v{p.draft.version} waits for <b>{pr?.approver||"the approver"}</b>.</>;
+    const parts = [];
+    const nF = p.rules.filter(r=>r.type==="validation").reduce((n,r)=>n+pm3EvalRule(p,r).findings.filter(f=>!isExcepted(p,r,f.asset)).length,0); if(nF) parts.push(`${nF} finding${nF>1?"s":""} for the stewards`);
+    const nT = p.rules.filter(r=>r.type==="enforcement").reduce((n,r)=>n+pm3EvalRule(p,r).targets.filter(t=>pm3TargetStatus(p.id,r.id,t.asset.name)!=="approved").length,0); if(nT) parts.push(`${nT} table owner approval${nT>1?"s":""}`);
+    const nA = p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm3AttState(p,r).state)).length; if(nA) parts.push(`${nA} form${nA>1?"s":""} to fill in`);
+    const nR = p.rules.filter(r=>r.type==="attestation"&&pm3AttState(p,r).state==="review").length; if(nR) parts.push(`${nR} form${nR>1?"s":""} to review`);
+    return parts.length ? <>Running. Waiting on: <b>{parts.join(" · ")}</b>.</> : <>Running — every rule is met.</>;
+  };
+
+
+  const pad = {flex:1,overflowY:"auto",padding:"20px 28px"};
+  // ── Styles shared with the original Policy Manager ──
+  const SEV_COLOR = {Critical:T.rose, High:"#f97316", Medium:T.amber, Low:T.green};
+  const SEV_BG    = {Critical:`${T.rose}14`, High:"rgba(249,115,22,.12)", Medium:`${T.amber}14`, Low:`${T.green}14`};
+  const CAT_COLOR = {Privacy:T.violet, Security:T.rose, Retention:T.amber, Access:T.blue, Quality:T.green, Governance:"#0ea5e9"};
+  const catColor  = c => CAT_COLOR[c]||T.textMuted;
+  const sevPill   = s => s ? <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:SEV_BG[s]||T.bgElevated,color:SEV_COLOR[s]||T.textSub,border:`1px solid ${SEV_COLOR[s]||T.border}30`}}>{s}</span> : null;
+  const sideLabel = (label, onEdit) => (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}</div>
+      {onEdit&&<button onClick={onEdit} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"2px 3px",display:"flex",borderRadius:4}}
+        onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+        <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
+    </div>);
+  const groupHead = (label, n, color, right) => (
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+      <div style={{width:3,height:14,borderRadius:2,background:color}}/>
+      <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>{label}</span>
+      <span style={{fontSize:10.5,color:T.textMuted}}>({n})</span>{right&&<span style={{marginLeft:"auto"}}>{right}</span>}
+    </div>);
+  const searchBox = (value, set, placeholder, max) => (
+    <div style={{position:"relative",flex:1,maxWidth:max||340}}>
+      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.3"/><path d="M10 10l2.5 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+      <input value={value} onChange={e=>set(e.target.value)} placeholder={placeholder}
+        style={{width:"100%",padding:"7px 10px 7px 28px",background:T.bgElevated,border:`1.5px solid ${value?T.accent:T.border}`,borderRadius:8,color:T.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+      {value&&<button onClick={()=>set("")} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,lineHeight:1}}>×</button>}
+    </div>);
+  const readinessLabel = s => s>=80?"On Track":s>=50?"Partial":"Needs Attention";
+
+  // ═════ FRAMEWORKS — one stacked list of what you track, Add framework at the end ═════
+  const fwRow = fw => {
+    const s=fwScore(fw); const sc=scoreColor(s); const tc=fw.custom?T.accent:fwTypeColor(fw.type);
+    const inIdx=fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
+    const met=inIdx.filter(i=>artState(fw,i)==="met").length;
+    const polCt=livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false)).length;
+    return (
+      <div key={fw.id} onClick={()=>setSelFw(fw.id)} style={{display:"flex",alignItems:"center",gap:16,padding:"14px 18px",background:T.bgSurface,border:`1.5px solid ${T.border}`,borderRadius:10,cursor:"pointer",transition:"all .15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.borderColor=tc;e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.10)";}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.boxShadow="none";}}>
+        <div style={{width:36,height:36,borderRadius:9,background:`${tc}14`,border:`1px solid ${tc}30`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={tc} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg></div>
+        <div style={{flex:"1 1 220px",minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,fontWeight:700,color:T.text}}>{fw.name}</span>{fw.custom&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,letterSpacing:"0.04em"}}>CUSTOM</span>}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{fw.custom?(fw.fullName||`${fw.type} framework`):regMeta(fw.id).fullName}{!fw.custom&&regMeta(fw.id).jurisdiction?` · ${regMeta(fw.id).jurisdiction}`:""}</div>
+        </div>
+        <div style={{width:210,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{flex:1,height:5,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{width:`${s}%`,height:"100%",background:sc,borderRadius:3}}/></div>
+            <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:sc,width:36,textAlign:"right"}}>{s}%</span></div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:4}}>{met} of {inIdx.length} articles met</div>
+        </div>
+        <div style={{width:90,flexShrink:0,fontSize:11.5,color:T.textSub,textAlign:"right"}}>{polCt} polic{polCt===1?"y":"ies"}</div>
+        <span style={{width:118,flexShrink:0,textAlign:"center",fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}25`,whiteSpace:"nowrap"}}>{readinessLabel(s)}</span>
+        <span style={{color:T.textMuted,flexShrink:0}}>{Ic.chevRight(12)}</span>
+      </div>);
+  };
+  const renderFrameworks = () => {
+    const ql = q.toLowerCase(); const match = f => !ql||[f.name, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
+    const tracked = [...adoptedFws.filter(f=>!f.custom), ...adoptedFws.filter(f=>f.custom)].filter(match);
+    const scores = adoptedFws.map(fwScore);
+    const noPolicy = adoptedFws.reduce((n,f)=>n+f.arts.filter((a,i)=>!a.out&&artState(f,i)==="uncovered").length,0);
+    return (
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18,flexWrap:"wrap"}}>
+          {searchBox(q, setQ, "Search frameworks…")}
+          <span style={{fontSize:11.5,color:T.textMuted}}>{adoptedFws.length} framework{adoptedFws.length===1?"":"s"} tracked</span>
+        </div>
+        <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+          {[{label:"On Track (≥80%)",count:scores.filter(s=>s>=80).length,color:T.green},{label:"Partial (50–79%)",count:scores.filter(s=>s>=50&&s<80).length,color:T.amber},{label:"Needs Attention (<50%)",count:scores.filter(s=>s<50).length,color:T.rose},{label:"Articles with no policy",count:noPolicy,color:T.rose},{label:"Assets not checked",count:new Set(adoptedFws.flatMap(f=>fwUnscanned(f).map(a=>a.name))).size,color:T.amber}].map(x=>(
+            <div key={x.label} style={{flex:1,minWidth:120,padding:"12px 16px",background:T.bgSurface,border:`1.5px solid ${x.color}30`,borderRadius:10,textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:x.color,marginBottom:3}}>{x.count}</div>
+              <div style={{fontSize:10.5,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"}}>{x.label}</div>
+            </div>))}
+        </div>
+        <div style={{fontSize:11,color:T.textMuted,marginBottom:18}}>Data governance readiness — not a legal compliance certification. Articles outside EDG's scope (identity, incident response, vendor management, legal disclosure) are excluded from these numbers.</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {tracked.map(fwRow)}
+          {ql&&!tracked.length&&<div style={{fontSize:12,color:T.textMuted,padding:"8px 2px"}}>No tracked framework matches “{q}”.</div>}
+          {!adoptedFws.length&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 2px"}}>No frameworks enabled yet.</div>}
+          <div style={{fontSize:11.5,color:T.textMuted,padding:"6px 2px"}}>Regulations are enabled, and custom frameworks created, in <button onClick={()=>onNav&&onNav("settings",{section:"frameworks"})} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:11.5,fontWeight:600}}>Settings › Regulations</button>.</div>
+        </div>
+      </div>
+    );
+  };
+
+  // ═════ FRAMEWORK DETAIL — the original regulation drill-in ═════
+  // ═════ FRAMEWORK OVERVIEW — compliance observability for one framework ═════
+  // Answers: how compliant are we, is it improving, what's at risk, who must act.
+  // Every open item (finding, missing approval, late form, draft policy, unmapped
+  // article) counts as one "issue", so the page never needs rule-type vocabulary.
+  const fwIssues = fw => {
+    const today = pm3Today();
+    const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
+    const out = [];
+    allFindings.filter(f=>f.exc?.status!=="accepted"&&f.refs.some(r=>r.fw===fw.name)).forEach(f=>out.push({owner:f.asset.owner||"Unassigned", asset:f.asset, sev:f.rule.severity||"Medium", overdue:false}));
+    linked.filter(p=>p.status==="Active").forEach(p=>{
+      evalOf(p).targets.filter(t=>pm3AssetInFw(t.asset,p,fw,t.rule)).forEach(t=>{ const s=pm3TargetStatus(p.id,t.rule.id,t.asset.name);
+        if(s!=="approved") out.push({owner:s==="rejected"?p.owner:(t.asset.owner||"Unassigned"), asset:t.asset, sev:"Medium", overdue:false}); });
+      p.rules.filter(r=>r.type==="attestation").forEach(r=>{ const s=pm3AttState(p,r);
+        if(["due","overdue","rejected"].includes(s.state)) out.push({owner:pm3Assignee(p,r), sev:"Medium", overdue:s.state==="overdue"||(s.due&&s.due<today)});
+        if(s.state==="review") out.push({owner:pm3Reviewer(p,r), sev:"Low", overdue:false}); });
+    });
+    linked.filter(p=>p.status==="Draft"||p.status==="Rejected").forEach(p=>out.push({owner:p.owner, sev:"Low", overdue:false}));
+    linked.filter(p=>p.status==="In review").forEach(p=>out.push({owner:pendingReqOf(p)?.approver||ap.activation.approver, sev:"Low", overdue:false}));
+    fw.arts.forEach((a,i)=>{ if(!a.out&&!polsForArt(fw,i).length) out.push({owner:"Unassigned", sev:"High", overdue:false}); });
+    return out;
+  };
+  // Readiness history: a weekly sample back-fill, then a snapshot after every policy run, then today.
+  const fwHistory = (fw, cur) => {
+    const h = [...String(fw.id)].reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0, 7);
+    const drop = 6 + h%14; const steps = [1, .7, .45, .2];
+    const back = steps.map((k,j)=>({d:pm3AddDays(pm3Today(), -7*(4-j)), pct:Math.max(0, Math.min(100, Math.round(cur - drop*k + ((h>>j)%3) - 1)))}));
+    const rec = ((st.fwHist||{})[fw.id]||[]).filter(x=>x.d<pm3Today());
+    return [...back.filter(b=>!rec.some(r=>r.d===b.d)), ...rec, {d:pm3Today(), pct:cur}].sort((a,b)=>a.d.localeCompare(b.d));
+  };
+  const renderFwOverview = fw => {
+    const inIdx = fw.arts.map((a,i)=>i).filter(i=>!fw.arts[i].out);
+    const s = fwScore(fw); const sc = scoreColor(s); const met = inIdx.filter(i=>artState(fw,i)==="met").length;
+    const hist = fwHistory(fw, s); const was = hist[0].pct; const delta = s - was;
+    const issues = fwIssues(fw); const overdue = issues.filter(x=>x.overdue).length;
+    const inScope = PM3_ASSETS.filter(a=>pm3InScope(a,fw.covers));
+    const risky = new Set(issues.filter(x=>x.asset).map(x=>x.asset.name)); const atRisk = inScope.filter(a=>risky.has(a.name));
+    const unscanned = fwUnscanned(fw); const covPct = inScope.length ? Math.round((inScope.length-unscanned.length)/inScope.length*100) : 100;
+    const linked = livePols.filter(p=>p.articles.some(a=>a.fw===fw.id&&a.ok!==false));
+    const fwScans = linked.filter(p=>(p.runs||[]).length);   // linked policies that have run
+    const lastRun = fwScans.map(x=>(x.runs||[])[0]).filter(Boolean).sort((a,b)=>String(b.ts).localeCompare(String(a.ts)))[0];
+    // Who needs to act
+    const byOwner = Object.values(issues.reduce((m,x)=>{ const k=x.owner||"Unassigned"; m[k]=m[k]||{o:k,n:0,od:0,hi:0}; m[k].n++; if(x.overdue) m[k].od++; if(x.sev==="High"||x.sev==="Critical") m[k].hi++; return m; },{})).sort((a,b)=>b.od-a.od||b.n-a.n);
+    // Where the risk is
+    const group = key => Object.entries(atRisk.reduce((m,a)=>{ (key(a)||[]).forEach(k=>{ m[k]=(m[k]||0)+1; }); return m; },{})).sort((a,b)=>b[1]-a[1]);
+    const byDomain = group(a=>[a.domain||"No domain"]);
+    const byClass = group(a=>pm3Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)));
+    // Needs attention
+    const gaps = inIdx.map(i=>({i, st:artState(fw,i)})).filter(x=>x.st!=="met").sort((a,b)=>ART_ORDER.indexOf(a.st)-ART_ORDER.indexOf(b.st));
+    const reason = i => { const pols = polsForArt(fw,i); if(!pols.length) return "No policy mapped";
+      const hs = pols.map(p=>({p, h:polHealth(p,fw,linkOf(p,fw,i))})); const w = hs.find(x=>x.h.state===artState(fw,i))||hs[0]; return `${w.p.name} · ${w.h.label}`; };
+    const stLabel = k => ({findings:"Failing", rejected:"Rejected", uncovered:"No policy", norules:"No rules", draft:"Draft", review:"Awaiting approval", pending:"Awaiting approval", review2:"In review", evidence:"Due"}[k]||ART_META[k].l);
+    // Coming up (next 30 days)
+    const today = pm3Today(), horizon = pm3AddDays(today, 30);
+    const upcoming = [
+      ...linked.filter(p=>p.status==="Active").flatMap(p=>p.rules.filter(r=>r.type==="attestation").map(r=>({p,r,s:pm3AttState(p,r)}))
+        .filter(x=>x.s.due && x.s.due<=horizon && x.s.state!=="review").map(x=>({d:x.s.due, what:x.r.name, who:pm3Assignee(x.p,x.r), late:x.s.due<today}))),
+      ...allFindings.filter(f=>f.exc?.status==="accepted"&&f.exc.until&&f.exc.until<=horizon&&f.refs.some(r=>r.fw===fw.name)).map(f=>({d:f.exc.until, what:`Exception ends · ${f.asset.name}`, who:f.pol.owner, late:f.exc.until<today})),
+    ].sort((a,b)=>a.d.localeCompare(b.d)).slice(0,6);
+    // What changed
+    const changes = [
+      ...linked.flatMap(p=>(p.history||[]).map(h=>({d:h.when, who:h.who, what:`${p.name} · ${h.what}`}))),
+      ...fwScans.flatMap(x=>(x.runs||[]).slice(0,1).filter(r=>r.trigger==="Manual"||r.violationsNew).map(r=>({d:String(r.ts).slice(0,10), who:r.by||"Schedule", what:`${x.name} ran · ${r.violations} violation${r.violations===1?"":"s"}${r.violationsNew?` (+${r.violationsNew} new)`:""}`}))),
+    ].sort((a,b)=>String(b.d).localeCompare(String(a.d))).slice(0,6);
+
+    const label = {fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"};
+    const card = {background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10};
+    const head = (t, right) => <div style={{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8}}><span style={{...label,flex:1}}>{t}</span>{right}</div>;
+    const empty = t => <div style={{padding:"14px 16px",fontSize:12,color:T.textMuted}}>{t}</div>;
+    const tile = (title, big, color, sub, go) => (
+      <div onClick={go} style={{...card,padding:"14px 16px",cursor:go?"pointer":"default",minWidth:0}}
+        onMouseEnter={e=>{ if(go) e.currentTarget.style.borderColor=T.accent; }} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+        <div style={{...label,marginBottom:6}}>{title}</div>
+        <div style={{fontSize:26,fontWeight:800,fontFamily:"'Geist Mono',monospace",color:color||T.text,lineHeight:1.1}}>{big}</div>
+        <div style={{fontSize:11.5,color:T.textSub,marginTop:6,lineHeight:1.5}}>{sub}</div>
+      </div>);
+    const bars = (rows, total) => rows.length===0 ? empty("Nothing at risk") : rows.slice(0,5).map(([k,n])=>
+      <div key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 16px"}}>
+        <span style={{width:110,fontSize:12,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{k}</span>
+        <span style={{flex:1,height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><span style={{display:"block",height:"100%",width:`${Math.round(n/Math.max(1,total)*100)}%`,background:T.rose}}/></span>
+        <span style={{width:24,textAlign:"right",fontSize:11.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{n}</span></div>);
+    // Trend chart (inline SVG, drawn to one scale)
+    const W=520, H=150, P={l:30,r:12,t:12,b:24};
+    const xs = i => P.l + (hist.length<2?0:i*(W-P.l-P.r)/(hist.length-1)); const ys = v => P.t + (100-v)*(H-P.t-P.b)/100;
+    const line = hist.map((h,i)=>`${i?"L":"M"}${xs(i).toFixed(1)},${ys(h.pct).toFixed(1)}`).join(" ");
+    const area = `${line} L${xs(hist.length-1).toFixed(1)},${ys(0)} L${xs(0).toFixed(1)},${ys(0)} Z`;
+    const fmtD = d => { const x=new Date(d+"T00:00:00Z"); return x.toLocaleDateString("en-GB",{day:"numeric",month:"short",timeZone:"UTC"}); };
+    const m = regMeta(fw.id);
+    return (<>
+      <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:16}}>
+        <span style={{fontSize:20,fontWeight:800,color:T.text}}>{fw.name}</span>
+        <span style={{fontSize:10.5,fontWeight:700,padding:"2px 9px",borderRadius:99,background:`${sc}15`,color:sc,border:`1px solid ${sc}30`}}>{readinessLabel(s)}</span>
+        <span style={{fontSize:12,color:T.textMuted}}>{[m.fullName||fw.fullName, m.jurisdiction||fw.jurisdiction].filter(Boolean).join(" · ")}</span>
+        <span style={{flex:1}}/>{runAllBtn(linked, fw.name)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:12,marginBottom:16}}>
+        {tile("Readiness", `${s}%`, sc, <>{met} of {inIdx.length} articles met · <span style={{color:delta>0?T.green:delta<0?T.rose:T.textMuted,fontWeight:700}}>{delta>0?"+":""}{delta} pts</span> in 30 days</>)}
+        {tile("Open issues", issues.length, issues.length?T.rose:T.green, issues.length?`${overdue} overdue · ${byOwner.length} ${byOwner.length===1?"person":"people"} to act`:"Nothing open", issues.length?()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}:null)}
+        {tile("Assets at risk", `${atRisk.length}/${inScope.length}`, atRisk.length?T.amber:T.green, `in-scope assets with an open issue`)}
+        {tile("Coverage", `${covPct}%`, unscanned.length?T.amber:T.green, <>{inScope.length-unscanned.length} of {inScope.length} assets checked · {lastRun?`last ${lastRun.ts}`:"never run"}</>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start",marginBottom:16}}>
+        <div style={{...card,overflow:"hidden"}}>
+          {head("Readiness over time", <span style={{fontSize:11,color:T.textMuted}}>{fmtD(hist[0].d)} – today</span>)}
+          <div style={{padding:"8px 12px 4px"}}>
+            <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto",display:"block"}} role="img" aria-label={`Readiness from ${was}% to ${s}%`}>
+              {[0,50,100].map(v=><g key={v}><line x1={P.l} x2={W-P.r} y1={ys(v)} y2={ys(v)} stroke={T.border} strokeWidth="1"/>
+                <text x={P.l-6} y={ys(v)+3.5} textAnchor="end" fontSize="10" fill={T.textMuted}>{v}%</text></g>)}
+              <path d={area} fill={sc} opacity=".10"/>
+              <path d={line} fill="none" stroke={sc} strokeWidth="2" strokeLinejoin="round"/>
+              {hist.map((h,i)=><circle key={i} cx={xs(i)} cy={ys(h.pct)} r={i===hist.length-1?4:2.5} fill={i===hist.length-1?sc:T.bgSurface} stroke={sc} strokeWidth="1.5"><title>{`${fmtD(h.d)}: ${h.pct}%`}</title></circle>)}
+              {hist.map((h,i)=>(i===0||i===hist.length-1||hist.length<=6)&&<text key={"t"+i} x={xs(i)} y={H-6} textAnchor={i===0?"start":i===hist.length-1?"end":"middle"} fontSize="10" fill={T.textMuted}>{i===hist.length-1?"Today":fmtD(h.d)}</text>)}
+            </svg>
+          </div>
+        </div>
+        <div style={{...card,overflow:"hidden"}}>
+          {head("Who needs to act", <span style={{fontSize:11,color:T.textMuted}}>issues · overdue</span>)}
+          {byOwner.length===0 ? empty("No one has open issues") : byOwner.slice(0,6).map(x=>
+            <div key={x.o} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 16px",borderBottom:`1px solid ${T.border}`}}>
+              <span style={{width:24,height:24,borderRadius:"50%",background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10.5,fontWeight:700,color:T.textSub,flexShrink:0}}>{x.o==="Unassigned"?"?":x.o[0].toUpperCase()}</span>
+              <span style={{flex:1,fontSize:12.5,color:x.o==="Unassigned"?T.textMuted:T.text}}>{x.o}</span>
+              {x.hi>0&&<span style={{fontSize:10.5,fontWeight:700,color:T.rose}}>{x.hi} high</span>}
+              <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:T.text,minWidth:22,textAlign:"right"}}>{x.n}</span>
+              <span style={{fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:x.od?T.rose:T.textMuted,minWidth:22,textAlign:"right"}}>{x.od}</span>
+            </div>)}
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.5fr) minmax(0,1fr)",gap:16,alignItems:"start"}}>
+        <div style={{display:"flex",flexDirection:"column",gap:16,minWidth:0}}>
+          <div style={{...card,overflow:"hidden"}}>
+            {head(`Needs attention · ${gaps.length}`, <button onClick={()=>setFwTab("articles")} style={{fontSize:11.5,color:T.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600,padding:0}}>All articles →</button>)}
+            {gaps.length===0 ? <div style={{padding:"14px 16px",fontSize:12.5,color:T.green}}>Every article is met</div> :
+              gaps.map(({i,st:k})=><div key={i} onClick={()=>{ setFwTab("articles"); setExpArt(x=>({...x,[fw.id+i]:true})); }} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textSub,minWidth:92}}>{fw.arts[i].ref}</span>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{fw.arts[i].t}</div>
+                  <div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reason(i)}</div></div>
+                <span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${ART_META[k].c}15`,color:ART_META[k].c,whiteSpace:"nowrap"}}>{stLabel(k)}</span>
+              </div>)}
+          </div>
+          <div style={{...card,overflow:"hidden"}}>
+            {head("What changed")}
+            {changes.length===0 ? empty("No recent changes") : changes.map((c,j)=><div key={j} style={{display:"flex",gap:12,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,alignItems:"baseline"}}>
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",minWidth:78}}>{c.d}</span>
+              <span style={{flex:1,fontSize:12,color:T.text,minWidth:0}}>{c.what}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{c.who}</span></div>)}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:16,minWidth:0}}>
+          <div style={{...card,overflow:"hidden",paddingBottom:6}}>
+            {head("Where the risk is", <span style={{fontSize:11,color:T.textMuted}}>assets at risk</span>)}
+            <div style={{...label,padding:"10px 16px 2px"}}>By domain</div>{bars(byDomain, atRisk.length)}
+            <div style={{...label,padding:"10px 16px 2px"}}>By data type</div>{bars(byClass.map(([k,n])=>[(PM3_CLASS_META[k]||{}).label||k,n]), atRisk.length)}
+          </div>
+          <div style={{...card,overflow:"hidden"}}>
+            {head("Coming up · next 30 days")}
+            {upcoming.length===0 ? empty("Nothing due") : upcoming.map((u,j)=><div key={j} style={{display:"flex",gap:12,padding:"8px 16px",borderBottom:`1px solid ${T.border}`,alignItems:"baseline"}}>
+              <span style={{fontSize:11,fontWeight:700,color:u.late?T.rose:T.textSub,fontFamily:"'Geist Mono',monospace",minWidth:78}}>{u.late?"Overdue":fmtD(u.d)}</span>
+              <span style={{flex:1,fontSize:12,color:T.text,minWidth:0}}>{u.what}</span>
+              <span style={{fontSize:11,color:T.textMuted}}>{u.who}</span></div>)}
+          </div>
+        </div>
+      </div>
+    </>);
+  };
+
+  const renderFwDetail = () => {
+    const fw = pm3Fw(selFw); if(!fw) return renderFrameworks();
+    const m = regMeta(fw.id); const adopted = !!st.adopted[fw.id]; const s = fwScore(fw); const sc = scoreColor(s); const tc = fwTypeColor(fw.type);
+    const idx = fw.arts.map((a,i)=>i); const inIdx = idx.filter(i=>!fw.arts[i].out); const outIdx = idx.filter(i=>fw.arts[i].out);
+    const meta = fw.custom ? [["Kind",fw.type],["Applies where",fw.jurisdiction||"—"],["Created",st.adopted[fw.id]?.at||fw.created||"—"],["Owner",st.adopted[fw.id]?.owner||fw.owner]]
+      : [["Jurisdiction",m.jurisdiction],["Industry",m.industry],["Effective Date",m.effective],["Max Penalty",m.penalty]];
+    const circle = st2 => { const ok=st2==="met"; const c=ok?T.green:["uncovered","findings","rejected"].includes(st2)?T.rose:T.amber;
+      return <div style={{width:20,height:20,borderRadius:"50%",background:`${c}15`,border:`1.5px solid ${c}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{ok?<svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5l2 2L7 2.5" stroke={c} strokeWidth="1.4" strokeLinecap="round"/></svg>:<span style={{fontSize:9,color:c,fontWeight:700}}>!</span>}</div>; };
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{flexShrink:0,padding:"12px 24px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:10,background:T.bgSurface}}>
+          <button onClick={()=>setSelFw(null)} style={{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:12,padding:"4px 8px",borderRadius:6}}
+            onMouseEnter={e=>{e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M8 2L4 6l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>Policies</button>
+          <span style={{color:T.border}}>›</span><span style={{fontSize:12,fontWeight:600,color:T.text}}>{fw.name}</span>
+          <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+            {!adopted&&<Btn small variant="primary" onClick={()=>startAdopt(fw.id)}>Adopt {fw.name}</Btn>}
+            {adopted&&(fw.custom?<Btn small onClick={()=>openFwEditor(fw)}>Edit framework</Btn>:<Btn small onClick={()=>startAdopt(fw.id,2)}>Review its policies</Btn>)}
+            {adopted&&menuBtn("fwd:"+fw.id, fwMenu(fw))}
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"24px 28px"}}>
+          <div style={{display:"flex",gap:2,borderBottom:`1px solid ${T.border}`,marginBottom:18}}>{[["overview","Overview"],["articles",`Articles · ${fw.arts.filter(a=>!a.out).length}`]].map(([k,l])=><button key={k} onClick={()=>setFwTab(k)} style={{padding:"8px 14px",background:"none",border:"none",borderBottom:`2px solid ${fwTab===k?T.accent:"transparent"}`,color:fwTab===k?T.text:T.textMuted,fontSize:13,fontWeight:fwTab===k?600:500,cursor:"pointer"}}>{l}</button>)}</div>
+          {fwTab==="overview" ? renderFwOverview(fw) : <>
+          <div>
+            <div style={{display:"flex",alignItems:"baseline",gap:10,marginBottom:10}}><span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>Scope — articles ({inIdx.length})</span><span style={{fontSize:11,color:T.textMuted}}>Each article → the policies that satisfy it → the rules that count. Open an article to add a policy or a rule.</span></div>
+            {inIdx.map(i=>{
+              const art=fw.arts[i]; const stt=adopted?artState(fw,i):"uncovered"; const pols=polsForArt(fw,i,true);
+              const recs=(art.c||[]).map(pm3ParseRef).filter(({tid})=>!pols.some(p=>p.id===pm3TplPolicyId(tid,fw)));
+              const mappable = livePols.filter(p=>!pols.includes(p));
+              const open = !!expArt[fw.id+i];
+              return (
+                <div key={i} style={{background:T.bgSurface,border:`1.5px solid ${stt==="met"?T.green+"30":T.border}`,borderRadius:10,marginBottom:8,overflow:"hidden"}}>
+                  {/* Article */}
+                  <div onClick={()=>setExpArt(x=>({...x,[fw.id+i]:!open}))} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 16px",cursor:"pointer"}}>
+                    {circle(stt)}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                        <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:tc,background:`${tc}10`,padding:"1px 7px",borderRadius:4,border:`1px solid ${tc}20`,flexShrink:0}}>{art.ref}</span>
+                        <span style={{fontSize:13,color:T.text,lineHeight:1.5,fontWeight:700}}>{art.t}</span>
+                      </div>
+                      <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{art.ask}</div>
+                      {!open&&!pols.length&&adopted&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>No policy yet — open it to add one</div>}
+                      {!open&&pols.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginTop:6}}><span style={{fontSize:10.5,color:T.textMuted}}>→</span>{pols.map(p=><span key={p.id} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgElevated,color:T.text}}>{typeDots(p)}{p.name}</span>)}</div>}
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                      <span style={{fontSize:11,color:T.textMuted}}>{pols.length} polic{pols.length===1?"y":"ies"} · {(n=>`${n} rule${n===1?"":"s"}`)(pols.reduce((n,p)=>n+pm3RulesForLink(p,linkOf(p,fw,i)).length,0))}</span>
+                      {adopted&&pill(ART_META[stt].c, ART_META[stt].l)}
+                      <span style={{color:T.textMuted,fontSize:11,transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}>▶</span>
+                    </div>
+                  </div>
+                  {/* → Policies → Rules */}
+                  {open&&<div style={{borderTop:`1px solid ${T.border}`,background:T.bgElevated,padding:"10px 16px 12px 48px"}}>
+                    {pols.map(p=>{ const link=linkOf(p,fw,i); const pend=link.ok===false; const mine=p.source==="custom"&&!fw.custom; const rules=pm3RulesForLink(p,link); const h=polHealth(p,fw,link);
+                      return (<div key={p.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9,marginBottom:8,overflow:"hidden"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderBottom:`1px solid ${T.border}`}}>
+                          <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>POLICY</span>
+                          <span onClick={()=>openPolicy(p.id, fw.id)} style={{fontSize:12.5,fontWeight:700,color:T.text,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>{p.name}</span>
+                          <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
+                          <span style={{fontSize:11,color:T.textMuted}}>owner {p.owner}</span>
+                          {(()=>{ const o=usedBy(p).filter(n=>n!==fw.name); return o.length>0&&<span title={`The same policy also counts for ${o.join(", ")} — change it once, it counts everywhere`} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:99,background:`${T.violet}12`,color:T.violet,border:`1px solid ${T.violet}30`}}>also {o.join(" · ")}</span>; })()}
+                          {mine&&pill(pend?T.amber:T.accent, pend?"Mapping awaiting approval":"Your interpretation")}
+                          {p.status!=="Active"&&pill(statusColor(p.status), p.status)}
+                          <span style={{marginLeft:"auto",fontSize:11,fontWeight:600,color:ART_META[h.state]?.c||T.textMuted}}>{p.status==="Active"?h.label:""}</span>
+                          {(fw.custom||mine||link.added)&&canEdit(p)&&<button onClick={()=>ask(`Detach "${p.name}"?`, `It stops counting for ${fw.name} ${art.ref}. The policy itself keeps running.`, "Detach", ()=>unmap(p,fw.id,i))} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Detach</button>}
+                        </div>
+                        {rules.map(r=>{ const rh=p.status==="Active"?ruleHealth(p,r,fw):null; const as=r.type==="attestation"?pm3AttState(p,r):null;
+                          const canFillR = as&&p.status==="Active"&&["due","overdue","rejected","soon"].includes(as.state)&&(pm3Assignee(p,r)===me||isAdmin);
+                          return (<div key={r.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}>
+                            <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em",paddingTop:2,width:34,flexShrink:0}}>RULE</span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typePill(r.type)}{originPill(r)}<span onClick={()=>openRuleView(p,r)} title="View rule" style={{fontSize:12.5,color:T.text,fontWeight:600,cursor:"pointer",textDecoration:"underline",textDecorationStyle:"dotted",textUnderlineOffset:3}}>{r.name}</span></div>
+                              <div style={{fontSize:11.5,color:T.textSub,marginTop:3,lineHeight:1.55}}>{ruleSentence(p,r)}</div>
+                              {as&&as.lastOk&&<div style={{fontSize:11,color:T.blue,marginTop:3}}>Attested by {as.lastOk.by}, approved {as.lastOk.decidedAt}</div>}
+                            </div>
+                            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+                              {rh&&<span style={{fontSize:11,fontWeight:600,color:ART_META[rh.state]?.c||T.textMuted,whiteSpace:"nowrap"}}>{rh.label}</span>}
+                              {canFillR&&<button onClick={()=>{openPolicy(p.id,fw.id,"activity");setFill({polId:p.id,ruleId:r.id,values:{}});}} style={{fontSize:11,padding:"3px 9px",borderRadius:6,background:T.blueDim,border:`1px solid ${T.blue}50`,color:T.blue,cursor:"pointer",fontWeight:600}}>Fill in the form</button>}
+                              {rh&&rh.state==="findings"&&r.type==="validation"&&<button onClick={()=>{setTab("findings");setFindFilter(fw.name);setSelFw(null);}} style={{fontSize:11,background:"none",border:"none",color:T.rose,cursor:"pointer",padding:0}}>See findings ›</button>}
+                            </div>
+                          </div>); })}
+                        {!rules.length&&<div style={{padding:"8px 12px",fontSize:11.5,color:T.rose,borderTop:`1px solid ${T.border}`}}>This policy has no rules yet — add one.</div>}
+                        {canEdit(p)&&p.status!=="Retired"&&!pendingReqOf(p)&&<div style={{padding:"6px 12px",borderTop:`1px solid ${T.border}`}}>
+                          <button onClick={()=>openRuleEditor(p,null,{fw:fw.id,i})} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"4px 11px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button></div>}
+                      </div>); })}
+                    {recs.map(({tid,keys})=><div key={tid} style={{fontSize:11.5,padding:"8px 12px",borderRadius:8,border:`1px dashed ${T.border}`,color:T.textMuted,marginBottom:8}}>
+                      Recommended policy <b style={{color:T.textSub}}>{PM3_TPL[tid].name}</b> ({(keys?PM3_TPL[tid].rules.filter(r=>keys.includes(r.key)):PM3_TPL[tid].rules).map(r=>PM3_TYPE_META[r.type].label.toLowerCase()).join(" + ")}) — {adopted?"switched off when adopted":"created when you adopt"}
+                      {adopted&&!fw.custom&&<button onClick={()=>startAdopt(fw.id,2)} style={{marginLeft:8,fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>Switch on</button>}</div>)}
+                    {!pols.length&&!recs.length&&<div style={{fontSize:12,color:T.rose,marginBottom:8}}>Nothing covers this article yet.</div>}
+                    {adopted&&<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",marginTop:2}}>
+                      <button onClick={()=>setAddPol({fw:fw.id,i,sel:[],q:""})} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"5px 12px",borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}50`,color:T.accent,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add policy</button>
+                      <button onClick={()=>openArticleRule(fw,i,pols)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11.5,padding:"5px 12px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>
+                      {!fw.custom&&<span style={{fontSize:11,color:T.textMuted}}>A custom policy on a regulation article counts once {ap.mapping.approver} approves the mapping.</span>}
+                    </div>}
+                  </div>}
+                </div>);
+            })}
+          </div>
+          {outIdx.length>0&&<div style={{marginTop:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Outside EDG's scope ({outIdx.length}) — not counted above</div>
+            {outIdx.map(i=>{ const a=fw.arts[i]; return (
+              <div key={i} style={{padding:"12px 16px",background:T.bgElevated,border:`1px dashed ${T.border}`,borderRadius:9,marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+                  <span style={{fontSize:10.5,fontFamily:"'Geist Mono',monospace",fontWeight:700,color:T.textMuted,background:T.bgSurface,padding:"1px 7px",borderRadius:4,border:`1px solid ${T.border}`,flexShrink:0}}>{a.ref}</span>
+                  <span style={{fontSize:12.5,color:T.textSub,lineHeight:1.5}}>{a.t}</span>
+                  <span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.bgSurface,color:T.textMuted,flexShrink:0}}>Out of model</span>
+                </div>
+                <div style={{fontSize:11,color:T.textMuted,lineHeight:1.6}}>{a.ask} Belongs to {a.out} — confirm with the team that owns it, not this platform.</div>
+              </div>); })}
+          </div>}
+          </>}
+        </div>
+      </div>
+    );
+  };
+
+  // ═════ POLICIES — the original list: category tree on the left, detail on the right ═════
+  // Boxed P / C marks a policy as prebuilt (shipped with the regulations) or custom (built by you).
+  const srcBox = p => { const pre=p.source==="regulation"; const c=pre?T.blue:T.accent;
+    return <span title={pre?"Prebuilt policy — shipped with the regulations":"Custom policy — built by your organisation"} style={{width:15,height:15,borderRadius:3,border:`1.5px solid ${c}`,background:`${c}12`,color:c,fontSize:9,fontWeight:800,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"'Geist Mono',monospace",lineHeight:1}}>{pre?"P":"C"}</span>; };
+  const renderPolicies = () => {
+    const ql = polQ.toLowerCase();
+    const list = st.policies.filter(p=>!ql||p.name.toLowerCase().includes(ql));
+    const sel = st.policies.find(p=>p.id===selPol);
+    // Folders are frameworks: each lists the policies attached to it, prefixed (shipped with the regulation) and custom.
+    const live = list.filter(p=>p.status!=="Retired");
+    const fwFolders = [...adoptedFws.filter(f=>!f.custom), ...PM3_CUSTOM_FW].map(fw=>({id:"fw:"+fw.id, fw, label:fw.name, color:fw.custom?T.accent:fwTypeColor(fw.type), open:true,
+      hint:fw.custom?"Your framework":"Regulation", rows:live.filter(p=>p.articles.some(a=>a.fw===fw.id))}));
+    const folders = [...fwFolders,
+      {id:"unlinked", label:"Not linked to a framework", color:T.textMuted, open:true, flat:true, hint:"Custom policies attached to no framework article", rows:live.filter(p=>!p.articles.some(a=>st.adopted[a.fw]||pm3Fw(a.fw)?.custom))},
+      {id:"retired", label:"Retired", color:T.textMuted, open:false, flat:true, hint:"Not running — restore or delete", rows:list.filter(p=>p.status==="Retired")}];
+    const badge = p => p.status!=="Active"?0 : evalOf(p).findings.filter(f=>!isExcepted(p,f.rule,f.asset)).length + p.rules.filter(r=>r.type==="attestation"&&["due","overdue","rejected"].includes(pm3AttState(p,r).state)).length + evalOf(p).targets.filter(t=>pm3TargetStatus(p.id,t.rule.id,t.asset.name)!=="approved").length;
+    return (
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        <div style={{width:258,borderRight:`1px solid ${T.border}`,display:"flex",flexDirection:"column",flexShrink:0,background:T.bgSurface}}>
+          <div style={{padding:"12px 12px 10px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+              <span style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Policies</span>
+              <div style={{position:"relative"}}>
+                <button onClick={()=>setPlusOpen(o=>!o)} title="New policy or framework" style={{width:22,height:22,borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textMuted,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.bgHover;e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}} onMouseLeave={e=>{e.currentTarget.style.background=T.bgElevated;e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textMuted;}}>{Ic.plus(10)}</button>
+                {plusOpen&&<><div onClick={()=>setPlusOpen(false)} style={{position:"fixed",inset:0,zIndex:49}}/>
+                  <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,width:180,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,.18)",zIndex:50,overflow:"hidden"}}>
+                  {[["New Framework",()=>openFwEditor(null),"#6366f1"],["New Policy",()=>openEditor(null),T.accent]].map(([l,fn,c])=>(
+                    <button key={l} onClick={()=>{setPlusOpen(false);fn();}} style={{width:"100%",padding:"10px 12px",background:"transparent",border:"none",textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:9,color:T.text,fontSize:12.5}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <span style={{width:20,height:20,borderRadius:5,background:`${c}14`,display:"flex",alignItems:"center",justifyContent:"center",color:c,flexShrink:0}}>{Ic.shield(11)}</span>{l}</button>))}
+                </div></>}
+              </div>
+            </div>
+            <div style={{position:"relative"}}>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:T.textMuted,pointerEvents:"none"}}><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.5"/><path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <input value={polQ} onChange={e=>setPolQ(e.target.value)} placeholder="Search policies…" style={{width:"100%",padding:"7px 8px 7px 28px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,fontSize:12,color:T.text,outline:"none",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+            </div>
+          </div>
+          <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+            {list.length===0&&<div style={{textAlign:"center",padding:"36px 16px"}}>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:4}}>No policies match</div>
+              <div style={{fontSize:11,color:T.textMuted,marginBottom:12}}>Try another search, or create a new policy</div>
+              <button onClick={()=>openEditor(null)} style={{fontSize:11,padding:"5px 14px",borderRadius:7,background:T.accent,border:"none",color:"#fff",cursor:"pointer",fontWeight:600}}>+ New Policy</button></div>}
+            {folders.map(fd=>{
+              const rows = fd.rows; if(!rows.length&&!fd.fw) return null; const fwOn = fd.fw&&!selPol&&selFw===fd.fw.id;
+              const exp = expCat[fd.id]!==undefined ? expCat[fd.id] : fd.open;
+              const pre = rows.filter(p=>p.source==="regulation"), cus = rows.filter(p=>p.source==="custom");
+              const row = p => { const on=selPol===p.id&&(selFolder===fd.id||!selFolder); const hov=hovPol===fd.id+p.id||menu==="pl:"+fd.id+p.id; const n=badge(p);
+                const link = fd.fw && p.articles.find(a=>a.fw===fd.fw.id); const pend = link&&link.ok===false;
+                return (<div key={p.id} onMouseEnter={()=>setHovPol(fd.id+p.id)} onMouseLeave={()=>setHovPol(null)}
+                  style={{display:"flex",alignItems:"center",background:on?T.accentDim:hov?T.bgHover:"transparent",borderLeft:`2.5px solid ${on?T.accent:"transparent"}`}}>
+                  <button onClick={()=>{ if(on){setSelPol(null);} else {setSelPol(p.id);setSelFolder(fd.id);} setPdTab("overview");setFill(null);setSideEdit(null);}}
+                    style={{flex:1,display:"flex",alignItems:"center",gap:7,padding:"5px 6px 5px 30px",background:"none",border:"none",cursor:"pointer",textAlign:"left",minWidth:0}}>
+                    {srcBox(p)}
+                    <span style={{flex:1,fontSize:12,fontWeight:on?600:400,color:on?T.text:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                    {pend&&<span title="Mapping to this framework awaits approval" style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:4,background:`${T.amber}18`,color:T.amber,flexShrink:0}}>pending</span>}
+                    {p.status!=="Active"&&p.status!=="Retired"&&<span style={{fontSize:9.5,color:statusColor(p.status),fontWeight:700,flexShrink:0}}>{p.status}</span>}
+                  </button>
+                  <div style={{width:26,display:"flex",justifyContent:"center",opacity:hov?1:0}}>{menuBtn("pl:"+fd.id+p.id, policyMenu(p), "right", true)}</div>
+                </div>); };
+              return (<div key={fd.id}>
+                <button onClick={()=>{ if(fd.fw){ setSelFw(fd.fw.id); setSelPol(null); setExpCat(x=>({...x,[fd.id]:true})); } else setExpCat(x=>({...x,[fd.id]:!exp})); }} title={fd.fw?`${fd.label} summary`:fd.hint} style={{width:"100%",display:"flex",alignItems:"center",gap:5,padding:"6px 6px 6px 8px",background:fwOn?T.accentDim:"none",borderTop:"none",borderRight:"none",borderBottom:"none",borderLeft:`2.5px solid ${fwOn?T.accent:"transparent"}`,cursor:"pointer",textAlign:"left"}}>
+                  <span onClick={e=>{ e.stopPropagation(); setExpCat(x=>({...x,[fd.id]:!exp})); }} style={{width:14,height:14,display:"flex",alignItems:"center",justifyContent:"center",color:T.textMuted,transform:exp?"rotate(90deg)":"none",transition:"transform .15s"}}><svg width="7" height="10" viewBox="0 0 7 10" fill="none"><path d="M1.5 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></span>
+                  <svg width="13" height="12" viewBox="0 0 16 14" fill="none" style={{flexShrink:0,color:fd.color}}><path d="M1 3a1 1 0 011-1h4.5L8 4h7a1 1 0 011 1v7a1 1 0 01-1 1H2a1 1 0 01-1-1V3z" fill="currentColor" opacity=".25" stroke="currentColor" strokeWidth="1.2"/></svg>
+                  <span style={{flex:1,fontSize:12,fontWeight:500,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fd.label}</span>
+                </button>
+                {exp&&(fd.flat ? rows.map(row) : [...pre, ...cus].map(row))}
+              </div>); })}
+          </div>
+          <div style={{padding:"8px 12px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,flexWrap:"wrap"}}>
+            <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"regulation"})}Prebuilt</span>
+            <span style={{display:"flex",alignItems:"center",gap:4,fontSize:10.5,color:T.textMuted}}>{srcBox({source:"custom"})}Custom</span>
+          </div>
+        </div>
+        {sel ? renderPolicy(sel) : selFw&&pm3Fw(selFw) ? renderFwDetail() : (
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+            <div style={{width:48,height:48,borderRadius:12,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" style={{color:T.textMuted}}><path d="M9 12h6M9 16h4M5 21h14a2 2 0 002-2V7l-5-5H5a2 2 0 00-2 2v15a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg></div>
+            <div style={{fontSize:13,fontWeight:600,color:T.text}}>Select a policy</div>
+            <div style={{fontSize:12,color:T.textMuted,maxWidth:260,textAlign:"center",lineHeight:1.7}}>Choose a policy from the list to view details, manage its rules, and track compliance.</div>
+            <Btn variant="primary" onClick={()=>openEditor(null)}>+ New Policy</Btn>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+
+  // ═════ POLICY DETAIL — the original layout: header, underline tabs, overview with sidebar ═════
+  const renderPolicy = p => {
+    const ev = evalOf(p); const h = polHealth(p); const pr = pendingReqOf(p); const upd = tplUpdate(p);
+    const pendMaps = p.articles.filter(x=>x.ok===false).length; const mapReq = reqById(p.mapReqId);
+    const isReg = p.source==="regulation";
+    const canChange = canEdit(p) && p.status!=="Retired" && !pr;
+    const openF = ev.findings.filter(f=>!isExcepted(p,f.rule,f.asset)); const openFindN = openF.length;
+    const vR = p.rules.filter(r=>r.type==="validation"), eR = p.rules.filter(r=>r.type==="enforcement");
+    const attRules = p.rules.filter(r=>r.type==="attestation"); const dueN = attRules.filter(r=>["due","overdue","rejected"].includes(pm3AttState(p,r).state)).length;
+    const curN = attRules.filter(r=>["current","soon"].includes(pm3AttState(p,r).state)).length;
+    const runN = ev.targets.filter(t=>pm3TargetStatus(p.id,t.rule.id,t.asset.name)==="approved").length;
+    const inScope = PM3_ASSETS.filter(a=>pm3AssetInPolicy(a,p));
+    const assetRows = [...new Map([...inScope, ...ev.targets.map(t=>t.asset), ...ev.held].map(a=>[a.name,a])).values()];
+    const failing = new Set(openF.map(f=>f.asset.name));
+    const lastRunRec = (p.runs||[])[0];
+    const checks = hasChecks(p);
+    const running = runningPol===p.id; const notLive = p.status!=="Active";
+    const runBtn = full => <button disabled={running||notLive} title={notLive?"Activate the policy first":""} onClick={()=>runNow(p)}
+      style={{width:full?"100%":"auto",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 14px",borderRadius:8,background:running||notLive?T.bgElevated:T.accentDim,border:`1.5px solid ${running||notLive?T.border:T.accent+"44"}`,color:running||notLive?T.textMuted:T.accent,fontSize:12.5,fontWeight:600,cursor:running||notLive?"not-allowed":"pointer",marginBottom:full?8:0,fontFamily:"inherit"}}>
+      {running ? <><span style={{display:"inline-block",width:12,height:12,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Evaluating…</>
+        : <><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><polygon points="5,3 14,8 5,13" fill="currentColor"/></svg>Run now</>}</button>;
+    const schedBtn = () => { const on=!!p.schedule&&p.schedEnabled!==false, paused=!!p.schedule&&p.schedEnabled===false; const col=on?"#16a34a":paused?T.amber:T.textSub;
+      return <button onClick={()=>setSchedFor(p.id)} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:7,padding:"8px 12px",borderRadius:8,background:on?"#16a34a12":paused?T.amberDim:"transparent",border:`1.5px solid ${on?"#16a34a55":paused?T.amber+"66":T.border}`,color:col,fontSize:12.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg>{on?"Scheduled":paused?"Schedule paused":"Schedule"}</button>; };
+    // One compliance number, as in the original: validation pass rate, else enforcement coverage, else evidence currency.
+    const pct = vR.length ? (inScope.length?Math.round((inScope.length-failing.size)/inScope.length*100):100)
+      : eR.length ? (ev.targets.length?Math.round(runN/ev.targets.length*100):100)
+      : attRules.length ? Math.round(curN/attRules.length*100) : 100;
+    const healthColor = pct>=80?T.green:pct>=60?T.amber:T.rose;
+    const healthLabel = pct>=80?"Healthy":pct>=60?"Needs attention":"Critical";
+    // "activity" (used by inbox and framework links) opens the matching tab.
+    const tab = pdTab==="activity" ? (attRules.length&&(fill?.polId===p.id||dueN||!vR.length) ? "evidence" : vR.length ? "violations" : "assets") : pdTab;
+    const tabs = [{k:"overview",l:"Overview"},{k:"rules",l:"Implementation rules",badge:p.rules.length},
+      ...(vR.length?[{k:"violations",l:"Violations",badge:openFindN||null,danger:true}]:[]),
+      ...(checks?[{k:"runs",l:"Runs",badge:(p.runs||[]).length||null}]:[]),
+      {k:"assets",l:"Assets",badge:assetRows.length||null},
+      ...(attRules.length?[{k:"evidence",l:"Evidence",badge:(p.status==="Active"&&dueN)||null,danger:true}]:[]),
+      {k:"satisfies",l:"Frameworks",badge:p.articles.length||null},{k:"history",l:"Audit Logs",badge:(p.history||[]).length}];
+    const myReqs = statusReqs.filter(r=>(r.kind||"").startsWith("pm3")&&String(r.targetId||"").split("|")[0]===p.id);
+    const initials = u => u.split(".").map(x=>x[0]?.toUpperCase()).join("");
+    const ownerChip = u => <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:`${T.accent}0f`,border:`1px solid ${T.accent}20`}}>
+      <div style={{width:18,height:18,borderRadius:3,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:T.accent}}>{initials(u)}</div><span style={{fontSize:12,color:T.accent,fontWeight:500}}>{u}</span></div>;
+    const stewardChip = u => <div key={u} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"3px 10px 3px 6px",borderRadius:5,background:"rgba(217,119,6,.08)",border:"1px solid rgba(217,119,6,.2)"}}>
+      <div style={{width:18,height:18,borderRadius:"50%",background:"rgba(217,119,6,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:"#d97706"}}>{initials(u)}</div><span style={{fontSize:12,color:"#d97706",fontWeight:500}}>{u}</span>
+      {canSubmit(p)&&<button onClick={()=>updPol(p.id,x=>addHist({...x,stewards:x.stewards.filter(y=>y!==u)},`Removed steward ${u}`))} style={{background:"none",border:"none",cursor:"pointer",color:"#d97706",padding:0,lineHeight:1,opacity:.6}}>×</button>}</div>;
+    const SB = (label, onEdit, children) => <div style={{padding:"16px",borderBottom:`1px solid ${T.border}`}}>{sideLabel(label,onEdit)}{children}</div>;
+    const kv = (k, v, c) => <div key={k} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:12,padding:"3px 0"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:c||T.text,fontWeight:500,textAlign:"right"}}>{v}</span></div>;
+    const secHd = (label, n, right) => <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{fontSize:11,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}>{label}{n>0&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{n}</span>}</div>{right}</div>;
+    const logicBadge = () => { if(vR.length<2) return null; const rl=p.ruleLogic||"independent"; const c=rl==="and"?T.green:rl==="or"?T.violet:T.textSub;
+      return <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 11px",borderRadius:8,marginBottom:14,background:rl==="independent"?T.bgElevated:`${c}10`,border:`1px solid ${rl==="independent"?T.border:c+"30"}`}}>
+        <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:5,background:rl==="independent"?T.bgBase:c,color:rl==="independent"?T.textMuted:"#fff"}}>{PM3_LOGIC[rl].short}</span>
+        <span style={{fontSize:11.5,color:c}}>{PM3_LOGIC[rl].hint}</span>
+        {canChange&&<button onClick={()=>openEditor(p,null,3)} style={{marginLeft:"auto",fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600}}>Change</button>}
+      </div>; };
+    // A rule as a card (Rules tab): type, origin, name, sentence, where it counts, state, actions.
+    const ruleCardView = r => { const rh=p.status==="Active"?ruleHealth(p,r):null; const arts=artsOfRule(p,r);
+      const editable = canChange;
+      return (<div key={r.id} onClick={()=>openRuleView(p,r)} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:9,padding:"12px 14px",marginBottom:8,cursor:"pointer"}}
+        onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
+        <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+          {typePill(r.type)}{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text,flex:1,minWidth:160}}>{r.name}</span>
+          {rh&&<span style={{fontSize:11,fontWeight:600,color:ART_META[rh.state]?.c||T.textMuted}}>{rh.label}</span>}
+          {editable&&<button onClick={e=>{e.stopPropagation(); openRuleEditor(p,r);}} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,cursor:"pointer"}}>{r.origin==="custom"?"Edit":"Edit values"}</button>}
+          {canChange&&r.origin==="custom"&&<button onClick={e=>{e.stopPropagation(); ask(`Remove “${r.name}”?`, p.status==="Active"?"The policy's next version drops this rule; the current version keeps running until that's approved.":"The rule is removed from this draft.", "Remove", ()=>removeRule(p,r), true); }} style={{fontSize:11,padding:"3px 10px",borderRadius:6,background:"transparent",border:`1px solid ${T.rose}40`,color:T.rose,cursor:"pointer"}}>Remove</button>}
+        </div>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginTop:6}}>{ruleSentence(p,r)}</div>
+        {arts.length>0&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8,alignItems:"center"}}><span style={{fontSize:10.5,color:T.textMuted,marginRight:2}}>Counts for</span>{arts.map((x,j)=><span key={j}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div>}
+      </div>); };
+    // A rule as a compact row (Overview), like the original's RULE rows.
+    const ruleRow = r => { const tail = r.type==="validation" ? (r.severity||"Medium") : r.type==="enforcement" ? (r.enf?.action==="hold"?"Legal hold":"Retention") : `Every ${r.att?.every||12} mo`;
+      const sc = r.type==="validation" ? (SEV_COLOR[r.severity||"Medium"]||T.textMuted) : typeColor(r.type);
+      return <div key={r.id} onClick={()=>openRuleView(p,r)} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,cursor:"pointer"}}>
+        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:4,background:T.bgBase,color:T.textMuted,border:`1px solid ${T.border}`,flexShrink:0}}>RULE</span>
+        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${typeColor(r.type)}14`,color:typeColor(r.type),flexShrink:0}}>{PM3_TYPE_META[r.type].label}</span>
+        <span style={{fontSize:12,color:T.textSub,flex:1,lineHeight:1.5,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</span>
+        {r.origin==="custom"&&originPill(r)}
+        <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:`${sc}14`,color:sc,flexShrink:0}}>{tail}</span>
+      </div>; };
+    let body;
+    if(tab==="overview"){
+      const metricBtn = (n, label, c, go, chips) => <button onClick={go} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:7,background:`${c}10`,border:`1px solid ${c}25`,cursor:"pointer",textAlign:"left",marginBottom:6}}>
+        <span style={{fontSize:11,fontWeight:600,color:c}}>{n} {label}</span>{chips}</button>;
+      const crit = openF.filter(f=>f.severity==="Critical").length, high = openF.filter(f=>f.severity==="High").length;
+      const results = p.status!=="Active"
+        ? <div style={{marginBottom:20,padding:"12px 14px",borderRadius:10,border:`1.5px dashed ${T.border}`,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:32,height:32,borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke={T.textMuted} strokeWidth="1.5" strokeLinecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 1.5"/></svg></div>
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>Policy not running yet</div><div style={{fontSize:11.5,color:T.textMuted}}>{nextText(p)}</div></div></div>
+        : <div style={{marginBottom:20,borderRadius:10,border:`1px solid ${healthColor}30`,background:`${healthColor}10`,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:`1px solid ${healthColor}20`}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}><span style={{width:7,height:7,borderRadius:"50%",background:healthColor,boxShadow:`0 0 0 3px ${healthColor}25`}}/><span style={{fontSize:11,fontWeight:700,color:healthColor,textTransform:"uppercase",letterSpacing:"0.07em"}}>Evaluation Results</span></div>
+              {checks&&<button onClick={()=>setPdTab("runs")} style={{fontSize:10.5,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all runs →</button>}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+              <div style={{padding:"14px 16px",borderRight:`1px solid ${healthColor}15`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Pass rate</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:32,fontWeight:800,color:healthColor,lineHeight:1,fontFamily:"'Geist Mono',monospace"}}>{pct}%</span>
+                  <span style={{fontSize:11,color:healthColor,fontWeight:600,marginBottom:4,padding:"1px 7px",borderRadius:99,background:`${healthColor}18`,border:`1px solid ${healthColor}30`}}>{healthLabel}</span></div>
+                <div style={{height:6,borderRadius:3,background:T.bgElevated,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,borderRadius:3,background:healthColor}}/></div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:5}}>{vR.length?`${inScope.length-failing.size} of ${inScope.length} assets passing`:eR.length?`${runN} of ${ev.targets.length} tables enforced`:`${curN} of ${attRules.length} forms current`}</div>
+              </div>
+              <div style={{padding:"14px 16px"}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Last Evaluation</div>
+                {lastRunRec ? <div style={{marginBottom:10}}>
+                    <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:2}}>{lastRunRec.ts}</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:4,alignItems:"center"}}>
+                      <span style={{fontSize:10.5,color:T.textMuted}}>⏱ {lastRunRec.duration}</span><span style={{fontSize:10.5,color:T.textMuted}}>· {lastRunRec.assetsScanned} assets</span>
+                      <span style={{fontSize:10.5,padding:"1px 6px",borderRadius:4,background:lastRunRec.trigger==="Manual"?`${T.violet}14`:`${T.blue}14`,color:lastRunRec.trigger==="Manual"?T.violet:T.blue,fontWeight:600}}>{lastRunRec.trigger}</span></div></div>
+                  : <div style={{fontSize:12,color:T.textMuted,marginBottom:10}}>{checks?"Not run yet":"Evidence only"}</div>}
+                {vR.length>0&&(openFindN ? metricBtn(openFindN, `open violation${openFindN!==1?"s":""}`, T.rose, ()=>setPdTab("violations"), <div style={{display:"flex",gap:4}}>{crit>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.rose,color:"#fff"}}>{crit} Crit</span>}{high>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:3,background:T.amber,color:"#fff"}}>{high} High</span>}</div>)
+                  : <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",borderRadius:7,background:`${T.green}10`,border:`1px solid ${T.green}25`,marginBottom:6}}><span style={{fontSize:11,fontWeight:600,color:T.green}}>✓ All assets compliant</span></div>)}
+                {eR.length>0&&metricBtn(`${runN}/${ev.targets.length}`, ev.targets.length-runN?`tables enforced — ${ev.targets.length-runN} awaiting their owner`:"tables enforced", ev.targets.length-runN?T.amber:T.green, ()=>setPdTab("assets"))}
+                {attRules.length>0&&metricBtn(`${curN}/${attRules.length}`, dueN?`forms current — ${dueN} due`:"forms current", dueN?T.violet:T.green, ()=>setPdTab("evidence"))}
+              </div>
+            </div></div>;
+      body = (
+        <div style={{display:"flex",minHeight:"100%"}}>
+          <div style={{flex:1,padding:"20px 22px",borderRight:`1px solid ${T.border}`,minWidth:0}}>
+            <DescSection key={p.id} text={p.purpose} canEdit={canEdit(p)&&!isReg} onToast={onToast} style={{marginBottom:20}}
+              onSave={(t,fromAI)=>updPol(p.id,x=>addHist({...x,purpose:t},fromAI?"Description updated from an approved AI draft":"Description edited"))}
+              obj={{name:"pm3:"+p.id, label:p.name, kind:"Policy", category:p.category, scope:p.scope, rules:(p.rules||[]).map(r=>r.name),
+                    regulations:(p.articles||[]).map(a=>{ const fw=pm3Fw(a.fw); return fw?`${fw.name} ${(fw.arts[a.i]||{}).ref||""}`.trim():null; }).filter(Boolean),
+                    owner:p.owner, owners:[p.owner].filter(Boolean), stewards:p.stewards||[], description:p.purpose}}/>
+            {results}
+            {secHd("Implementation rules", p.rules.length, <span style={{display:"flex",gap:10,alignItems:"center"}}>{canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,padding:"3px 10px",borderRadius:7,background:`${T.green}14`,border:`1px solid ${T.green}50`,color:T.green,cursor:"pointer",fontWeight:600}}>{Ic.plus(10)} Add rule</button>}{p.rules.length>0&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500}}>View all →</button>}</span>)}
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:20}}>
+              {vR.length>1&&(p.ruleLogic||"independent")!=="independent"&&<div style={{fontSize:11,fontWeight:600,padding:"4px 10px",borderRadius:6,background:(p.ruleLogic==="and"?T.green:T.violet)+"18",color:p.ruleLogic==="and"?T.green:T.violet,border:`1px solid ${(p.ruleLogic==="and"?T.green:T.violet)}30`,alignSelf:"flex-start"}}>{p.ruleLogic==="and"?"AND — all rules must pass":"OR — any rule passing is enough"}</div>}
+              {p.rules.slice(0,4).map(ruleRow)}
+              {p.rules.length>4&&<button onClick={()=>setPdTab("rules")} style={{fontSize:11.5,color:T.accent,background:"none",border:`1px solid ${T.accent}30`,borderRadius:7,cursor:"pointer",padding:"6px 12px",fontWeight:500}}>+{p.rules.length-4} more rules — view all</button>}
+              {!p.rules.length&&<div style={{padding:"18px 14px",borderRadius:8,border:`1.5px dashed ${T.border}`,textAlign:"center",fontSize:12,color:T.textMuted}}>No rules defined for this policy.</div>}
+            </div>
+            {sideLabel("Scope", canChange?()=>openEditor(p,null,2):null)}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Data classes</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{p.scope.map(classChip)}</div></div>
+              <div style={{padding:"10px 12px",background:T.bgElevated,borderRadius:9,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Assets</div>
+                <div style={{fontSize:12,color:T.textSub}}>{inScope.length} assets in scope <button onClick={()=>setPdTab("assets")} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",padding:0,fontWeight:500,marginLeft:6}}>View →</button></div></div>
+            </div>
+          </div>
+          <div style={{width:250,flexShrink:0}}>
+            {SB("Status", null, <>
+              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,fontWeight:600,padding:"3px 10px",borderRadius:6,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`}}>{p.status==="Active"?"✓ ":""}{p.status}{p.draft?` · v${p.draft.version} in review`:""}</span>
+              <div style={{fontSize:11.5,color:T.textSub,marginTop:8,lineHeight:1.55}}>{nextText(p)}</div></>)}
+            {SB("Category", canEdit(p)?()=>setSideEdit(sideEdit==="cat"?null:"cat"):null, sideEdit==="cat"
+              ? <select autoFocus value={p.category||""} onChange={e=>{const v=e.target.value; updPol(p.id,x=>addHist({...x,category:v},`Category set to ${v||"Not set"}`)); setSideEdit(null);}} style={{...selStyle,width:"100%"}}><option value="">Not set</option>{PM3_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+              : p.category ? <span style={{display:"inline-flex",fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{p.category}</span> : <span style={{fontSize:12,color:T.textMuted}}>Not set</span>)}
+            {SB("Owners", (isAdmin||p.owner===me)?()=>setSideEdit(sideEdit==="own"?null:"own"):null, sideEdit==="own"
+              ? userSel(p.owner, v=>{updPol(p.id,x=>addHist({...x,owner:v},`Owner changed ${x.owner} → ${v}`)); setSideEdit(null); onToast(`${v} now owns this policy`,"success");}) : ownerChip(p.owner))}
+            {SB("Stewards", canSubmit(p)?()=>setSideEdit(sideEdit==="stw"?null:"stw"):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {(p.stewards||[]).map(stewardChip)}{!(p.stewards||[]).length&&<span style={{fontSize:12,color:T.textMuted}}>None</span>}
+              {sideEdit==="stw"&&<select value="" onChange={e=>{const v=e.target.value; if(v) updPol(p.id,x=>addHist({...x,stewards:[...(x.stewards||[]),v]},`Added steward ${v}`)); setSideEdit(null);}} style={{...selStyle,width:"100%",marginTop:4}}><option value="">+ add a steward</option>{PM3_USERS.filter(u=>!(p.stewards||[]).includes(u)&&u!==p.owner).map(u=><option key={u}>{u}</option>)}</select>}</div>)}
+            {SB("Frameworks", canChange?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+              {[...new Set(p.articles.map(a=>a.fw))].map(id=>{ const f=pm3Fw(id); const pend=p.articles.some(a=>a.fw===id&&a.ok===false);
+                return f&&<span key={id} title={pend?"Mapping awaiting approval":"Open the framework"} onClick={()=>{setTab("policies");setSelPol(null);setSelFw(id);}} style={{fontSize:12,fontWeight:500,padding:"3px 10px",borderRadius:5,background:pend?`${T.amber}12`:`${T.blue}10`,color:pend?T.amber:T.blue,border:`1px solid ${pend?T.amber:T.blue}30`,cursor:"pointer"}}>{f.name}</span>; })}
+              {!p.articles.length&&<span style={{fontSize:12,color:T.textMuted}}>Internal — no framework</span>}</div>)}
+            {SB("Tags", canChange?()=>openEditor(p,null,4):null, <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{(p.tags||[]).length?p.tags.map(t=><span key={t} style={{fontSize:11.5,padding:"2px 9px",borderRadius:5,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub}}>{t}</span>):<span style={{fontSize:12,color:T.textMuted}}>None</span>}</div>)}
+            {SB("Compliance", null, <>
+              {kv("Score", p.status==="Active"?`${pct}%`:"—", p.status==="Active"?healthColor:T.textMuted)}
+              {kv("Assets in scope", inScope.length)}
+              {vR.length>0&&kv("Open violations", openFindN, openFindN?T.rose:T.green)}
+              {eR.length>0&&kv("Tables enforced", `${runN} of ${ev.targets.length}`)}
+              {attRules.length>0&&kv("Forms current", `${curN} of ${attRules.length}`, dueN?T.violet:T.green)}</>)}
+            {SB("Details", null, <>
+              {kv("Created", p.created||"—")}
+              {kv("Updated", (p.history||[])[0]?.when||"—")}
+              {kv("Version", `v${p.version||1}`)}
+              {kv("Source", isReg?"Prebuilt":p.basedOn?"Custom (duplicated)":"Custom")}
+              {isReg&&kv("Template", `v${p.tplVersion||1}`)}
+              {upd&&<div style={{fontSize:11.5,color:T.blue,fontWeight:600,marginTop:4}}>Update to v{upd.version} available</div>}</>)}
+            {checks&&SB("Evaluation", null, <>{runBtn(true)}{schedBtn()}
+              {p.schedule&&<div style={{marginTop:8,padding:"7px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`}}>
+                <div style={{fontSize:10.5,color:T.textMuted,marginBottom:2}}>{p.schedEnabled===false?"Paused — next run when re-enabled":"Next run"}</div>
+                <div style={{fontSize:11.5,fontWeight:600,color:T.text}}>{p.schedEnabled===false?"—":(p.nextRun||"—").replace(/^Next run: /,"")}</div>
+                <div style={{fontSize:10,color:T.textMuted,marginTop:3,fontFamily:"'Geist Mono',monospace"}}>{p.schedule}</div></div>}</>)}
+          </div>
+        </div>);
+    }
+    if(tab==="rules"){
+      // Same layout as the original Policy Manager's Rules tab: Prebuilt / Custom sections, compact cards,
+      // status + severity chips, pencil to edit, × to remove. Click a card to view the rule.
+      const live = p.status==="Active";
+      const stOf = r => {
+        if(!live) return null;
+        if(r.type==="enforcement"){ const ss=pm3EvalRule(p,r).targets.map(t=>pm3TargetStatus(p.id,r.id,t.asset.name)); if(!ss.length) return null;
+          return ss.includes("rejected")?{l:"Rejected",c:T.rose} : ss.every(x=>x==="approved")?{l:"Approved",c:T.green} : {l:"Approval Pending",c:T.amber}; }
+        if(r.type==="attestation"){ const as=pm3AttState(p,r);
+          return {current:{l:"Current",c:T.green}, soon:{l:"Due soon",c:T.amber}, review:{l:"In Review",c:T.amber}, due:{l:"Due",c:T.violet}, overdue:{l:"Overdue",c:T.rose}, rejected:{l:"Rejected",c:T.rose}}[as.state]||null; }
+        const n=pm3EvalRule(p,r).findings.filter(f=>!isExcepted(p,r,f.asset)).length; return n?{l:`${n} violation${n>1?"s":""}`,c:T.rose}:null;
+      };
+      const sum = r => {
+        if(r.type==="validation") return (r.conds||[]).map(pm3CondText).join(" and ")||"—";
+        const e=r.enf||{}; if(r.type==="enforcement"){ if(e.action==="hold") return `Legal hold · ${e.matter||"no matter set"}`; const eff=pm3EffectivePeriod(p,r);
+          return `${e.mode==="minimum"?"Keep at least":"Dispose after"} ${eff?.label||`${e.period} ${e.unit}`} · ${e.select==="assets"?`${(e.assets||[]).length} assets`:(e.classes||[]).length?e.classes.map(c=>PM3_CLASS_META[c]?.label).join(", "):"policy scope"}`; }
+        const a=r.att||{}; return `Form · ${(a.form||[]).length} fields · every ${a.every||12} months · ${pm3Assignee(p,r)}`;
+      };
+      const card = r => { const s=stOf(r); const pend=r.type==="enforcement"&&s&&s.l!=="Approved"; const sev=r.severity||"Medium";
+        return (<div key={r.id} onClick={()=>openRuleView(p,r)} style={{padding:"12px 14px",border:`1px ${pend?"dashed":"solid"} ${pend?s.c+"88":T.border}`,borderRadius:10,background:T.bgSurface,cursor:"pointer"}}
+          onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=T.bgSurface}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:13,fontWeight:600,color:T.text,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</span>
+            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:`${typeColor(r.type)}14`,color:typeColor(r.type),flexShrink:0}}>{PM3_TYPE_META[r.type].label}</span>
+            {s&&<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"2px 8px",borderRadius:99,background:`${s.c}14`,border:`1px solid ${s.c}30`,flexShrink:0}}>
+              <span style={{width:5,height:5,borderRadius:"50%",background:s.c}}/><span style={{fontSize:10,fontWeight:700,color:s.c,whiteSpace:"nowrap"}}>{s.l}</span></span>}
+            {r.type==="validation"&&<span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:5,background:SEV_BG[sev]||T.bgElevated,color:SEV_COLOR[sev]||T.textMuted,flexShrink:0}}>{sev}</span>}
+            {canChange&&<button onClick={e=>{e.stopPropagation(); openRuleEditor(p,r);}} title={r.origin==="custom"?"Edit rule":"Edit rule values"} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:"3px 5px",lineHeight:1,flexShrink:0,borderRadius:5}}
+              onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.background=T.accentDim;}} onMouseLeave={e=>{e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="none";}}>
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 1.5l1.5 1.5L4 9.5 1.5 10 2 7.5 9 1.5z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg></button>}
+            {canChange&&r.origin==="custom"&&<button onClick={e=>{e.stopPropagation(); ask(`Remove “${r.name}”?`, live?"The next version drops this rule; the current version keeps running until it's approved.":"The rule is removed from this draft.", "Remove", ()=>removeRule(p,r), true);}} title="Remove rule" style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,fontSize:16,padding:"0 3px",lineHeight:1,flexShrink:0}}>×</button>}
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{sum(r)}</div>
+        </div>); };
+      const section = (title, rs) => rs.length>0&&<div style={{marginBottom:18}}>
+        <div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:9,display:"flex",alignItems:"center",gap:6}}>
+          {title} <span style={{fontSize:10,padding:"1px 6px",borderRadius:99,background:T.bgElevated,color:T.textMuted,border:`1px solid ${T.border}`,fontWeight:700}}>{rs.length}</span></div>
+        <div style={{display:"flex",flexDirection:"column",gap:7}}>{rs.map(card)}</div></div>;
+      body = <>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div><span style={{fontSize:13,fontWeight:600,color:T.text}}>Implementation rules</span>{p.rules.length>0&&<span style={{marginLeft:7,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`}}>{p.rules.length}</span>}</div>
+          {canChange&&<button onClick={()=>openRuleEditor(p,null)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:7,background:T.accentDim,border:`1px solid ${T.accent}40`,color:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=T.accent;e.currentTarget.style.color="#fff";}} onMouseLeave={e=>{e.currentTarget.style.background=T.accentDim;e.currentTarget.style.color=T.accent;}}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg> Add Rule</button>}
+        </div>
+        {logicBadge()}
+        {!p.rules.length&&<div style={{padding:"40px 20px",textAlign:"center",border:`1.5px dashed ${T.border}`,borderRadius:10}}><div style={{fontSize:13,fontWeight:600,color:T.textSub}}>No rules defined</div></div>}
+        {section("Prebuilt Rules", p.rules.filter(r=>r.origin!=="custom"))}
+        {section("Custom Rules", p.rules.filter(r=>r.origin==="custom"))}
+      </>;
+    }
+    const thS = {padding:"8px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap"};
+    if(tab==="violations"){
+      const stateOf = f => f.exc?.status==="accepted"?"Excepted":f.exc?.status==="pending"?"Exception requested":"Open";
+      const STAT = {"Open":T.rose, "Exception requested":T.amber, "Excepted":T.textMuted};
+      const detected = (p.runs||[]).slice(-1)[0]?.ts?.slice(0,10) || p.activatedAt || "—";
+      const all = ev.findings.map(f=>({...f, pol:p, key:excKey(p,f.rule,f.asset), exc:excOf(p,f.rule,f.asset), refs:artsOfRule(p,f.rule).filter(x=>x.ok&&pm3AssetInFw(f.asset,p,x.fw,f.rule)).map(x=>({fw:x.fw.name,ref:x.art.ref}))}));
+      const ql = pvQ.toLowerCase();
+      const rows = all.filter(f=>pvStat==="All"||stateOf(f)===pvStat).filter(f=>pvSev==="All"||f.severity===pvSev).filter(f=>!ql||[f.asset.name,f.rule.name,f.msg,f.asset.domain].join(" ").toLowerCase().includes(ql));
+      const cnt = k => all.filter(f=>stateOf(f)===k).length;
+      const fsel = (label, val, set, opts) => <div style={{display:"flex",alignItems:"center",gap:5}}>
+        <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>{label}:</span>
+        <select value={val} onChange={e=>set(e.target.value)} style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${val!=="All"?T.accent:T.border}`,background:val!=="All"?T.accentDim:T.bgElevated,color:val!=="All"?T.accent:T.textSub,cursor:"pointer",outline:"none",fontFamily:"inherit"}}>{opts.map(o=><option key={o}>{o}</option>)}</select></div>;
+      body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Nothing is evaluated until the policy is active. {nextText(p)}</div> : <>
+        <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+          {["Open","Exception requested","Excepted"].map(k=>{ const c=STAT[k]; return (
+            <div key={k} onClick={()=>setPvStat(pvStat===k?"All":k)} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 12px",borderRadius:7,background:pvStat===k?`${c}22`:`${c}12`,border:`1px solid ${c}30`,cursor:"pointer"}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:c}}/><span style={{fontSize:11,fontWeight:700,color:c}}>{cnt(k)}</span><span style={{fontSize:11,color:c,opacity:.85}}>{k}</span></div>); })}
+          <div style={{marginLeft:"auto",fontSize:11,color:T.textMuted,alignSelf:"center"}}>{all.length} total</div>
+        </div>
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{flex:"1 1 180px",maxWidth:280,display:"flex"}}>{searchBox(pvQ, setPvQ, "Search asset, rule…", 280)}</div>
+          {fsel("Status", pvStat, setPvStat, ["All","Open","Exception requested","Excepted"])}
+          {fsel("Severity", pvSev, setPvSev, ["All","Critical","High","Medium","Low"])}
+        </div>
+        {all.length===0 ? <div style={{textAlign:"center",padding:"48px 20px"}}>
+            <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7 10l3 3 5-5" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="10" cy="10" r="8" stroke={T.green} strokeWidth="1.5"/></svg></div>
+            <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No violations detected</div>
+            <div style={{fontSize:12,color:T.textMuted,lineHeight:1.7,maxWidth:280,margin:"0 auto"}}>All in-scope assets are compliant with this policy. Run it again to check for new issues.</div></div>
+          : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Asset","Rule","Severity","Status","Frameworks","Detected"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>
+                {rows.map((f,vi)=>{ const s=stateOf(f); const c=STAT[s]; const isExp=pvExp===f.key;
+                  return (<React.Fragment key={f.key}>
+                    <tr onClick={()=>setPvExp(isExp?null:f.key)} style={{borderBottom:(!isExp&&vi<rows.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:isExp?`${T.accent}06`:"transparent",opacity:s==="Excepted"?.6:1}}
+                      onMouseEnter={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=isExp?`${T.accent}06`:"transparent"}>
+                      <td style={{padding:"10px 14px",maxWidth:180}}><div style={{fontSize:12.5,fontWeight:700,color:T.text,fontFamily:"'Geist Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.asset.name}</div><div style={{fontSize:10.5,color:T.textMuted,marginTop:1}}>{f.asset.service} · {f.asset.domain}</div></td>
+                      <td style={{padding:"10px 14px",maxWidth:240}}><div style={{fontSize:11.5,color:T.textSub,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.rule.name}</div><div style={{fontSize:10.5,color:T.textMuted,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>“{f.msg}”</div></td>
+                      <td style={{padding:"10px 14px"}}><span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${SEV_COLOR[f.severity]||T.textMuted}14`,color:SEV_COLOR[f.severity]||T.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"}}>{f.severity}</span></td>
+                      <td style={{padding:"10px 14px"}}><span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:6,background:`${c}14`,color:c,border:`1.5px solid ${c}45`,whiteSpace:"nowrap"}}>{s}</span></td>
+                      <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{f.refs.slice(0,2).map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`)}</span>)}{f.refs.length>2&&<span style={{fontSize:10.5,color:T.textMuted}}>+{f.refs.length-2}</span>}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>—</span>}</div></td>
+                      <td style={{padding:"10px 14px",fontSize:11,color:T.textMuted,whiteSpace:"nowrap"}}>{detected}</td>
+                    </tr>
+                    {isExp&&<tr style={{borderBottom:vi<rows.length-1?`1px solid ${T.border}`:"none"}}><td colSpan={6} style={{padding:0,background:T.bgElevated,borderTop:`1px solid ${T.border}`}}>{findingRow(f,0,true)}</td></tr>}
+                  </React.Fragment>); })}
+                {!rows.length&&<tr><td colSpan={6} style={{padding:"28px",textAlign:"center",color:T.textMuted,fontSize:12}}>No violations match the current filters.</td></tr>}
+              </tbody></table></div>}
+      </>;
+    }
+    if(tab==="runs"){ const runs=p.runs||[];
+      body = <>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,gap:12}}>
+          <div><div style={{fontSize:13,fontWeight:700,color:T.text}}>Runs</div>
+            <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{p.schedule&&p.schedEnabled!==false?`Scheduled ${contractScheduleLabel(p.sched)}`:p.schedule?"Schedule paused":"Manual only"}</div></div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>{runs.length>0&&<span style={{fontSize:11,color:T.textMuted}}>{runs.length} run{runs.length!==1?"s":""}</span>}{runBtn(false)}</div>
+        </div>
+        {runs.length===0 ? <div style={{textAlign:"center",padding:"48px 20px",border:`1.5px dashed ${T.border}`,borderRadius:12}}>
+            <div style={{fontSize:28,marginBottom:10}}>▷</div><div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No runs yet</div>
+            <div style={{fontSize:12,color:T.textMuted,maxWidth:280,margin:"0 auto",lineHeight:1.7}}>{p.status!=="Active"?"Policy not active":"Not run yet"}</div></div>
+          : <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse"}}>
+              <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>{["Status","Run at","Trigger","Assets","Rules","Duration","New violations","Open violations","Score"].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
+              <tbody>{runs.map((run,ri)=>{ const sc=run.status==="success"?T.green:T.rose; const scoreC=run.score==null?T.textMuted:run.score>=80?T.green:run.score>=60?T.amber:T.rose;
+                return (<tr key={run.id} style={{borderBottom:ri<runs.length-1?`1px solid ${T.border}`:"none",boxShadow:`inset 3px 0 0 ${sc}`,background:ri===0?`${T.accent}05`:"transparent"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.bgHover} onMouseLeave={e=>e.currentTarget.style.background=ri===0?`${T.accent}05`:"transparent"}>
+                  <td style={{padding:"10px 14px"}}><div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${sc}10`,color:sc,border:`1px solid ${sc}30`,display:"inline-flex",alignItems:"center",gap:4}}><span style={{width:5,height:5,borderRadius:"50%",background:sc}}/>{run.status==="success"?"Passed":"Failed"}</span>
+                    {ri===0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}30`,textTransform:"uppercase",letterSpacing:"0.05em"}}>Latest</span>}</div></td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace",whiteSpace:"nowrap"}}>{run.ts}</td>
+                  <td style={{padding:"10px 14px"}}><span style={{fontSize:10.5,padding:"1px 8px",borderRadius:4,background:run.trigger==="Manual"?`${T.violet}14`:`${T.blue}10`,color:run.trigger==="Manual"?T.violet:T.blue,fontWeight:600,border:`1px solid ${run.trigger==="Manual"?T.violet:T.blue}25`}}>{run.trigger}</span></td>
+                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.assetsScanned}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,color:T.textSub}}>{run.rulesEval}</td>
+                  <td style={{padding:"10px 14px",fontSize:11.5,color:T.textMuted,whiteSpace:"nowrap"}}>⏱ {run.duration}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,color:run.violationsNew>0?T.rose:T.green}}>{run.violationsNew>0?`+${run.violationsNew}`:"0"}</td>
+                  <td style={{padding:"10px 14px"}}>{run.violations>0&&vR.length?<button onClick={()=>setPdTab("violations")} style={{fontSize:12,fontWeight:700,color:T.rose,background:"none",border:"none",cursor:"pointer",padding:0}}>{run.violations}</button>:<span style={{fontSize:12,color:T.green,fontWeight:600}}>{run.violations}</span>}</td>
+                  <td style={{padding:"10px 14px",fontSize:12,fontWeight:700,fontFamily:"'Geist Mono',monospace",color:scoreC}}>{run.score!=null?`${run.score}%`:"—"}</td>
+                </tr>); })}</tbody></table></div>}
+      </>;
+    }
+    if(tab==="assets"){
+      const th = {padding:"9px 12px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",textAlign:"left",borderBottom:`1px solid ${T.border}`,background:T.bgElevated,whiteSpace:"nowrap"};
+      body = <>
+        <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>{assetRows.length} asset{assetRows.length===1?"":"s"} this policy governs — picked by classification, so newly classified data joins automatically.{p.status!=="Active"?" Nothing runs on them until the policy is active.":""}</div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:10,overflow:"auto",background:T.bgSurface}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr>{["Asset","Classifications",...(vR.length?["Validation"]:[]),...(eR.length?["Enforcement"]:[]),"Owner"].map(x=><th key={x} style={th}>{x}</th>)}</tr></thead>
+            <tbody>{assetRows.map(a=>{ const fN=openF.filter(f=>f.asset.name===a.name).length; const tg=ev.targets.filter(t=>t.asset.name===a.name); const held=ev.held.some(x=>x.name===a.name);
+              return (<tr key={a.name} style={{borderBottom:`1px solid ${T.border}`}}>
+                <td style={{padding:"9px 12px"}}><div style={{fontFamily:"'Geist Mono',monospace",color:T.text,fontWeight:600}}>{a.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{a.service} · {a.env}</div></td>
+                <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{pm3Classes(a).map(classChip)}</div></td>
+                {vR.length>0&&<td style={{padding:"9px 12px"}}>{p.status!=="Active"?<span style={{color:T.textMuted}}>—</span>:fN?<button onClick={()=>setPdTab("violations")} style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:99,background:`${T.rose}12`,color:T.rose,border:`1px solid ${T.rose}30`,cursor:"pointer"}}>{fN} violation{fN>1?"s":""}</button>:<span style={{fontSize:11,fontWeight:700,color:T.green}}>✓ Pass</span>}</td>}
+                {eR.length>0&&<td style={{padding:"9px 12px"}}>{held?<span style={{fontSize:11,color:T.amber,fontWeight:600}}>Disposal suspended — legal hold</span>
+                  : tg.length ? <div style={{display:"flex",flexDirection:"column",gap:3}}>{tg.map((t,i)=>{ const ts=pm3TargetStatus(p.id,t.rule.id,t.asset.name); const rq=enfReqs.filter(x=>x.ruleId===`pm3:${p.id}:${t.rule.id}:${t.asset.name}`).slice(-1)[0];
+                      return <div key={i} title={`${t.rule.name} · ${t.detail}`} style={{display:"flex",alignItems:"center",gap:6}}><span style={{fontSize:11,color:T.textSub}}>{t.verb}</span>{pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[ts], ts==="approved"?"Running":ts==="pending"?`Awaiting ${rq?.approver||"owner"}`:ts==="rejected"?"Rejected":"Not requested")}</div>; })}</div>
+                  : <span style={{color:T.textMuted}}>—</span>}</td>}
+                <td style={{padding:"9px 12px",color:a.owner?T.textSub:T.textMuted}}>{a.owner||<i>none</i>}</td>
+              </tr>); })}
+              {!assetRows.length&&<tr><td colSpan={5} style={{padding:22,textAlign:"center",color:T.textMuted}}>No assets in scope yet.</td></tr>}</tbody>
+          </table>
+        </div>
+        {ev.targets.some(t=>pm3TargetStatus(p.id,t.rule.id,t.asset.name)==="pending")&&<div style={{fontSize:11,color:T.textMuted,marginTop:8}}>Table owners approve enforcement in their Workspace inbox; a table without an owner goes to {ap.enforcement.fallback}.</div>}
+      </>;
+    }
+    if(tab==="evidence") body = p.status!=="Active" ? <div style={{fontSize:12.5,color:T.textMuted}}>Forms come due once the policy is active. {nextText(p)}</div> : <>
+      <div style={{fontSize:12,color:T.textSub,marginBottom:12}}>Each evidence rule is a form someone fills in on schedule; a reviewer approves it before it counts.</div>
+      {attRules.map(r=>{ const as=pm3AttState(p,r); const canFill=(pm3Assignee(p,r)===me||isAdmin)&&as.state!=="review"; const filling=fill&&fill.polId===p.id&&fill.ruleId===r.id;
+        return (<div key={r.id} style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:200}}><div style={{display:"flex",gap:6,alignItems:"center"}}>{originPill(r)}<span style={{fontSize:13,fontWeight:700,color:T.text}}>{r.name}</span></div>
+              <div style={{fontSize:11.5,color:T.textSub,marginTop:3}}>Filled in by {pm3Assignee(p,r)} · reviewed by {pm3Reviewer(p,r)} · every {r.att.every} months</div></div>
+            <span style={{fontSize:12,fontWeight:700,color:ART_META[ruleHealth(p,r).state]?.c}}>{as.label}</span>
+            {canFill&&!filling&&<Btn small variant="primary" onClick={()=>setFill({polId:p.id, ruleId:r.id, values:{}})}>Fill in the form</Btn>}
+          </div>
+          {filling&&<div style={{padding:"14px 16px",borderTop:`1px solid ${T.border}`,background:T.bgElevated}}>
+            <div style={{padding:"10px 12px",background:T.bgSurface,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor("attestation")}`,borderRadius:8,marginBottom:12,fontSize:12,color:T.textSub,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{r.att.instructions}</div>
+            {formView(r.att.form, fill.values, (id,v)=>setFill(f=>({...f, values:{...f.values,[id]:v}})))}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:14}}><Btn ghost onClick={()=>setFill(null)}>Cancel</Btn><Btn variant="primary" onClick={submitAttestation}>Submit for review</Btn></div>
+          </div>}
+          {(r.submissions||[]).map(sb=>{ const rq=reqById(sb.reqId); const open=openSub===sb.id;
+            return (<div key={sb.id} style={{borderTop:`1px solid ${T.border}`}}>
+              <div onClick={()=>setOpenSub(open?null:sb.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",cursor:"pointer"}}>
+                <span style={{fontSize:10,color:T.textMuted}}>{open?"▾":"▸"}</span>
+                <span style={{fontSize:12.5,color:T.text,flex:1}}>Submitted by <b>{sb.by}</b> on {sb.at}</span>
+                {pill(sb.status==="approved"?T.green:sb.status==="rejected"?T.rose:T.amber, sb.status==="approved"?`Approved by ${sb.decidedBy}`:sb.status==="rejected"?`Rejected by ${sb.decidedBy}`:`Awaiting ${sb.reviewer}`)}
+                {sb.status==="pending"&&(sb.by===me||isAdmin)&&<button onClick={e=>{e.stopPropagation(); ask("Withdraw this submission?","The reviewer's request is cancelled and the form is due again.","Withdraw",()=>withdrawSubmission(p,r,sb));}} style={{fontSize:11,background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>Withdraw</button>}
+              </div>
+              {open&&<div style={{padding:"4px 14px 12px 34px",display:"grid",gridTemplateColumns:"220px 1fr",gap:"5px 10px",fontSize:12}}>
+                {r.att.form.map(f=><React.Fragment key={f.id}><span style={{color:T.textMuted}}>{f.label}</span><span style={{color:T.text}}>{valText(f, sb.values?.[f.id])}</span></React.Fragment>)}
+                {sb.comment&&<><span style={{color:T.textMuted}}>Reviewer comment</span><span style={{color:T.rose}}>{sb.comment}</span></>}</div>}
+              {sb.status==="pending"&&rq&&rq.status==="pending"&&canDecide(rq)&&<div style={{padding:"0 14px 12px 34px",display:"flex",gap:8,alignItems:"center"}}>
+                <input value={review?.reqId===rq.id?review.comment:""} onChange={e=>setReview({reqId:rq.id,comment:e.target.value})} placeholder="Comment (required to reject)" style={{...inStyle,flex:1}}/>
+                <Btn small variant="primary" onClick={()=>decideReq(rq,true,review?.reqId===rq.id?review.comment:"")}>Approve</Btn>
+                <Btn small ghost onClick={()=>{ const c=review?.reqId===rq.id?review.comment.trim():""; if(!c){onToast("Say what needs fixing","info");return;} decideReq(rq,false,c); }}>Reject</Btn></div>}
+            </div>); })}
+        </div>); })}
+    </>;
+    if(tab==="satisfies") body = <>
+      {p.articles.length===0&&<div style={{fontSize:12,color:T.textMuted}}>Not attached to any article — it's an internal policy. Edit it to attach it to a regulation or your own framework.</div>}
+      {artsOfPol(p,true).map((x,i)=>{ const rules=pm3RulesForLink(p,x.link); return (
+        <div key={i} style={{padding:"10px 0",borderBottom:`1px dashed ${T.border}`}}>
+          <div style={{display:"flex",gap:10,alignItems:"baseline"}}>
+            <span style={{fontSize:12,fontWeight:700,color:st.adopted[x.fw.id]?T.text:T.textMuted,width:130,flexShrink:0}}>{x.fw.name}</span>{refTag(x.art.ref)}
+            <div style={{flex:1}}><div style={{fontSize:12.5,color:T.text,cursor:"pointer"}} onClick={()=>{setTab("policies");setSelPol(null);setSelFw(x.fw.id);}}>{x.art.t}</div><div style={{fontSize:11.5,color:T.textMuted}}>{x.art.ask}</div></div>
+            {!x.ok?pill(T.amber,"Awaiting approval"):p.source==="custom"&&!x.fw.custom?pill(T.accent,"Your interpretation"):null}
+          </div>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",margin:"6px 0 0 140px"}}><span style={{fontSize:10.5,color:T.textMuted}}>Counted rules:</span>{rules.map(r=><span key={r.id} style={{fontSize:11,color:T.textSub}}>{r.name}{" "}<span style={{color:typeColor(r.type)}}>({PM3_TYPE_META[r.type].label.toLowerCase()})</span></span>)}</div>
+        </div>); })}
+    </>;
+    if(tab==="history") body = <>
+      {myReqs.map(r=><div key={r.id} style={{display:"flex",gap:10,fontSize:12,padding:"5px 0",color:T.textSub}}>{pill(r.status==="approved"?T.green:r.status==="rejected"?T.rose:r.status==="withdrawn"?T.textMuted:T.amber, r.status)}<span>{r.name}: {r.requestedBy} → {r.approver} · “{r.note}”{r.decidedBy?` · decided by ${r.decidedBy}`:""}</span></div>)}
+      {(p.history||[]).map((x,i)=><div key={i} style={{display:"flex",gap:10,fontSize:12,padding:"6px 0",borderBottom:`1px dashed ${T.border}`}}><span style={{color:T.textMuted,width:84,fontFamily:"'Geist Mono',monospace",fontSize:11}}>{x.when}</span><span style={{color:T.textSub,width:90}}>{x.who}</span><span style={{color:T.text}}>{x.what}</span></div>)}
+    </>;
+    return (
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"16px 22px 14px",borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0}}>
+              {srcBox(p)}
+              <span style={{fontSize:17,fontWeight:700,color:T.text,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+              {p.status!=="Active"&&<span style={{fontSize:10.5,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${statusColor(p.status)}14`,color:statusColor(p.status),border:`1px solid ${statusColor(p.status)}30`,flexShrink:0}}>{p.status}</span>}
+              {p.status==="Active"&&<span title="Pass rate" style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:5,background:`${healthColor}12`,color:healthColor,border:`1px solid ${healthColor}30`,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>{pct}%</span>}
+              <span style={{fontSize:11,color:T.textMuted,fontFamily:"'Geist Mono',monospace",flexShrink:0}}>v{p.version||1}</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              {(p.status==="Draft"||p.status==="Rejected")&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>p.rules.length?submitPolicy(p.id):onToast("Add at least one rule first","info")}>Submit for approval</Btn>}
+              {pr&&!canDecide(pr)&&(pr.requestedBy===me||canSubmit(p))&&<Btn small ghost onClick={()=>withdrawRequest(p)}>Withdraw request</Btn>}
+              {p.status==="Retired"&&canSubmit(p)&&<Btn small variant="primary" onClick={()=>restorePolicy(p)}>Restore</Btn>}
+              {menuBtn("pd:"+p.id, policyMenu(p))}
+              <button onClick={()=>setSelPol(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.textMuted,padding:4,lineHeight:1}}>{Ic.x(13)}</button>
+            </div>
+          </div>
+        </div>
+        {pr&&canDecide(pr)&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>{pr.requestedBy}</b> asks you to approve {p.draft?`v${p.draft.version} of this policy`:"this policy"} — “{pr.note}”.</span>
+          <Btn small variant="primary" onClick={()=>decideReq(pr,true)}>Approve</Btn><Btn small ghost onClick={()=>decideReq(pr,false)}>Reject</Btn></div>}
+        {upd&&!p.draft&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.blue}50`,background:`${T.blue}0c`,fontSize:12,color:T.text,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><span style={{flex:1}}><b>Update available — template v{upd.version}.</b> {upd.changelog} Your custom rules are kept. Nothing changes until you review and apply it.</span>{canSubmit(p)&&<Btn small variant="primary" onClick={()=>applyTplUpdate(p)}>Review & apply</Btn>}</div>}
+        {pendMaps>0&&<div style={{margin:"12px 22px 0",padding:"10px 14px",borderRadius:9,border:`1px solid ${T.amber}50`,background:`${T.amber}0c`,fontSize:12,color:T.text}}>{mapReq&&mapReq.status==="pending"?<>{pendMaps} regulation article mapping{pendMaps>1?"s are":" is"} waiting for {mapReq.approver} to approve — {pendMaps>1?"they don't":"it doesn't"} count toward readiness yet.</>:<>{pendMaps} regulation article mapping{pendMaps>1?"s go":" goes"} to {ap.mapping.approver} for approval once the policy is submitted.</>}{mapReq&&mapReq.status==="pending"&&canDecide(mapReq)&&<span style={{marginLeft:10}}><Btn small variant="primary" onClick={()=>decideReq(mapReq,true)}>Approve</Btn> <Btn small ghost onClick={()=>decideReq(mapReq,false)}>Reject</Btn></span>}</div>}
+        <div style={{display:"flex",borderBottom:`1px solid ${T.border}`,flexShrink:0,padding:"0 16px",overflowX:"auto",marginTop:(pr&&canDecide(pr))||upd||pendMaps?8:0}}>
+          {tabs.map(({k,l,badge,danger})=>(
+            <button key={k} onClick={()=>setPdTab(k)} style={{display:"flex",alignItems:"center",gap:5,padding:"9px 12px",background:"none",border:"none",borderBottom:`2px solid ${tab===k?T.accent:"transparent"}`,color:tab===k?T.accent:T.textMuted,fontSize:12,fontWeight:tab===k?600:500,cursor:"pointer",whiteSpace:"nowrap",marginBottom:-1}}>
+              {l}{badge!=null&&badge>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:tab===k?T.accent:danger?`${T.rose}18`:T.bgElevated,color:tab===k?"#fff":danger?T.rose:T.textMuted,fontFamily:"'Geist Mono',monospace"}}>{badge}</span>}
+            </button>))}
+        </div>
+        <div style={{flex:1,overflowY:"auto",minHeight:0}}>{tab==="overview" ? body : <div style={{padding:"20px 22px 40px"}}>{body}</div>}</div>
+      </div>
+    );
+  };
+
+
+  // ═════ FINDINGS ═════
+  const findingRow = (f, i, compact) => {
+    const open = excDraft&&excDraft.key===f.key; const e = f.exc;
+    return (
+      <div key={f.key+i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 14px",borderTop:i?`1px solid ${T.border}`:"none",opacity:e?.status==="accepted"?.6:1}}>
+        <div style={{width:170,flexShrink:0}}>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{f.asset.name}</div>
+          <div style={{fontSize:10.5,color:T.textMuted}}>{f.asset.service} · {f.asset.domain} · owner {f.asset.owner||"none"}</div>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12.5,color:T.text}}>{f.msg} <span style={{fontSize:10.5,color:T.textMuted}}>· {f.severity}</span></div>
+          {!compact&&<div onClick={()=>openPolicy(f.pol.id)} style={{fontSize:11,color:T.accent,cursor:"pointer",marginTop:2}}>{f.pol.name} · steward {(f.pol.stewards||[])[0]||f.pol.owner}</div>}
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{f.refs.map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`, T.rose)}</span>)}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>Internal policy — no article</span>}</div>
+          {e&&<div style={{fontSize:11,marginTop:5,color:e.status==="accepted"?T.green:e.status==="rejected"?T.rose:T.amber}}>{e.status==="accepted"&&(isAdmin||f.pol.owner===me)&&<button onClick={()=>ask("Revoke this exception?", `The finding on ${f.asset.name} counts against readiness again.`, "Revoke", ()=>revokeException(f))} style={{fontSize:11,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,marginRight:8}}>Revoke</button>}{e.status==="accepted"?`Exception accepted until ${e.until} by ${e.decidedBy}`:e.status==="rejected"?`Exception rejected by ${e.decidedBy}`:`Exception requested — waiting on ${e.approver}`} · “{e.reason}”</div>}
+          {open&&<div style={{display:"flex",gap:8,marginTop:8}}>
+            <input value={excDraft.reason} onChange={e2=>setExcDraft(d=>({...d,reason:e2.target.value}))} placeholder="Why is this acceptable, and what compensates for it?" style={{...inStyle,flex:1}}/>
+            <Btn small ghost onClick={()=>setExcDraft(null)}>Cancel</Btn><Btn small variant="primary" onClick={()=>excDraft.reason.trim()&&requestException(f,excDraft.reason.trim())}>Send</Btn></div>}
+        </div>
+        {!open&&(!e||e.status==="rejected")&&<div style={{display:"flex",gap:6,flexShrink:0}}>
+          <Btn small ghost onClick={()=>{ const s=(f.pol.stewards||[])[0]||f.pol.owner; pushNotif({category:"Policy",type:"policy",event:"policy_violation",asset:f.asset.name,title:`Finding assigned · ${f.asset.name}`,body:`${f.msg} — ${f.refs.map(r=>r.fw+" "+r.ref).join(", ")}`,nav:"policymanager3"}); onToast(`Assigned to ${s}`,"success"); }}>Assign to steward</Btn>
+          <Btn small ghost onClick={()=>setExcDraft({key:f.key,reason:""})}>Request exception</Btn>
+        </div>}
+      </div>
+    );
+  };
+  const renderFindings = () => {
+    const ql = findQ.toLowerCase();
+    const stateOf = f => f.exc?.status==="accepted"?"Excepted":f.exc?.status==="pending"?"Exception requested":"Open";
+    const STAT = {"Open":T.rose, "Exception requested":T.amber, "Excepted":T.textMuted};
+    const rows = allFindings.filter(f=>findFilter==="all"||f.refs.some(r=>r.fw===findFilter)).filter(f=>findSev==="All"||f.severity===findSev)
+      .filter(f=>findStat==="All"||stateOf(f)===findStat).filter(f=>!ql||[f.asset.name,f.msg,f.pol.name,f.asset.domain].join(" ").toLowerCase().includes(ql));
+    const cnt = k => allFindings.filter(f=>stateOf(f)===k).length;
+    const openN = cnt("Open"); const crit = allFindings.filter(f=>stateOf(f)==="Open"&&f.severity==="Critical").length; const high = allFindings.filter(f=>stateOf(f)==="Open"&&f.severity==="High").length;
+    const fsel = (label, val, set, opts) => <div style={{display:"flex",alignItems:"center",gap:5}}>
+      <span style={{fontSize:10.5,color:T.textMuted,fontWeight:600,whiteSpace:"nowrap"}}>{label}:</span>
+      <select value={val} onChange={e=>set(e.target.value)} style={{fontSize:11.5,padding:"4px 8px",borderRadius:7,border:`1px solid ${val!=="All"&&val!=="all"?T.accent:T.border}`,background:val!=="All"&&val!=="all"?T.accentDim:T.bgElevated,color:val!=="All"&&val!=="all"?T.accent:T.textSub,cursor:"pointer",outline:"none"}}>
+        {opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></div>;
+    return (
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px"}}>
+        <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center",flexWrap:"wrap"}}>
+          {searchBox(findQ, setFindQ, "Search asset, policy, domain…", 360)}
+          <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+            {fsel("Framework", findFilter, setFindFilter, [["all","All"],...adoptedFws.map(f=>[f.name,f.name])])}
+            {fsel("Severity", findSev, setFindSev, [["All","All"],["Critical","Critical"],["High","High"],["Medium","Medium"],["Low","Low"]])}
+            {fsel("Status", findStat, setFindStat, [["All","All"],["Open","Open"],["Exception requested","Exception requested"],["Excepted","Excepted"]])}
+            {(findFilter!=="all"||findSev!=="All"||findStat!=="Open"||findQ)&&<button onClick={()=>{setFindFilter("all");setFindSev("All");setFindStat("Open");setFindQ("");}} style={{fontSize:11,color:T.textMuted,background:"none",border:"none",cursor:"pointer",fontWeight:500}}>Clear</button>}
+            <span style={{fontSize:11,color:T.textMuted}}>{rows.length} of {allFindings.length}</span>
+          </div>
+        </div>
+        {rows.length===0
+          ? <div style={{textAlign:"center",padding:"52px 24px"}}>
+              <div style={{width:44,height:44,borderRadius:11,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 12px"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 12l2 2 4-4" stroke={T.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="12" cy="12" r="9" stroke={T.green} strokeWidth="1.5"/></svg></div>
+              <div style={{fontSize:13,fontWeight:600,color:T.text,marginBottom:4}}>No findings</div><div style={{fontSize:12,color:T.textMuted}}>No matching findings.</div></div>
+          : <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+              <table style={{width:"100%",borderCollapse:"collapse"}}>
+                <thead><tr style={{background:T.bgElevated,borderBottom:`1px solid ${T.border}`}}>
+                  {["Asset","Policy / Rule","Severity","Status","Frameworks"].map(x=><th key={x} style={{padding:"9px 14px",fontSize:10,fontWeight:700,color:T.textMuted,textAlign:"left",letterSpacing:.6,textTransform:"uppercase",whiteSpace:"nowrap"}}>{x}</th>)}
+                </tr></thead>
+                <tbody>
+                  {rows.map((f,i)=>{ const exp=expFind===f.key; const s=stateOf(f);
+                    return (<React.Fragment key={f.key}>
+                      <tr onClick={()=>setExpFind(exp?null:f.key)} style={{borderBottom:(!exp&&i<rows.length-1)?`1px solid ${T.border}`:"none",cursor:"pointer",background:exp?`${T.accent}06`:"transparent"}}
+                        onMouseEnter={e=>{if(!exp)e.currentTarget.style.background=T.bgHover;}} onMouseLeave={e=>{if(!exp)e.currentTarget.style.background="transparent";}}>
+                        <td style={{padding:"10px 14px"}}><div style={{fontSize:12.5,fontWeight:600,color:T.text,fontFamily:"'Geist Mono',monospace"}}>{f.asset.name}</div><div style={{fontSize:10.5,color:T.textMuted}}>{f.asset.service} · {f.asset.domain}</div></td>
+                        <td style={{padding:"10px 14px"}}><div style={{fontSize:12,color:T.text}}>{f.msg}</div><div style={{fontSize:10.5,color:T.accent}}>{f.pol.name}</div></td>
+                        <td style={{padding:"10px 14px"}}>{sevPill(f.severity)}</td>
+                        <td style={{padding:"10px 14px"}}><span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:600,color:STAT[s]}}><span style={{width:6,height:6,borderRadius:"50%",background:STAT[s]}}/>{s}</span></td>
+                        <td style={{padding:"10px 14px"}}><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{f.refs.slice(0,3).map((r,j)=><span key={j}>{refTag(`${r.fw} ${r.ref}`)}</span>)}{f.refs.length>3&&<span style={{fontSize:10.5,color:T.textMuted}}>+{f.refs.length-3}</span>}{!f.refs.length&&<span style={{fontSize:10.5,color:T.textMuted}}>Internal</span>}</div></td>
+                      </tr>
+                      {exp&&<tr style={{borderBottom:i<rows.length-1?`1px solid ${T.border}`:"none",background:`${T.accent}06`}}><td colSpan={5} style={{padding:0}}>{findingRow(f,0)}</td></tr>}
+                    </React.Fragment>); })}
+                </tbody>
+              </table>
+            </div>}
+      </div>
+    );
+  };
+
+
+  // ── The original Policy Manager's create/edit panel: header, section rail, footer with Back on the left.
+  const drawer = ({title, sub, steps, step, done, onStep, body, onClose, width, onBack, right}) => (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:width||860,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+            <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}</div>
+          </div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,display:"flex",minHeight:0}}>
+          <div style={{width:212,flexShrink:0,borderRight:`1px solid ${T.border}`,overflowY:"auto",padding:"14px 10px",display:"flex",flexDirection:"column",gap:3,background:T.bg}}>
+            {steps.map((s,i)=>{ const n=i+1, on=step===n, ok=done?done(n):step>n; const lab=typeof s==="string"?s:s.label; const req=typeof s==="object"&&s.required;
+              return (
+              <button key={lab} onClick={()=>onStep(n)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 11px",borderRadius:8,background:on?T.bgSurface:"transparent",border:`1px solid ${on?T.border:"transparent"}`,color:on?T.text:T.textSub,fontSize:12.5,fontWeight:on?600:500,cursor:"pointer",textAlign:"left",boxShadow:on?"0 1px 3px rgba(0,0,0,.06)":"none"}}>
+                <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:ok?T.accent:T.borderLight}}/><span style={{flex:1}}>{lab}</span>
+                {req&&!ok&&<span style={{fontSize:13,color:T.textMuted,lineHeight:1}}>*</span>}
+              </button>); })}
+          </div>
+          <div style={{flex:1,overflowY:"auto",minHeight:0,padding:"22px 26px"}}>{body}</div>
+        </div>
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.bgBase||T.bg}}>
+          <button onClick={onBack} disabled={step===1}
+            style={{padding:"7px 18px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:step===1?T.textMuted:T.textSub,fontSize:12,fontWeight:500,cursor:step===1?"not-allowed":"pointer",opacity:step===1?.4:1}}>← Back</button>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={onClose} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+            {right}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+  const fBtn = (label, on, primary, disabled, icon) => <button onClick={()=>!disabled&&on()} disabled={disabled}
+    style={{display:"flex",alignItems:"center",gap:6,padding:primary?"7px 22px":"7px 18px",borderRadius:7,background:primary?(disabled?T.bgElevated:T.accent):"transparent",border:`1px solid ${primary?(disabled?T.border:T.accent):T.border}`,color:primary?(disabled?T.textMuted:"#fff"):T.textSub,fontSize:12,fontWeight:primary?700:600,cursor:disabled?"not-allowed":"pointer"}}>{icon}{label}</button>;
+  const continueBtn = (on, ok=true) => fBtn("Continue →", on, true, !ok);
+  const stewardChips = (list, onChange, exclude) => (
+    <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
+      {list.map(s=><span key={s} style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11.5,padding:"2px 8px",borderRadius:99,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text}}>{s}<button onClick={()=>onChange(list.filter(x=>x!==s))} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:0}}>×</button></span>)}
+      <select value="" onChange={e=>e.target.value&&onChange([...list,e.target.value])} style={selStyle}><option value="">+ steward</option>{PM3_USERS.filter(u=>!list.includes(u)&&u!==exclude).map(u=><option key={u}>{u}</option>)}</select>
+    </div>
+  );
+  // Approval route for a set of rules — what happens after Submit.
+  const routeText = (rules, n) => {
+    const list = Array.isArray(rules) ? rules : [];
+    if(ap.activation.autoValidation && onlyValidation(list)) return <span style={{color:T.green}}>Active as soon as it's submitted — validation rules change no data</span>;
+    const who = pm3Approver(ap.activation.approver, me);
+    return <span>Goes to <b>{who}</b> for approval{list.some(r=>r.type==="enforcement")?<>, then {n!=null&&n!==1?`${n} table owners approve`:n===1?"1 table owner approves":"each table owner approves"} before CDP acts</>:""}{list.some(r=>r.type==="attestation")?", then its forms are assigned and come due on schedule":""}</span>;
+  };
+
+  // ── One rule form, used by the create wizard, the single-rule drawer and adoption. ──
+  const newRuleId = () => `r-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  const newRuleOfType = (t, name) => ({id:newRuleId(), key:null, origin:"custom", type:t, name:name||"", finding:"", severity:"Medium",
+    conds: t==="validation"?[{f:"access",op:"is",v:""}]:[],
+    enf: t==="enforcement"?{action:"retention",mode:"dispose",period:36,unit:"months",trigger:"Last use",disposal:"Delete permanently",select:"flag",assets:[],matter:""}:null,
+    att: t==="attestation"?{instructions:"",every:12,remind:30,assignee:"owner",reviewer:"approver",form:[pm3Field("Completed on","date",true),pm3Field("Evidence","doc",true),pm3Field("Signed off by","person",true)]}:null,
+    submissions:[]});
+  const retype = (r, t) => ({...newRuleOfType(t, r.name), id:r.id});
+  const condComplete = c => { const F=PM3_FIELDS[c.f]; return !!F && (F.type==="bool"||F.type==="presence" || (c.v!==undefined&&c.v!==null&&String(c.v).trim()!=="")); };
+  const ruleProblem = (r, n) => {
+    const tag = n!=null ? `Rule ${n}` : "The rule";
+    if(!String(r.name||"").trim()) return `${tag} needs a name`;
+    if(r.type==="validation"){ if(!r.conds.length||!r.conds.every(condComplete)) return `${tag} needs a value for every condition`; if(!String(r.finding||"").trim()) return `${tag} needs the finding message`; }
+    if(r.type==="enforcement"){ const e=r.enf;
+      if(e.action==="hold"&&!String(e.matter||"").trim()) return `${tag}: name the legal matter`;
+      if(e.select==="assets"&&!(e.assets||[]).length) return `${tag}: pick at least one asset`;
+      if(e.action==="retention"&&!(Number(e.period)>0)) return `${tag}: set a retention period`; }
+    if(r.type==="attestation"){ const a=r.att;
+      if(!String(a.instructions||"").trim()) return `${tag}: describe what needs to be documented`;
+      if(!a.form.length) return `${tag}: add at least one form field`;
+      if(a.form.some(f=>!f.label.trim())) return `${tag}: every form field needs a label`;
+      if(a.form.some(f=>f.type==="select"&&!f.opts.length)) return `${tag}: dropdown fields need options`; }
+    return null;
+  };
+  const typeSeg = (r, onType, locked) => (
+    <div style={{display:"flex",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:6,padding:2}}>
+      {(locked ? [r.type] : [...(r.type==="validation"?["validation"]:[]), "enforcement","attestation"]).map(k=>{ const on=r.type===k; return (
+        <button key={k} disabled={locked||!onType} onClick={()=>onType&&!on&&onType(k)} title={locked?"A prebuilt rule's type is fixed":""}
+          style={{fontSize:10.5,fontWeight:on?700:500,padding:"2px 9px",borderRadius:4,border:"none",cursor:locked||!onType?"default":"pointer",background:on?(k==="validation"?T.bgElevated:typeColor(k)):"transparent",color:on?(k==="validation"?T.text:"#fff"):T.textMuted}}>{PM3_TYPE_META[k].label}</button>); })}
+    </div>);
+  const ruleForm = (r, setR, {locked, p}={}) => {
+    const s2 = {...inp,background:T.bgSurface,width:"auto",flex:1,minWidth:0,padding:"7px 9px"};
+    const pv = p||{id:"preview",scope:[],domains:[],articles:[],rules:[r]};
+    const nameRow = <>
+      <label style={lbl}>Rule name <span style={{color:T.rose}}>*</span></label>
+      <input disabled={locked} value={r.name} onChange={e=>setR({...r,name:e.target.value})} placeholder={r.type==="validation"?"e.g. Sensitive data is encrypted at rest":r.type==="enforcement"?"e.g. Dispose of marketing data after 24 months":"e.g. Quarterly access review signed off"} style={{...inp,background:T.bgSurface,marginBottom:12}}/></>;
+    if(r.type==="validation"){ const ev=pm3EvalRule(pv,r);
+      return <>{nameRow}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 150px",gap:10,marginBottom:12}}>
+          <div><label style={lbl}>Finding message <span style={{color:T.rose}}>*</span></label><input disabled={locked} value={r.finding||""} onChange={e=>setR({...r,finding:e.target.value})} placeholder="What the finding says, e.g. Not encrypted at rest" style={{...inp,background:T.bgSurface}}/></div>
+          <div><label style={lbl}>Severity</label><select value={r.severity||"Medium"} onChange={e=>setR({...r,severity:e.target.value})} style={{...inp,background:T.bgSurface,color:SEV_COLOR[r.severity||"Medium"],fontWeight:600,cursor:"pointer"}}>{["Low","Medium","High","Critical"].map(x=><option key={x}>{x}</option>)}</select></div>
+        </div>
+        <label style={lbl}>Check — raise a finding when an in-scope asset…</label>
+        {r.conds.map((c,ci)=>{ const F=PM3_FIELDS[c.f]; const setC=nc=>setR({...r,conds:r.conds.map((x,j)=>j===ci?nc:x)}); const lockF=locked; const lockV=locked&&!c.edit;
+          return (<div key={ci} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6}}>
+            <span style={{fontSize:10,fontWeight:800,color:T.textMuted,width:30}}>{ci?"AND":""}</span>
+            <select disabled={lockF} value={c.f} onChange={e=>{const nf=PM3_FIELDS[e.target.value]; setC({f:e.target.value, op:PM3_OPS[nf.type][0], v:["enum","number","list"].includes(nf.type)?"":undefined});}} style={{...s2,flex:1.4}}>{Object.entries(PM3_FIELDS).map(([k,f])=><option key={k} value={k}>{f.label}</option>)}</select>
+            <select disabled={lockF} value={c.op} onChange={e=>setC({...c,op:e.target.value})} style={s2}>{PM3_OPS[F.type].map(o=><option key={o}>{o}</option>)}</select>
+            {F.type==="enum"&&<select disabled={lockV} value={c.v||""} onChange={e=>setC({...c,v:e.target.value})} style={{...s2,color:c.v?T.text:T.textMuted}}><option value="">— select —</option>{F.opts.map(o=><option key={o}>{o}</option>)}</select>}
+            {F.type==="number"&&<input disabled={lockV} type="number" value={c.v??""} placeholder="value" onChange={e=>setC({...c,v:e.target.value===""?"":Number(e.target.value)})} style={s2}/>}
+            {F.type==="list"&&<input disabled={lockV} value={c.v||""} onChange={e=>setC({...c,v:e.target.value})} placeholder="comma-separated" style={s2}/>}
+            {(F.type==="bool"||F.type==="presence")&&<span style={{flex:1}}/>}
+            {!locked&&<button onClick={()=>setR({...r,conds:r.conds.filter((_,j)=>j!==ci)})} style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",flexShrink:0}}>×</button>}
+          </div>); })}
+        {!locked&&<button onClick={()=>setR({...r,conds:[...r.conds,{f:"env",op:"is",v:""}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 0 36px"}}>+ Add condition</button>}
+        {locked&&(r.conds||[]).some(c=>c.edit)&&<div style={{fontSize:11,color:T.textMuted,margin:"2px 0 0 36px"}}>Only the values the law leaves to you are editable.</div>}
+        {p&&r.conds.every(condComplete)&&<div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:ev.findings.length?`${T.rose}0c`:`${T.green}0c`,border:`1px solid ${ev.findings.length?T.rose:T.green}30`,fontSize:11.5,color:T.text}}>
+          If it ran now: <b>{ev.findings.length}</b> finding{ev.findings.length===1?"":"s"}{ev.findings.length>0&&<> — {ev.findings.slice(0,4).map(f=>f.asset.name).join(", ")}{ev.findings.length>4?"…":""}</>}</div>}
+      </>; }
+    if(r.type==="enforcement"){ const e=r.enf; const setEnf=v=>setR({...r,enf:v}); const eff=pm3EffectivePeriod(pv,r); const floor=locked&&e.mode==="minimum"?eff?.floor:null;
+      return <>{nameRow}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <div><label style={lbl}>Action</label><select disabled={locked} value={e.action} onChange={x=>setEnf(x.target.value==="hold"?{...e,action:"hold",matter:e.matter||"",select:e.select||"flag"}:{...e,action:"retention",mode:e.mode||"dispose",period:e.period||36,unit:e.unit||"months",trigger:e.trigger||"Last use",disposal:e.disposal||"Delete permanently"})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="retention">Retention</option><option value="hold">Legal Hold</option></select></div>
+          <div><label style={lbl}>Apply to</label><div style={{display:"flex"}}>
+            {[["flag",e.action==="hold"?"Assets flagged for the matter":"By classification"],["assets","Specific assets"]].map(([k,l2],ix)=>{ const on=(e.select||"flag")===k;
+              return <button key={k} disabled={locked} onClick={()=>setEnf({...e,select:k})} style={{flex:1,padding:"7px 8px",fontSize:11.5,fontWeight:600,border:`1px solid ${on?T.accent:T.border}`,background:on?T.accent:T.bgSurface,color:on?"#fff":T.textSub,cursor:locked?"default":"pointer",borderRadius:ix===0?"7px 0 0 7px":"0 7px 7px 0"}}>{l2}</button>; })}</div></div>
+        </div>
+        {e.select==="assets"&&<div style={{marginBottom:12}}><CatFieldDropdown label="Assets" required options={PM3_ASSETS.filter(a=>!(pv.sources||[]).length||pv.sources.includes(pm3SourceOf(a))).map(a=>a.name)} selected={e.assets||[]} onChange={v=>setEnf({...e,assets:v})} placeholder="Search assets…"/></div>}
+        {(e.select||"flag")==="flag"&&e.action==="retention"&&(()=>{ const keys=Object.keys(PM3_CLASS_META).filter(k=>(pv.scope||[]).includes("ALL")||(pv.scope||[]).includes(k)); return (
+          <div style={{marginBottom:12}}><CatFieldDropdown label="Classification" options={keys.map(k=>PM3_CLASS_META[k].label)} selected={(e.classes||[]).map(k=>PM3_CLASS_META[k]?.label).filter(Boolean)}
+            onChange={v=>!locked&&setEnf({...e,classes:v.map(l=>keys.find(k=>PM3_CLASS_META[k].label===l)).filter(Boolean)})} placeholder="All of the policy's data classes"/>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:5}}>Optional — narrow this rule to some of the policy's data classes. Every matching asset's owner approves before CDP acts.</div></div>); })()}
+        {e.action==="retention"&&<div style={{display:"grid",gridTemplateColumns:"150px 1fr",gap:"8px 12px",alignItems:"center"}}>
+          <span style={{fontSize:11.5,color:T.textSub}}>Mode</span>
+          <select disabled={locked} value={e.mode} onChange={x=>setEnf({...e,mode:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="dispose">Dispose of data after a period</option><option value="minimum">Keep data for at least a period</option></select>
+          <span style={{fontSize:11.5,color:T.textSub}}>Period{floor?` (≥ ${floor} yrs by law)`:""}</span>
+          <div style={{display:"flex",gap:6}}><input type="number" min={1} value={e.period} onChange={x=>setEnf({...e,period:Number(x.target.value)})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:100}}/>
+            <select value={e.unit} onChange={x=>setEnf({...e,unit:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px",width:120}}><option>months</option><option>years</option></select></div>
+          <span style={{fontSize:11.5,color:T.textSub}}>Starts from</span>
+          <select value={e.trigger} onChange={x=>setEnf({...e,trigger:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Last use","Creation","Contract end","Account closure"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11.5,color:T.textSub}}>At the end</span>
+          <select value={e.disposal} onChange={x=>setEnf({...e,disposal:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}>{["Delete permanently","Archive to CDP, then delete","Archive to CDP"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11.5,color:T.textSub}}>Criteria type</span>
+          <div style={{display:"flex",gap:6}}>{[["date","Datewise"],["text","Criteriawise"],["both","Both"]].map(([v,l2])=>{ const on=(e.critType||"date")===v;
+            return <button key={v} onClick={()=>setEnf({...e,critType:v})} style={{flex:1,padding:"7px 4px",borderRadius:7,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgSurface,color:on?T.accent:T.textSub,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l2}</button>; })}</div>
+          {(e.critType||"date")!=="text"&&<><span style={{fontSize:11.5,color:T.textSub}}>Retain by</span>
+            <select value={e.dateCol||""} onChange={x=>setEnf({...e,dateCol:x.target.value})} style={{...inp,background:T.bgSurface,padding:"7px 9px"}}><option value="">Whole object · creation date</option>{PM3_DATE_COLS.map(c=><option key={c} value={c}>{c}</option>)}</select></>}
+          {(e.critType||"date")!=="date"&&<><span style={{fontSize:11.5,color:T.textSub}}>Table criteria</span>
+            <input value={e.critText||""} onChange={x=>setEnf({...e,critText:x.target.value})} placeholder="e.g. status = 'closed'" style={{...inp,background:T.bgSurface,padding:"7px 9px"}}/></>}
+        </div>}
+        {e.action==="hold"&&<><label style={lbl}>Legal matter <span style={{color:T.rose}}>*</span></label><input value={e.matter||""} onChange={x=>setEnf({...e,matter:x.target.value})} placeholder="e.g. LIT-2026-021 · Customer class action" style={{...inp,background:T.bgSurface}}/>
+          <label style={{...lbl,marginTop:12}}>Hold rule</label>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+            <select value={e.holdCol||""} onChange={x=>setEnf({...e,holdCol:x.target.value})} style={{...inp,width:"auto",flex:"1 1 180px",background:T.bgSurface,padding:"7px 9px"}}><option value="">Hold the entire object</option>{["customer_id","account_id","employee_id","order_id","region",...PM3_DATE_COLS].map(c=><option key={c} value={c}>Rows where {c}</option>)}</select>
+            {e.holdCol&&<><select value={e.holdOp||"="} onChange={x=>setEnf({...e,holdOp:x.target.value})} style={{...inp,width:"auto",background:T.bgSurface,padding:"7px 9px"}}>{["=","!=","in",">","<"].map(o=><option key={o}>{o}</option>)}</select>
+              <select value={e.holdType||"Text"} onChange={x=>setEnf({...e,holdType:x.target.value})} style={{...inp,width:"auto",background:T.bgSurface,padding:"7px 9px"}}>{["Text","Number","Date"].map(o=><option key={o}>{o}</option>)}</select>
+              <input value={e.holdVal||""} onChange={x=>setEnf({...e,holdVal:x.target.value})} placeholder="value" style={{...inp,width:"auto",flex:"1 1 110px",background:T.bgSurface,padding:"7px 9px"}}/></>}
+          </div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Releasing the hold takes {ap.hold.twoPerson?"two people — the policy owner and the table owner":"the policy owner"}.</div></>}
+        <div style={{marginTop:10,padding:"8px 10px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.text,lineHeight:1.6}}>{enfText(pv,r)} <span style={{color:T.textMuted}}>Only retention and legal hold are enforced — masking is checked by a validation rule.</span></div>
+      </>; }
+    const a=r.att; const setAtt=v=>setR({...r,att:v});
+    const setF=(i,f)=>setAtt({...a,form:a.form.map((x,j)=>j===i?f:x)}); const move=(i,d)=>{const f=[...a.form]; const j=i+d; if(j<0||j>=f.length) return; [f[i],f[j]]=[f[j],f[i]]; setAtt({...a,form:f});};
+    return <>{nameRow}
+      <label style={lbl}>What needs to be documented <span style={{color:T.rose}}>*</span></label>
+      <textarea disabled={locked} rows={3} value={a.instructions||""} onChange={e=>setAtt({...a,instructions:e.target.value})} placeholder="What the assignee must attest to and what evidence to attach." style={{...inp,background:T.bgSurface,resize:"vertical",marginBottom:12}}/>
+      <label style={lbl}>Form fields</label>
+      {a.form.map((f,i)=>(
+        <div key={f.id} style={{display:"flex",gap:6,alignItems:"center",marginBottom:6,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,color:T.textMuted,width:18}}>{i+1}</span>
+          <input disabled={locked} value={f.label} onChange={e=>setF(i,{...f,label:e.target.value})} placeholder="Question or label" style={{...s2,flex:"2 1 180px"}}/>
+          <select disabled={locked} value={f.type} onChange={e=>setF(i,{...f,type:e.target.value})} style={{...s2,flex:"1 1 110px"}}>{Object.entries(PM3_FORM_TYPES).map(([k,l2])=><option key={k} value={k}>{l2}</option>)}</select>
+          {f.type==="select"&&<input disabled={locked} value={f.opts.join(", ")} onChange={e=>setF(i,{...f,opts:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})} placeholder="Options, comma-separated" style={{...s2,flex:"2 1 160px"}}/>}
+          <label style={{display:"flex",alignItems:"center",gap:4,fontSize:11,color:T.textSub}}><input type="checkbox" disabled={locked} checked={f.required} onChange={e=>setF(i,{...f,required:e.target.checked})} style={{accentColor:T.accent}}/>Required</label>
+          {!locked&&<><button onClick={()=>move(i,-1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↑</button><button onClick={()=>move(i,1)} style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer"}}>↓</button>
+            <button onClick={()=>setAtt({...a,form:a.form.filter((_,j)=>j!==i)})} style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer"}}>×</button></>}
+        </div>))}
+      {!locked&&<button onClick={()=>setAtt({...a,form:[...a.form,{id:`f-${Date.now()}`,label:"",type:"text",required:false,help:"",opts:[]}]})} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:"2px 0 0 24px"}}>+ Add field</button>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginTop:12}}>
+        <div><label style={lbl}>Due every (months)</label><input type="number" min={1} value={a.every} onChange={e=>setAtt({...a,every:Number(e.target.value)})} style={{...inp,background:T.bgSurface}}/></div>
+        <div><label style={lbl}>Reminder (days)</label><input type="number" min={0} value={a.remind} onChange={e=>setAtt({...a,remind:Number(e.target.value)})} style={{...inp,background:T.bgSurface}}/></div>
+        <div><label style={lbl}>Filled in by</label><select value={a.assignee} onChange={e=>setAtt({...a,assignee:e.target.value})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="owner">Policy owner</option><option value="steward">First steward</option>{PM3_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+        <div><label style={lbl}>Reviewed by</label><select value={a.reviewer} onChange={e=>setAtt({...a,reviewer:e.target.value})} style={{...inp,background:T.bgSurface,cursor:"pointer"}}><option value="approver">Default ({ap.attest.reviewer})</option><option value="owner">Policy owner</option>{PM3_USERS.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+      </div>
+    </>;
+  };
+  // A rule card: RULE n, the type toggle, origin, and the form.
+  const ruleCard = (r, n, setR, {onRemove, locked, p, onType}={}) => (
+    <div key={r.id} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderLeft:`3px solid ${typeColor(r.type)}`,borderRadius:10,padding:"10px 12px 12px",marginBottom:10}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <span style={{fontSize:10.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>RULE {n}</span>{originPill(r)}
+        <span style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>{typeSeg(r, onType, locked)}
+          {onRemove&&<button onClick={onRemove} title="Remove" style={{width:22,height:22,borderRadius:5,background:"transparent",border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(10)}</button>}</span>
+      </div>
+      {ruleForm(r, setR, {locked, p})}
+    </div>);
+  const addRuleButtons = (onAdd) => (
+    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+      {["enforcement","attestation"].map(k=><button key={k} onClick={()=>onAdd(k)} style={{flex:"1 1 150px",padding:"10px",borderRadius:9,border:`1px dashed ${typeColor(k)}60`,background:`${typeColor(k)}08`,color:typeColor(k),fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>{Ic.plus(11)} {PM3_TYPE_META[k].label} rule</button>)}
+    </div>);
+
+  // ═════ ARTICLE ACTIONS — Add policy (pick from the Policies section) · Add rule ═════
+  const sideDrawer = ({title, sub, body, foot, onClose, width}) => (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+    <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:width||620,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+      <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+          <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{title}</div>{sub&&<div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{sub}</div>}</div></div>
+        <button onClick={onClose} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>{body}</div>
+      {foot&&<div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>{foot}</div>}
+    </div></>);
+  const usedBy = p => [...new Set(p.articles.filter(a=>a.ok!==false).map(a=>pm3Fw(a.fw)?.name).filter(Boolean))];
+  const renderAddPolicy = () => {
+    const fw = pm3Fw(addPol.fw); const art = fw.arts[addPol.i];
+    const onArt = new Set(polsForArt(fw, addPol.i, true).map(p=>p.id));
+    const ql = addPol.q.toLowerCase();
+    const list = livePols.filter(p=>!onArt.has(p.id)).filter(p=>!ql||[p.name, p.purpose, p.owner].join(" ").toLowerCase().includes(ql));
+    const toggle = id => setAddPol(x=>({...x, sel:x.sel.includes(id)?x.sel.filter(y=>y!==id):[...x.sel,id]}));
+    const add = () => {
+      addPol.sel.forEach(id=>updPol(id, p=>addHist({...p, articles:[...p.articles, {fw:fw.id, i:addPol.i, ok:!!fw.custom||p.source==="regulation", rules:null, added:true}]}, `Linked to ${fw.name} ${art.ref}`)));
+      setTimeout(pm3Sync,0);
+      const pend = !fw.custom && addPol.sel.some(id=>st.policies.find(p=>p.id===id)?.source==="custom");
+      onToast(`${addPol.sel.length} polic${addPol.sel.length===1?"y":"ies"} added to ${art.ref}${pend?` — custom ones count once ${ap.mapping.approver} approves the mapping`:""}`,"success");
+      setExpArt(x=>({...x,[fw.id+addPol.i]:true})); setAddPol(null);
+    };
+    return sideDrawer({title:"Add policy", sub:`${fw.name} ${art.ref} · ${art.t}`, onClose:()=>setAddPol(null),
+      body:<>
+        <div style={{fontSize:12,color:T.textSub,lineHeight:1.6,marginBottom:12}}><span style={{color:T.textMuted,fontWeight:600}}>The article asks: </span>{art.ask}</div>
+        <div style={{marginBottom:12}}>{searchBox(addPol.q, v=>setAddPol(x=>({...x,q:v})), "Search policies…", 9999)}</div>
+        {list.length===0&&<div style={{fontSize:12,color:T.textMuted,padding:"12px 2px"}}>{ql?"No policy matches.":"Every policy is already on this article."}</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {list.map(p=>{ const on=addPol.sel.includes(p.id); const ub=usedBy(p);
+            return (<label key={p.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${on?T.accent:T.border}`,background:on?T.accentDim:T.bgSurface,cursor:"pointer"}}>
+              <input type="checkbox" checked={on} onChange={()=>toggle(p.id)} style={{accentColor:T.accent,marginTop:2}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}><span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{p.name}</span>
+                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:p.source==="regulation"?`${T.blue}14`:T.accentDim,color:p.source==="regulation"?T.blue:T.accent,letterSpacing:"0.04em"}}>{p.source==="regulation"?"PREBUILT":"CUSTOM"}</span>
+                  {p.status!=="Active"&&pill(statusColor(p.status), p.status)}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:3,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typeDots(p)} {p.rules.length} rule{p.rules.length===1?"":"s"} · owner {p.owner}{ub.length?` · already used by ${ub.join(", ")}`:" · not used by any framework yet"}</div>
+              </div>
+            </label>); })}
+        </div>
+        {!fw.custom&&<div style={{fontSize:11,color:T.textMuted,marginTop:12}}>Prebuilt policies count straight away. A custom policy on a regulation article counts once {ap.mapping.approver} approves the mapping.</div>}
+      </>,
+      foot:<>
+        <button onClick={()=>{ const i=addPol.i; setAddPol(null); openEditor(null,{articles:[{fw:fw.id,i,ok:!!fw.custom,rules:null}], name:`${art.t} — ${fw.name} custom`, ruleType:art.expect&&art.expect!=="outside"?art.expect:"validation"}); }} style={{marginRight:"auto",fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",fontWeight:600,padding:0}}>Create a new policy instead</button>
+        <button onClick={()=>setAddPol(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Cancel</button>
+        {fBtn(addPol.sel.length?`Add ${addPol.sel.length} polic${addPol.sel.length===1?"y":"ies"}`:"Add", add, true, !addPol.sel.length)}
+      </>});
+  };
+  // Add rule from an article: pick which of its policies the rule joins, or start a new policy for the article.
+  const openArticleRule = (fw, i, pols) => {
+    const choices = pols.filter(p=>canEdit(p)&&p.status!=="Retired"&&!pendingReqOf(p)).map(p=>p.id);
+    setRuleEd({polId:choices[0]||"__new", isNew:true, rule:newRuleOfType("enforcement"), ctx:{fw:fw.id, i, choices}});
+  };
+  const createPolicyWithRule = (pv, rule) => {
+    const id = "p-cust-"+Date.now();
+    pm3Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", name:pv.name, purpose:"", category:"", scope:pv.scope, domains:[], rules:[rule], articles:pv.articles, stewards:[], notify:["Owner","Steward"], owner:me, status:"Draft", version:1, reqId:null, draft:null, created:pm3Today(), history:[{when:pm3Today(), who:me, what:`Created from ${pm3Fw(pv.articles[0].fw).name} ${pm3Fw(pv.articles[0].fw).arts[pv.articles[0].i].ref} with one ${rule.type} rule`}]}]}));
+    submitPolicy(id, "New policy"); setTimeout(pm3Sync,0);
+    setExpArt(x=>({...x,[pv.articles[0].fw+pv.articles[0].i]:true}));
+  };
+
+  // ═════ ADD / EDIT ONE RULE — the original's single-rule drawer ═════
+  const openRuleEditor = (p, r, ctx) => {
+    if(!canEdit(p)){ onToast(`Only ${p.owner} or a steward can change this policy`,"info"); return; }
+    if(pendingReqOf(p)){ onToast("Withdraw the approval request first","info"); return; }
+    setRuleEd({polId:p.id, isNew:!r, rule: r ? JSON.parse(JSON.stringify(r)) : newRuleOfType("enforcement"), ctx});
+  };
+  // ═════ VIEW ONE RULE — click any rule to see it; Edit switches the same drawer to the editor ═════
+  const ruleLock = p => !canEdit(p) ? `Only ${p.owner} or a steward can change this policy` : p.status==="Retired" ? "Restore the policy to change it" : pendingReqOf(p) ? "Withdraw the approval request first" : null;
+  const openRuleView = (p, r) => setRuleEd({polId:p.id, isNew:false, view:true, rule:JSON.parse(JSON.stringify(r))});
+  const renderRuleView = p => {
+    const r = p.rules.find(x=>x.id===ruleEd.rule.id) || ruleEd.rule; const lock = ruleLock(p); const live = p.status==="Active";
+    const rh = live ? ruleHealth(p,r) : null; const arts = artsOfRule(p,r); const ev = pm3EvalRule(p,r);
+    const sec = (title, children) => <div style={{marginBottom:18}}><div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{title}</div>{children}</div>;
+    const kvs = rows => <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{rows.filter(Boolean).map(([k,v],i)=><div key={k} style={{display:"flex",gap:14,padding:"8px 12px",fontSize:12,borderTop:i?`1px solid ${T.border}`:"none",background:T.bgSurface}}><span style={{width:150,flexShrink:0,color:T.textMuted}}>{k}</span><span style={{flex:1,color:T.text}}>{v}</span></div>)}</div>;
+    const goPolicy = tab2 => { setRuleEd(null); openPolicy(p.id, null, tab2); };
+    let def, res;
+    if(r.type==="validation"){
+      def = kvs([
+        ["Conditions", <div style={{display:"flex",flexDirection:"column",gap:4}}>{(r.conds||[]).map((c,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{i>0&&<span style={{fontSize:10,fontWeight:700,color:T.textMuted}}>AND</span>}<span>{pm3CondText(c)}</span>{c.edit&&r.origin==="prebuilt"&&pill(T.accent,"Editable value")}</div>)}{!(r.conds||[]).length&&<span style={{color:T.textMuted}}>—</span>}</div>],
+        ["Finding message", r.finding||"—"],
+        ["Severity", <span style={{fontWeight:700,color:SEV_COLOR[r.severity||"Medium"]}}>{r.severity||"Medium"}</span>],
+        r.scopeBy==="suspect"&&["Checks", "Assets that look like regulated data but aren't classified"],
+      ]);
+      const open = ev.findings.filter(f=>!isExcepted(p,r,f.asset));
+      res = !live ? null : open.length===0 ? <div style={{fontSize:12.5,fontWeight:600,color:T.green}}>✓ Passing</div>
+        : <><div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{open.slice(0,6).map(f=><div key={f.asset.name} style={{display:"flex",gap:10,padding:"7px 12px",borderTop:`1px solid ${T.border}`,fontSize:12,background:T.bgSurface}}>
+            <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text,flex:1}}>{f.asset.name}</span><span style={{color:T.textMuted}}>{f.asset.domain}</span></div>)}</div>
+          <button onClick={()=>goPolicy("violations")} style={{marginTop:8,fontSize:11.5,background:"none",border:"none",color:T.rose,cursor:"pointer",padding:0,fontWeight:600}}>{open.length} violation{open.length>1?"s":""} — view all ›</button></>;
+    } else if(r.type==="enforcement"){
+      const e = r.enf||{}; const eff = pm3EffectivePeriod(p,r);
+      def = kvs([
+        ["Action", e.action==="hold"?"Legal hold":"Retention"],
+        e.action==="hold" ? ["Legal matter", e.matter||"—"] : ["Mode", e.mode==="minimum"?"Keep data for at least a period":"Dispose of data after a period"],
+        e.action!=="hold"&&["Period", <>{eff?.label||`${e.period} ${e.unit}`}{eff?.floor?<span style={{color:T.textMuted}}> · at least {eff.floor} years by law</span>:null}</>],
+        e.action!=="hold"&&["Starts from", e.trigger||"—"],
+        e.action!=="hold"&&["At the end", e.disposal||"—"],
+        e.action!=="hold"&&e.critType&&["Criteria", [e.critType!=="text"&&`Retain by ${e.dateCol||"creation date"}`, e.critType!=="date"&&(e.critText||"—")].filter(Boolean).join(" · ")],
+        e.action==="hold"&&["Hold rule", e.holdCol?`Rows where ${e.holdCol} ${e.holdOp||"="} ${e.holdVal||"—"}`:"Entire object"],
+        ["Apply to", e.select==="assets" ? <span style={{fontFamily:"'Geist Mono',monospace"}}>{(e.assets||[]).join(", ")||"—"}</span> : (e.classes||[]).length ? e.classes.map(c=>PM3_CLASS_META[c]?.label).join(", ") : "By classification"],
+      ]);
+      const ts = ev.targets.map(t=>({t, s:pm3TargetStatus(p.id,r.id,t.asset.name)}));
+      res = !live ? null : !ts.length ? <div style={{fontSize:12,color:T.textMuted}}>No tables in scope</div>
+        : <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{ts.map(({t,s})=><div key={t.asset.name} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",borderTop:`1px solid ${T.border}`,fontSize:12,background:T.bgSurface}}>
+            <span style={{fontFamily:"'Geist Mono',monospace",fontWeight:600,color:T.text,flex:1}}>{t.asset.name}</span><span style={{color:T.textMuted}}>{t.asset.owner||"no owner"}</span>
+            {pill({approved:T.green,pending:T.amber,rejected:T.rose,none:T.textMuted}[s], s==="approved"?"Running":s==="pending"?"Awaiting owner":s==="rejected"?"Rejected":"Not requested")}</div>)}</div>;
+    } else {
+      const a = r.att||{}; const as = pm3AttState(p,r); const canFill = live && (pm3Assignee(p,r)===me||isAdmin) && as.state!=="review";
+      def = kvs([
+        ["What needs to be documented", <span style={{whiteSpace:"pre-wrap"}}>{a.instructions||"—"}</span>],
+        ["Form", <div style={{display:"flex",flexDirection:"column",gap:3}}>{(a.form||[]).map(f=><span key={f.id}>{f.label} <span style={{color:T.textMuted}}>· {PM3_FORM_TYPES[f.type]||f.type}{f.required?" · required":""}</span></span>)}</div>],
+        ["Due every", `${a.every||12} months`],
+        ["Reminder", `${a.remind||0} days before`],
+        ["Filled in by", pm3Assignee(p,r)],
+        ["Reviewed by", pm3Reviewer(p,r)],
+      ]);
+      res = !live ? null : <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+        <span style={{fontSize:12.5,fontWeight:600,color:ART_META[rh?.state]?.c||T.text}}>{as.label}</span>
+        {as.lastOk&&<span style={{fontSize:11.5,color:T.textMuted}}>Last approved {as.lastOk.decidedAt} · {as.lastOk.by}</span>}
+        {canFill&&<Btn small variant="primary" onClick={()=>{ setRuleEd(null); openPolicy(p.id, null, "evidence"); setFill({polId:p.id, ruleId:r.id, values:{}}); }}>Fill in the form</Btn>}
+        <button onClick={()=>goPolicy("evidence")} style={{fontSize:11.5,background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontWeight:600}}>Evidence ›</button></div>;
+    }
+    return (<>
+      <div onClick={()=>setRuleEd(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:640,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,background:T.bgElevated}}>
+          <div style={{minWidth:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:5}}>{typePill(r.type)}{originPill(r)}{rh&&pill(ART_META[rh.state]?.c||T.textMuted, rh.label)}{!live&&pill(statusColor(p.status), p.status)}</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.text,lineHeight:1.35}}>{r.name}</div>
+            <div onClick={()=>goPolicy("overview")} style={{fontSize:11.5,color:T.accent,marginTop:3,cursor:"pointer"}}>{p.name} · v{p.version||1}</div>
+          </div>
+          <button onClick={()=>setRuleEd(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
+          <div style={{fontSize:12.5,color:T.textSub,lineHeight:1.7,padding:"10px 12px",background:T.bgElevated,borderRadius:8,marginBottom:18}}>{ruleSentence(p,r)}</div>
+          {sec("Definition", def)}
+          {live&&sec(r.type==="validation"?"Violations":r.type==="enforcement"?"Tables":"Evidence", res)}
+          {sec("Counts for", arts.length ? <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{arts.map((x,j)=><span key={j} onClick={()=>{ setRuleEd(null); setTab("policies");setSelPol(null); setSelFw(x.fw.id); }} style={{cursor:"pointer"}}>{refTag(`${x.fw.name} ${x.art.ref}`, x.ok?T.textSub:T.amber)}</span>)}</div> : <span style={{fontSize:12,color:T.textMuted}}>No framework article</span>)}
+        </div>
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>
+          {lock&&<span style={{fontSize:11,color:T.textMuted,marginRight:"auto"}}>{lock}</span>}
+          {!lock&&r.origin==="custom"&&<button onClick={()=>ask(`Remove “${r.name}”?`, p.status==="Active"?"The next version drops this rule; the current version keeps running until it's approved.":"The rule is removed from this draft.", "Remove", ()=>{ removeRule(p,r); setRuleEd(null); }, true)} style={{marginRight:"auto",padding:"7px 14px",borderRadius:7,background:"transparent",border:`1px solid ${T.rose}40`,color:T.rose,fontSize:12,cursor:"pointer"}}>Remove</button>}
+          <button onClick={()=>setRuleEd(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Close</button>
+          {fBtn(r.origin==="custom"?"Edit":"Edit values", ()=>setRuleEd(x=>({...x, view:false, fromView:true, rule:JSON.parse(JSON.stringify(r))})), true, !!lock)}
+        </div>
+      </div></>);
+  };
+  const renderRuleEditor = () => {
+    const fwA = ruleEd.ctx?.choices ? pm3Fw(ruleEd.ctx.fw) : null;
+    const p = ruleEd.polId==="__new" ? {id:"__new", name:`${fwA.arts[ruleEd.ctx.i].t} — ${fwA.name} custom`, status:"Draft", version:1, source:"custom", owner:me, stewards:[], scope:fwA.covers, domains:[], rules:[], articles:[{fw:fwA.id,i:ruleEd.ctx.i,ok:!!fwA.custom,rules:null}]} : st.policies.find(x=>x.id===ruleEd.polId); if(!p) return null;
+    if(ruleEd.view) return renderRuleView(p);
+    const r = ruleEd.rule; const locked = r.origin==="prebuilt"; const prob = ruleProblem(r);
+    const setR = v => setRuleEd(x=>({...x, rule:v}));
+    const will = p.id==="__new" ? `A new custom policy, “${p.name}”, is created with this rule and linked to ${fwA.name} ${fwA.arts[ruleEd.ctx.i].ref}. It goes to ${pm3Approver(ap.activation.approver, me)} for approval${ap.activation.autoValidation&&r.type==="validation"?" — or goes live at once, since it only validates":""}.` : p.status==="Active" ? (ap.activation.autoValidation&&r.type==="validation" ? "The policy is active. A validation rule changes no data, so it goes live as soon as you save." : `The policy is active. Saving creates v${p.version+1}, which goes to ${pm3Approver(ap.activation.approver, me)} for approval; v${p.version} keeps running meanwhile.`) : "The policy is a draft — the rule is saved into it now.";
+    return (<>
+      <div onClick={()=>setRuleEd(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1200}}/>
+      <div className="slideInRight" style={{position:"fixed",right:0,top:0,height:"100vh",width:640,maxWidth:"96vw",background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:1201,display:"flex",flexDirection:"column",boxShadow:"-16px 0 48px rgba(0,0,0,.2)"}}>
+        <div style={{padding:"14px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:T.bgElevated}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:30,height:30,borderRadius:7,background:T.accentDim,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}>{Ic.shield(14)}</div>
+            <div><div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{ruleEd.isNew?"Add Rule":locked?"Edit Rule Values":"Edit Rule"}</div><div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{p.name}{locked?" · prebuilt rule — only the values the law leaves open":""}</div></div></div>
+          <button onClick={()=>setRuleEd(null)} style={{width:30,height:30,borderRadius:8,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(12)}</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
+          {ruleEd.ctx?.choices&&<div style={{marginBottom:14}}><label style={lbl}>Add to policy</label>
+            <select value={ruleEd.polId} onChange={e=>setRuleEd(x=>({...x, polId:e.target.value}))} style={{...inp,background:T.bgSurface,cursor:"pointer"}}>
+              {ruleEd.ctx.choices.map(id=>{ const q=st.policies.find(x=>x.id===id); return <option key={id} value={id}>{q.name} ({q.source==="regulation"?"prebuilt":"custom"})</option>; })}
+              <option value="__new">+ New policy for this article</option></select>
+            <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>The rule counts for {fwA.name} {fwA.arts[ruleEd.ctx.i].ref} through the policy it belongs to.</div></div>}
+          {ruleEd.isNew&&<div style={{marginBottom:14}}><label style={lbl}>Rule type</label>{typeSeg(r, t=>setR(retype(r,t)), false)}<div style={{fontSize:11,color:T.textMuted,marginTop:6}}>{PM3_TYPE_META[r.type].hint}</div></div>}
+          {ruleForm(r, setR, {locked, p})}
+          <div style={{marginTop:16,padding:"10px 12px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:11.5,color:T.textSub,lineHeight:1.6}}>{will}{ruleEd.isNew&&p.articles.length>0?` A custom rule counts toward every article this policy satisfies (${p.articles.length}).`:""}</div>
+        </div>
+        <div style={{padding:"13px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",alignItems:"center",gap:8,background:T.bgBase||T.bg}}>
+          {prob&&<span style={{fontSize:11,color:T.rose,marginRight:"auto"}}>{prob}</span>}
+          <button onClick={()=>ruleEd.fromView?setRuleEd(x=>({...x, view:true})):setRuleEd(null)} style={{padding:"7px 16px",borderRadius:7,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>{ruleEd.fromView?"Back":"Cancel"}</button>
+          {fBtn(ruleEd.isNew?"Add rule":"Save rule", ()=>{ if(p.id==="__new") createPolicyWithRule(p, r); else saveRule(p, r, ruleEd.isNew); setRuleEd(null); setPdTab("rules"); }, true, !!prob)}
+        </div>
+      </div></>);
+  };
+
+  // ═════ ADOPT A REGULATION ═════
+  const tplIds = fw => [...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm3ParseRef(r).tid)))];
+  const existingFor = (t, fw) => livePols.find(p=>p.id===pm3TplPolicyId(t,fw));
+  const startAdopt = (fwId, step=1) => {
+    const fw = pm3Fw(fwId); const picks={}, pols={};
+    tplIds(fw).forEach(t=>{ picks[t]=true; pols[t]=pm3PolicyFromTemplate(t, fw, me, [PM3_TPL_STEWARD[t]||"priya.nair"]); });
+    setWiz({fwId, step, owner:st.adopted[fwId]?.owner||me, picks, pols, owners:{}, editing:!!st.adopted[fwId]});
+  };
+  const previewTpl = (t, fw) => pm3LinkToFw({...wiz.pols[t], owner:wiz.owners[t]||wiz.owner}, fw);
+  const adoptSubmit = () => {
+    const fw = pm3Fw(wiz.fwId); const when = pm3Today();
+    let pols = [..._pm3.policies]; const created = []; let extended = 0;
+    tplIds(fw).forEach(t=>{
+      const ex = pols.find(p=>p.id===pm3TplPolicyId(t,fw)&&p.status!=="Retired");
+      if(ex){
+        const np = pm3LinkToFw(ex, fw); const wid = np.scope.filter(c=>!ex.scope.includes(c)); const na = np.articles.length-ex.articles.length;
+        if(na||wid.length){ extended++; pols = pols.map(p=>p.id===ex.id?{...np, history:[{when, who:me, what:`Linked to ${fw.name} (${na} article${na===1?"":"s"})${wid.length?` — scope widened to ${wid.map(c=>PM3_CLASS_META[c].label).join(", ")}`:""}`}, ...(np.history||[])]}:p); }
+      } else if(wiz.picks[t]){ const np = {...previewTpl(t, fw), history:[{when, who:me, what:`Created from the ${fw.name} template`}]}; pols.push(np); created.push(np.id); }
+    });
+    pm3Set(s=>({...s, adopted:{...s.adopted, [fw.id]:s.adopted[fw.id]||{owner:wiz.owner, at:when}}, policies:pols}));
+    created.forEach(id=>submitPolicy(id, `Adopting ${fw.name}`, true));
+    setTimeout(pm3Sync,0);
+    const auto = created.filter(id=>_pm3.policies.find(p=>p.id===id)?.status==="Active").length;
+    onToast(`${fw.name} ${wiz.editing?"updated":"adopted"} — ${created.length} new polic${created.length===1?"y":"ies"} (${auto} active now, ${created.length-auto} sent for approval), ${extended} existing reused`,"success");
+    setWiz(null); setSelFw(fw.id); setTab("policies");setSelPol(null);
+  };
+  const renderWizard = () => {
+    const fw = pm3Fw(wiz.fwId); const m = regMeta(fw.id);
+    const inS = PM3_ASSETS.filter(a=>pm3InScope(a,fw.covers)); const sus = PM3_ASSETS.filter(a=>pm3SuspectIn(a,fw.covers));
+    const recs = (fw.recordClasses||[]).length ? PM3_ASSETS.filter(a=>pm3Classes(a).some(c=>fw.recordClasses.includes(c))) : [];
+    const tids = tplIds(fw); const newT = tids.filter(t=>!existingFor(t,fw)&&wiz.picks[t]); const exT = tids.filter(t=>existingFor(t,fw));
+    const setW = (k,v) => setWiz(w=>({...w,[k]:v}));
+    const setRuleIn = (t, rid, nr) => setWiz(w=>({...w, pols:{...w.pols, [t]:{...w.pols[t], rules:w.pols[t].rules.map(x=>x.id===rid?nr:x)}}}));
+    const assetRow = (a, right) => <div key={a.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderTop:`1px solid ${T.border}`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11,color:T.textMuted,width:130}}>{a.service} · {a.env}</span><div style={{flex:1,display:"flex",gap:4,flexWrap:"wrap"}}>{right}</div></div>;
+    // The rules an article counts, with the values the law leaves open editable in place.
+    const ruleLine = (pv, r, t, editable) => (
+      <div key={r.id} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"7px 10px",borderTop:`1px solid ${T.border}`}}>
+        <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em",paddingTop:3,width:34}}>RULE</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{typePill(r.type)}{originPill(r)}<span style={{fontSize:12.5,fontWeight:600,color:T.text}}>{r.name}</span></div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:3,lineHeight:1.5}}>{ruleSentence(pv,r)}</div>
+          {editable&&r.type==="validation"&&(r.conds||[]).some(c=>c.edit)&&<div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+            {r.conds.map((c,ci)=>c.edit&&<label key={ci} style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}>{PM3_FIELDS[c.f].label} {c.op}
+              <input type={PM3_FIELDS[c.f].type==="number"?"number":"text"} value={c.v} onChange={e=>setRuleIn(t, r.id, {...r, conds:r.conds.map((x,j)=>j===ci?{...x,v:PM3_FIELDS[c.f].type==="number"?Number(e.target.value):e.target.value}:x)})} style={{...inStyle,width:PM3_FIELDS[c.f].type==="number"?70:230}}/></label>)}</div>}
+          {editable&&r.type==="enforcement"&&r.enf.action==="retention"&&<div style={{display:"flex",gap:6,marginTop:6,alignItems:"center",fontSize:11.5,color:T.textSub}}>Your period: <input type="number" value={r.enf.period} onChange={e=>setRuleIn(t, r.id, {...r, enf:{...r.enf, period:Number(e.target.value)}})} style={{...inStyle,width:70}}/> {r.enf.unit}</div>}
+        </div>
+      </div>);
+    let body;
+    if(wiz.step===1) body = <>
+      {secHead("Applicability", `${fw.name} applies to the data classes below. EDG uses your classifications to decide what's in scope — nothing is hand-picked, and newly classified data joins automatically.`)}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{fw.covers.map(classChip)}</div>
+      {secLabel(`In scope today (${inS.length} assets)`)}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{inS.map(a=>assetRow(a, pm3Classes(a).filter(c=>fw.covers.includes("ALL")||fw.covers.includes(c)).map(classChip)))}</div>
+      {recs.length>0&&<>{secLabel(`Records ${fw.name} says you must keep (${recs.length})`)}<div style={{border:`1px solid ${T.border}`,borderRadius:9,overflow:"hidden"}}>{recs.map(a=>assetRow(a, pm3Classes(a).filter(c=>fw.recordClasses.includes(c)).map(classChip)))}</div></>}
+      {sus.length>0&&<>{secLabel(`Probably in scope, not classified yet (${sus.length})`)}
+        {sus.map(a=><div key={a.name} style={{display:"flex",gap:10,padding:"7px 12px",border:`1px dashed ${T.amber}70`,borderRadius:8,marginBottom:5,background:`${T.amber}08`}}><span style={{fontSize:12.5,fontFamily:"'Geist Mono',monospace",color:T.text,width:180}}>{a.name}</span><span style={{fontSize:11.5,color:T.textSub}}>{Object.entries(a.suspect).map(([k,v])=>`${k} → ${v}`).join(", ")}</span></div>)}</>}
+      {secLabel("Framework owner")}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>{userSel(wiz.owner, v=>setW("owner",v))}<span style={{fontSize:11.5,color:T.textMuted}}>Answers for {fw.name} readiness. New policies default to this owner.</span></div>
+    </>;
+    if(wiz.step===2) body = <>
+      {secHead("Articles → policies → rules", `Every article, what it asks, the policy that satisfies it and the exact rules that count for it. Policies you already run are reused. The values the law leaves to you are editable; everything else is fixed by ${fw.name}. You can add custom rules to any policy after adopting.`)}
+      {fw.arts.map((art,i)=>(
+        <div key={i} style={{marginTop:12,border:`1px ${art.out?"dashed":"solid"} ${T.border}`,borderRadius:10,background:art.out?T.bgElevated:T.bgSurface,overflow:"hidden"}}>
+          <div style={{padding:"10px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>{refTag(art.ref, fwTypeColor(fw.type))}<span style={{fontSize:13,fontWeight:700,color:art.out?T.textSub:T.text,flex:1}}>{art.t}</span>{art.out&&<span style={{fontSize:11,color:T.textMuted}}>Outside EDG · {art.out}</span>}</div>
+            <div style={{fontSize:12,color:T.textSub,marginTop:4}}><span style={{color:T.textMuted,fontWeight:600}}>The law asks: </span>{art.ask}</div>
+          </div>
+          {!art.out&&(art.c||[]).map(ref=>{ const {tid,keys}=pm3ParseRef(ref); const ex=existingFor(tid,fw);
+            const pv = ex ? pm3LinkToFw(ex,fw) : previewTpl(tid,fw); const rules = keys ? pv.rules.filter(r=>keys.map(k=>pm3RuleId(tid,k)).includes(r.id)) : pv.rules.filter(r=>r.origin==="prebuilt");
+            const on = ex || wiz.picks[tid];
+            return (<div key={ref} style={{margin:"0 14px 12px",border:`1px solid ${T.border}`,borderRadius:9,background:T.bgElevated,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px"}}>
+                <input type="checkbox" checked={!!on} disabled={!!ex} onChange={e=>setW("picks",{...wiz.picks,[tid]:e.target.checked})} style={{accentColor:T.accent}}/>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.textMuted,letterSpacing:"0.06em"}}>POLICY</span>
+                <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{pv.name}</span>
+                {ex ? <span style={{fontSize:11,color:T.green,fontWeight:600}}>Already running — reused for {fw.name}</span> : pill(T.accent,"New prebuilt policy")}
+                {keys&&<span style={{marginLeft:"auto",fontSize:10.5,color:T.textMuted}}>{rules.length} of {pv.rules.length} rules count here</span>}
+              </div>
+              {on ? rules.map(r=>ruleLine(pv, r, tid, !ex)) : <div style={{padding:"6px 10px 10px",fontSize:11,color:T.amber}}>Off — this article will read "No policy" unless another policy covers it.</div>}
+            </div>); })}
+        </div>))}
+    </>;
+    if(wiz.step===3) body = <>
+      {secHead("Ownership","Every policy has one owner — who answers for it and submits changes — and stewards who work it.")}
+      {newT.length===0&&<div style={{fontSize:12,color:T.textMuted}}>No new policies — everything {fw.name} needs already exists.</div>}
+      {newT.map(t=>{ const pv=previewTpl(t,fw); const n=pm3Eval(pv).targets.length;
+        return <div key={t} style={{marginBottom:8}}>{card(<>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{pv.name}</span>{typeDots(pv)}<span style={{fontSize:11,color:T.textMuted}}>{pv.rules.length} rule{pv.rules.length===1?"":"s"}</span></div>
+          <div style={{display:"flex",gap:18,flexWrap:"wrap",marginTop:10,alignItems:"center"}}>
+            <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Owner {userSel(wiz.owners[t]||wiz.owner, v=>setW("owners",{...wiz.owners,[t]:v}))}</label>
+            <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.textSub}}>Stewards {stewardChips(wiz.pols[t].stewards||[], v=>setWiz(w=>({...w,pols:{...w.pols,[t]:{...w.pols[t],stewards:v}}})), wiz.owners[t]||wiz.owner)}</div>
+          </div>
+          <div style={{fontSize:11.5,color:T.textSub,marginTop:8}}>{routeText(pv.rules, n)}</div>
+        </>,{padding:"12px 14px"})}</div>; })}
+      {exT.length>0&&<>{secLabel(`Existing policies this reuses (${exT.length})`)}
+        {exT.map(t=>{ const ex=existingFor(t,fw); return <div key={t} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{typeDots(ex)}<span style={{fontWeight:600,color:T.text,flex:1}}>{ex.name}</span><span style={{color:T.textMuted}}>stays with {ex.owner}</span></div>; })}</>}
+    </>;
+    if(wiz.step===4){
+      const pvs = newT.map(t=>previewTpl(t,fw)); const allR = pvs.flatMap(p=>p.rules); const byT = k => allR.filter(r=>r.type===k).length;
+      const autoN = pvs.filter(p=>ap.activation.autoValidation&&onlyValidation(p.rules)).length;
+      const stat = (v,l,c) => <div style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px"}}><div style={{fontSize:24,fontWeight:800,color:c,fontFamily:"'Geist Mono',monospace"}}>{v}</div><div style={{fontSize:11.5,color:T.textSub}}>{l}</div></div>;
+      body = <>
+        {secHead("Review", `What happens when you submit ${fw.name}.`)}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
+          {stat(pvs.length, "new prebuilt policies", T.accent)}
+          {stat(exT.length, "existing policies reused", T.green)}
+          {stat(pvs.length-autoN, `sent to ${pm3Approver(ap.activation.approver, me)} for approval`, T.amber)}
+          {stat(byT("validation"), "validation rules", typeColor("validation"))}
+          {stat(byT("enforcement"), "enforcement rules", typeColor("enforcement"))}
+          {stat(byT("attestation"), "evidence rules (forms)", typeColor("attestation"))}
+        </div>
+        <div style={{fontSize:11.5,color:T.textMuted,marginTop:12}}>{autoN} validation-only polic{autoN===1?"y goes":"ies go"} live straight away. {fw.arts.filter(a=>a.out).length} article{fw.arts.filter(a=>a.out).length===1?" is":"s are"} outside EDG — listed on the {fw.name} page, never scored.</div>
+        {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).length>0&&<div style={{fontSize:11.5,color:T.amber,marginTop:8}}>Switched off: {tids.filter(t=>!existingFor(t,fw)&&!wiz.picks[t]).map(t=>PM3_TPL[t].name).join("; ")}.</div>}
+      </>;
+    }
+    return drawer({title:`${wiz.editing?"Review":"Adopt"} ${fw.name}`, sub:m.fullName, steps:[{label:"Applicability",required:true},{label:"Articles & policies"},{label:"Ownership"},{label:"Review"}], step:wiz.step, onStep:n=>setW("step",n), body, onClose:()=>setWiz(null), width:900,
+      onBack:()=>setW("step",Math.max(1,wiz.step-1)), right: wiz.step<4 ? continueBtn(()=>setW("step",wiz.step+1)) : fBtn(`${wiz.editing?"Save":"Submit"} ${fw.name}`, adoptSubmit, true)});
+  };
+
+  // ═════ CREATE / EDIT A POLICY — the original wizard: Details · Scope · Rules · Ownership · Review ═════
+  const openEditor = (p, preset, startStep) => {
+    if(p&&!canEdit(p)){ onToast(`Only ${p.owner} or a steward can edit this policy`,"info"); return; }
+    if(p){ setEd({id:p.id, step:startStep||1, isReg:p.source==="regulation", isActive:p.status==="Active", version:p.version, template:p.template,
+      name:p.name, purpose:p.purpose||"", category:p.category||"", scope:[...p.scope], domains:[...(p.domains||[])],
+      rules:JSON.parse(JSON.stringify(p.rules)), articles:p.articles.map(x=>({...x})), owner:p.owner, stewards:[...(p.stewards||[])],
+      fwSel:[...new Set(p.articles.map(a=>a.fw))], notify:p.notify||["Owner","Steward"], ruleLogic:p.ruleLogic||"independent",
+      sources:[...(p.sources||[])], objectTypes:[...(p.objectTypes||[])], tags:[...(p.tags||[])], sched:p.sched||null});
+      return; }
+    setEd({id:null, step:1, isReg:false, isActive:false, version:1, template:null, name:preset?.name||"", purpose:"", category:"", scope:["PII"], domains:[],
+      rules: preset?.ruleType ? [newRuleOfType(preset.ruleType)] : [], ruleLogic:"independent",
+      articles:preset?.articles||[], owner:me, stewards:[], fwSel:[...new Set((preset?.articles||[]).map(a=>a.fw))], notify:["Owner","Steward"],
+      sources:[], objectTypes:[], tags:[], sched:{freq:"daily", time:"08:00", day:"monday", cron:"0 8 * * *", tz:"UTC", enabled:true}});
+  };
+  const edPolicy = () => ({id:ed.id||"preview", template:ed.template, name:ed.name, scope:ed.scope, domains:ed.domains, sources:ed.sources, objectTypes:ed.objectTypes, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, owner:ed.owner, stewards:ed.stewards, source:ed.isReg?"regulation":"custom"});
+  const rulesProblem = () => { if(!ed.rules.length) return "Add at least one rule"; for(let i=0;i<ed.rules.length;i++){ const x=ruleProblem(ed.rules[i], i+1); if(x) return x; } return null; };
+  const saveEditor = submit => {
+    if(!ed.name.trim()){ onToast("Give the policy a name","info"); setEd(e=>({...e,step:1})); return; }
+    if(!ed.scope.length){ onToast("Pick at least one data class","info"); setEd(e=>({...e,step:2})); return; }
+    const rp = rulesProblem(); if(rp){ onToast(rp,"info"); setEd(e=>({...e,step:3})); return; }
+    const fields = {name:ed.name.trim(), purpose:ed.purpose.trim(), category:ed.category, scope:ed.scope, domains:ed.domains, sources:ed.sources, objectTypes:ed.objectTypes, tags:ed.tags, rules:ed.rules, ruleLogic:ed.ruleLogic, articles:ed.articles, stewards:ed.stewards, notify:ed.notify};
+    // The evaluation schedule applies straight away (it only decides when an active policy runs).
+    const schedFields = !ed.id&&ed.sched&&(ed.rules||[]).some(r=>r.type!=="attestation") ? {sched:ed.sched, schedule:contractCron(ed.sched), nextRun:scheduleNextRun(ed.sched), schedEnabled:ed.sched.enabled!==false} : {};
+    let id = ed.id;
+    if(!id){
+      id = "p-cust-"+Date.now();
+      pm3Set(s=>({...s, policies:[...s.policies, {id, template:null, source:"custom", ...fields, ...schedFields, runs:[], owner:ed.owner, status:"Draft", version:1, reqId:null, draft:null, created:pm3Today(), history:[{when:pm3Today(), who:me, what:`Created (custom policy, ${ed.rules.length} rule${ed.rules.length===1?"":"s"})`}]}]}));
+    } else if(ed.isActive){
+      updPol(id, p=>addHist({...p, ...schedFields, owner:ed.owner, draft:{version:p.version+1, fields}}, `Drafted v${p.version+1}`));
+    } else updPol(id, p=>addHist({...p, ...fields, ...schedFields, owner:ed.owner, status:"Draft"}, "Edited"));
+    if(submit) submitPolicy(id, ed.isActive?"Change to an active policy":"New policy"); else onToast("Saved as draft","success");
+    setTimeout(pm3Sync,0);
+    setEd(null); setSelFw(null); setTab("policies"); setSelPol(id); setPdTab("overview");
+  };
+  const classLabels = Object.keys(PM3_CLASS_META).map(k=>PM3_CLASS_META[k].label);
+  const classFromLabel = l => Object.keys(PM3_CLASS_META).find(k=>PM3_CLASS_META[k].label===l);
+  const renderEditor = () => {
+    const setE = (k,v) => setEd(e=>({...e,[k]:v}));
+    const pv = edPolicy(); const ev = pm3Eval(pv);
+    const ownerSubmits = isAdmin || ed.owner===me;
+    const setRule = (ri, r) => setE("rules", ed.rules.map((x,j)=>j===ri?r:x));
+    const lockedArt = x => ed.isReg && !pm3Fw(x.fw)?.custom;
+    const reviewCard = (title, rows) => <div style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,marginBottom:12,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",fontSize:10.5,fontWeight:700,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",borderBottom:`1px solid ${T.border}`}}>{title}</div>
+      {rows.map(([k,v],i)=><div key={i} style={{display:"flex",justifyContent:"space-between",gap:14,padding:"9px 14px",fontSize:12,borderTop:i?`1px solid ${T.border}`:"none"}}><span style={{color:T.textMuted}}>{k}</span><span style={{color:T.text,textAlign:"right",fontWeight:500}}>{v}</span></div>)}</div>;
+    let body;
+    if(ed.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
+      {secHead("Policy Details","Name this policy, describe its purpose, and file it under a category. Its implementation rules come in the next step.")}
+      <div><label style={lbl}>Policy Name <span style={{color:T.rose}}>*</span></label><input value={ed.name} onChange={e=>setE("name",e.target.value)} disabled={ed.isReg} autoFocus placeholder="e.g. Customer data retention, Vendor access review…" style={inp}/></div>
+      <div><label style={lbl}>Description</label><textarea rows={3} value={ed.purpose} onChange={e=>setE("purpose",e.target.value)} disabled={ed.isReg} placeholder="Business or compliance reason for this policy…" style={{...inp,resize:"vertical"}}/></div>
+      <div><label style={lbl}>Category <span style={{fontWeight:400,color:T.textMuted}}>— optional</span></label>
+        <select value={ed.category} onChange={e=>setE("category",e.target.value)} style={{...inp,cursor:"pointer",color:ed.category?T.text:T.textMuted}}><option value="">Select a category…</option>{PM3_CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+        <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Optional — leave it empty and assign a category later.</div></div>
+    </div>;
+    if(ed.step===2) body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:600}}>
+      {secHead("Policy Scope")}
+      <div>{ed.isReg ? <><label style={lbl}>Data Classes <span style={{color:T.rose}}>*</span></label><div style={{display:"flex",gap:5,flexWrap:"wrap"}}>{ed.scope.map(classChip)}</div><div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Locked — set by the regulations it serves.</div></>
+        : <CatFieldDropdown label="Data Classes" required options={classLabels} selected={ed.scope.filter(c=>c!=="ALL").map(c=>PM3_CLASS_META[c].label)} onChange={v=>setE("scope",v.map(classFromLabel).filter(Boolean))} placeholder="Search and select data classes…"/>}
+        {!ed.scope.length&&<div style={{fontSize:11,color:T.rose,marginTop:6}}>Select at least one data class to continue.</div>}</div>
+      <div style={{padding:"10px 14px",borderRadius:9,background:T.accentDim,border:`1px solid ${T.accent}30`,fontSize:12,color:T.accent}}><b>{PM3_ASSETS.filter(a=>pm3AssetInPolicy(a,pv)).length} assets</b> in scope today</div>
+    </div>;
+    if(ed.step===3) body = <>
+      {secHead("Implementation rules", ed.isReg?"Prebuilt rules are locked to the regulation — only the values it leaves open are editable. Add your own custom rules alongside them.":"Each implementation rule is Enforcement (retain or hold data) or Evidence (a form a person fills in).")}
+      {ed.rules.length===0&&<div style={{padding:"22px 16px",borderRadius:10,background:T.bgElevated,border:`1px solid ${T.border}`,textAlign:"center",marginBottom:12,fontSize:12,color:T.textMuted}}>No rules yet — add your first one.</div>}
+      {ed.rules.map((r,ri)=>ruleCard(r, ri+1, nr=>setRule(ri,nr), {locked:r.origin==="prebuilt", p:pv, onType:r.origin==="prebuilt"?null:(t=>setRule(ri, retype(r,t))), onRemove:r.origin==="prebuilt"?null:()=>setE("rules",ed.rules.filter((_,j)=>j!==ri))}))}
+      <div style={{marginTop:4}}>{addRuleButtons(t=>setE("rules",[...ed.rules,newRuleOfType(t)]))}</div>
+      {(()=>{ const rl=ed.ruleLogic||"independent"; const nV=ed.rules.filter(r=>r.type==="validation").length; const accent=rl==="and"?T.green:rl==="or"?T.violet:T.accent;
+        return <div style={{marginTop:20,paddingTop:20,borderTop:`1px solid ${T.border}`}}>
+          <label style={lbl}>Evaluation logic</label>
+          <select value={rl} onChange={e=>setE("ruleLogic",e.target.value)} style={{...inp,cursor:"pointer"}}>{Object.entries(PM3_LOGIC).map(([k,o])=><option key={k} value={k}>{o.label}</option>)}</select>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,padding:"8px 12px",borderRadius:7,background:accent+"14",color:accent,fontSize:11.5,lineHeight:1.5}}>{PM3_LOGIC[rl].hint}</div>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Applies to the validation rules ({nV}){nV<2?" — it matters once there are two or more":""}. Enforcement and evidence rules always run on their own.</div>
+        </div>; })()}
+    </>;
+    if(ed.step===4){
+      const fwOpts = [...PM3_CUSTOM_FW, ...PM3_FW.filter(f=>st.adopted[f.id]), ...PM3_FW.filter(f=>!st.adopted[f.id])];
+      const lockedFws = new Set(ed.articles.filter(lockedArt).map(a=>a.fw));
+      body = <div style={{display:"flex",flexDirection:"column",gap:18,maxWidth:640}}>
+        {secHead("Ownership & Compliance","Assign who's accountable for this policy, choose who's notified, and link it to the articles it satisfies.")}
+        {(isAdmin||!ed.id||ed.owner===me) ? <CatFieldDropdown label="Owner" multi={false} options={PM3_USERS} selected={ed.owner} onChange={v=>setE("owner",v||ed.owner)} placeholder="Search and select owners…"/> : <div><label style={lbl}>Owner(s)</label><div style={{fontSize:12.5,color:T.text}}>{ed.owner}</div></div>}
+        <CatFieldDropdown label="Stewards" options={PM3_USERS.filter(u=>u!==ed.owner)} selected={ed.stewards} onChange={v=>setE("stewards",v)} placeholder="Search and select stewards…"/>
+        <div>
+          <CatFieldDropdown label="Regulatory Frameworks" options={fwOpts.map(f=>f.name)} selected={ed.fwSel.map(id=>pm3Fw(id)?.name).filter(Boolean)}
+            onChange={names=>{ const ids=names.map(n=>fwOpts.find(f=>f.name===n)?.id).filter(Boolean); const keep=[...new Set([...ids,...lockedFws])]; setEd(e=>({...e, fwSel:keep, articles:e.articles.filter(a=>keep.includes(a.fw))})); }} placeholder="Search and select frameworks…"/>
+          <div style={{fontSize:11,color:T.textMuted,marginTop:6}}>Then tick the articles this policy satisfies. {ed.isReg?"Its regulations' articles are locked.":`On a regulation's article a custom policy counts once ${ap.mapping.approver} approves the mapping; on your own framework it counts straight away.`} The same policy can serve several frameworks.</div>
+        </div>
+        {ed.fwSel.map(id=>{ const fw=pm3Fw(id); if(!fw) return null; return (
+          <div key={id} style={{background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>
+            <div style={{padding:"9px 14px",fontSize:12,fontWeight:700,color:T.text,borderBottom:`1px solid ${T.border}`,display:"flex",gap:8,alignItems:"center"}}>{fw.name}{fw.custom?pill(T.accent,"Your framework"):!st.adopted[fw.id]&&pill(T.textMuted,"Not adopted")}<span style={{marginLeft:"auto",fontSize:11,fontWeight:500,color:T.textMuted}}>{ed.articles.filter(a=>a.fw===id).length} selected</span></div>
+            {fw.arts.map((a,i)=>{ if(a.out) return null; const has=ed.articles.some(x=>x.fw===id&&x.i===i); const locked=has&&lockedArt(ed.articles.find(x=>x.fw===id&&x.i===i));
+              return (<label key={i} style={{display:"flex",alignItems:"flex-start",gap:8,padding:"7px 14px",borderTop:`1px solid ${T.border}`,cursor:locked?"default":"pointer"}}>
+                <input type="checkbox" checked={has} disabled={locked} onChange={e=>setE("articles",e.target.checked?[...ed.articles,{fw:id,i,ok:!!fw.custom||ed.isReg,rules:null}]:ed.articles.filter(x=>!(x.fw===id&&x.i===i)))} style={{accentColor:T.accent,marginTop:2}}/>
+                {refTag(a.ref)}<div style={{flex:1}}><div style={{fontSize:12.5,color:T.text}}>{a.t}</div><div style={{fontSize:11,color:T.textMuted}}>{a.ask}</div></div>
+                {has&&!fw.custom&&!ed.isReg&&pill(T.amber,"Needs approval")}{locked&&<span style={{fontSize:10.5,color:T.textMuted}}>🔒 regulation</span>}
+              </label>); })}
+          </div>); })}
+        <CatFieldDropdown label="Tags" options={PM3_TAGS} selected={ed.tags} onChange={v=>setE("tags",v)} placeholder="Search and select tags…"/>
+        <CatFieldDropdown label="Notification" options={["Owner","Steward","Approver","Table owners"]} selected={ed.notify} onChange={v=>setE("notify",v)} placeholder="Who is notified on a violation…"/>
+        <div style={{padding:"12px 14px",borderRadius:9,background:T.bgElevated,border:`1px solid ${T.border}`,fontSize:12,color:T.textSub,lineHeight:1.6}}><b style={{color:T.text}}>Approval: </b>{routeText(ed.rules, ev.targets.length||null)}.{ed.isActive&&<> Your change becomes v{ed.version+1}; v{ed.version} keeps running until it's approved.</>}</div>
+      </div>;
+    }
+    if(ed.step===5) body = <div style={{maxWidth:680}}>
+      {secHead("Review & Create","Confirm your policy settings, then save it as a draft or submit it for approval.")}
+      {reviewCard("Scope", [["Data classes", ed.scope.map(c=>c==="ALL"?"All classified data":PM3_CLASS_META[c]?.label).join(", ")||"—"],["Objects holding these classes", PM3_ASSETS.filter(a=>pm3AssetInPolicy(a,pv)).length]])}
+      {reviewCard("Policy", [["Name", <b>{ed.name||"—"}</b>],["Source", ed.isReg?"Prebuilt":"Custom"],["Category", ed.category||"Not set"],["Tags", ed.tags.join(", ")||"None"],["Notify", ed.notify.join(", ")||"Nobody"]])}
+      {reviewCard(`Rules (${ed.rules.length})`, [["Evaluation logic", PM3_LOGIC[ed.ruleLogic||"independent"].label], ...ed.rules.map((r,i)=>[`Rule ${i+1}`, <span style={{display:"inline-flex",gap:6,alignItems:"center"}}>{typePill(r.type)}{originPill(r)}{r.name||"—"}</span>])])}
+      {reviewCard("Ownership", [["Owner", ed.owner],["Stewards", ed.stewards.join(", ")||"None"],["Frameworks", ed.fwSel.map(id=>`${pm3Fw(id)?.name} (${ed.articles.filter(a=>a.fw===id).length})`).join(", ")||"Internal — none"]])}
+      {reviewCard("Approval", [["Route", routeText(ed.rules, ev.targets.length||null)],...(ed.articles.some(a=>a.ok===false)?[["Mappings", `${ed.articles.filter(a=>a.ok===false).length} regulation article mapping(s) go to ${ap.mapping.approver}`]]:[])])}
+      {!ownerSubmits&&<div style={{fontSize:11.5,color:T.textMuted}}>You're a steward on this policy — you can save the draft; {ed.owner} submits it.</div>}
+    </div>;
+    const rp = ed.step===3 ? rulesProblem() : null;
+    const canNext = ed.step===1?!!ed.name.trim() : ed.step===2?ed.scope.length>0 : ed.step===3?!rp : true;
+    const stepDone = n => (n===1||n<ed.step) && (n===1?!!ed.name.trim() : n===2?ed.scope.length>0 : n===3?!rulesProblem() : n===4?!!ed.owner : false);
+    return drawer({title:ed.id?"Edit Policy":"New Policy", sub:ed.isActive?`Active v${ed.version} — your changes become v${ed.version+1}`:"Define what this policy governs and how it's met.",
+      steps:[{label:"Details",required:true},{label:"Scope",required:true},{label:"Implementation rules",required:true},{label:"Ownership"},{label:"Review"}], step:ed.step, done:stepDone, onStep:n=>setE("step",n), body, onClose:()=>setEd(null), width:880,
+      onBack:()=>setE("step",Math.max(1,ed.step-1)),
+      right: ed.step<5 ? <>{rp&&<span style={{fontSize:11,color:T.rose,marginRight:4}}>{rp}</span>}{continueBtn(()=>setE("step",ed.step+1), canNext)}</> : <>
+        {!ed.isActive&&fBtn("Save as draft", ()=>saveEditor(false), false, false)}
+        {ownerSubmits&&fBtn(ed.isActive?"Submit change":"Submit for approval", ()=>saveEditor(true), true)}
+      </>});
+  };
+
+
+  // ═════ CREATE / EDIT A CUSTOM FRAMEWORK ═════
+  const openFwEditor = fw => setFwEd(fw ? {id:fw.id, step:1, name:fw.name, fullName:fw.fullName||"", type:fw.type, jurisdiction:fw.jurisdiction||"", owner:fw.owner||me, covers:[...fw.covers], arts:fw.arts.map((a,i)=>({...a, _old:i}))}
+    : {id:null, step:1, name:"", fullName:"", type:"Internal", jurisdiction:"", owner:me, covers:["ALL"], arts:[{ref:"1", t:"", ask:"", expect:"validation"}]});
+  const saveFw = () => {
+    if(!fwEd.name.trim()||!fwEd.arts.length||fwEd.arts.some(a=>!a.t.trim())){ onToast("Name the framework and every article","info"); return; }
+    const arts = fwEd.arts.map(({_old,...a})=>a.expect==="outside"?{ref:a.ref,t:a.t,ask:a.ask,out:a.out||"Another system"}:{ref:a.ref,t:a.t,ask:a.ask,expect:a.expect});
+    if(fwEd.id){
+      const fw = PM3_CUSTOM_FW.find(f=>f.id===fwEd.id);
+      const remap = {}; fwEd.arts.forEach((a,ni)=>{ if(a._old!=null) remap[a._old]=ni; });
+      Object.assign(fw, {name:fwEd.name.trim(), fullName:fwEd.fullName, type:fwEd.type, jurisdiction:fwEd.jurisdiction, owner:fwEd.owner, covers:fwEd.covers, arts});
+      pm3Set(s=>({...s, fwVer:(s.fwVer||0)+1, policies:s.policies.map(p=>({...p, articles:p.articles.map(x=>x.fw!==fw.id?x:(remap[x.i]!=null?{...x,i:remap[x.i]}:null)).filter(Boolean)}))}));
+      onToast(`${fw.name} saved`,"success"); setFwEd(null); setSelFw(fw.id); setTab("policies");setSelPol(null); return;
+    }
+    const id = "cf-"+Date.now();
+    PM3_CUSTOM_FW.push({id, custom:true, name:fwEd.name.trim(), fullName:fwEd.fullName, type:fwEd.type, jurisdiction:fwEd.jurisdiction, owner:fwEd.owner, covers:fwEd.covers, created:pm3Today(), arts});
+    pm3Set(s=>({...s, fwVer:(s.fwVer||0)+1, adopted:{...s.adopted, [id]:{owner:fwEd.owner, at:pm3Today()}}}));
+    onToast(`${fwEd.name} created — now attach policies to its articles`,"success"); setFwEd(null); setSelFw(id); setTab("policies");setSelPol(null);
+  };
+  const renderFwEditor = () => {
+    const setF = (k,v) => setFwEd(e=>({...e,[k]:v}));
+    const setArt = (i,a) => setF("arts", fwEd.arts.map((x,j)=>j===i?a:x));
+    const mappedCount = i => fwEd.id ? st.policies.filter(p=>p.articles.some(x=>x.fw===fwEd.id&&x.i===fwEd.arts[i]._old)).length : 0;
+    let body;
+    if(fwEd.step===1) body = <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:620}}>
+      {secHead("Framework details","Your own standard — an internal policy, a contract obligation or an industry code — built exactly like a regulation.")}
+      <div><label style={lbl}>Name <span style={{color:T.rose}}>*</span></label><input value={fwEd.name} onChange={e=>setF("name",e.target.value)} placeholder="e.g. Internal Data Standard" style={inp}/></div>
+      <div><label style={lbl}>Full name</label><input value={fwEd.fullName} onChange={e=>setF("fullName",e.target.value)} placeholder="e.g. J&J Internal Data Handling Standard v3" style={inp}/></div>
+      <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+        <div><label style={lbl}>Kind</label><select value={fwEd.type} onChange={e=>setF("type",e.target.value)} style={selStyle}>{["Internal","Contractual","Industry","Regional"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div><label style={lbl}>Applies where</label><input value={fwEd.jurisdiction} onChange={e=>setF("jurisdiction",e.target.value)} placeholder="e.g. Company-wide, EU subsidiaries" style={{...inStyle,width:240}}/></div>
+        <div><label style={lbl}>Owner(s)</label>{userSel(fwEd.owner, v=>setF("owner",v))}</div>
+      </div>
+      <div><label style={lbl}>Data it covers</label>
+        <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>{["ALL",...Object.keys(PM3_CLASS_META)].map(c=><label key={c} style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:T.text,cursor:"pointer"}}><input type="checkbox" checked={fwEd.covers.includes(c)} onChange={e=>setF("covers",e.target.checked?(c==="ALL"?["ALL"]:[...fwEd.covers.filter(x=>x!=="ALL"),c]):fwEd.covers.filter(x=>x!==c))} style={{accentColor:T.accent}}/>{c==="ALL"?"All classified data":PM3_CLASS_META[c].label}</label>)}</div></div>
+    </div>;
+    if(fwEd.step===2) body = <>
+      {secHead("Articles","Each article states one requirement in plain language, and how it's meant to be met — which becomes the suggested type when you create a policy for it.")}
+      {fwEd.arts.map((a,i)=>{ const n=mappedCount(i); return (
+        <div key={i} style={{border:`1px solid ${T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:10,background:T.bgElevated}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <input value={a.ref} onChange={e=>setArt(i,{...a,ref:e.target.value})} placeholder="Ref" style={{...inStyle,width:80}}/>
+            <input value={a.t} onChange={e=>setArt(i,{...a,t:e.target.value})} placeholder="Requirement title" style={{...inStyle,flex:"1 1 260px"}}/>
+            <select value={a.expect||(a.out?"outside":"validation")} onChange={e=>setArt(i,{...a,expect:e.target.value})} style={selStyle}>{["validation","enforcement","attestation","outside"].map(k=><option key={k} value={k}>{PM3_TYPE_META[k].label}</option>)}</select>
+            <button disabled={n>0} title={n?`${n} polic${n>1?"ies are":"y is"} attached — detach first`:"Remove"} onClick={()=>setF("arts",fwEd.arts.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:n?T.textMuted:T.rose,cursor:n?"not-allowed":"pointer",fontSize:11}}>Remove</button>
+          </div>
+          <textarea rows={2} value={a.ask} onChange={e=>setArt(i,{...a,ask:e.target.value})} placeholder="What it asks, in one plain sentence" style={{...inp,marginTop:8,resize:"vertical"}}/>
+          {(a.expect==="outside"||(!a.expect&&a.out))&&<input value={a.out||""} onChange={e=>setArt(i,{...a,out:e.target.value})} placeholder="Which system owns it (e.g. Vendor risk)" style={{...inp,marginTop:6}}/>}
+          {n>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>{n} polic{n>1?"ies":"y"} attached</div>}
+        </div>); })}
+      <Btn small onClick={()=>setF("arts",[...fwEd.arts,{ref:String(fwEd.arts.length+1), t:"", ask:"", expect:"validation"}])}>+ Add article</Btn>
+    </>;
+    if(fwEd.step===3) body = <div style={{maxWidth:720}}>
+      {secHead("Review & Create", fwEd.id?"Save your changes. Policies stay attached to the articles you kept.":"Once created, open each article and create or attach the policies that meet it.")}
+      {card(<><div style={{fontSize:15,fontWeight:700,color:T.text}}>{fwEd.name||"Unnamed framework"}</div><div style={{fontSize:12,color:T.textSub,marginTop:2}}>{fwEd.fullName} · {fwEd.type} · {fwEd.jurisdiction||"—"} · owner {fwEd.owner}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:8}}>{fwEd.covers.map(classChip)}</div></>)}
+      {secLabel(`Articles (${fwEd.arts.length})`)}
+      {fwEd.arts.map((a,i)=><div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.border}`,fontSize:12}}>{refTag(a.ref||"—")}<span style={{flex:1,color:T.text}}>{a.t||<i style={{color:T.textMuted}}>untitled</i>}</span>{typePill(a.expect||(a.out?"outside":"validation"))}</div>)}
+    </div>;
+    return drawer({title:fwEd.id?"Edit Framework":"New Framework", sub:"A custom framework works exactly like a regulation — articles, policies, readiness.", steps:[{label:"Details",required:true},{label:"Articles",required:true},{label:"Review"}], step:fwEd.step, onStep:n=>setF("step",n), body, onClose:()=>setFwEd(null), width:820,
+      onBack:()=>setF("step",Math.max(1,fwEd.step-1)), right: fwEd.step<3 ? continueBtn(()=>setF("step",fwEd.step+1), fwEd.step!==1||!!fwEd.name.trim()) : fBtn(fwEd.id?"Save framework":"Create framework", saveFw, true)});
+  };
+
+  // Settings › Regulations: enabling a regulation adopts it; your own frameworks are created and edited here too.
+  if(settingsOnly){
+    const ql = q.toLowerCase(); const match = f => !ql||[f.name, f.fullName, regMeta(f.id).fullName, regMeta(f.id).jurisdiction].join(" ").toLowerCase().includes(ql);
+    const regs = PM3_FW.filter(match); const customs = PM3_CUSTOM_FW.filter(match);
+    const onCt = PM3_FW.filter(f=>st.adopted[f.id]).length;
+    const sw = (on, go, title) => <div title={title} onClick={go} style={{position:"relative",width:40,height:22,borderRadius:11,background:on?T.green:"rgba(100,100,120,.2)",border:`1.5px solid ${on?T.green:T.border}`,cursor:"pointer",transition:"all .2s",flexShrink:0}}>
+      <div style={{position:"absolute",top:2,left:on?20:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.3)"}}/></div>;
+    const row = (fw, i, n, main, right) => <div key={fw.id} style={{display:"flex",alignItems:"center",gap:14,padding:"12px 16px",borderBottom:i<n-1?`1px solid ${T.border}`:"none"}}><div style={{flex:1,minWidth:0}}>{main}</div>{right}</div>;
+    const box = kids => <div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden"}}>{kids}</div>;
+    return (<div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,flexWrap:"wrap"}}>
+        {searchBox(q, setQ, "Search by name or jurisdiction…", 400)}
+        <span style={{fontSize:12,color:T.textMuted,whiteSpace:"nowrap"}}><strong style={{color:T.text}}>{onCt}</strong> of {PM3_FW.length} regulations enabled</span>
+        <span style={{marginLeft:"auto"}}><Btn small icon={Ic.plus(11)} onClick={()=>openFwEditor(null)}>New framework</Btn></span>
+      </div>
+      {secLabel(`Your frameworks (${customs.length})`)}
+      {customs.length ? box(customs.map((fw,i)=>{ const who=canFw(fw)?null:`Only ${st.adopted[fw.id]?.owner||fw.owner} or an admin`; const rm=fwMenu(fw)[3];
+        return row(fw, i, customs.length, <>
+          <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:13,fontWeight:700,color:T.text}}>{fw.name}</span><span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:4,background:T.accentDim,color:T.accent,letterSpacing:"0.04em"}}>CUSTOM</span></div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{fw.fullName||`${fw.type} framework`} · {fw.arts.length} articles · owner {st.adopted[fw.id]?.owner||fw.owner}</div></>,
+          <div style={{display:"flex",gap:6}}><Btn small ghost disabled={!!who} onClick={()=>openFwEditor(fw)}>Edit</Btn><Btn small ghost disabled={!!who} onClick={rm.on}>Delete</Btn></div>); }))
+        : <div style={{fontSize:12,color:T.textMuted,padding:"4px 2px"}}>None yet — <button onClick={()=>openFwEditor(null)} style={{background:"none",border:"none",color:T.accent,cursor:"pointer",padding:0,fontSize:12,fontWeight:600}}>create one</button> for an internal standard, contract obligation or industry code.</div>}
+      {secLabel(`Regulations (${regs.length})`)}
+      {box(regs.map((fw,i)=>{ const m=regMeta(fw.id); const on=!!st.adopted[fw.id];
+        const tids=[...new Set(fw.arts.flatMap(a=>(a.c||[]).map(r=>pm3ParseRef(r).tid)))]; const reused=tids.filter(t=>livePols.some(p=>p.id===pm3TplPolicyId(t,fw))).length;
+        const who=on&&!canFw(fw)?`Only ${st.adopted[fw.id]?.owner} or an admin`:null;
+        return row(fw, i, regs.length, <>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><span style={{fontSize:13,fontWeight:700,color:on?T.text:T.textSub}}>{fw.name}</span>
+            {m.jurisdiction&&<span style={{fontSize:10,padding:"1px 6px",borderRadius:4,background:T.bgElevated,color:T.textSub,fontWeight:600,border:`1px solid ${T.border}`}}>{m.jurisdiction}</span>}</div>
+          <div style={{fontSize:11.5,color:T.textMuted,marginTop:2}}>{m.fullName}</div>
+          <div style={{fontSize:10.5,color:T.textMuted,marginTop:3}}>{fw.arts.filter(a=>!a.out).length} articles · {tids.length} prebuilt policies{on?` · readiness ${fwScore(fw)}%`:reused?` · ${reused} already running`:""}</div></>,
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            {on&&<Btn small ghost disabled={!!who} onClick={()=>startAdopt(fw.id,2)}>Review policies</Btn>}
+            {sw(on, ()=>{ if(who){ onToast(who,"info"); return; } on ? fwMenu(fw)[3].on() : startAdopt(fw.id); }, on?"Disable — stop tracking this regulation":"Enable — adopt it and switch on its policies")}
+          </div>); }))}
+      {!regs.length&&!customs.length&&<div style={{textAlign:"center",padding:"36px 0",color:T.textMuted,fontSize:13}}>Nothing matches “{q}”</div>}
+      {wiz&&renderWizard()}
+      {fwEd&&renderFwEditor()}
+      {confirm&&<>
+        <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
+        <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div style={{fontSize:14.5,fontWeight:700,color:T.text}}>{confirm.title}</div>
+          <div style={{fontSize:12.5,color:T.textSub,marginTop:8,lineHeight:1.6}}>{confirm.body}</div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:18}}>
+            <Btn ghost onClick={()=>setConfirm(null)}>Cancel</Btn>
+            <Btn variant={confirm.danger?"danger":"primary"} onClick={()=>{ const f=confirm.onYes; setConfirm(null); f(); }}>{confirm.yesLabel}</Btn>
+          </div>
+        </div></>}
+    </div>);
+  }
+
+
+  // ═════ RUNS — each policy runs on its own: Run now, a schedule, a Runs history ═════
+  // Assets a tracked framework applies to that no run of a linked active policy has checked.
+  const fwUnscanned = fw => { const seen=new Set();
+    livePols.filter(p=>p.status==="Active"&&(p.runs||[]).length&&p.articles.some(a=>a.fw===fw.id&&a.ok!==false)).forEach(p=>PM3_ASSETS.forEach(a=>{ if(pm3AssetInPolicy(a,p)) seen.add(a.name); }));
+    return PM3_ASSETS.filter(a=>pm3InScope(a,fw.covers)&&!seen.has(a.name)); };
+  // Readiness snapshot per adopted framework after a run, for the trend on each framework overview.
+  const snapFwHist = () => setTimeout(()=>{ const snap={}; adoptedFws.forEach(f=>{ snap[f.id]=fwScore(f); });
+    pm3Set(s2=>({...s2, fwHist:{...(s2.fwHist||{}), ...Object.fromEntries(Object.keys(snap).map(id=>[id, [...((s2.fwHist||{})[id]||[]).filter(h=>h.d!==pm3Today()), {d:pm3Today(), pct:snap[id]}]]))}})); },0);
+  const recordRun = (id, trigger) => { const q=_pm3.policies.find(x=>x.id===id); if(!q) return null; const x=pm3RunStats(q); const prev=(q.runs||[])[0];
+    const ts=`${pm3Today()} ${new Date().toTimeString().slice(0,5)}`;
+    const run={id:`run-${id}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`, ts, trigger, by:me, duration:`${1+Math.floor(Math.random()*2)}m ${10+Math.floor(Math.random()*49)}s`,
+      assetsScanned:x.assetsScanned, rulesEval:x.rulesEval, violations:x.violations, violationsNew:Math.max(0,x.violations-(prev?.violations??0)), score:x.score, status:"success"};
+    updPol(id, y=>({...y, runs:[run, ...(y.runs||[])]}));
+    pm3Set(s2=>({...s2, lastRun:{...s2.lastRun, [id]:ts.slice(11)}}));
+    return x; };
+  const runNow = p => {
+    if(!p) return;
+    if(p.status!=="Active"){ onToast("Activate the policy before running it","info"); return; }
+    if(!hasChecks(p)){ onToast("Nothing to run — evidence forms come due on their own calendar","info"); return; }
+    if(runningPol) return;
+    setRunningPol(p.id);
+    setTimeout(()=>{ const x=recordRun(p.id,"Manual"); pm3RequestTargets(); snapFwHist(); setRunningPol(null);
+      if(x) onToast(`Ran "${p.name}" — ${x.violations} violation${x.violations===1?"":"s"} across ${x.assetsScanned} assets`,"success"); }, 1600);
+  };
+  const runAllPolicies = (list, label) => {
+    const go = list.filter(p=>p.status==="Active"&&hasChecks(p));
+    if(!go.length){ onToast("No active policies to run","info"); return; }
+    if(runningPol) return;
+    setRunningPol("__all");
+    setTimeout(()=>{ let v=0; go.forEach(p=>{ const x=recordRun(p.id,"Manual"); if(x) v+=x.violations; }); pm3RequestTargets(); snapFwHist(); setRunningPol(null);
+      onToast(`${label} — ran ${go.length} polic${go.length===1?"y":"ies"} · ${v} violation${v===1?"":"s"}`,"success"); }, 1800);
+  };
+  const runAllBtn = (list, label) => { const busy=runningPol==="__all"; const n=list.filter(p=>p.status==="Active"&&hasChecks(p)).length; const off=!!runningPol||!n;
+    return <button disabled={off} onClick={()=>runAllPolicies(list,label)} title={n?`Runs ${n} active polic${n===1?"y":"ies"}`:"No active policies to run"}
+      style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 13px",borderRadius:7,background:off?T.bgElevated:T.accentDim,border:`1.5px solid ${off?T.border:T.accent+"44"}`,color:off?T.textMuted:T.accent,fontSize:12,fontWeight:600,cursor:off?"not-allowed":"pointer",fontFamily:"inherit"}}>
+      {busy?<><span style={{display:"inline-block",width:11,height:11,borderRadius:"50%",border:`1.5px solid ${T.accent}`,borderTopColor:"transparent",animation:"spin 0.7s linear infinite"}}/>Running…</>
+        :<><svg width="10" height="10" viewBox="0 0 16 16" fill="none"><polygon points="5,3 14,8 5,13" fill="currentColor"/></svg>Run all policies</>}</button>; };
+
+  // ═════ PAGE — the original Policy Manager shell: breadcrumb, icon tab bar, content ═════
+  const waiting = pm3StatusPending.filter(r=>r.kind!=="pm3attestdue").length + pm3EnfPending.length;
+  const TAB_ICON = {
+    policies:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><rect x="2" y="1" width="12" height="14" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8.5" x2="11" y2="8.5"/><line x1="5" y1="11.5" x2="8" y2="11.5"/></svg>,
+    frameworks:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L2 4v4c0 3.5 2.7 5.5 6 6.5C11.3 13.5 14 11.5 14 8V4L8 1z"/></svg>,
+    findings:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M8 1L1 14h14L8 1z"/><line x1="8" y1="6" x2="8" y2="9"/><circle cx="8" cy="11.5" r=".5" fill="currentColor"/></svg>,
+    approvals:<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5 8l2 2 4-4"/></svg>,
+  };
+  const TABS = [
+    {key:"policies",   label:"Policies",   badge:livePols.length},
+    {key:"findings",   label:"Findings",   badge:openFindings.length||null, danger:true},
+  ];
+  return (
+    <div className="fadeUp" style={{height:"100%",display:"flex",flexDirection:"column"}}>
+      <Topbar breadcrumb={[{label:"Policy Manager 3"}]}/>
+      <div style={{flexShrink:0,borderBottom:`1px solid ${T.border}`,background:T.bgBase}}>
+        <div style={{display:"flex",paddingLeft:24,overflowX:"auto"}}>
+          {TABS.map(t=>{ const isA=tab===t.key; return (
+            <button key={t.key} onClick={()=>{setTab(t.key);setSelFw(null);}}
+              style={{display:"flex",alignItems:"center",gap:7,padding:"12px 20px",background:"transparent",border:"none",borderBottom:`2.5px solid ${isA?T.accent:"transparent"}`,color:isA?T.accent:T.textMuted,fontSize:13,fontWeight:isA?600:500,cursor:"pointer",transition:"all .15s",marginBottom:-1,whiteSpace:"nowrap",flexShrink:0}}
+              onMouseEnter={e=>{if(!isA){e.currentTarget.style.color=T.text;e.currentTarget.style.background=T.bgHover;}}} onMouseLeave={e=>{if(!isA){e.currentTarget.style.color=T.textMuted;e.currentTarget.style.background="transparent";}}}>
+              <span style={{display:"flex",opacity:isA?1:.65,color:isA?T.accent:t.danger&&t.badge?T.rose:"currentColor"}}>{TAB_ICON[t.key]}</span>
+              <span>{t.label}</span>
+              {t.badge!=null&&<span style={{display:"flex",alignItems:"center",justifyContent:"center",minWidth:18,height:18,borderRadius:9,padding:"0 5px",fontSize:10,fontWeight:700,fontFamily:"'Geist Mono',monospace",background:isA?T.accent:t.danger?`${T.rose}18`:T.bgElevated,color:isA?"#fff":t.danger?T.rose:T.textSub}}>{t.badge}</span>}
+            </button>); })}
+        </div>
+      </div>
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+        {tab==="policies"&&renderPolicies()}
+        {tab==="findings"&&renderFindings()}
+      </div>
+      {wiz&&renderWizard()}
+      {ed&&renderEditor()}
+      {fwEd&&renderFwEditor()}
+      {ruleEd&&renderRuleEditor()}
+      {addPol&&renderAddPolicy()}
+      {schedFor&&(()=>{ const sp=st.policies.find(x=>x.id===schedFor);
+        return <ScheduleControl title="Evaluation schedule" subtitle={sp?.name} schedule={sp?.sched} onClose={()=>setSchedFor(null)}
+          onRunNow={()=>{ setSchedFor(null); runNow(sp); }} running={runningPol===schedFor}
+          onRemove={sp?.schedule?()=>{ updPol(schedFor,x=>addHist({...x,sched:null,schedule:null,nextRun:null},"Evaluation schedule removed")); setSchedFor(null); onToast("Schedule removed","info"); }:undefined}
+          onSave={sched=>{ updPol(schedFor,x=>addHist({...x,sched,schedule:contractCron(sched),nextRun:scheduleNextRun(sched),schedEnabled:sched.enabled},`Evaluation schedule set — ${contractScheduleLabel(sched)}`)); setSchedFor(null); onToast(sched.enabled?"Schedule saved":"Schedule saved (paused)","success"); }}/>; })()}
       {confirm&&<>
         <div onClick={()=>setConfirm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:1300}}/>
         <div role="dialog" style={{position:"fixed",top:"28%",left:"50%",transform:"translateX(-50%)",width:460,maxWidth:"92vw",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:12,zIndex:1301,padding:"18px 20px",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -49612,7 +52441,7 @@ const ROLES_CONFIG = {
     badge: "rgba(238,36,36,0.15)",
     desc:  "Full platform access including settings, user management, and all configurations.",
     rbacRole: "admin",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","settings","tags"],
     homeWidgets: ["metrics","tasks","quality","recentAssets","services","activity"],
   },
   steward: {
@@ -49625,7 +52454,7 @@ const ROLES_CONFIG = {
     desc:  "Govern assets in your domain: certify data, manage glossary terms, resolve conflicts.",
     rbacRole: "steward",
     domain: "Commerce",
-    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","tags"],
+    nav: ["home","search","stewardship","catalog","quality","policymanager","policymanager2","policymanager3","certifications","glossary","domains","dataproducts","knowledgelayer","semanticlayer","ontologies","knowledgegraphs","context","tags"],
     homeWidgets: ["tasks","certQueue","qualityAlerts","recentAssets","activity"],
   },
   analyst: {
@@ -55512,7 +58341,12 @@ const enfApprovalFor = (policyId,ruleId) => _enfReqs.filter(r=>r.policyId===poli
 // Covered: status (term/domain/policy/cert) · deletion (term/domain) ·
 // enforcement (incl. legal-hold release) · role (asset owner/steward, platform role).
 // Not covered from chat: tag requests (need the Classifications context) and
-// Policy Manager 2 requests (separation-of-duties rules) — those stay in EDG.
+// Policy Manager 2 / 3 requests (separation-of-duties rules) — those stay in EDG.
+// Policy Manager 2 and 3 keep separate stores; their request kinds start "pm2…" / "pm3…".
+const pmVer   = k => /^pm3/.test(String(k||"")) ? 3 : /^pm2/.test(String(k||"")) ? 2 : 0;
+const pmBase  = k => String(k||"").replace(/^pm3/,"pm2");
+const pmStore = k => pmVer(k)===3 ? _pm3 : _pm2;
+const pmOpen  = (k, policy, tab, onNav) => { const v=pmVer(k); if(v===3) _pm3Deep={policy, tab}; else _pm2Deep={policy, tab}; onNav&&onNav(v===3?"policymanager3":"policymanager2"); };
 const REQ_SOURCES = {
   status:{find:id=>_statusReqs.find(r=>r.id===id), set:u=>srSet(u), kinds:["term","domain","policy","cert"]},
   delete:{find:id=>_deleteReqs.find(r=>r.id===id), set:u=>drSet(u), kinds:["term","domain"]},
@@ -55594,7 +58428,7 @@ const _collabSeenReqs = new Set();
 const _collabReqList = ()=>[
   ..._statusReqs.filter(r=>REQ_SOURCES.status.kinds.includes(r.kind)).map(r=>({src:"status",r})),
   ..._deleteReqs.filter(r=>REQ_SOURCES.delete.kinds.includes(r.kind)).map(r=>({src:"delete",r})),
-  ..._enfReqs.filter(r=>!String(r.policyId||"").startsWith("pm2:")).map(r=>({src:"enf",r})),
+  ..._enfReqs.filter(r=>!/^pm[23]:/.test(String(r.policyId||""))).map(r=>({src:"enf",r})),
   ..._roleReqs.map(r=>({src:"role",r})),
 ];
 const _collabSync = ()=>{
@@ -56050,9 +58884,9 @@ const InboxView = ({onToast}) => {
   // top-down status-change requests (tag/domain — assets keep their own certification flow) → steward approval items
   const statusReqs = useStatusReqs();
   const STATUS_REQ_ITEMS = statusReqs.filter(r=>r.status==="pending").map(r=>({
-    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||(r.kind||"").startsWith("pm2"))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
-    asset:{name:r.name, path:r.kind==="pm2policy"?"Policy · Policy Manager 2":r.kind==="pm2exception"?"Exception · Policy Manager 2":r.kind==="pm2attest"?"Attestation · Policy Manager 2":r.kind==="pm2attestdue"?"Attestation due · Policy Manager 2":r.kind==="pm2mapping"?"Article mapping · Policy Manager 2":r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||r.kind==="pm2policy"||r.kind==="pm2mapping")?"Policy":r.kind==="pm2exception"?"Exception":(r.kind==="pm2attest"||r.kind==="pm2attestdue")?"Attestation":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
-    body:r.kind==="pm2attestdue"?`Your attestation form is due — ${r.note||""}. Fill it in in Policy Manager 2.`:r.kind==="pm2attest"?(()=>{ const p=_pm2.policies.find(x=>x.id===String(r.targetId).split("|")[0]); const rl=p&&(p.rules||[]).find(x=>x.id===r.ruleId||(x.submissions||[]).some(y=>y.reqId===r.id)); const sb=rl&&(rl.submissions||[]).find(x=>x.reqId===r.id); return sb&&rl.att ? `${r.requestedBy} submitted "${rl.name}" (${p.name}) for review — ${rl.att.form.map(f=>`${f.label}: ${sb.values?.[f.id]??"—"}`).join(" · ")}` : `${r.requestedBy} submitted an attestation for review.`; })():r.kind==="pm2mapping"?`A custom policy by ${r.requestedBy} claims to satisfy regulation articles — ${r.note||""}`:r.kind==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:r.kind==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
+    id:"srq-"+r.id, type:"certification_review", severity:"medium", section:r.kind==="tag"?"tags":(r.kind==="policy"||/^pm[23]/.test(r.kind||""))?"policy":r.kind==="term"?"glossary":"catalog", timeAgo:r.at||"just now",
+    asset:{name:r.name, path:pmBase(r.kind)==="pm2policy"?`Policy · Policy Manager ${pmVer(r.kind)}`:pmBase(r.kind)==="pm2exception"?`Exception · Policy Manager ${pmVer(r.kind)}`:pmBase(r.kind)==="pm2attest"?`Attestation · Policy Manager ${pmVer(r.kind)}`:pmBase(r.kind)==="pm2attestdue"?`Attestation due · Policy Manager ${pmVer(r.kind)}`:pmBase(r.kind)==="pm2mapping"?`Article mapping · Policy Manager ${pmVer(r.kind)}`:r.kind==="tag"?"Tag · Classifications":r.kind==="policy"?"Policy · Policy Manager":r.kind==="term"?"Term · Glossary":r.kind==="cert"?"Status · Catalog":"Domain · Data Domains", type:r.kind==="tag"?"Tag":(r.kind==="policy"||pmBase(r.kind)==="pm2policy"||pmBase(r.kind)==="pm2mapping")?"Policy":pmBase(r.kind)==="pm2exception"?"Exception":(pmBase(r.kind)==="pm2attest"||pmBase(r.kind)==="pm2attestdue")?"Attestation":r.kind==="term"?"Term":r.kind==="cert"?"Table":"Domain"},
+    body:pmBase(r.kind)==="pm2attestdue"?`Your attestation form is due — ${r.note||""}. Fill it in in Policy Manager ${pmVer(r.kind)}.`:pmBase(r.kind)==="pm2attest"?(()=>{ const p=pmStore(r.kind).policies.find(x=>x.id===String(r.targetId).split("|")[0]); const rl=p&&(p.rules||[]).find(x=>x.id===r.ruleId||(x.submissions||[]).some(y=>y.reqId===r.id)); const sb=rl&&(rl.submissions||[]).find(x=>x.reqId===r.id); return sb&&rl.att ? `${r.requestedBy} submitted "${rl.name}" (${p.name}) for review — ${rl.att.form.map(f=>`${f.label}: ${sb.values?.[f.id]??"—"}`).join(" · ")}` : `${r.requestedBy} submitted an attestation for review.`; })():pmBase(r.kind)==="pm2mapping"?`A custom policy by ${r.requestedBy} claims to satisfy regulation articles — ${r.note||""}`:pmBase(r.kind)==="pm2policy"?`${r.requestedBy} asks you to approve this policy so it can go Active — "${r.note||""}"`:pmBase(r.kind)==="pm2exception"?`${r.requestedBy} asks to accept this finding as an exception — "${r.note||""}"`:`${r.requestedBy} requested status → ${r.requestedStatus} — "${r.note||""}"`,
     requestedBy:r.requestedBy, requestedStatus:r.requestedStatus, reqKind:r.kind, reqTargetId:r.targetId, reqId:r.id, readAt:null,
   }));
   // top-down deletion requests (tag/domain) → owner approval items
@@ -56232,14 +59066,14 @@ const InboxView = ({onToast}) => {
     if(item.type==="term_review")
       return <>{btn("Approve",()=>{setTermStatus(item.termId,"Approved");ack(item.id,`${item.asset.name} approved & published`);},true)}{btn("Reject",()=>{setTermStatus(item.termId,"Draft");ack(item.id,"Term sent back to draft");},false,true)}{openIn("Open in Glossary","glossary")}</>;
     if(item.type==="certification_review"){
-      // Policy Manager 2 requests: resolve the shared request — Policy Manager 2 applies the decision.
+      // Policy Manager 2 / 3 requests: resolve the shared request — the owning Policy Manager applies the decision.
       // An attestation that is due is filled in, not approved — it only links to the form.
-      if(item.reqKind==="pm2attestdue")
-        return <><span style={{fontSize:11.5,color:T.textMuted}}>Fill in and submit the form — it then goes to a reviewer.</span>{btn("Fill in the form",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
-      if((item.reqKind||"").startsWith("pm2")&&_pm2.approvalPolicy.sod&&item.requestedBy===meHandle)
-        return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
-      if((item.reqKind||"").startsWith("pm2"))
-        return <>{btn("Approve",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"approved",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"cert",title:`Approved · ${item.asset.name}`,body:`Approved by ${meHandle||"approver"}`,nav:"policymanager2"});ack(item.id,`${item.asset.name} approved — requester notified`);},true)}{btn("Reject",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"rejected",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"field_updated",title:`Rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was rejected`,nav:"policymanager2"});ack(item.id,"Rejected — requester notified");},false,true)}{btn("Open in Policy Manager 2",()=>{ const k=item.reqKind; const pid=String(item.reqTargetId||"").split("|")[0]; _pm2Deep={policy:pid, tab:k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview"}; onNav&&onNav("policymanager2"); })}</>;
+      if(pmBase(item.reqKind)==="pm2attestdue")
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>Fill in and submit the form — it then goes to a reviewer.</span>{btn("Fill in the form",()=>{ const k=pmBase(item.reqKind); const pid=String(item.reqTargetId||"").split("|")[0]; pmOpen(item.reqKind, pid, k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview", onNav); })}</>;
+      if(pmVer(item.reqKind)&&pmStore(item.reqKind).approvalPolicy.sod&&item.requestedBy===meHandle)
+        return <><span style={{fontSize:11.5,color:T.textMuted}}>You requested this — separation of duties means someone else decides.</span>{btn(`Open in Policy Manager ${pmVer(item.reqKind)}`,()=>{ const k=pmBase(item.reqKind); const pid=String(item.reqTargetId||"").split("|")[0]; pmOpen(item.reqKind, pid, k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview", onNav); })}</>;
+      if(pmVer(item.reqKind))
+        return <>{btn("Approve",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"approved",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"cert",title:`Approved · ${item.asset.name}`,body:`Approved by ${meHandle||"approver"}`,nav:"policymanager"+pmVer(item.reqKind)});ack(item.id,`${item.asset.name} approved — requester notified`);},true)}{btn("Reject",()=>{srSet(prev=>prev.map(r=>r.id===item.reqId?{...r,status:"rejected",decidedBy:meHandle||"approver"}:r));pushNotif({category:"Policy",type:"field_updated",title:`Rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was rejected`,nav:"policymanager"+pmVer(item.reqKind)});ack(item.id,"Rejected — requester notified");},false,true)}{btn(`Open in Policy Manager ${pmVer(item.reqKind)}`,()=>{ const k=pmBase(item.reqKind); const pid=String(item.reqTargetId||"").split("|")[0]; pmOpen(item.reqKind, pid, k==="pm2mapping"?"satisfies":(k==="pm2attest"||k==="pm2attestdue"||k==="pm2exception")?"activity":"overview", onNav); })}</>;
       if(item.reqKind==="tag")
         return <>{btn("Approve",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:item.requestedStatus});if(item.reqId)resolveStatusRequest(item.reqId,"approved");pushNotif({category:"Status",type:"cert",title:`Status changed to ${item.requestedStatus} · ${item.asset.name}`,body:`Approved by ${meHandle||"steward"}`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,`${item.asset.name} status → ${item.requestedStatus} — requester notified`);},true)}{btn("Reject",()=>{tagCtx?.updateTagDef(item.reqTargetId,{cert:"Draft"});if(item.reqId)resolveStatusRequest(item.reqId,"rejected");pushNotif({category:"Status",type:"field_updated",title:`Status change rejected · ${item.asset.name}`,body:`${item.requestedBy}'s request was sent back to Draft`,nav:"tags",navArg:{tagId:item.reqTargetId}});ack(item.id,"Status change rejected — sent back to Draft");},false,true)}{openIn("Open in Classifications","tags")}</>;
       if(item.reqKind==="domain")
@@ -56293,7 +59127,7 @@ const InboxView = ({onToast}) => {
     }
     if(item.type==="enforcement_approval"){
       const lbl = (item.action==="Unhold"||item.action==="Partial Unhold")?"Approve release":"Approve";
-      const open = String(item.policyId||"").startsWith("pm2:")?btn("Open in Policy Manager 2",()=>{ _pm2Deep={policy:String(item.policyId).slice(4), tab:"activity"}; onNav&&onNav("policymanager2"); }):openIn("Open in Policy Manager","policymanager",{policyId:item.policyId});
+      const open = /^pm[23]:/.test(String(item.policyId||""))?btn(`Open in Policy Manager ${pmVer(item.policyId)}`,()=>pmOpen(item.policyId, String(item.policyId).slice(4), "activity", onNav)):openIn("Open in Policy Manager","policymanager",{policyId:item.policyId});
       return decideBtns("enf",open,lbl);
     }
 
@@ -69900,6 +72734,7 @@ export default function App(){
       case "quality":       return <QualityView onToast={showToast}/>;
       case "policymanager": return <PolicyManagerView onToast={showToast} onNav={handleNav} deepLinkPolicyId={deepLinkPolicyId}/>;
       case "policymanager2": return <PolicyManager2View onToast={showToast} onNav={handleNav}/>;
+      case "policymanager3": return <PolicyManager3View onToast={showToast} onNav={handleNav}/>;
       case "access":        return <AccessView onToast={showToast}/>;
       case "certifications":return <CertificationsView onToast={showToast}/>;
       case "stewardship":   return <InboxView onToast={showToast}/>;
