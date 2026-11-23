@@ -24973,7 +24973,7 @@ const FileAssetDetail = ({asset, onBack, onToast}) => {
       {/* ── Body ── */}
       <div style={{flex:1,overflow:"auto",padding:"24px 28px",display:"flex",gap:22,alignItems:"flex-start"}}>
 
-        {tab==="kg"&&<div style={{flex:1,minWidth:0}}><KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name} diagramOnly/></div>}
+        {tab==="kg"&&<div style={{flex:1,minWidth:0}}><KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name}/></div>}
         {/* ── CUSTOM PROPERTIES TAB ── */}
         {tab==="customprops"&&(
           <div style={{flex:1,minWidth:0}}>
@@ -43793,14 +43793,12 @@ const KnowledgeGraphView = ({onToast, onNav, onAsset}) => {
 
 // Knowledge Graph tab on a catalog asset: what it connects to, in plain sections.
 // The same view on any governed object: pass the node ids it may have, first match wins.
-const KgObjectTab = ({ids, name, onAsset, diagramOnly}) => {
+const KgObjectTab = ({ids, name, onAsset}) => {
   useKgs(); useOnt();
   const g = kgGraph();
   const home = (ids||[]).find(id=>g.nodes.some(n=>n.id===id)) || (ids||[])[0];
   const [focus, setFocus] = useState(home);
   const [showDerived, setShowDerived] = useState(true);
-  const [showDiagram0, setShowDiagram] = useState(false);
-  const showDiagram = diagramOnly || showDiagram0;
   useEffect(()=>{ setFocus(home); },[home]);
   const fNode = g.nodes.find(n=>n.id===focus);
   const asset = fNode && fNode.type==="asset" && focus!==home ? ASSETS.find(a=>a.name===fNode.label) : null;
@@ -43812,15 +43810,13 @@ const KgObjectTab = ({ids, name, onAsset, diagramOnly}) => {
         {focus!==home && <button onClick={()=>setFocus(home)} style={{fontSize:11,color:T.accent,background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}>Back to {name}</button>}
         <span style={{flex:1}}/>
         <label style={{display:"flex",alignItems:"center",gap:6,fontSize:11.5,color:T.textSub}}><input type="checkbox" checked={showDerived} onChange={e=>setShowDerived(e.target.checked)}/> Derived facts</label>
-        {!diagramOnly && <SegTabs tabs={[{key:"list",label:"Summary"},{key:"diagram",label:"Diagram"}]} active={showDiagram?"diagram":"list"} onChange={k=>setShowDiagram(k==="diagram")}/>}
       </div>
       {!fNode ? <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.textMuted}}>No connections yet</div>
-        : showDiagram ? <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus} height={460}/>
-        : <KgSections g={g} id={focus} showDerived={showDerived} onFocus={setFocus}/>}
+        : <KgCanvas graph={KG.neighbourhood(g, focus, {depth:1, derived:showDerived})} focus={focus} onFocus={setFocus} height={460}/>}
     </div>
   );
 };
-const KgAssetTab = ({asset, onAsset}) => <KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name} onAsset={onAsset} diagramOnly/>;
+const KgAssetTab = ({asset, onAsset}) => <KgObjectTab ids={[`asset:${asset.name}`]} name={asset.name} onAsset={onAsset}/>;
 
 // ═══ Ontology Manager · metadata level ═══════════════════════════════════════
 // Meaning (OWL), rules (SHACL) and bindings to catalog fields. Records stay in
