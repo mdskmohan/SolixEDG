@@ -41681,7 +41681,7 @@ const OntClassDrawer = ({o, cls, onClose, onToast, onAsset, apply}) => {
             <div style={{width:70}}><Input2 placeholder="Min" value={String(x.kind==="count"?(x.min??""):x.kind==="min"||x.kind==="exact"?(x.n??""):"")} onChange={e=>setR(i,{kind:"count", min:e.target.value.replace(/[^0-9]/g,""), max:x.kind==="count"?(x.max??""):x.kind==="max"||x.kind==="exact"?String(x.n??""):""})}/></div>
             <div style={{width:70}}><Input2 placeholder="Max" value={String(x.kind==="count"?(x.max??""):x.kind==="max"||x.kind==="exact"?(x.n??""):"")} onChange={e=>setR(i,{kind:"count", max:e.target.value.replace(/[^0-9]/g,""), min:x.kind==="count"?(x.min??""):x.kind==="min"||x.kind==="exact"?String(x.n??""):""})}/></div>
             {rel && <div style={{flex:1}}><SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} options={[{v:"",l:"Any class"}, ...o.classes.map(c=>({v:c.id,l:c.name}))]}/></div>}</div>
-          : x.kind==="value" ? (inds.length ? <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Select an individual" options={inds.map(v=>({v:v.id,l:v.name}))}/>
+          : x.kind==="value" ? (inds.length ? <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Select a value" options={inds.map(v=>({v:v.id,l:v.name}))}/>
             : <Input2 value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder="Value"/>)
           : <SLSelect value={x.target} onChange={e=>setR(i,{target:e.target.value})} placeholder={rel?"Select a class":"Select a data type"} options={rel ? o.classes.map(c=>({v:c.id,l:c.name})) : ontDtOpts()}/>}
         <button onClick={()=>setD(y=>({...y, restrictions:y.restrictions.filter(z=>z.id!==x.id)}))} title="Remove" style={{background:"transparent",border:"none",color:T.textMuted,cursor:"pointer",display:"flex"}}>{Ic.x(12)}</button>
@@ -42706,7 +42706,7 @@ const OntSidebar = ({o, cov}) => {
           ["Classes with data",`${cov.classes.mapped} / ${cov.classes.total}`],
           ["Glossary terms",String(o.classes.filter(c=>c.termId).length)],["Created",o.created||"—"],["Published",latest?`v${latest.n} · ${latest.at.slice(0,10)}`:"Never"],
           ["Prefix",o.prefix],["Imports",String((o.imports||[]).length)],["License",(ONT_LICENSES.find(x=>x.v===(o.license||""))||{l:o.license||"—"}).l],
-          ["Individuals",String((o.individuals||[]).length)],["Store",ONT_STORE]].map(([k,v])=>(
+          ["Values",String((o.individuals||[]).length)],["Store",ONT_STORE]].map(([k,v])=>(
           <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:7}}>
             <span style={{fontSize:12,color:T.textMuted}}>{k}</span>
             <span style={{fontSize:11.5,color:T.textSub,fontFamily:"'Geist Mono',monospace",textAlign:"right"}}>{v}</span>
@@ -42791,12 +42791,13 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
     ? {name:o.name, desc:o.desc||"", domain:o.domain||"", owner:o.owner||"", steward:o.steward||"", prefix:o.prefix, ns:o.namespace, prefixTouched:true, imports:o.imports||[], license:o.license||""}
     : {name:"", desc:"", domain:"", owner:"", steward:"", prefix:"", ns:"", prefixTouched:false, imports:[], license:""});
   const [draft, setDraft] = useState(()=> JSON.parse(JSON.stringify(isEdit
-    ? {id:o.id, name:o.name, classes:o.classes||[], rels:o.rels||[], constraints:o.constraints||[], mappings:o.mappings||[]}
-    : {id:"ont_draft", name:"", classes:[], rels:[], constraints:[], mappings:[]})));
+    ? {id:o.id, name:o.name, classes:o.classes||[], rels:o.rels||[], individuals:o.individuals||[], constraints:o.constraints||[], mappings:o.mappings||[]}
+    : {id:"ont_draft", name:"", classes:[], rels:[], individuals:[], constraints:[], mappings:[]})));
   const apply = (fn) => setDraft(p => typeof fn==="function" ? fn(p) : {...p, ...fn});
   const [classEdit, setClassEdit] = useState(null);
   const [relEdit, setRelEdit] = useState(null);
   const [conEdit, setConEdit] = useState(null);
+  const [valEdit, setValEdit] = useState(null);
   const [picked, setPicked] = useState({});
   const [q, setQ] = useState("");
   useEffect(()=>{ setPicked({}); setQ(""); },[sec]);
@@ -42809,7 +42810,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
   const err = !d.name.trim() ? "Enter an ontology name" : nameTaken ? "An ontology with this name exists" : !d.domain ? "Select a data domain"
     : !d.owner ? "Select an owner" : !isEdit && !/^[a-z][a-z0-9]{0,9}$/.test(prefix) ? "Prefix: 1–10 lowercase letters or digits, starting with a letter" : prefixTaken ? "Prefix is in use" : null;
   const SECTIONS = [{k:"details",l:"Details"},{k:"classes",l:`Classes · ${draft.classes.length}`},{k:"rels",l:`Relationships · ${draft.rels.length}`},
-    {k:"constraints",l:`Data rules · ${draft.constraints.length}`},{k:"review",l:"Review"}];
+    {k:"values",l:`Values · ${draft.individuals.length}`},{k:"constraints",l:`Data rules · ${draft.constraints.length}`},{k:"review",l:"Review"}];
   const order = SECTIONS.map(s=>s.k), idx = order.indexOf(sec);
   const go = (k) => { if(k!=="details" && err){ onToast&&onToast(err,"error"); setSec("details"); return; } setSec(k); };
   const view = {...draft, name:d.name};      // what the editors see
@@ -42819,7 +42820,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
 
   // Bulk actions on the selected rows of the current step.
   const removeClasses = (list) => apply(x=>({...x, classes:x.classes.filter(c=>!list.includes(c.id)).map(c=>list.includes(c.parent)?{...c,parent:null}:c),
-    rels:x.rels.filter(r=>!list.includes(r.from)&&!list.includes(r.to)), constraints:x.constraints.filter(k=>!list.includes(k.classId)),
+    rels:x.rels.filter(r=>!list.includes(r.from)&&!list.includes(r.to)), individuals:x.individuals.filter(v=>!list.includes(v.classId)), constraints:x.constraints.filter(k=>!list.includes(k.classId)),
     mappings:x.mappings.filter(m=>!list.includes(m.classId))}));
   const bulk = (fn, label) => { fn(ids); setPicked({}); onToast&&onToast(`${label} · ${ids.length}`,"success"); };
 
@@ -42828,7 +42829,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
     const owners = [d.owner, ...((isEdit && o.owners)||[]).filter(x=>x!==d.owner)];
     const stewards = d.steward ? [d.steward, ...((isEdit && o.stewards)||[]).filter(x=>x!==d.steward)] : ((isEdit && o.stewards)||[d.owner]);
     const body = {name:d.name.trim(), desc:d.desc.trim(), domain:d.domain, owner:d.owner, steward:d.steward||d.owner, owners, stewards, imports:d.imports, license:d.license,
-      classes:draft.classes, rels:draft.rels, constraints:draft.constraints,
+      classes:draft.classes, rels:draft.rels, individuals:draft.individuals, constraints:draft.constraints,
       mappings:draft.mappings.filter(m=>m.kind==="metric" || draft.classes.some(c=>c.id===m.classId))};
     if(isEdit){ ontPatch(o.id, body); onToast&&onToast(`${body.name} saved`,"success"); onSaved(o.id); return; }
     const id = "ont_"+Date.now().toString(36);
@@ -42859,10 +42860,11 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
   const clsRows = draft.classes.slice().sort((a,b)=>a.name.localeCompare(b.name))
     .filter(c=>match(`${c.name} ${c.desc||""} ${(c.props||[]).map(p=>p.name).join(" ")} ${MAP.sourcesOf(draft,c.id).map(m=>MAP.sourceTable(m, ctx)).join(" ")}`));
   const relRows = draft.rels.filter(r=>match(`${nm(r.from)} ${r.name} ${nm(r.to)} ${r.inverse||""}`));
+  const valRows = draft.individuals.filter(v=>match(`${v.name} ${nm(v.classId)} ${v.desc||""}`));
   const conRows = draft.constraints.filter(k=>match(`${nm(k.classId)} ${k.prop||""} ${ONT.CONSTRAINT_KINDS[k.kind]} ${k.value||""}`));
   // Links to data are summarised in one line; the rest is listed.
   const changes = (()=>{ if(!isEdit) return [];
-    const all = ONT.diff(ONT.snapshot(o), ONT.snapshot({...o, name:d.name, desc:d.desc, classes:draft.classes, rels:draft.rels, constraints:draft.constraints, mappings:draft.mappings}));
+    const all = ONT.diff(ONT.snapshot(o), ONT.snapshot({...o, name:d.name, desc:d.desc, classes:draft.classes, rels:draft.rels, individuals:draft.individuals, constraints:draft.constraints, mappings:draft.mappings}));
     const links = all.filter(l=>/ mapping /.test(l.text));
     return [...all.filter(l=>!/ mapping /.test(l.text)), ...(links.length?[{kind:"changed", text:`${links.length} link${links.length===1?"":"s"} to data updated`}]:[])]; })();
 
@@ -42931,6 +42933,14 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
                 rows={relRows.map(r=>({key:r.id, r, cells:[<Check id={r.id}/>, nm(r.from), <span style={{fontWeight:600,color:T.text}}>{r.name}</span>, nm(r.to), r.inverse||"—", ONT.CARDINALITY[r.cardinality]||"—"]}))}/>
             </>}
 
+            {sec==="values" && <>
+              {toolbar({addLabel:"Add value", onAdd:()=>setValEdit("new"), disabled:!draft.classes.length, bulkUi:<>
+                <Btn small ghost onClick={()=>bulk(l=>apply(x=>({...x, individuals:x.individuals.filter(v=>!l.includes(v.id))})), "Values removed")}>Delete</Btn></>})}
+              <OntTable empty={!draft.classes.length?"Add a class first":q?"No values match":"No values yet"} onRow={r=>setValEdit(r.v)}
+                cols={[{l:<AllCheck items={valRows.map(v=>v.id)}/>,w:"28px"},{l:"Value",w:"1.2fr"},{l:"Class"},{l:"Definition",w:"2fr"}]}
+                rows={valRows.map(v=>({key:v.id, v, cells:[<Check id={v.id}/>, v.name, nm(v.classId), v.desc||"—"]}))}/>
+            </>}
+
             {sec==="constraints" && <>
               {toolbar({addLabel:"Add constraint", onAdd:()=>setConEdit("new"), disabled:!draft.classes.length, bulkUi:<>
                 <div style={{width:150}}><SLSelect value="" placeholder="Set severity" onChange={e=>{ const v = e.target.value; if(!v) return; bulk(l=>apply(x=>({...x, constraints:x.constraints.map(k=>l.includes(k.id)?{...k,severity:v}:k)})), "Severity set"); }}
@@ -42945,7 +42955,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
               <KV rows={[["Ontology name", d.name||"—"], ["Description", d.desc||"—"], ["Data domain", ((domains.find(x=>x.name===d.domain)||{}).displayName)||d.domain||"—"],
                 ["Owner", d.owner||"—"], ["Steward", d.steward||d.owner||"—"], ["Namespace", isEdit?`${o.prefix}: ${o.namespace}`:(prefix?`${prefix}: ${nsUri}`:"—")],
                 ["Imports", d.imports.length?d.imports.join(", "):"—"], ["License", (ONT_LICENSES.find(x=>x.v===d.license)||{l:d.license||"—"}).l],
-                ["Classes", String(draft.classes.length)], ["Relationships", String(draft.rels.length)], ["Data rules", String(draft.constraints.length)],
+                ["Classes", String(draft.classes.length)], ["Relationships", String(draft.rels.length)], ["Values", String(draft.individuals.length)], ["Data rules", String(draft.constraints.length)],
                 ["Classes with a data source", `${draft.classes.filter(c=>MAP.sourcesOf(draft,c.id).length).length} of ${draft.classes.length}`],
                 ["Status", isEdit ? (changes.length ? "Unpublished changes" : "No changes") : "Draft"]]}/>
               {isEdit && changes.length>0 && <div style={{marginTop:14}}>
@@ -42969,6 +42979,7 @@ const OntEditorWizard = ({o, onClose, onSaved, onToast, onAsset}) => {
         {classEdit && <OntClassDrawer key={classEdit==="new"?"new":classEdit.id} o={view} cls={classEdit==="new"?null:classEdit} apply={apply} onClose={()=>setClassEdit(null)} onToast={onToast} onAsset={onAsset}/>}
         {relEdit && <OntRelDrawer key={relEdit==="new"?"new":relEdit.id} o={view} rel={relEdit==="new"?null:relEdit} apply={apply} onClose={()=>setRelEdit(null)} onToast={onToast}/>}
         {conEdit && <OntConstraintDrawer key={conEdit==="new"?"new":conEdit.id} o={view} con={conEdit==="new"?null:conEdit} apply={apply} onClose={()=>setConEdit(null)} onToast={onToast}/>}
+        {valEdit && <OntIndividualDrawer key={valEdit==="new"?"new":valEdit.id} o={view} ind={valEdit==="new"?null:valEdit} apply={apply} onClose={()=>setValEdit(null)} onToast={onToast}/>}
       </div>
     </div>
   );
@@ -44021,21 +44032,22 @@ const OntValidationTab = ({o, me, onRule, onOpenMapping, onToast}) => {
   </>);
 };
 
-// ── Individuals: named reference values (owl:NamedIndividual) ──
-const OntIndividualDrawer = ({o, ind, onClose, onToast}) => {
+// ── Values: the fixed, named values of a class (exported as owl:NamedIndividual) ──
+const OntIndividualDrawer = ({o, ind, onClose, onToast, apply}) => {
+  const ap = apply || ((f)=>ontPatch(o.id, f));
   const isNew = !ind;
   const [d, setD] = useState(()=>({name:"", classId:"", desc:"", deprecated:false, ...(ind||{}), id:(ind&&ind.id)||ONT.uid("i")}));
   const err = !d.name.trim() ? "Enter a name" : !d.classId ? "Select a class" : null;
   const save = () => { if(err){ onToast&&onToast(err,"error"); return; }
     const x0 = {...d, name:d.name.trim()};
-    ontPatch(o.id, x=>({...x, individuals: isNew ? [...(x.individuals||[]), x0] : (x.individuals||[]).map(y=>y.id===x0.id?x0:y)}));
+    ap(x=>({...x, individuals: isNew ? [...(x.individuals||[]), x0] : (x.individuals||[]).map(y=>y.id===x0.id?x0:y)}));
     onToast&&onToast(`${x0.name} saved`,"success"); onClose(); };
   return (
-    <OntDrawerShell title={isNew?"New individual":ind.name} width={560} onClose={onClose} footer={<>
-      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ontPatch(o.id, x=>({...x, individuals:(x.individuals||[]).filter(y=>y.id!==d.id)})); onClose(); }}>Remove</Btn></span>}
+    <OntDrawerShell title={isNew?"New value":ind.name} width={560} onClose={onClose} footer={<>
+      {!isNew && <span style={{flex:1}}><Btn ghost onClick={()=>{ ap(x=>({...x, individuals:(x.individuals||[]).filter(y=>y.id!==d.id)})); onClose(); }}>Remove</Btn></span>}
       <Btn ghost onClick={onClose}>Cancel</Btn><Btn variant="primary" disabled={!!err} onClick={save}>{isNew?"Add":"Save"}</Btn></>}>
       <OntField label="Name"><Input2 value={d.name} onChange={e=>setD({...d,name:e.target.value})} placeholder="e.g. Shipped"/></OntField>
-      <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || `${o.namespace}${ONT.slug(d.name||"…")}`}</div></OntField>
+      <OntField label="Identifier · IRI"><div style={{fontSize:12,color:T.textSub,fontFamily:"ui-monospace,monospace",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8}}>{d.iri || (o.namespace ? `${o.namespace}${ONT.slug(d.name||"…")}` : "Assigned on save")}</div></OntField>
       <OntField label="Class"><SLSelect value={d.classId} onChange={e=>setD({...d,classId:e.target.value})} placeholder="Select a class" options={o.classes.map(c=>({v:c.id,l:c.name}))}/></OntField>
       <OntField label="Definition"><Input2 multiline rows={2} value={d.desc} onChange={e=>setD({...d,desc:e.target.value})}/></OntField>
       <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:T.textSub}}><input type="checkbox" checked={!!d.deprecated} onChange={e=>setD({...d,deprecated:e.target.checked})}/> Deprecated</label>
@@ -44197,7 +44209,7 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
   const issues = ONT.validate(o);
   const errs = issues.filter(i=>i.severity==="error").length;
   const TABS = [{key:"overview",label:"Overview"},{key:"classes",label:`Classes · ${o.classes.length}`},{key:"rels",label:`Relationships · ${o.rels.length}`},
-    {key:"individuals",label:`Individuals · ${(o.individuals||[]).length}`},
+    {key:"individuals",label:`Values · ${(o.individuals||[]).length}`},
     {key:"validation",label:(()=>{ const r = OMD.validateMetadata(o, ontMdCtx()), f = OMD.runTests(o, ontMdCtx()).filter(t=>!t.pass).length; const n = r.violations + f; return n ? `Validation · ${n}` : "Validation"; })()},
     ...(ONT_AI_UI && _oai.settings.enabled?[{key:"ai",label:"AI suggestions"}]:[]),
     {key:"source",label:"Configuration"}];
@@ -44357,9 +44369,9 @@ const OntologyView = ({onToast, onNav, onAsset}) => {
         {tab==="individuals" && <>
           <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
             <div style={{width:320}}><Input2 placeholder="Search…" value={listQ} onChange={e=>setListQ(e.target.value)} icon={Ic.search(12)}/></div>
-            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setIndEdit("new")} disabled={!o.classes.length}>Add individual</Btn></div>
-          <OntTable empty={listQ?"No individuals match":"No individuals yet"} onRow={r=>setIndEdit(r.x)}
-            cols={[{l:"Individual",w:"1.2fr"},{l:"Class"},{l:"Definition",w:"2fr"}]}
+            <span style={{flex:1}}/><Btn variant="primary" icon={Ic.plus(10)} onClick={()=>setIndEdit("new")} disabled={!o.classes.length}>Add value</Btn></div>
+          <OntTable empty={!o.classes.length?"Add a class first":listQ?"No values match":"No values yet"} onRow={r=>setIndEdit(r.x)}
+            cols={[{l:"Value",w:"1.2fr"},{l:"Class"},{l:"Definition",w:"2fr"}]}
             rows={(o.individuals||[]).filter(x=>!listQ || `${x.name} ${nm(x.classId)} ${x.desc||""}`.toLowerCase().includes(listQ.toLowerCase()))
               .map(x=>({key:x.id, x, cells:[<span>{x.name}{x.deprecated && <span style={{marginLeft:6,fontSize:10,color:T.violet}}>deprecated</span>}</span>, nm(x.classId), x.desc||"—"]}))}/>
         </>}

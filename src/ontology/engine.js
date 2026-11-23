@@ -121,7 +121,7 @@ export function diff(prev, next) {
   coll("classes", "class", (x) => x.name, prev, next);
   coll("rels", "relationship", (x, s) => `${nm(s, x.from)} ${x.name} ${nm(s, x.to)}`, prev, next);
   coll("mappings", "mapping", (x, s) => `${x.kind} for ${nm(s, x.classId)}${x.target && x.target.column ? "." + x.target.column : ""}`, prev, next);
-  coll("individuals", "individual", (x) => x.name, prev, next);
+  coll("individuals", "value", (x) => x.name, prev, next);
   coll("tests", "expected-answer test", (x) => `"${x.question}"`, prev, next);
   coll("constraints", "constraint", (x, s) => `${CONSTRAINT_KINDS[x.kind] || x.kind} on ${nm(s, x.classId)}${x.prop ? "." + x.prop : ""}`, prev, next);
   return lines;
