@@ -116,3 +116,37 @@ test("the graph links stewards, teams, products, policies, tests and where asset
   assert.ok(has("schema:service:Snowflake DWH/prod/COMMERCE", "contains", "asset:users"));
   assert.ok(has("service:Snowflake DWH", "contains", "database:service:Snowflake DWH/prod"));
 });
+
+test("AI agents: own node types, routes/calls/reads edges, and an agent that reads PII is classified PII", () => {
+  const inp = input();
+  inp.assets.push(
+    { id: 90, name: "gw", type: "AI Gateway" },
+    { id: 91, name: "sales_agent", type: "AI Agent", owner: "maya.chen" },
+    { id: 92, name: "run_sql", type: "MCP Tool" },
+    { id: 93, name: "orders_agent", type: "AI Agent" },
+  );
+  inp.ai = [
+    { from: "gw", to: "sales_agent", type: "routes" },
+    { from: "sales_agent", to: "run_sql", type: "calls" },
+    { from: "sales_agent", to: "users", type: "reads", label: "Observed · 12 calls" },
+    { from: "orders_agent", to: "orders", type: "reads", label: "Configured" },
+    { from: "nobody", to: "users", type: "reads" },
+  ];
+  const g = KG.buildMetadataGraph(inp);
+  const n = (id) => g.nodes.find((x) => x.id === id);
+  assert.equal(n("asset:sales_agent").type, "agent");
+  assert.equal(n("asset:run_sql").type, "tool");
+  assert.equal(n("asset:gw").type, "gateway");
+  assert.equal(n("asset:sales_agent").assetId, 91);
+  const has = (from, type, to, derived) => g.edges.some((e) => e.from === from && e.type === type && e.to === to && (derived === undefined || e.derived === derived));
+  assert.ok(has("asset:gw", "routes", "asset:sales_agent"));
+  assert.ok(has("asset:sales_agent", "calls", "asset:run_sql"));
+  assert.ok(has("asset:sales_agent", "reads", "asset:users"));
+  assert.ok(!g.edges.some((e) => e.from === "asset:nobody"));
+  // users.email is PII, so the agent that reads users is PII; orders has no PII column here.
+  const pii = g.edges.find((e) => e.from === "asset:sales_agent" && e.to === "tag:PII");
+  assert.ok(pii && pii.derived && pii.rule === "agent_pii" && pii.because.length === 2);
+  assert.ok(!has("asset:orders_agent", "tagged", "tag:PII"));
+  const off = KG.buildMetadataGraph(inp, { rules: { agent_pii: false } });
+  assert.ok(!off.edges.some((e) => e.rule === "agent_pii"));
+});

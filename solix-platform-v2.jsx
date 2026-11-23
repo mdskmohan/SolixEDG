@@ -1791,6 +1791,170 @@ const AKG_TABLE_ASSETS = [];
 })();
 ASSETS.push(...AKG_ASSETS, ...AKG_TABLE_ASSETS);
 
+// ═══════════════════════════════════════════════════════════════════════════
+// AI AGENTS, MCP SERVERS AND THE AI GATEWAY
+// ═══════════════════════════════════════════════════════════════════════════
+// The AI Gateway connector catalogs what the gateway routes: the agents behind it, the
+// MCP servers and tools they call, and which tables and views those calls touch. EDG
+// keeps metadata only - agent, tool, asset, call counts, last used. Prompts, answers and
+// rows never leave the gateway.
+//
+// Every agent -> asset use says where it came from:
+//   configured - the agent platform's own definition (tools, knowledge sources,
+//                semantic views it was given): what the agent CAN use.
+//   observed   - gateway traces (OpenTelemetry GenAI), SQL parsed to tables: what the
+//                agent DID use, how often and when last.
+// A generic SQL tool names no tables, so for it only "observed" can say which.
+const AI_TYPES = ["AI Gateway","MCP Server","MCP Tool","AI Agent"];
+const isAiType = t => AI_TYPES.includes(t);
+const AI_USE_SRC = {
+  observed:  {l:"Observed",   c:"#16a34a"},
+  configured:{l:"Configured", c:"#64748b"},
+};
+const AI_GATEWAY_META = {
+  "agentgateway-prod":{vendor:"agentgateway", version:"0.9.2", env:"Production", endpoint:"https://ai-gw.corp.local",
+    telemetry:"OpenTelemetry GenAI traces", window:"Last 7 days", synced:"2026-11-23 06:00",
+    policies:["OAuth 2.0 token required on every call","PII redaction on tool responses","Tool quarantined when its schema changes","Rate limit · 600 calls/min per agent"]},
+};
+const MCP_SERVER_META = {
+  "snowflake-mcp":   {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/snowflake",   auth:"OAuth 2.0",        conn:"Snowflake DWH",
+    tools:["snowflake.run_sql","snowflake.query_semantic_view"]},
+  "oracle-hr-mcp":   {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/oracle-hr",   auth:"OAuth 2.0",        conn:"Oracle ERP",
+    tools:["oracle_hr.get_employee","oracle_hr.list_org_chart"]},
+  "ecs-docs-mcp":    {gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/ecs-docs",    auth:"Service token",    conn:"Solix ECS",
+    tools:["ecs.search_contracts"]},
+  "databricks-uc-mcp":{gateway:"agentgateway-prod", transport:"Streamable HTTP", endpoint:"/mcp/databricks", auth:"OAuth 2.0",        conn:"Databricks",
+    tools:["databricks.get_features"]},
+};
+const MCP_TOOL_META = {
+  "snowflake.run_sql":            {server:"snowflake-mcp",     kind:"SQL query",      scope:"Schemas COMMERCE, FINANCE", configured:[],
+    desc:"Runs a read-only SQL statement. Names no tables of its own: which tables it touches is known only from observed calls."},
+  "snowflake.query_semantic_view":{server:"snowflake-mcp",     kind:"Semantic view",  scope:"store_sales_sv", configured:["store_sales_sv"],
+    desc:"Answers a question through the store sales semantic view."},
+  "oracle_hr.get_employee":       {server:"oracle-hr-mcp",     kind:"Lookup",         scope:"HR.EMPLOYEES",  configured:["employees"],
+    desc:"Returns one employee record by employee id or email."},
+  "oracle_hr.list_org_chart":     {server:"oracle-hr-mcp",     kind:"Lookup",         scope:"HR.EMPLOYEES",  configured:["employees"],
+    desc:"Returns the reporting line above and below an employee."},
+  "ecs.search_contracts":         {server:"ecs-docs-mcp",      kind:"Retrieval",      scope:"Finance contracts", configured:["contracts_2025.pdf"],
+    desc:"Searches archived contract documents and returns matching passages."},
+  "databricks.get_features":      {server:"databricks-uc-mcp", kind:"Feature lookup", scope:"ml_features.feature_store", configured:["feature_store"],
+    desc:"Returns churn and lifetime-value features for one customer."},
+};
+// uses: {asset, configured, observed:{calls,last}|null, via:tool}
+const _obs = (calls,last) => ({calls,last});
+const AGENT_META = {
+  "Sales Insights Agent":{platform:"Snowflake Cortex Agents", model:"Claude Sonnet 5.5", identity:"Delegated · end user",
+    gateway:"agentgateway-prod", firstSeen:"2026-08-04", lastActive:"12 min ago",
+    tools:["snowflake.query_semantic_view","snowflake.run_sql"],
+    uses:[
+      {asset:"store_sales_sv",   configured:true,  observed:_obs(2410,"12 min ago"), via:"snowflake.query_semantic_view"},
+      {asset:"orders",           configured:false, observed:_obs(1842,"12 min ago"), via:"snowflake.run_sql"},
+      {asset:"vw_order_summary", configured:false, observed:_obs(611,"1h ago"),      via:"snowflake.run_sql"},
+      {asset:"dim_products",     configured:false, observed:_obs(388,"3h ago"),      via:"snowflake.run_sql"},
+      {asset:"customers",        configured:false, observed:_obs(142,"1d ago"),      via:"snowflake.run_sql"},
+    ]},
+  "HR Helpdesk Agent":{platform:"Microsoft Copilot Studio", model:"GPT-4o", identity:"Service principal · svc-hr-helpdesk",
+    gateway:"agentgateway-prod", firstSeen:"2026-09-22", lastActive:"4 min ago",
+    tools:["oracle_hr.get_employee","oracle_hr.list_org_chart"],
+    uses:[
+      {asset:"employees", configured:true, observed:_obs(3905,"4 min ago"), via:"oracle_hr.get_employee"},
+    ]},
+  "Contract Review Agent":{platform:"Amazon Bedrock Agents", model:"Claude Haiku 5.5", identity:"Delegated · end user",
+    gateway:"agentgateway-prod", firstSeen:"2026-10-01", lastActive:"2h ago",
+    tools:["ecs.search_contracts"],
+    uses:[
+      {asset:"contracts_2025.pdf", configured:true, observed:_obs(276,"2h ago"), via:"ecs.search_contracts"},
+    ]},
+  "Churn Model Assistant":{platform:"Databricks Mosaic AI", model:"Llama 3.3 70B", identity:"Service principal · svc-churn",
+    gateway:"agentgateway-prod", firstSeen:"2026-07-15", lastActive:"35 min ago",
+    tools:["databricks.get_features"],
+    uses:[
+      {asset:"feature_store", configured:true, observed:_obs(954,"35 min ago"), via:"databricks.get_features"},
+    ]},
+  "Finance Close Agent":{platform:"Custom · LangGraph", model:"Claude Opus 5.5", identity:"Service principal · svc-fin-close",
+    gateway:"agentgateway-prod", firstSeen:"2026-10-28", lastActive:"6h ago",
+    tools:["snowflake.run_sql"],
+    uses:[
+      {asset:"transactions", configured:false, observed:_obs(1120,"6h ago"), via:"snowflake.run_sql"},
+      {asset:"orders",       configured:false, observed:_obs(430,"6h ago"),  via:"snowflake.run_sql"},
+    ]},
+  "Support Triage Agent":{platform:"Microsoft Copilot Studio", model:"GPT-4o", identity:"Delegated · end user",
+    gateway:"agentgateway-prod", firstSeen:"2026-11-20", lastActive:"No calls yet",
+    tools:["snowflake.run_sql"],
+    uses:[
+      {asset:"customers", configured:true, observed:null, via:"snowflake.run_sql"},
+      {asset:"orders",    configured:true, observed:null, via:"snowflake.run_sql"},
+    ]},
+};
+const AI_ASSETS = (()=>{
+  const out = []; let id = 7900;
+  const base = (name,type,x) => ({id:id++, name, type, cert:"Approved", quality:0, usage:"", updated:"1h ago",
+    service:"aigateway", connectionLabel:"AI Gateway", tier:2, rows:"—", size:"—", tags:[], ...x});
+  out.push(base("agentgateway-prod","AI Gateway",{domain:"Platform", owner:"james.oh", owners:["james.oh"], steward:"james.oh", stewards:["james.oh"],
+    db:"agentgateway · Production", description:"Production AI gateway. Every agent and MCP call in the company is routed and traced here."}));
+  const SERVER_OWNER = {"snowflake-mcp":["maya.chen","Commerce"], "oracle-hr-mcp":["james.oh","Platform"], "ecs-docs-mcp":["sarah.kim","Finance"], "databricks-uc-mcp":["priya.nair","ML"]};
+  Object.entries(MCP_SERVER_META).forEach(([n,m])=>{ const [o,d] = SERVER_OWNER[n];
+    out.push(base(n,"MCP Server",{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n}`,
+      description:`MCP server over ${m.conn}.`}));
+    m.tools.forEach(t=>out.push(base(t,"MCP Tool",{domain:d, owner:o, owners:[o], steward:o, stewards:[o], db:`${m.gateway} · ${n} · ${t}`,
+      description:MCP_TOOL_META[t].desc})));
+  });
+  const AG = {
+    "Sales Insights Agent": {domain:"Commerce", owner:"maya.chen", steward:"dev.patel", cert:"Approved",
+      description:"Answers sales questions for store and regional managers."},
+    "HR Helpdesk Agent":    {domain:"Platform", owner:"",          steward:"james.oh",  cert:"In Review",
+      description:"Answers employee questions about colleagues, managers and the org chart."},
+    "Contract Review Agent":{domain:"Finance",  owner:"sarah.kim", steward:"sarah.kim", cert:"Approved",
+      description:"Finds clauses and renewal dates across archived contracts."},
+    "Churn Model Assistant":{domain:"ML",       owner:"priya.nair",steward:"priya.nair",cert:"Approved",
+      description:"Explains a customer's churn score from the features behind it."},
+    "Finance Close Agent":  {domain:"Finance",  owner:"sarah.kim", steward:"alex.wu",   cert:"Approved",
+      description:"Reconciles transactions against orders during month-end close."},
+    "Support Triage Agent": {domain:"Commerce", owner:"alex.wu",   steward:"alex.wu",   cert:"Draft",
+      description:"Looks up a customer's recent orders to route support tickets."},
+  };
+  Object.entries(AG).forEach(([n,x])=>out.push(base(n,"AI Agent",{domain:x.domain, owner:x.owner, owners:x.owner?[x.owner]:[],
+    steward:x.steward, stewards:[x.steward], cert:x.cert, db:`${AGENT_META[n].gateway} · ${AGENT_META[n].platform}`,
+    updated:AGENT_META[n].lastActive==="No calls yet"?"3d ago":"1h ago", description:x.description})));
+  return out;
+})();
+ASSETS.push(...AI_ASSETS);
+// Catalog lookups. A name can repeat across connections, so data assets resolve to the
+// first non-AI asset of that name.
+const aiDataAsset = n => ASSETS.find(a=>a.name===n && !isAiType(a.type));
+const aiAssetPii = n => (SCHEMA[n]||[]).some(c=>c.pii) || ((aiDataAsset(n)||{}).tags||[]).includes("PII");
+const aiUseSrc = u => u.observed ? (u.configured ? "Configured · Observed" : "Observed") : "Configured";
+// Every use of every agent, flattened: {agent, asset, configured, observed, via}.
+const aiAllUses = () => Object.entries(AGENT_META).flatMap(([agent,m])=>m.uses.map(u=>({agent, ...u})));
+const aiAgentsOfTool = t => Object.keys(AGENT_META).filter(a=>AGENT_META[a].tools.includes(t));
+// What one tool touches: its configured assets plus every observed call made through it.
+const aiToolUses = t => {
+  const m = MCP_TOOL_META[t]; if(!m) return [];
+  const rows = m.configured.map(a=>({asset:a, configured:true, observed:null, agents:[]}));
+  aiAllUses().filter(u=>u.via===t).forEach(u=>{
+    let r = rows.find(x=>x.asset===u.asset);
+    if(!r){ r = {asset:u.asset, configured:false, observed:null, agents:[]}; rows.push(r); }
+    if(u.configured) r.configured = true;
+    if(u.observed) r.observed = {calls:(r.observed?r.observed.calls:0)+u.observed.calls, last:r.observed?r.observed.last:u.observed.last};
+    if(!r.agents.includes(u.agent)) r.agents.push(u.agent);
+  });
+  return rows;
+};
+// Edges for the knowledge graph (by asset name; the graph drops any it cannot resolve).
+const aiKgEdges = () => {
+  const e = [];
+  Object.entries(MCP_SERVER_META).forEach(([s,m])=>{ e.push({from:m.gateway, to:s, type:"routes"});
+    m.tools.forEach(t=>e.push({from:s, to:t, type:"contains"})); });
+  Object.entries(MCP_TOOL_META).forEach(([t,m])=>m.configured.forEach(a=>e.push({from:t, to:a, type:"reads", label:"Configured"})));
+  Object.entries(AGENT_META).forEach(([ag,m])=>{
+    e.push({from:m.gateway, to:ag, type:"routes"});
+    m.tools.forEach(t=>e.push({from:ag, to:t, type:"calls"}));
+    m.uses.forEach(u=>e.push({from:ag, to:u.asset, type:"reads",
+      label: u.observed ? `${aiUseSrc(u)} · ${u.observed.calls.toLocaleString()} calls` : "Configured"}));
+  });
+  return e;
+};
+
 // Extended schema for new tables
 Object.assign(SCHEMA,{
   transactions:[
@@ -4776,6 +4940,7 @@ const SERVICE_LOGOS = {
   powerbi:    <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#F2C811"/><rect x="9" y="16" width="4.5" height="9" rx="1" fill="#8a6d00"/><rect x="14.5" y="11" width="4.5" height="14" rx="1" fill="#6b5400"/><rect x="20" y="7" width="4.5" height="18" rx="1" fill="#4d3c00"/></svg>,
   dbt:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#ff6f44"/><path d="M16 8l4 4-4 4-4-4 4-4z" fill="white" opacity=".3"/><path d="M16 12v8M12 16h8" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>,
   bigquery:   <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#4285f4"/><circle cx="14" cy="14" r="5" fill="none" stroke="white" strokeWidth="1.5" opacity=".5"/><circle cx="14" cy="14" r="2.5" fill="white"/><path d="M18 18l4 4" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  aigateway:  <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#334155"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><circle cx="31" cy="20" r="2.6" fill="white"/></svg>,
   eai:        <svg viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   sap:        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#0FAAFF"/><text x="16" y="21" textAnchor="middle" fill="white" fontSize="10" fontWeight="700" fontFamily="Arial">SAP</text></svg>,
   salesforce: <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="6" fill="#00A1E0"/><path d="M9 20c-1.7 0-3-1.3-3-3s1.3-3 3-3c.2-1.7 1.7-3 3.4-3 1.2 0 2.2.6 2.8 1.5.6-.9 1.7-1.5 2.9-1.5 1.9 0 3.4 1.5 3.4 3.4 1.4.2 2.5 1.4 2.5 2.9 0 1.7-1.3 3-3 3H9z" fill="white"/></svg>,
@@ -4870,6 +5035,11 @@ const TYPE_META = {
   "Iceberg Table": {c:"#1FA8DE", bg:"rgba(31,168,222,.12)", icon:"◮"},
   // -- Solix EAI: one Application Knowledge Graph per application Data Sense maps --
   "Application Knowledge Graph": {c:"#8b5cf6", bg:"rgba(139,92,246,.1)", icon:"⬡"},
+  // -- AI Gateway connector: what the gateway routes --
+  "AI Gateway": {c:"#334155", bg:"rgba(51,65,85,.1)",   icon:"⛩"},
+  "MCP Server": {c:"#115e59", bg:"rgba(17,94,89,.1)",   icon:"▤"},
+  "MCP Tool":   {c:"#0f766e", bg:"rgba(15,118,110,.1)", icon:"⚙"},
+  "AI Agent":   {c:"#c026d3", bg:"rgba(192,38,211,.1)", icon:"✦"},
 };
 const TypeBadge = ({type})=>{
   const s = TYPE_META[type]||{c:T.textMuted,bg:T.bgHover,icon:"▪"};
@@ -21905,6 +22075,7 @@ const LINEAGE_TYPE_COLOR={
   "dbt Source":"#f97316", "dbt Model":"#ff694b", "dbt Seed":"#eab308",
   "dbt Snapshot":"#8b5cf6", "dbt Metric":"#0ea5e9", "dbt Exposure":"#a78bfa",
   View:"#818cf8", "Application Knowledge Graph":"#8b5cf6",
+  "AI Agent":"#c026d3", "MCP Tool":"#0f766e", "Semantic View":"#0891b2", Object:"#64748b",
 };
 
 // ─── Default lineage: deliberately EMPTY ──────────────────────────────────────
@@ -22659,6 +22830,51 @@ function akgLineageGraph(asset, activeOnly){
   return {topo, meta, colMaps:[], edges, akg:true};
 }
 
+
+// AI agent and MCP tool lineage, in the same graph shape every other connector uses.
+// On an agent: the assets it uses -> the tool each call went through -> the agent.
+// On a tool:   the assets it touches -> the tool -> the agents that call it.
+// Observed edges are solid, configured-only edges dashed. Gateways and MCP servers route
+// calls rather than move data, so they have no lineage (they are in the Knowledge Graph).
+function aiLineageGraph(asset){
+  if(!asset || !["AI Agent","MCP Tool"].includes(asset.type)) return null;
+  const metaOf = a => ({assetType:a.type, service:a.service, db:a.db, domain:a.domain,
+    owner:a.owner||"Unowned", steward:(a.stewards||[])[0]||a.steward||"", quality:a.quality||0, cert:a.cert,
+    tags:a.tags||[], cols:(SCHEMA[a.name]||[]).map(c=>({n:c.name,t:c.type})), description:a.description});
+  const aiA = n => ASSETS.find(x=>x.name===n && isAiType(x.type));
+  const ROW=90, topo={}, meta={}, edges=[];
+  const place = (ids, x) => ids.forEach((id,k)=>{ topo[id]={...topo[id], x, y:Math.round((k-(ids.length-1)/2)*ROW)}; });
+  const link = (s, t, u) => {
+    topo[s].downstream = [...new Set([...(topo[s].downstream||[]), t])];
+    topo[t].upstream   = [...new Set([...(topo[t].upstream||[]), s])];
+    const src = u ? (u.observed ? "observed" : "configured") : null;
+    edges.push({id:`ai_${edges.length}`, s, t,
+      tk: u ? (u.observed ? `${u.observed.calls.toLocaleString()} calls` : "Configured") : null,
+      color: src ? AI_USE_SRC[src].c : "#94a3b8", dashed: src==="configured"});
+  };
+  const addAsset = (id, a, label) => { if(topo[id]) return; meta[id] = metaOf(a); topo[id] = {label, upstream:[], downstream:[]}; };
+  if(asset.type==="AI Agent"){
+    const m = AGENT_META[asset.name]; if(!m) return null;
+    addAsset("ag", asset, asset.name); topo.ag.active = true;
+    const dataIds = [], toolIds = [];
+    m.uses.forEach(u=>{ const a = aiDataAsset(u.asset); if(!a) return;
+      const did = "d_"+u.asset; addAsset(did, a, u.asset); if(!dataIds.includes(did)) dataIds.push(did);
+      const tool = u.via && aiA(u.via);
+      if(tool){ const tid = "t_"+u.via; if(!topo[tid]){ addAsset(tid, tool, u.via); toolIds.push(tid); link(tid, "ag", null); } link(did, tid, u); }
+      else link(did, "ag", u);
+    });
+    place(dataIds, 0); place(toolIds, 310); place(["ag"], 620);
+  } else {
+    const rows = aiToolUses(asset.name);
+    addAsset("tool", asset, asset.name); topo.tool.active = true;
+    const dataIds = [], agIds = [];
+    rows.forEach(r=>{ const a = aiDataAsset(r.asset); if(!a) return; const did = "d_"+r.asset; addAsset(did, a, r.asset); dataIds.push(did); link(did, "tool", r); });
+    aiAgentsOfTool(asset.name).forEach(g=>{ const a = aiA(g); if(!a) return; const gid = "g_"+g; addAsset(gid, a, g); agIds.push(gid); link("tool", gid, null); });
+    place(dataIds, 0); place(["tool"], 310); place(agIds, 620);
+  }
+  return {topo, meta, colMaps:[], edges, ai:true};
+}
+
 // Resolve which lineage graph an asset's Lineage tab renders. dbt assets (and the Snowflake
 // table a dbt model materializes) get the full Postgres -> dbt -> Snowflake -> Tableau path;
 // Tableau assets get the BI path; everything else keeps the default graph. The matching node
@@ -22667,6 +22883,9 @@ function pickLineageGraph(asset, akgActiveOnly){
   // An AKG, or a table an AKG uses, answers with its AKG lineage.
   const akgG = akgLineageGraph(asset, akgActiveOnly);
   if(akgG) return akgG;
+  // An AI agent or MCP tool answers with the data it uses.
+  const aiG = aiLineageGraph(asset);
+  if(aiG) return aiG;
   // The unified graph FIRST, wherever the asset appears in it. It spans Snowflake sources ->
   // dbt models -> the table they materialize -> the Tableau and Power BI objects that read
   // it, so a Power BI dataset and the dbt model that feeds it now answer with the same
@@ -22722,7 +22941,7 @@ const AssetLineageFull=({asset})=>{
   const _activeId=useMemo(()=>Object.entries(_Gdbt.topo||{}).find(([,t])=>t.active)?.[0]||null,[_Gdbt]);
   // An AKG always spans two products (EAI and the application it maps), so "This source"
   // would only ever empty the graph - the scope control is not offered there.
-  const _crossCount=useMemo(()=>_Graw.akg?0:crossSourceCount(_Gdbt,asset?.service),[_Gdbt,asset,_Graw]);
+  const _crossCount=useMemo(()=>(_Graw.akg||_Graw.ai)?0:crossSourceCount(_Gdbt,asset?.service),[_Gdbt,asset,_Graw]);
   const _G=useMemo(()=>lineageScope==="source"
     ? inSourceOnly(_Gdbt,asset?.service,_activeId)
     : _Gdbt,[_Gdbt,lineageScope,asset,_activeId]);
@@ -22879,6 +23098,13 @@ const AssetLineageFull=({asset})=>{
             <span key={type} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
               <span style={{width:8,height:8,borderRadius:2,background:LINEAGE_TYPE_COLOR[type]||"#94a3b8",display:"inline-block"}}/>
               {type}
+            </span>
+          ))}
+          {/* AI edges: observed calls solid, configured-only dashed. */}
+          {_Graw.ai&&Object.entries(AI_USE_SRC).map(([k,s])=>(
+            <span key={k} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:"#64748b"}}>
+              <span style={{width:14,height:0,borderTop:`2px ${k==="observed"?"solid":"dashed"} ${s.c}`,display:"inline-block"}}/>
+              {s.l}
             </span>
           ))}
           {/* AKG edges are coloured by the table's scope state in the AKG. */}
@@ -29744,6 +29970,204 @@ const AkgTh = ({cols})=>(
 const akgTd = {padding:"9px 14px",fontSize:12,get color(){return T.textSub;},verticalAlign:"top"};
 const akgMono = {fontFamily:"'Geist Mono',monospace",get color(){return T.text;}};
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// AI AGENT / MCP / AI GATEWAY PROFILES - Overview · Tools · Data Used · Routes
+// ═══════════════════════════════════════════════════════════════════════════
+const AiSrcPill = ({src})=>{
+  const m = AI_USE_SRC[src];
+  return <span style={{fontSize:10.5,fontWeight:600,color:m.c,background:`${m.c}12`,border:`1px ${src==="configured"?"dashed":"solid"} ${m.c}55`,borderRadius:99,padding:"1px 8px",whiteSpace:"nowrap"}}>{m.l}</span>;
+};
+const AiSrcPills = ({u})=>(
+  <span style={{display:"inline-flex",gap:4,flexWrap:"wrap"}}>
+    {u.configured&&<AiSrcPill src="configured"/>}{u.observed&&<AiSrcPill src="observed"/>}
+  </span>
+);
+const AiPiiChip = ()=>(
+  <span style={{fontSize:10.5,fontWeight:600,color:T.textSub,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:4,padding:"1px 7px",whiteSpace:"nowrap"}}>PII</span>
+);
+// A catalog name that opens the asset. AI names are unique; data names resolve to the data asset.
+const AiLink = ({name, ai, onAsset})=>{
+  const a = ai ? ASSETS.find(x=>x.name===name && isAiType(x.type)) : aiDataAsset(name);
+  if(!a || !onAsset) return <span style={akgMono}>{name}</span>;
+  return <button onClick={()=>onAsset(a)} style={{background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"'Geist Mono',monospace",fontSize:12,color:T.accent,textAlign:"left"}}>{name}</button>;
+};
+const AiTable = ({cols, children, empty})=>(
+  <Card2>
+    <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse"}}>
+      <AkgTh cols={cols}/>
+      <tbody>{children}</tbody>
+    </table></div>
+    {empty&&<div style={{padding:"28px",textAlign:"center",fontSize:12.5,color:T.textMuted}}>{empty}</div>}
+  </Card2>
+);
+const aiTr = {get borderBottom(){return `1px solid ${T.border}`;}};
+const aiCalls = n => n==null ? "—" : n.toLocaleString();
+const AiStat = ({l,v,warn})=>(
+  <div style={{padding:"8px 10px",borderRadius:8,border:`1px solid ${warn?`${T.amber}55`:T.border}`,background:T.bgElevated}}>
+    <div style={{fontSize:10.5,color:T.textMuted,fontWeight:600}}>{l}</div>
+    <div style={{fontSize:18,fontWeight:700,color:warn?T.amber:T.text,marginTop:3}}>{v}</div>
+  </div>
+);
+const AiBanner = ({children})=>(
+  <div style={{padding:"10px 14px",borderRadius:8,background:`${T.amber}12`,border:`1px solid ${T.amber}40`,fontSize:12.5,color:T.textSub}}>{children}</div>
+);
+
+const AiOverview = ({asset,data,setData,onToast})=>{
+  const t = asset.type;
+  const desc = <DescSection key={asset.id} text={data.description} obj={{...asset, ...data}} onToast={onToast} onSave={x=>setData(d=>({...d,description:x}))}/>;
+  if(t==="AI Agent"){
+    const m = AGENT_META[asset.name]; if(!m) return desc;
+    const pii = m.uses.filter(u=>aiAssetPii(u.asset));
+    const calls = m.uses.reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
+    const unowned = (data.owners||[]).length===0;
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+        {unowned&&pii.length>0&&<AiBanner><b style={{color:T.amber}}>Unowned · reads PII</b> · {pii.map(u=>u.asset).join(", ")}. Inbox task “Assign an owner” sent to {(data.stewards||[])[0]||"the Connection Admin of AI Gateway"}.</AiBanner>}
+        {desc}
+        <Card2><div style={{padding:"14px 16px"}}>
+          <SH title="Agent"/>
+          <DbtProps rows={[["Platform",m.platform],["Model",m.model],["Identity",m.identity],["Gateway",m.gateway],
+            ["First seen",m.firstSeen],["Last active",m.lastActive],["Calls · 7 days",aiCalls(calls)],["Tools",m.tools.length]]}/>
+        </div></Card2>
+        <Card2><div style={{padding:"14px 16px"}}>
+          <SH title="Data used" sub={AI_GATEWAY_META[m.gateway]?.window}/>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            <AiStat l="Assets" v={m.uses.length}/>
+            <AiStat l="With PII" v={pii.length} warn={pii.length>0}/>
+            <AiStat l="Observed, not configured" v={m.uses.filter(u=>u.observed&&!u.configured).length}/>
+            <AiStat l="Configured, never called" v={m.uses.filter(u=>u.configured&&!u.observed).length}/>
+          </div>
+        </div></Card2>
+      </div>
+    );
+  }
+  if(t==="MCP Tool"){
+    const m = MCP_TOOL_META[asset.name]; if(!m) return desc;
+    const rows = aiToolUses(asset.name);
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+        {desc}
+        <Card2><div style={{padding:"14px 16px"}}>
+          <SH title="MCP tool"/>
+          <DbtProps rows={[["MCP server",m.server],["Kind",m.kind],["Scope",m.scope],["Agents calling",aiAgentsOfTool(asset.name).length],
+            ["Assets touched",rows.length],["Calls · 7 days",aiCalls(rows.reduce((s,r)=>s+(r.observed?r.observed.calls:0),0))]]}/>
+        </div></Card2>
+      </div>
+    );
+  }
+  if(t==="MCP Server"){
+    const m = MCP_SERVER_META[asset.name]; if(!m) return desc;
+    return (
+      <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+        {desc}
+        <Card2><div style={{padding:"14px 16px"}}>
+          <SH title="MCP server"/>
+          <DbtProps rows={[["Gateway",m.gateway],["Transport",m.transport],["Endpoint",m.endpoint],["Authentication",m.auth],
+            ["Connection",m.conn],["Tools",m.tools.length]]}/>
+        </div></Card2>
+      </div>
+    );
+  }
+  const m = AI_GATEWAY_META[asset.name]; if(!m) return desc;
+  const agents = Object.keys(AGENT_META).filter(a=>AGENT_META[a].gateway===asset.name);
+  const servers = Object.keys(MCP_SERVER_META).filter(s=>MCP_SERVER_META[s].gateway===asset.name);
+  const calls = aiAllUses().filter(u=>AGENT_META[u.agent].gateway===asset.name).reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16,maxWidth:920}}>
+      {desc}
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="AI gateway"/>
+        <DbtProps rows={[["Vendor",m.vendor],["Version",m.version],["Environment",m.env],["Endpoint",m.endpoint],
+          ["Telemetry",m.telemetry],["Last synced",m.synced]]}/>
+      </div></Card2>
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Traffic" sub={m.window}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+          <AiStat l="Agents" v={agents.length}/>
+          <AiStat l="MCP servers" v={servers.length}/>
+          <AiStat l="Tools" v={servers.reduce((s,x)=>s+MCP_SERVER_META[x].tools.length,0)}/>
+          <AiStat l="Calls" v={aiCalls(calls)}/>
+        </div>
+      </div></Card2>
+      <Card2><div style={{padding:"14px 16px"}}>
+        <SH title="Policies enforced" sub="Read from the gateway"/>
+        {m.policies.map(p=><div key={p} style={{fontSize:12.5,color:T.textSub,padding:"6px 0",borderTop:`1px solid ${T.border}`}}>{p}</div>)}
+      </div></Card2>
+    </div>
+  );
+};
+
+// Tools of an agent, or of an MCP server.
+const AiToolsPanel = ({asset,onAsset})=>{
+  const isAgent = asset.type==="AI Agent";
+  const tools = isAgent ? (AGENT_META[asset.name]||{tools:[]}).tools : (MCP_SERVER_META[asset.name]||{tools:[]}).tools;
+  const callsOf = t => aiAllUses().filter(u=>u.via===t && (!isAgent||u.agent===asset.name)).reduce((s,u)=>s+(u.observed?u.observed.calls:0),0);
+  return (
+    <AiTable cols={["Tool","MCP server","Kind","Scope","Calls · 7 days"]} empty={tools.length?null:"No tools"}>
+      {tools.map(t=>{ const m = MCP_TOOL_META[t]; return (
+        <tr key={t} style={aiTr}>
+          <td style={akgTd}><AiLink name={t} ai onAsset={onAsset}/></td>
+          <td style={akgTd}><AiLink name={m.server} ai onAsset={onAsset}/></td>
+          <td style={akgTd}>{m.kind}</td>
+          <td style={akgTd}>{m.scope}</td>
+          <td style={akgTd}>{aiCalls(callsOf(t))}</td>
+        </tr>); })}
+    </AiTable>
+  );
+};
+
+// Tables, views and objects an agent or a tool uses, and where each fact came from.
+const AiDataUsedPanel = ({asset,onAsset})=>{
+  const isAgent = asset.type==="AI Agent";
+  const rows = isAgent ? (AGENT_META[asset.name]||{uses:[]}).uses : aiToolUses(asset.name);
+  return (
+    <AiTable cols={["Asset","Type","Connection","Source",isAgent?"Via tool":"Agents","Calls · 7 days","Last used",""]} empty={rows.length?null:"No data used yet"}>
+      {rows.map(u=>{ const a = aiDataAsset(u.asset)||{}; return (
+        <tr key={u.asset} style={aiTr}>
+          <td style={akgTd}><AiLink name={u.asset} onAsset={onAsset}/></td>
+          <td style={akgTd}>{a.type?<TypeBadge type={a.type}/>:"—"}</td>
+          <td style={akgTd}>{a.connectionLabel||"—"}</td>
+          <td style={akgTd}><AiSrcPills u={u}/></td>
+          <td style={akgTd}>{isAgent
+            ? (u.via?<AiLink name={u.via} ai onAsset={onAsset}/>:"—")
+            : (u.agents.length?u.agents.map((g,i)=><span key={g}>{i>0&&", "}<AiLink name={g} ai onAsset={onAsset}/></span>):"—")}</td>
+          <td style={akgTd}>{aiCalls(u.observed&&u.observed.calls)}</td>
+          <td style={akgTd}>{u.observed?u.observed.last:"Never"}</td>
+          <td style={akgTd}>{aiAssetPii(u.asset)&&<AiPiiChip/>}</td>
+        </tr>); })}
+    </AiTable>
+  );
+};
+
+// What a gateway routes: its agents and MCP servers.
+const AiRoutesPanel = ({asset,onAsset})=>{
+  const agents = Object.keys(AGENT_META).filter(a=>AGENT_META[a].gateway===asset.name);
+  const servers = Object.keys(MCP_SERVER_META).filter(s=>MCP_SERVER_META[s].gateway===asset.name);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+      <SH title="Agents" sub={`${agents.length}`}/>
+      <AiTable cols={["Agent","Platform","Model","Owner","Last active"]}>
+        {agents.map(g=>{ const m = AGENT_META[g], a = ASSETS.find(x=>x.name===g&&x.type==="AI Agent")||{}; return (
+          <tr key={g} style={aiTr}>
+            <td style={akgTd}><AiLink name={g} ai onAsset={onAsset}/></td>
+            <td style={akgTd}>{m.platform}</td><td style={akgTd}>{m.model}</td>
+            <td style={akgTd}>{(a.owners||[]).length?a.owners.join(", "):<span style={{color:T.amber}}>Unowned</span>}</td>
+            <td style={akgTd}>{m.lastActive}</td>
+          </tr>); })}
+      </AiTable>
+      <SH title="MCP servers" sub={`${servers.length}`}/>
+      <AiTable cols={["MCP server","Connection","Transport","Tools"]}>
+        {servers.map(s=>{ const m = MCP_SERVER_META[s]; return (
+          <tr key={s} style={aiTr}>
+            <td style={akgTd}><AiLink name={s} ai onAsset={onAsset}/></td>
+            <td style={akgTd}>{m.conn}</td><td style={akgTd}>{m.transport}</td><td style={akgTd}>{m.tools.length}</td>
+          </tr>); })}
+      </AiTable>
+    </div>
+  );
+};
+
 const AkgOverview = ({asset,data,setData,onToast,onNav})=>{
   const m = AKG_META[asset.name];
   if(!m) return null;
@@ -30241,7 +30665,20 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // Lineage for both goes through the standard Lineage tab (see akgLineageGraph).
   const isAKG      = asset.type==="Application Knowledge Graph" && !!AKG_META[asset.name];
   const isPartial  = !!asset.partial;
-  const tabs = isAKG
+  // Agents, MCP servers and tools, and the gateway they route through, are catalog assets
+  // with no schema, profiling or quality of their own.
+  const isAI       = isAiType(asset.type);
+  const tabs = isAI
+    ? [
+        {key:"overview",label:"Overview"},
+        ...(asset.type==="AI Agent"||asset.type==="MCP Server"?[{key:"aitools",label:"Tools"}]:[]),
+        ...(asset.type==="AI Agent"||asset.type==="MCP Tool"?[{key:"aidata",label:"Data Used"},{key:"lineage",label:"Lineage"}]:[]),
+        ...(asset.type==="AI Gateway"?[{key:"airoutes",label:"Routes"}]:[]),
+        {key:"kg",label:"Knowledge Graph"},
+        {key:"customprops",label:"Custom Properties"},
+        {key:"activity",label:"Audit Logs"},
+      ]
+    : isAKG
     ? [
         {key:"overview",label:"Overview"},
         {key:"akgtables",label:"Assets"},
@@ -30401,7 +30838,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
 
       {/* Main content */}
       <div style={{flex:1,overflowY:"auto",padding:24,minWidth:0}}>
-        {tab==="overview"  && (isAKG
+        {tab==="overview"  && (isAI
+          ? <AiOverview asset={asset} data={data} setData={setData} onToast={onToast}/>
+          : isAKG
           ? <AkgOverview asset={asset} data={data} setData={setData} onToast={onToast} onNav={onNav}/>
           : isPBI
           ? <PowerBiOverview asset={asset} data={data} setData={setData} onToast={onToast} onAsset={onAsset}/>
@@ -30424,6 +30863,9 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="dbt"       && dbtOnTable && <DbtOnTablePanel asset={data} onAsset={onAsset}/>}
         {tab==="glue"      && glueOnTable && <GlueOnTablePanel asset={data}/>}
         {tab==="bigid"     && bigidOnAsset && <BigIdOnAssetPanel asset={data} onToast={onToast}/>}
+        {tab==="aitools"     && isAI && <AiToolsPanel asset={data} onAsset={onAsset}/>}
+        {tab==="aidata"      && isAI && <AiDataUsedPanel asset={data} onAsset={onAsset}/>}
+        {tab==="airoutes"    && isAI && <AiRoutesPanel asset={data} onAsset={onAsset}/>}
         {tab==="akgtables"   && isAKG && <AkgTablesPanel asset={data} onAsset={onAsset}/>}
         {tab==="akgrels"     && isAKG && <AkgRelationshipsPanel asset={data}/>}
         {tab==="akgversions" && isAKG && <AkgVersionsPanel asset={data}/>}
@@ -31507,7 +31949,7 @@ const CatalogView = ({onAsset})=>{
   const CONN_TYPE_LABELS = {cdp:"Solix CDP",ecs:"Solix ECS",snowflake:"Snowflake",databricks:"Databricks",
     oracle:"Oracle",postgres:"PostgreSQL",mysql:"MySQL",s3:"Amazon S3",azureblob:"Azure Blob",
     gcs:"Google Cloud Storage",airflow:"Airflow",tableau:"Tableau",powerbi:"Power BI",
-    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery",eai:"Solix EAI",sap:"SAP"};
+    glue:"AWS Glue",dbt:"dbt",bigid:"BigID",bigquery:"BigQuery",eai:"Solix EAI",aigateway:"AI Gateway",sap:"SAP"};
   const allConnTypes = [...new Set(ASSETS.map(a=>a.service))];
   const visibleConns = selConnTypes.size===0 ? [...new Set(ASSETS.map(a=>a.connectionLabel))] : [...new Set(ASSETS.filter(a=>selConnTypes.has(a.service)).map(a=>a.connectionLabel))];
   const ALL_ASSET_TYPES = selConnTypes.size===0
@@ -40510,6 +40952,7 @@ const CONN_CONFIG_FIELDS = {
 
 // Inline SVG logo render functions — called inside components, zero CDN dependency
 const CONNECTOR_LOGOS = {
+  aigateway:    s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#334155"/><rect x="17" y="10" width="6" height="20" rx="2" fill="white"/><path d="M9 14h8M9 20h8M9 26h8M23 20h8" stroke="white" strokeWidth="1.8" strokeLinecap="round"/><circle cx="31" cy="20" r="2.6" fill="white"/></svg>,
   eai:          s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#8b5cf6"/><path d="M20 13.5L12 25.5M20 13.5l8 12M13.5 25.5h13" stroke="white" strokeWidth="1.9" strokeLinecap="round" opacity=".85"/><circle cx="20" cy="12" r="3.4" fill="white"/><circle cx="11.6" cy="26.6" r="3.4" fill="white"/><circle cx="28.4" cy="26.6" r="3.4" fill="white"/></svg>,
   postgres:     s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#336791"/><text x="20" y="26" textAnchor="middle" fill="white" fontSize="11" fontWeight="700" fontFamily="monospace">PG</text></svg>,
   snowflake:    s=><svg width={s} height={s} viewBox="0 0 40 40" fill="none"><rect width="40" height="40" rx="9" fill="#29b5e8"/><path d="M20 8v24M8 20h24M11.5 11.5l17 17M28.5 11.5l-17 17" stroke="white" strokeWidth="2.5" strokeLinecap="round"/></svg>,
@@ -40550,6 +40993,7 @@ const CONNECTOR_LOGOS = {
 // Map connector display names → logo key
 const LOGO_KEY_MAP = {
   "Solix EAI":"eai",
+  "AI Gateway":"aigateway",
   "PostgreSQL":"postgres","MySQL":"mysql","Microsoft SQL":"mssql","Oracle":"oracle",
   "Snowflake":"snowflake","Google BigQuery":"bigquery","Amazon Redshift":"redshift",
   "Databricks":"databricks","Apache Airflow":"airflow","dbt":"dbt","dbt Cloud":"dbt",
@@ -45739,14 +46183,15 @@ const kgLineage = () => {
   if(_kgLineage) return _kgLineage;
   const out = [], seen = new Set();
   ASSETS.forEach(a=>{ let G = null; try { G = pickLineageGraph(a); } catch(e) { return; }
-    if(!G || !G.topo) return;
+    // AI usage is not data lineage; it enters the graph as reads/calls edges (aiKgEdges).
+    if(!G || !G.topo || G.ai) return;
     Object.values(G.topo).forEach(t=>(t.downstream||[]).forEach(d=>{ const to = G.topo[d]; if(!to) return;
       const k = `${t.label}>${to.label}`; if(!seen.has(k)){ seen.add(k); out.push({from:t.label, to:to.label}); } })); });
   _kgLineage = out; return out;
 };
 // Everything the metadata graph is built from, read live.
 const kgInputs = () => ({
-  assets: ASSETS, schemaOf: t=>SCHEMA[t]||[], lineage: kgLineage(),
+  assets: ASSETS, schemaOf: t=>SCHEMA[t]||[], lineage: kgLineage(), ai: aiKgEdges(),
   terms: _gtState.map(t=>({id:t.id, name:t.term, termType:t.termType, linkedAssets:t.linkedAssets||[], owners:t.owners||(t.owner?[t.owner]:[])})),
   semantic: {models:_slState.models, entities:_slState.entities, rels:_slState.rels, metrics:_slState.metrics},
   ontologies: ontLoad().ontologies,
@@ -46630,7 +47075,7 @@ const KgObjectTab = ({ids, name, onAsset}) => {
   const [showDerived, setShowDerived] = useState(true);
   useEffect(()=>{ setFocus(home); },[home]);
   const fNode = g.nodes.find(n=>n.id===focus);
-  const asset = fNode && fNode.type==="asset" && focus!==home ? ASSETS.find(a=>a.name===fNode.label) : null;
+  const asset = fNode && fNode.assetId!=null && focus!==home ? ASSETS.find(a=>a.id===fNode.assetId) : null;
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
@@ -53594,6 +54039,23 @@ const CONNECTOR_SCOPE = {
   // The one thing this connector deliberately does NOT bring is a link between two
   // applications: deciding that two supplier rows are the same company is a steward's
   // judgement made in the Knowledge Layer, never an import side effect.
+  // An AI gateway brings what it routes. Usage arrives from its traces as metadata only:
+  // agent, tool, asset, call count, last used. Prompts, answers and rows stay in the gateway.
+  aigateway:{
+    objectTypes:["Agents","MCP servers","MCP tools","Data usage"],
+    note:"Agents, MCP servers and tools are read from the gateway's registry. Which tables and views each agent uses comes from the agent's own configuration and from the gateway's traces. Only metadata is kept \u2014 never prompts, answers or rows.",
+    dims:[
+      {k:"agent", label:"Agents", opts:["Sales Insights Agent","HR Helpdesk Agent","Contract Review Agent","Churn Model Assistant","Finance Close Agent","Support Triage Agent"],
+       ph:"Select agents\u2026", rxIn:".*", rxEx:"^(test|sandbox|dev)-.*",
+       hint:"Leave both lists empty to catalog every agent the gateway routes."},
+    ],
+    auth:"Validating the gateway token",
+    authName:"Gateway token",
+    transport:"api",
+    discover:"Reading the gateway registry and traces",
+    discovery:{"Agents":6,"MCP servers":4,"MCP tools":6,"Assets used":10,"Calls (7 days)":12078},
+    caps:{},
+  },
   eai:{
     objectTypes:["Application Knowledge Graphs"],
     note:"A knowledge graph is imported whole. The entity classifications, identity columns, table relationships and terms Data Sense recorded inside it all arrive as part of the graph, so there is nothing to select separately \u2014 and nothing warehouse-shaped to pick, because a knowledge graph has no databases, schemas or tables of its own.",
@@ -53897,6 +54359,13 @@ const scopeFor = (v) => CONNECTOR_SCOPE[connIdFrom(v)] || DEFAULT_CONNECTOR_SCOP
 
 
 const ADD_SERVICE_CONNECTORS = {
+  AI: {
+    color:"#c026d3", icon:"bot",
+    desc:"AI gateways. EDG catalogs the agents, MCP servers and tools they route, and which tables and views the agents use.",
+    connectors:[
+      {id:"aigateway",  name:"AI Gateway",   logo:"\u26e9\ufe0f", color:"#334155", desc:"agentgateway, Kong AI Gateway, Azure API Management, Databricks AI Gateway"},
+    ],
+  },
   Knowledge: {
     color:"#8b5cf6", icon:"knowledge",
     desc:"Knowledge maps built elsewhere. These bring meaning \u2014 what a table represents, and how it identifies a business entity \u2014 rather than assets of their own.",
@@ -53980,6 +54449,12 @@ const ADD_SERVICE_CONNECTORS = {
 // What must already be true before any credential works. These are the steps connector
 // setups actually fail on, and they are quoted from each vendor's own documentation.
 const CONNECTOR_PREREQS = {
+  aigateway:[
+    "A read-only token for the gateway's admin API, to list its agents, MCP servers and tools.",
+    "Traces exported in OpenTelemetry GenAI format, or the gateway's own access log. Without traces EDG shows only what each agent is configured to use.",
+    "Agents that query a warehouse under their own service principal, or with a query tag. Under a user's delegated identity the warehouse log shows the user, so only the gateway trace names the agent.",
+    "EDG keeps metadata only: agent, tool, asset, call count and last used. Prompts, answers and rows are never read.",
+  ],
   eai:[
     "At least one application published in Data Sense. EDG imports published graphs \u2014 it does not build them and cannot trigger a build.",
     "A service-level token issued by EAI, scoped to read published knowledge graphs. No user account and no write access: EDG does not edit a graph, and nothing it decides is written back.",
@@ -54019,6 +54494,14 @@ const CONNECTOR_PREREQS = {
 };
 
 const CONNECTOR_FIELDS = {
+  aigateway:[
+    {k:"vendor", grp:"conn",       l:"Gateway",              type:"select", req:true, opts:["agentgateway","Kong AI Gateway","Azure API Management","Databricks AI Gateway","Other (OpenTelemetry)"], help:"Any gateway that exports OpenTelemetry GenAI traces works through Other."},
+    {k:"host", grp:"conn",         l:"Admin API URL",        ph:"https://ai-gw.corp.local", type:"text", req:true, help:"Where EDG reads the registry of agents, MCP servers and tools."},
+    {k:"token", grp:"auth",        l:"Gateway token",        ph:"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022", type:"password", req:true, help:"Read-only. Stored encrypted; never shown again after saving."},
+    {k:"otlp", grp:"scope",        l:"Trace source",         type:"select", opts:["OpenTelemetry collector (OTLP)","Gateway access log"], help:"Where observed usage comes from."},
+    {k:"window", grp:"scope",      l:"Usage window",         type:"select", opts:["Last 7 days","Last 30 days","Last 90 days"], help:"Call counts and last-used dates cover this window."},
+    {k:"parseSql", grp:"scope",    l:"Resolve SQL to tables", type:"toggle", val:true, help:"Parse the SQL a tool ran to find the tables and views it touched. Off, a generic SQL tool shows no assets."},
+  ],
   eai:[
     {k:"host", grp:"conn",          l:"EAI URL",              ph:"https://eai.company.solix.com", type:"text", req:true, help:"The Data Sense / EAI instance the knowledge graphs were built in."},
     // A service-level token carries its own scope, so EDG needs no user account, no password
@@ -68360,7 +68843,7 @@ const aidCanAsk = (role) => _aidState.settings.enabled && AID_EDIT_ROLES.include
 // objects are a source of their own. Each source lists its columns under its own name.
 const AID_SOURCE_LABEL = {snowflake:"Snowflake", databricks:"Databricks", bigquery:"BigQuery", postgres:"PostgreSQL", mysql:"MySQL", oracle:"Oracle",
   glue:"AWS Glue", cdp:"Solix CDP", s3:"Amazon S3", azureblob:"Azure Blob (ADLS)", gcs:"Google Cloud Storage", ecs:"Solix ECS",
-  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI", sap:"SAP"};
+  tableau:"Tableau", powerbi:"Power BI", dbt:"dbt", airflow:"Airflow", eai:"Solix EAI", aigateway:"AI Gateway", sap:"SAP"};
 const AID_COLUMN_TYPE = {tableau:"Field", powerbi:"Column / Measure", dbt:"Model column"};
 const aidColType = (svc) => AID_COLUMN_TYPE[svc] || "Column";
 // Sources whose object types are fixed by the connector rather than read off the catalog.

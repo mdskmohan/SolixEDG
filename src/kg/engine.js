@@ -34,7 +34,14 @@ export const NODE_TYPES = {
   metric:  { l: "Metric",          c: "#16a34a" },
   ontology:{ l: "Ontology",        c: "#9333ea" },
   class:   { l: "Ontology class",  c: "#a855f7" },
+  agent:   { l: "AI agent",        c: "#c026d3" },
+  tool:    { l: "MCP tool",        c: "#0f766e" },
+  mcpserver:{ l: "MCP server",     c: "#115e59" },
+  gateway: { l: "AI gateway",      c: "#334155" },
 };
+// Catalog asset types that are not data: they become their own node types, keep
+// the asset id (so they open in the catalog) and are left out of data lineage rules.
+export const AI_NODE_TYPE = { "AI Agent": "agent", "MCP Tool": "tool", "MCP Server": "mcpserver", "AI Gateway": "gateway" };
 export const EDGE_TYPES = {
   contains:     { l: "contains" },
   feeds:        { l: "feeds" },
@@ -57,12 +64,17 @@ export const EDGE_TYPES = {
   realised_by:  { l: "realised by" },
   stored_in:    { l: "stored in" },
   measures:     { l: "measures" },
+  routes:       { l: "routes" },
+  calls:        { l: "calls" },
+  reads:        { l: "reads" },
+  writes:       { l: "writes" },
 };
 export const RULES = {
   pii_downstream:  { l: "PII flows downstream", d: "A column with the same name in a downstream asset inherits its PII classification." },
   domain_columns:  { l: "Columns inherit the domain", d: "Every column belongs to its asset's domain." },
   lineage_closure: { l: "Indirect dependencies", d: "An asset depends on everything upstream of it, not only its direct inputs." },
   class_pii:       { l: "Classes inherit PII", d: "A class whose property is stored in a PII column is classified PII." },
+  agent_pii:       { l: "Agents inherit PII", d: "An AI agent that reads an asset with a PII column is classified PII." },
 };
 
 const nid = { asset: (n) => `asset:${n}`, column: (t, c) => `column:${t}.${c}`, term: (id) => `term:${id}`, tag: (n) => `tag:${n}`,
@@ -72,7 +84,7 @@ const nid = { asset: (n) => `asset:${n}`, column: (t, c) => `column:${t}.${c}`, 
 export { nid as nodeId };
 
 export function buildMetadataGraph(input, opts = {}) {
-  const rules = { pii_downstream: true, domain_columns: true, lineage_closure: true, class_pii: true, ...(opts.rules || {}) };
+  const rules = { pii_downstream: true, domain_columns: true, lineage_closure: true, class_pii: true, agent_pii: true, ...(opts.rules || {}) };
   const nodes = new Map(), edges = [], seen = new Set();
   const node = (id, type, label, extra) => { if (!nodes.has(id)) nodes.set(id, { id, type, label, ...(extra || {}) }); return id; };
   const edge = (from, to, type, extra) => {
@@ -87,7 +99,7 @@ export function buildMetadataGraph(input, opts = {}) {
 
   // catalog: assets, columns, domains, owners, classifications
   assets.forEach((a) => {
-    node(nid.asset(a.name), "asset", a.name, { assetType: a.type, assetId: a.id, domain: a.domain, db: a.db });
+    node(nid.asset(a.name), AI_NODE_TYPE[a.type] || "asset", a.name, { assetType: a.type, assetId: a.id, domain: a.domain, db: a.db });
     if (a.domain) { node(nid.domain(a.domain), "domain", a.domain); edge(nid.asset(a.name), nid.domain(a.domain), "in_domain"); }
     (a.owners || (a.owner ? [a.owner] : [])).filter(Boolean).forEach((o) => { node(nid.user(o), "user", o); edge(nid.asset(a.name), nid.user(o), "owned_by"); });
     (a.stewards || (a.steward ? [a.steward] : [])).filter(Boolean).forEach((o) => { node(nid.user(o), "user", o); edge(nid.asset(a.name), nid.user(o), "stewarded_by"); });
@@ -110,6 +122,8 @@ export function buildMetadataGraph(input, opts = {}) {
   });
   // lineage (asset level)
   (input.lineage || []).forEach((l) => { if (byName.has(l.from) && byName.has(l.to)) edge(nid.asset(l.from), nid.asset(l.to), "feeds"); });
+  // AI: gateway routes agents and MCP servers, agents call tools, agents and tools read assets
+  (input.ai || []).forEach((x) => { if (byName.has(x.from) && byName.has(x.to)) edge(nid.asset(x.from), nid.asset(x.to), x.type, x.label ? { label: x.label } : undefined); });
   // people: users belong to teams
   (input.teams || []).forEach((t) => {
     node(nid.team(t.name), "team", t.name);
@@ -215,6 +229,13 @@ export function buildMetadataGraph(input, opts = {}) {
   if (rules.class_pii) {
     const piiCols = new Set(edges.filter((e) => e.type === "tagged" && e.to === nid.tag("PII")).map((e) => e.from));
     base.filter((e) => e.type === "stored_in" && piiCols.has(e.to)).forEach((s) => derive(s.from, nid.tag("PII"), "tagged", "class_pii", [s.id], { label: s.label }));
+  }
+  if (rules.agent_pii) {
+    const piiTag = nid.tag("PII");
+    const piiOf = (assetId) => edges.find((e) => e.type === "tagged" && e.to === piiTag && (e.from === assetId || (e.from.startsWith("column:") && nodes.get(e.from).table === nodes.get(assetId).label)));
+    edges.filter((e) => e.type === "reads" && nodes.get(e.from).type === "agent").forEach((r) => {
+      const t = piiOf(r.to); if (t) derive(r.from, piiTag, "tagged", "agent_pii", [r.id, t.id], { label: nodes.get(r.to).label });
+    });
   }
   const all = [...nodes.values()];
   const count = (arr, k) => arr.reduce((m, x) => { m[x[k]] = (m[x[k]] || 0) + 1; return m; }, {});
