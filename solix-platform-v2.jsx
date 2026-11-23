@@ -2712,6 +2712,11 @@ const runDQCase = (id, batchOverride) => {
         comments: [], desc: next.failedReason || `${next.name} failed.`, fromRun: true };
       dqiSet(prev => [inc, ...prev]);
       next = { ...next, incidentId: inc.id };
+      // Slack / Teams: incident card with Acknowledge / Assign to me / Resolve, and a DM to the assignee.
+      if (typeof collabIncidentPost === "function") {
+        collabIncidentPost(inc);
+        _convPing(collabObj("incident:" + inc.id), "incident_assigned", [owner], `Incident assigned to you · ${inc.title}`, `${inc.severity} · ${inc.table}`);
+      }
     }
   } else if (open) {
     dqiSet(prev => prev.map(i => i.id === open.id ? { ...i, timeline: [...(i.timeline||[]), { action: next.status === "Warning" ? "Test case re-ran with a warning" : "Test case passed on re-run", by: "system", at }] } : i));
@@ -4410,15 +4415,19 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
                   <span style={{fontSize:11.5,padding:"3px 10px",borderRadius:99,background:T.accentDim,color:T.accent,border:`1px solid ${T.accent}33`,fontWeight:600}}>{term.domain}</span>
                 </div>
               </div>
-              <KebabMenu items={[{label:"Edit",onClick:()=>openModal("editTerm",termForm(term))},{label:"Delete",danger:true,onClick:()=>openModal("deleteTerm",{id:term.id,term:term.term})}]}/>
+              <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+                <CollabHeaderActions objKey={`term:${term.id}`} onToast={onToast}
+                  extraItems={[{label:"Edit",onClick:()=>openModal("editTerm",termForm(term))},{label:"Delete",danger:true,onClick:()=>openModal("deleteTerm",{id:term.id,term:term.term})}]}/>
+              </div>
             </div>
+            <AnnouncementBanner objKey={`term:${term.id}`}/>
             {/* Rejected banner */}
             {term.status==="Rejected"&&term.rejectionReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(225,29,72,.06)",border:"1px solid rgba(225,29,72,.25)",borderRadius:8,fontSize:12.5,color:"#e11d48",lineHeight:1.5}}><strong>Rejected: </strong>{term.rejectionReason}</div>)}
             {/* Deprecation banner */}
             {term.status==="Deprecated"&&term.deprecationReason&&(<div style={{margin:"0 0 8px",padding:"8px 14px",background:"rgba(124,58,237,.06)",border:"1px solid rgba(124,58,237,.25)",borderRadius:8,fontSize:12.5,color:"#7c3aed",lineHeight:1.5}}><strong>Deprecated: </strong>{term.deprecationReason}</div>)}
             <div style={{display:"flex",gap:0,marginBottom:-1}}>
               {[{id:"overview",l:"Overview"},{id:"relationships",l:`Relationships (${GLG.relationsOf((glRelTerms(terms).find(x=>x.id===term.id)||term), glRelTerms(terms)).length})`},
-                {id:"assets",l:`Linked Assets (${glLinkedRows(term, slStore).length})`},{id:"kg",l:"Knowledge Graph"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
+                {id:"assets",l:`Linked Assets (${glLinkedRows(term, slStore).length})`},{id:"kg",l:"Knowledge Graph"},{id:"conversations",l:"Conversations"},{id:"auditlog",l:`Audit Log (${(term.auditLog||[]).length})`}].map(tab=>(
                 <button key={tab.id} onClick={()=>setTermTab(tab.id)} style={{padding:"8px 18px",background:"transparent",border:"none",borderBottom:`2px solid ${termTab===tab.id?T.accent:"transparent"}`,color:termTab===tab.id?T.text:T.textMuted,fontSize:13,fontWeight:termTab===tab.id?600:400,cursor:"pointer",transition:"all .12s"}}>{tab.l}</button>
               ))}
             </div>
@@ -4455,6 +4464,7 @@ const GlossaryView = ({onToast, deepLinkTermId}) => {
             {/* Activity tab is hidden for now (Sprint 7); its content stays so it can be switched back on from the tab list above. */}
             {termTab==="relationships"&&<GlTermRelationsTab term={term} terms={terms} glossaries={glossaries} canEdit={canSetTermStatus(term)} me={meHandle} onOpenTerm={goToTerm} onToast={onToast} patchTerm={patchTerm}/>}
             {termTab==="kg"&&<KgObjectTab ids={[`term:${term.id}`]} name={term.term}/>}
+            {termTab==="conversations"&&<ConversationsPanel objKey={`term:${term.id}`} onToast={onToast}/>}
             {termTab==="activity"&&(<div style={{maxWidth:680}}><div style={{background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:10,padding:"14px",marginBottom:16}}><div style={{fontSize:12.5,fontWeight:600,color:T.textSub,marginBottom:8}}>Add a comment</div><textarea value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="Use @mention to tag teammates…" rows={3} style={{width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,color:T.text,fontSize:12.5,resize:"none",outline:"none",fontFamily:"inherit",lineHeight:1.55,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor=T.accent} onBlur={e=>e.target.style.borderColor=T.border}/><div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}><button onClick={()=>addComment(term.id)} disabled={!commentText.trim()} style={{padding:"6px 16px",borderRadius:7,background:commentText.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:commentText.trim()?"pointer":"default"}}>Post</button></div></div><div style={{display:"flex",flexDirection:"column",gap:8}}>{term.activity.map((act,i)=>(<div key={i} style={{display:"flex",gap:12,padding:"12px 14px",background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:9}}><div style={{width:30,height:30,borderRadius:8,background:T.accentDim,border:`1px solid ${T.accent}33`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:T.accent,flexShrink:0}}>{act.avatar}</div><div style={{flex:1}}><div style={{display:"flex",alignItems:"baseline",gap:6}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{act.user}</span><span style={{fontSize:11,color:T.textMuted}}>{act.time}</span></div><div style={{fontSize:13,color:act.isComment?T.text:T.textSub,marginTop:3,lineHeight:1.55}}>{act.action}</div></div></div>))}{term.activity.length===0&&<div style={{textAlign:"center",padding:"32px 0",color:T.textMuted,fontSize:13}}>No activity yet.</div>}</div></div>)}
             {termTab==="auditlog"&&(
               <div style={{maxWidth:900}}>
@@ -5368,6 +5378,13 @@ const NOTIF_CATALOG = [
     {ev:"workflow_failed", label:"Workflow failed → Connection Admin"},
     {ev:"schedule_paused", label:"Schedule paused → Connection Admin"},
   ]},
+  {menu:"Collaboration",   key:"collab",       events:[
+    {ev:"conv_mention",      label:"Mentioned in a conversation"},
+    {ev:"conv_reply",        label:"Reply on a conversation you started"},
+    {ev:"announcement",      label:"Announcement on an object you own"},
+    {ev:"incident_assigned", label:"Incident assigned to you"},
+    {ev:"ticket_updated",    label:"Support ticket updated → requester"},
+  ]},
 ];
 const NOTIF_EV_MENU = {}; NOTIF_CATALOG.forEach(g=>g.events.forEach(e=>{NOTIF_EV_MENU[e.ev]=g.key;}));
 let _notifPrefs = NOTIF_CATALOG.reduce((o,g)=>{g.events.forEach(e=>{o[e.ev]=true;});return o;},{});
@@ -5414,16 +5431,18 @@ const COLLAB_APPS = {
     unmatched:[]},
 };
 const COLLAB_DOMAINS = ["Commerce","Finance","Product","Platform","Procurement","Marketing","ML"];
-const _collabInit = ()=>({connected:false, org:"", connectedBy:"", connectedAt:"", defaultChannel:"", dm:true, routes:[]});
+const _collabInit = ()=>({connected:false, org:"", connectedBy:"", connectedAt:"", defaultChannel:"", dm:true, routes:[], features:{}, supportChannel:""});
 // Connection settings persist (a real install is stored server-side); the message log does not.
 const _COLLAB_KEY = "edg.collab.v1";
 const _collabLoad = ()=>{ try{ const v=JSON.parse(localStorage.getItem(_COLLAB_KEY)||"null"); return v&&v.slack&&v.teams?v:null; }catch(e){ return null; } };
 const _collabSaved = _collabLoad();
-let _collab = {slack:{..._collabInit(),...(_collabSaved?.slack||{})}, teams:{..._collabInit(),...(_collabSaved?.teams||{})}, log:[]};
+let _collab = {slack:{..._collabInit(),...(_collabSaved?.slack||{})}, teams:{..._collabInit(),...(_collabSaved?.teams||{})}, log:[],
+  // Each person links their own Slack / Teams account before sharing or attaching threads (Atlan model).
+  accounts:_collabSaved?.accounts||{slack:{}, teams:{}}};
 let _chPrefs = _collabSaved?.prefs||{slack:{}, teams:{}}; // personal DM preference per event; missing = on
 let _collabSeq = 0;
 const _collabSubs = new Set();
-const _collabNotify = ()=>{ try{ localStorage.setItem(_COLLAB_KEY, JSON.stringify({slack:_collab.slack, teams:_collab.teams, prefs:_chPrefs})); }catch(e){} _collabSubs.forEach(f=>f()); };
+const _collabNotify = ()=>{ try{ localStorage.setItem(_COLLAB_KEY, JSON.stringify({slack:_collab.slack, teams:_collab.teams, prefs:_chPrefs, accounts:_collab.accounts})); }catch(e){} _collabSubs.forEach(f=>f()); };
 const collabSet = (ch,patch)=>{ _collab={..._collab,[ch]:{..._collab[ch],...patch}}; _collabNotify(); };
 const chPrefSet = (ch,ev,on)=>{ _chPrefs={..._chPrefs,[ch]:{..._chPrefs[ch],[ev]:on}}; _collabNotify(); };
 const chPrefSetMenu = (ch,menuKey,on)=>{ const g=NOTIF_CATALOG.find(x=>x.key===menuKey); if(!g)return; const next={..._chPrefs[ch]}; g.events.forEach(e=>{next[e.ev]=on;}); _chPrefs={..._chPrefs,[ch]:next}; _collabNotify(); };
@@ -5436,7 +5455,7 @@ const _collabResp = (name)=>{ const a=_collabAsset(name); if(!a) return []; cons
 const _collabLog = (e)=>{
   // A distinct approval request is never collapsed into an earlier one with the same title.
   const dup=_collab.log.find(x=>x.ch===e.ch&&x.target===e.target&&x.title===e.title&&e.at-x.at<5*60*1000&&(!e.req||(x.req&&x.req.src===e.req.src&&x.req.id===e.req.id)));
-  if(dup&&e.kind!=="user") return false;
+  if(dup&&e.kind!=="user"&&!e.uniq) return false; // conversation / incident / ticket cards are never collapsed
   _collabSeq+=1; _collab={..._collab, log:[{id:_collabSeq,...e}, ..._collab.log].slice(0,60)}; return true;
 };
 const _collabDeliver = (n)=>{
@@ -5508,13 +5527,20 @@ const _collabAsk = (q,role)=>{
 const COLLAB_HELP = {title:"Solix EDG commands", ephemeral:true, lines:[
   {t:"/edg search <text>",sub:"Assets and glossary terms"},
   {t:"@EDG <question>  ·  /edg ask <question>",sub:"Ask the Copilot"},
-  {t:"Paste an EDG link",sub:"Preview an asset or term"}]};
+  {t:"Paste an EDG link",sub:"Preview an asset or term"},
+  {t:"/edg share <asset or term>",sub:"Post a preview card to this channel"},
+  {t:"/edg help <question>",sub:"Answers from the EDG docs"},
+  {t:"/edg ticket <issue>",sub:"Raise a support ticket"},
+  {t:"Message ⋯ › Attach to asset",sub:"Link this thread to an asset or term"}]};
 // A message sent in the connected app's default channel by `me` (role = their EDG role).
 const collabPost = (ch,text,me,role)=>{
   const t=String(text||"").trim(); if(!t) return;
   const c=_collab[ch]; const chan=c.defaultChannel||COLLAB_APPS[ch].channels[0];
   let reply=null;
   if(/^\/edg\s+search\b/i.test(t)) reply=_collabSearch(t.replace(/^\/edg\s+search\s*/i,""));
+  else if(/^\/edg\s+share\b/i.test(t)) reply=_collabShareCmd(ch,t.replace(/^\/edg\s+share\s*/i,""));
+  else if(/^\/edg\s+help\s+\S/i.test(t)) reply=_collabHelp(ch,t.replace(/^\/edg\s+help\s*/i,""));
+  else if(/^\/edg\s+ticket\b/i.test(t)) reply=_collabTicketCmd(ch,t.replace(/^\/edg\s+ticket\s*/i,""),me);
   else if(/^\/edg\s+ask\b/i.test(t)) reply=_collabAsk(t.replace(/^\/edg\s+ask\s*/i,""),role);
   else if(/^\/edg\b/i.test(t)) reply=COLLAB_HELP;
   else if(/(^|\s)@EDG\b/i.test(t)) reply=_collabAsk(t.replace(/@EDG\b/ig,"").trim(),role);
@@ -5523,8 +5549,218 @@ const collabPost = (ch,text,me,role)=>{
   _collabNotify();
 };
 
+// ── Collaboration in Slack / Teams (Atlan model) ─────────────────────────────
+//   • Share an asset or term to a channel or a person (preview card)
+//   • Conversations on an object — optionally posted to the routed channel; replies
+//     made in the chat thread come back to the object, and the other way round
+//   • Chat threads attached to an object (message action, or a pasted thread link)
+//   • Announcements on an object, posted to the routed channel
+//   • Incident cards with Acknowledge / Assign to me / Resolve and a reply thread
+//   • Help & Support: /edg help, /edg ticket, and a support-channel card per ticket
+// Kept: ids, authors, what was written in EDG, and a one-line preview of an
+// attached thread. A channel's history is never copied in.
+const COLLAB_FEATURES = [
+  {k:"conversations", l:"Conversations",    d:"Post to the routed channel · replies sync both ways"},
+  {k:"share",         l:"Share",            d:"Assets and terms to a channel or person"},
+  {k:"threads",       l:"Thread linking",   d:"Attach a chat thread to an asset or term"},
+  {k:"announcements", l:"Announcements",    d:"Post to the routed channel"},
+  {k:"incidents",     l:"Incident actions", d:"Acknowledge · assign · resolve"},
+  {k:"support",       l:"Help & tickets",   d:"/edg help · /edg ticket"},
+];
+const collabFeat = (ch,k)=>!!(_collab[ch]&&_collab[ch].connected&&((_collab[ch].features||{})[k]!==false));
+const collabAppsFor = (k)=>["slack","teams"].filter(ch=>collabFeat(ch,k));
+const collabAcct = (ch,me)=>!!(((_collab.accounts||{})[ch]||{})[me]);
+const collabAcctSet = (ch,me,on)=>{ const a=_collab.accounts||{slack:{},teams:{}}; _collab={..._collab,accounts:{...a,[ch]:{...(a[ch]||{}),[me]:on}}}; _collabNotify(); };
+const collabMeOf = (roleCfg)=>((roleCfg&&roleCfg.email)||"you@jnj").split("@")[0];
+const collabRoute = (ch,menu,dom)=>{ const c=_collab[ch]; const r=c.routes.find(x=>x.channel&&(!x.menu||x.menu===menu)&&(!x.domain||x.domain===dom)); return {chan:r?.channel||c.defaultChannel, via:r?"Route":"Default channel"}; };
+
+// Object keys: "asset:<name>", "term:<id>", "incident:<id>".
+const collabObj = (key)=>{
+  const s=String(key||""); const i=s.indexOf(":"); const kind=s.slice(0,i), id=s.slice(i+1);
+  if(kind==="asset"){ const a=_collabAsset(id); return {key:s,kind,id,label:id,typeLabel:a?.type||"Asset",domain:a?.domain||"",menu:"catalog",resp:_collabResp(id),link:collabLink("catalog",id),nav:"catalog",asset:id}; }
+  if(kind==="term"){ const t=(typeof _gtState!=="undefined"?_gtState:[]).find(x=>String(x.id)===id);
+    const resp=t?[...new Set([...(t.owners||[t.owner]),...(t.stewards||[t.steward])].filter(Boolean))]:[];
+    return {key:s,kind,id,label:t?.term||id,typeLabel:"Glossary term",domain:t?.domain||"",menu:"glossary",resp,link:collabLink("glossary",t?.term||id),nav:"glossary",navArg:t?{termId:t.id}:null}; }
+  if(kind==="incident"){ const inc=_dqiState.find(x=>x.id===id); const tn=inc?String(inc.table).split(".").pop():"";
+    return {key:s,kind,id,label:inc?.title||id,typeLabel:"Incident",domain:_collabAsset(tn)?.domain||"",menu:"catalog",resp:[...new Set([inc?.assignee,..._collabResp(tn)].filter(Boolean))],link:collabLink("quality",id),nav:"quality",asset:tn||null}; }
+  return {key:s,kind,id,label:id,typeLabel:"",domain:"",menu:null,resp:[],link:""};
+};
+// An asset name or glossary term typed in chat → object key.
+const collabFindObj = (q)=>{
+  const raw=String(q||"").trim(); const s=raw.toLowerCase(); if(!s) return null;
+  const all=(typeof ASSETS!=="undefined"?ASSETS:[]);
+  const a=all.find(x=>x.name===raw)||all.find(x=>x.name.toLowerCase()===s); if(a) return "asset:"+a.name; // exact case wins (orders vs ORDERS)
+  const t=(typeof _gtState!=="undefined"?_gtState:[]).find(x=>(x.term||"").toLowerCase()===s||(x.abbr||"").toLowerCase()===s); return t?"term:"+t.id:null;
+};
+
+const _CONV_KEY = "edg.collab.conv.v1";
+const _convSeed = ()=>{ const h=3600000, now=Date.now(); return {seq:20,
+  threads:[
+    {id:"cv1",obj:"asset:orders",author:"dev.patel",text:"Is status = 'refunded_pending' a valid value now? The accepted-values check on status fails on it.",at:now-26*h,resolved:false,
+      posted:[{ch:"slack",target:"#commerce-data"}],
+      replies:[{id:"cv1r1",author:"maya.chen",text:"Yes, finance added it last sprint. I'll add it to the check.",at:now-25*h,via:"Slack"}]},
+    {id:"cv2",obj:"term:t1",author:"lisa.ray",text:"@maya.chen does CLV include returns, or is it net of returns?",at:now-30*h,resolved:false,posted:[],replies:[]},
+  ],
+  links:[
+    {id:"lk1",obj:"asset:orders",ch:"slack",channel:"#data-eng-oncall",author:"priya.nair",by:"priya.nair",replies:4,at:now-50*h,
+      text:"orders load ran 40 minutes late — upstream lag on the order-events topic",url:"https://jnj-data.slack.com/archives/C04ONCALL/p1732300000"},
+  ],
+  announcements:[
+    {id:"an1",obj:"asset:orders",type:"Warning",title:"Backfill in progress",body:"Orders from Nov 21–22 are being reloaded. Row counts will change until Nov 24.",by:"maya.chen",at:now-6*h,posted:[]},
+  ],
+  tickets:[
+    {id:"TKT-003",subject:"Export to CSV broken in compliance report",status:"Resolved",priority:"Low",category:"Reports",requester:"dev.patel",source:"EDG",created:now-168*h,updated:now-48*h},
+    {id:"TKT-002",subject:"Data quality rule not triggering on new records",status:"Open",priority:"Med",category:"Quality",requester:"dev.patel",source:"Slack",created:now-72*h,updated:now-24*h},
+    {id:"TKT-001",subject:"Lineage view not loading for orders table",status:"In Progress",priority:"High",category:"Technical",requester:"dev.patel",source:"EDG",created:now-48*h,updated:now-4*h},
+  ].reverse()};};
+const _convLoad = ()=>{ try{ const v=JSON.parse(localStorage.getItem(_CONV_KEY)||"null"); return v&&Array.isArray(v.threads)&&Array.isArray(v.tickets)?v:null; }catch(e){ return null; } };
+let _conv = _convLoad()||_convSeed();
+const _convSubs = new Set();
+const _convNotify = ()=>{ try{ localStorage.setItem(_CONV_KEY, JSON.stringify(_conv)); }catch(e){} _convSubs.forEach(f=>f()); };
+const useConv = ()=>{ const [,f]=useState(0); useEffect(()=>{const fn=()=>f(n=>n+1);_convSubs.add(fn);return()=>{_convSubs.delete(fn);};},[]); return _conv; };
+const _convNext = (p)=>{ const n=(_conv.seq||20)+1; _conv={..._conv,seq:n}; return p+n; };
+const _agoAny = (at)=>{ if(typeof at!=="number") return at||""; const m=Math.round((Date.now()-at)/60000); return m<1?"just now":m<60?`${m}m ago`:m<1440?`${Math.round(m/60)}h ago`:`${Math.round(m/1440)}d ago`; };
+const convMentions = (text)=>[...new Set((String(text).match(/@[a-z]+\.[a-z]+/gi)||[]).map(s=>s.slice(1).toLowerCase()))];
+// Personal notifications (bell + Slack / Teams DM). Never a channel post.
+const _convPing = (o,ev,to,title,body)=>{ const who=[...new Set((to||[]).filter(Boolean))]; if(!who.length) return;
+  pushNotif({category:o.kind==="term"?"Glossary":"Catalog",type:ev==="incident_assigned"?"assigned":"field_updated",event:ev,title,body,nav:o.nav,navArg:o.navArg||undefined,asset:o.asset||null,to:who,dmOnly:true}); };
+const _convPost = (ch,o,title,body,extra)=>{ const {chan,via}=collabRoute(ch,o.menu,o.domain); if(!chan) return null; _collabLog({ch,kind:"channel",target:chan,via,title,body,at:Date.now(),uniq:true,...extra}); return chan; };
+
+// Conversations
+const convStart = (objKey,text,me,postTo=[])=>{
+  const t=String(text||"").trim(); if(!t) return null; const o=collabObj(objKey);
+  const id=_convNext("cv"); const posted=[];
+  postTo.filter(ch=>collabFeat(ch,"conversations")).forEach(ch=>{ const chan=_convPost(ch,o,`${o.label} · conversation`,`@${me}: ${t}`,{conv:id}); if(chan) posted.push({ch,target:chan}); });
+  _conv={..._conv,threads:[{id,obj:objKey,author:me,text:t,at:Date.now(),resolved:false,posted,replies:[]},..._conv.threads]};
+  _convNotify(); if(posted.length) _collabNotify();
+  _convPing(o,"conv_mention",convMentions(t).filter(u=>u!==me),`Mentioned by @${me} · ${o.label}`,t);
+  return {id,posted};
+};
+const convPostExisting = (id,ch)=>{
+  const th=_conv.threads.find(x=>x.id===id); if(!th||!collabFeat(ch,"conversations")||th.posted.some(p=>p.ch===ch)) return null;
+  const o=collabObj(th.obj); const chan=_convPost(ch,o,`${o.label} · conversation`,`@${th.author}: ${th.text}`,{conv:id}); if(!chan) return null;
+  _conv={..._conv,threads:_conv.threads.map(x=>x.id===id?{...x,posted:[...x.posted,{ch,target:chan}]}:x)}; _convNotify(); _collabNotify(); return chan;
+};
+const convReply = (id,text,me,via="EDG")=>{
+  const t=String(text||"").trim(); const th=_conv.threads.find(x=>x.id===id); if(!th||!t) return;
+  const r={id:_convNext("r"),author:me,text:t,at:Date.now(),via};
+  _conv={..._conv,threads:_conv.threads.map(x=>x.id===id?{...x,replies:[...x.replies,r]}:x)}; _convNotify(); if(th.posted.length) _collabNotify();
+  const o=collabObj(th.obj);
+  if(th.author!==me) _convPing(o,"conv_reply",[th.author],`Reply from @${me} · ${o.label}`,t);
+  _convPing(o,"conv_mention",convMentions(t).filter(u=>u!==me&&u!==th.author),`Mentioned by @${me} · ${o.label}`,t);
+};
+const convResolve = (id,on)=>{ _conv={..._conv,threads:_conv.threads.map(x=>x.id===id?{...x,resolved:on}:x)}; _convNotify(); };
+
+// Chat threads attached to an object
+const collabParseThreadUrl = (url)=>{ const u=String(url||"").trim(); if(/slack\.com\/archives\//i.test(u)) return "slack"; if(/teams\.microsoft\.com\/l\/message\//i.test(u)) return "teams"; return null; };
+const convLink = (objKey,{ch,channel,text,author,by,url,replies=0})=>{
+  const id=_convNext("lk"); _conv={..._conv,links:[{id,obj:objKey,ch,channel,text,author,by,url:url||"",replies,at:Date.now()},..._conv.links]}; _convNotify(); return id;
+};
+const convUnlink = (id)=>{ _conv={..._conv,links:_conv.links.filter(x=>x.id!==id)}; _convNotify(); };
+const collabThreadUrl = (ch,channel,at)=>ch==="slack"
+  ? `https://${COLLAB_APPS.slack.org}/archives/${encodeURIComponent(channel)}/p${at}`
+  : `https://teams.microsoft.com/l/message/${encodeURIComponent(channel)}/${at}`;
+// "Attach to asset" — the message action on a chat message.
+const collabAttach = (entryId,objKey,me)=>{
+  const e=_collab.log.find(x=>x.id===entryId); if(!e) return null;
+  if(!collabFeat(e.ch,"threads")) return {ok:false,msg:"Thread linking is turned off in Settings › Channels"};
+  const o=collabObj(objKey);
+  convLink(objKey,{ch:e.ch,channel:e.target,text:e.text||e.body||e.title,author:e.author||"Solix EDG",by:me,url:collabThreadUrl(e.ch,e.target,e.at)});
+  _collab={..._collab,log:_collab.log.map(x=>x.id===entryId?{...x,attached:[...(x.attached||[]),o.label]}:x)}; _collabNotify();
+  return {ok:true,msg:`Thread attached to ${o.label}`};
+};
+
+// Announcements
+const ANN_TYPES = ["Information","Warning","Issue"];
+const ANN_COLOR = (t)=>t==="Issue"?T.rose:t==="Warning"?T.amber:T.blue;
+const annAdd = (objKey,{type,title,body},me,postTo=[])=>{
+  const o=collabObj(objKey); const id=_convNext("an"); const posted=[];
+  postTo.filter(ch=>collabFeat(ch,"announcements")).forEach(ch=>{ const chan=_convPost(ch,o,`Announcement · ${o.label}`,`${type} · ${title}${body?`\n${body}`:""}`,{ann:id}); if(chan) posted.push({ch,target:chan}); });
+  _conv={..._conv,announcements:[{id,obj:objKey,type,title,body,by:me,at:Date.now(),posted},...(_conv.announcements||[])]}; _convNotify(); if(posted.length) _collabNotify();
+  _convPing(o,"announcement",o.resp.filter(u=>u!==me),`Announcement · ${o.label}`,`${type} · ${title}`);
+  return {id,posted};
+};
+const annRemove = (id)=>{ _conv={..._conv,announcements:(_conv.announcements||[]).filter(x=>x.id!==id)}; _convNotify(); };
+
+// Share — a preview card to a channel or a person
+const collabCard = (o)=>{
+  if(o.kind==="incident"){ const inc=_dqiState.find(x=>x.id===o.id); return {title:o.label, body:inc?`${inc.severity} · ${inc.table}${inc.col?"."+inc.col:""}`:"", kv:inc?[["Status",inc.status],["Assignee",inc.assignee||"Unassigned"]]:null}; }
+  return _collabUnfurl(o.link)||{title:o.label,body:o.typeLabel};
+};
+const collabShare = (ch,objKey,{dest,to,note},me)=>{
+  const o=collabObj(objKey); const card=collabCard(o);
+  _collabLog({ch,kind:dest==="person"?"dm":"channel",target:dest==="person"?"@"+to:to,via:`Shared by @${me}`,title:card.title,
+    body:[note,card.body].filter(Boolean).join("\n"),kv:card.kv,at:Date.now(),share:objKey,uniq:true});
+  _collabNotify();
+};
+const _collabShareCmd = (ch,q)=>{
+  const s=q.trim(); if(!s) return {title:"Share", body:"Usage: /edg share <asset or term>", ephemeral:true, open:null};
+  if(!collabFeat(ch,"share")) return {title:"Sharing is off", body:"Settings › Channels › Collaboration", ephemeral:true, open:null};
+  const key=collabFindObj(s); if(!key) return {title:`Not found · ${s}`, body:"No asset or glossary term with that name", ephemeral:true};
+  return {...collabCard(collabObj(key)), ephemeral:false, open:"Open in EDG"};
+};
+
+// Help & Support
+const _collabHelp = (ch,q)=>{
+  if(!collabFeat(ch,"support")) return {title:"Help is off", body:"Settings › Channels › Collaboration", ephemeral:true, open:null};
+  const stop=["how","the","and","what","does","can","for","with","why","do","is","a","an","to","in","of","my","i"];
+  const words=q.toLowerCase().split(/\W+/).filter(w=>w.length>2&&!stop.includes(w));
+  const hit=(txt,w)=>new RegExp(`\\b${w.replace(/s$/,"")}`,"i").test(txt); // word start, so "set" ≠ "assets"
+  const hits=DOCS.flatMap(c=>c.items.map(d=>({d,c,s:words.reduce((n,w)=>n+(hit(d.title,w)?2:0)+(hit(`${d.desc} ${c.cat}`,w)?1:0),0)})))
+    .filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,3);
+  return {title:hits.length?`${hits.length} help article${hits.length===1?"":"s"}`:"No matching help articles",
+    lines:hits.map(x=>({t:x.d.title,sub:`${x.c.cat} · ${x.d.desc}`})), ephemeral:true, open:hits.length?"Open Help in EDG":null, ticketDraft:q.trim()};
+};
+const ticketCreate = ({subject,priority="Med",category="Technical"},me,source="EDG")=>{
+  const nums=_conv.tickets.map(t=>parseInt(String(t.id).replace(/\D/g,""),10)||0); const id=`TKT-${String(Math.max(0,...nums)+1).padStart(3,"0")}`; const at=Date.now();
+  const tk={id,subject:String(subject).trim(),status:"Open",priority,category,requester:me,source,created:at,updated:at};
+  _conv={..._conv,tickets:[tk,..._conv.tickets]}; _convNotify();
+  ["slack","teams"].filter(ch=>collabFeat(ch,"support")&&_collab[ch].supportChannel).forEach(ch=>
+    _collabLog({ch,kind:"channel",target:_collab[ch].supportChannel,via:"Support",title:`${id} · ${tk.subject}`,
+      body:`${priority} priority · ${category} · raised by @${me}${source!=="EDG"?` in ${source}`:""}`,at,ticket:id,uniq:true}));
+  _collabNotify(); return tk;
+};
+const TICKET_STEPS = ["Open","In Progress","Resolved"];
+const ticketSetStatus = (id,status,by,via="EDG")=>{
+  const tk=_conv.tickets.find(x=>x.id===id); if(!tk||tk.status===status) return null;
+  _conv={..._conv,tickets:_conv.tickets.map(x=>x.id===id?{...x,status,updated:Date.now(),updatedBy:by}:x)}; _convNotify(); _collabNotify();
+  if(tk.requester!==by) pushNotif({category:"Support",type:"assigned",event:"ticket_updated",title:`${id} ${status==="Resolved"?"resolved":`moved to ${status}`} · ${tk.subject}`,
+    body:`By @${by}${via!=="EDG"?` in ${via}`:""}`,to:[tk.requester],dmOnly:true});
+  return {ok:true,msg:`${id} → ${status}`};
+};
+const _collabTicketCmd = (ch,text,me)=>{
+  if(!collabFeat(ch,"support")) return {title:"Tickets are off", body:"Settings › Channels › Collaboration", ephemeral:true, open:null};
+  if(!text.trim()) return {title:"Raise a ticket", body:"Usage: /edg ticket <describe the issue>", ephemeral:true, open:null};
+  const tk=ticketCreate({subject:text},me,COLLAB_APPS[ch].label);
+  return {title:`${tk.id} raised`, body:tk.subject, kv:[["Status",tk.status],["Priority",tk.priority]], ephemeral:true, open:"Open in Help & Support"};
+};
+
+// Incidents
+const collabIncidentPost = (inc,chs)=>{
+  const o=collabObj("incident:"+inc.id); const out=[];
+  (chs||collabAppsFor("incidents")).filter(ch=>collabFeat(ch,"incidents")).forEach(ch=>{
+    const chan=_convPost(ch,o,`Incident · ${inc.title}`,`${inc.severity} · ${inc.table}${inc.col?"."+inc.col:""}`,{inc:inc.id}); if(chan) out.push(chan); });
+  if(out.length) _collabNotify(); return out;
+};
+const collabIncAct = (incId,act,me,isAdmin,via,note)=>{
+  const inc=_dqiState.find(x=>x.id===incId); if(!inc) return {ok:false,msg:"Incident not found"};
+  const tn=String(inc.table).split(".").pop();
+  if(!(isAdmin||inc.assignee===me||_collabResp(tn).includes(me))) return {ok:false,msg:"Only the assignee, owners and stewards can act on this incident"};
+  if(inc.status==="Resolved"||inc.status==="Dismissed") return {ok:false,msg:`Already ${inc.status.toLowerCase()}`};
+  const at="Just now"; const tag=via&&via!=="EDG"?` via ${via}`:"";
+  const step=(patch,action,extra)=>dqiSet(p=>p.map(i=>i.id===incId?{...i,...patch,timeline:[...(i.timeline||[]),{action,by:me,at,...(extra||{})}]}:i));
+  if(act==="ack"){ if(inc.status!=="Open") return {ok:false,msg:"Already acknowledged"}; step({status:"In Progress"},`Acknowledged${tag}`); }
+  else if(act==="assign"){ if(inc.assignee===me) return {ok:false,msg:"Already assigned to you"}; step({assignee:me,status:inc.status==="Open"?"In Progress":inc.status},`Assigned to ${me}${tag}`); }
+  else if(act==="resolve"){ const n=String(note||"").trim(); if(!n) return {ok:false,msg:"A resolution note is required"};
+    step({status:"Resolved",resolved:"just now",resolutionReason:n},`Resolved${tag}`,{note:n}); }
+  _collabNotify();
+  return {ok:true,msg:act==="ack"?"Incident acknowledged":act==="assign"?"Incident assigned to you":"Incident resolved"};
+};
+const incComment = (incId,text,me,via="EDG")=>{ const t=String(text||"").trim(); if(!t) return;
+  dqiSet(p=>p.map(i=>i.id===incId?{...i,comments:[...(i.comments||[]),{text:t,by:me,at:"Just now",via}]}:i)); _collabNotify(); };
+
 // One message, rendered the way each app shows it (Slack message / Teams card).
-const CollabChatBody = ({isSlack,m,children})=>(
+const CollabChatBody =({isSlack,m,children})=>(
   <div style={isSlack?{}:{borderLeft:`3px solid ${T.accent}`,background:T.bgSurface,borderRadius:4,padding:"8px 10px"}}>
     {m.title&&<div style={{fontSize:12.5,fontWeight:700,color:T.text,marginBottom:3}}>{m.title}</div>}
     {m.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5,marginBottom:8,whiteSpace:"pre-line"}}>{m.body}</div>}
@@ -5552,8 +5788,36 @@ const CollabChatBot = ({isSlack,at,ephemeral,children})=>(
     </div>
   </div>
 );
-const ChatMsgPreview = ({ch,entry,onDecide})=>{
-  const isSlack = ch==="slack";
+// Replies inside a chat thread (Slack thread / Teams reply chain).
+const ChatThread = ({isSlack,items,onSend,placeholder})=>{
+  const [v,setV] = useState("");
+  const send = ()=>{ if(!v.trim()) return; onSend(v.trim()); setV(""); };
+  return (
+    <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.border}`}}>
+      {items.length>0&&<div style={{fontSize:10.5,fontWeight:700,color:T.textMuted,marginBottom:6}}>{items.length} repl{items.length===1?"y":"ies"}</div>}
+      {items.map((r,i)=>(
+        <div key={i} style={{fontSize:12,marginBottom:5,lineHeight:1.45}}>
+          <span style={{fontWeight:700,color:T.text}}>{r.author}</span>
+          {r.via==="EDG"&&<span style={{fontSize:9.5,fontWeight:700,marginLeft:5,padding:"0 4px",borderRadius:3,background:T.bgHover,color:T.textMuted}}>FROM EDG</span>}
+          <span style={{color:T.textMuted,fontSize:10.5,marginLeft:5}}>{_agoAny(r.at)}</span>
+          <div style={{color:T.textSub}}>{r.text}</div>
+        </div>
+      ))}
+      <div style={{display:"flex",gap:6,marginTop:4}}>
+        <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send();}} placeholder={placeholder||"Reply in thread"}
+          style={{flex:1,padding:"5px 9px",fontSize:11.5,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:isSlack?5:4,color:T.text,outline:"none"}}/>
+        <button onClick={send} disabled={!v.trim()} style={{fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.text,cursor:v.trim()?"pointer":"default",opacity:v.trim()?1:.6}}>Reply</button>
+      </div>
+    </div>
+  );
+};
+const ChatMsgPreview = ({ch,entry,onDecide,me,isAdmin,onToast})=>{
+  const isSlack = ch==="slack"; const app = COLLAB_APPS[ch];
+  const conv = useConv(); const [incs] = useDQIncidents();
+  const [attachOpen,setAttachOpen] = useState(false); const [attachQ,setAttachQ] = useState("");
+  const [resolveOpen,setResolveOpen] = useState(false); const [resolveNote,setResolveNote] = useState("");
+  const toast = (r)=>{ if(r&&onToast) onToast(r.msg,r.ok?"success":"info"); };
+  const who = me||"you";
   const d = entry.decided; const ok = d&&d.verdict==="approved";
   const chatBtn = (label,primary,onClick)=>(
     <button key={label} onClick={onClick} style={{fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:isSlack?5:4,border:`1px solid ${primary?T.accent:T.border}`,color:primary?"#fff":T.text,background:primary?T.accent:T.bgSurface,cursor:"pointer"}}>{label}</button>
@@ -5571,20 +5835,73 @@ const ChatMsgPreview = ({ch,entry,onDecide})=>{
               <span style={{fontSize:10.5,color:T.textMuted}}>{_agoShort(entry.at)}</span>
             </div>
             <div style={{fontSize:12.5,color:T.text,wordBreak:"break-word"}}>{entry.text}</div>
+            {(entry.attached||[]).length>0&&<div style={{fontSize:11,color:T.textMuted,marginTop:4}}>Attached to {entry.attached.join(", ")} in EDG</div>}
           </div>
+          {collabFeat(ch,"threads")&&!entry.reply&&<button onClick={()=>setAttachOpen(o=>!o)} title="More actions" style={{alignSelf:"flex-start",fontSize:13,lineHeight:1,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textMuted,cursor:"pointer"}}>⋯</button>}
         </div>
+        {attachOpen&&<div style={{marginLeft:40,display:"flex",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:11.5,fontWeight:600,color:T.textSub,whiteSpace:"nowrap"}}>Attach to asset</span>
+          <input list={`collab-obj-${entry.id}`} value={attachQ} onChange={e=>setAttachQ(e.target.value)} placeholder="Asset or glossary term"
+            style={{flex:1,padding:"5px 9px",fontSize:11.5,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,outline:"none"}}/>
+          <datalist id={`collab-obj-${entry.id}`}>
+            {(typeof ASSETS!=="undefined"?ASSETS:[]).slice(0,200).map(a=><option key={"a"+a.id} value={a.name}/>)}
+            {(typeof _gtState!=="undefined"?_gtState:[]).map(t=><option key={"t"+t.id} value={t.term}/>)}
+          </datalist>
+          {chatBtn("Attach",true,()=>{ const k=collabFindObj(attachQ); if(!k){ toast({ok:false,msg:"No asset or term with that name"}); return; } toast(collabAttach(entry.id,k,who)); setAttachOpen(false); setAttachQ(""); })}
+        </div>}
         {entry.reply&&<div style={{marginLeft:40,paddingLeft:10,borderLeft:`2px solid ${T.border}`}}>
           <CollabChatBot isSlack={isSlack} at={entry.at} ephemeral={entry.reply.ephemeral}>
-            <CollabChatBody isSlack={isSlack} m={entry.reply}>{entry.reply.title&&!/^Not found/.test(entry.reply.title)&&openBtn(entry.reply.open)}</CollabChatBody>
+            <CollabChatBody isSlack={isSlack} m={entry.reply}>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {entry.reply.ticketDraft&&!entry.reply.raised&&chatBtn("Raise ticket",!entry.reply.lines||!entry.reply.lines.length,()=>{
+                  const tk=ticketCreate({subject:entry.reply.ticketDraft},entry.author,app.label);
+                  _collab={..._collab,log:_collab.log.map(x=>x.id===entry.id?{...x,reply:{...x.reply,raised:tk.id}}:x)}; _collabNotify();
+                  toast({ok:true,msg:`${tk.id} raised`}); })}
+                {entry.reply.raised&&<span style={{fontSize:11.5,fontWeight:600,color:"#16a34a",alignSelf:"center"}}>{entry.reply.raised} raised</span>}
+                {entry.reply.title&&entry.reply.open!==null&&!/^Not found/.test(entry.reply.title)&&openBtn(entry.reply.open)}
+              </div>
+            </CollabChatBody>
           </CollabChatBot>
         </div>}
       </div>
     );
   }
+  const th = entry.conv ? conv.threads.find(x=>x.id===entry.conv) : null;
+  const inc = entry.inc ? incs.find(x=>x.id===entry.inc) : null;
+  const tk = entry.ticket ? conv.tickets.find(x=>x.id===entry.ticket) : null;
+  const incAct = (act,note)=>{ const r=collabIncAct(inc.id,act,who,isAdmin,app.label,note); toast(r); if(r.ok&&act==="resolve"){ setResolveOpen(false); setResolveNote(""); } };
+  if(th||inc||tk) return (
+    <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+      <CollabChatBot isSlack={isSlack} at={entry.at}>
+        <CollabChatBody isSlack={isSlack} m={{title:entry.title,body:entry.body,kv:inc?[["Status",inc.status],["Assignee",inc.assignee||"Unassigned"]]:tk?[["Status",tk.status],["Requester","@"+tk.requester]]:null}}>
+          {inc&&inc.status!=="Resolved"&&inc.status!=="Dismissed"&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {inc.status==="Open"&&chatBtn("Acknowledge",true,()=>incAct("ack"))}
+            {inc.assignee!==who&&chatBtn("Assign to me",false,()=>incAct("assign"))}
+            {chatBtn("Resolve",false,()=>setResolveOpen(o=>!o))}
+            {openBtn()}
+          </div>}
+          {inc&&resolveOpen&&<div style={{display:"flex",gap:6,marginTop:8}}>
+            <input value={resolveNote} onChange={e=>setResolveNote(e.target.value)} placeholder="Resolution note"
+              style={{flex:1,padding:"5px 9px",fontSize:11.5,background:T.bgSurface,border:`1px solid ${T.border}`,borderRadius:5,color:T.text,outline:"none"}}/>
+            {chatBtn("Resolve",true,()=>incAct("resolve",resolveNote))}
+          </div>}
+          {inc&&(inc.status==="Resolved"||inc.status==="Dismissed")&&<div style={{fontSize:12,fontWeight:600,color:inc.status==="Resolved"?"#16a34a":T.textMuted}}>{inc.status}{inc.resolutionReason?` · ${inc.resolutionReason}`:""}</div>}
+          {inc&&<ChatThread isSlack={isSlack} items={(inc.comments||[]).map(c=>({author:c.by,text:c.text,at:c.at,via:c.via||"EDG"}))} onSend={t=>incComment(inc.id,t,who,app.label)}/>}
+          {tk&&tk.status!=="Resolved"&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {tk.status==="Open"&&chatBtn("Start",true,()=>toast(ticketSetStatus(tk.id,"In Progress",who,app.label)))}
+            {chatBtn("Resolve",tk.status!=="Open",()=>toast(ticketSetStatus(tk.id,"Resolved",who,app.label)))}
+          </div>}
+          {tk&&tk.status==="Resolved"&&<div style={{fontSize:12,fontWeight:600,color:"#16a34a"}}>Resolved{tk.updatedBy?` by @${tk.updatedBy}`:""}</div>}
+          {th&&<><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{th.resolved&&<span style={{fontSize:11.5,fontWeight:600,color:"#16a34a",alignSelf:"center"}}>Resolved in EDG</span>}{openBtn()}</div>
+            <ChatThread isSlack={isSlack} items={th.replies} onSend={t=>convReply(th.id,t,who,app.label)}/></>}
+        </CollabChatBody>
+      </CollabChatBot>
+    </div>
+  );
   return (
     <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
       <CollabChatBot isSlack={isSlack} at={entry.at}>
-        <CollabChatBody isSlack={isSlack} m={{title:entry.title,body:entry.body}}>
+        <CollabChatBody isSlack={isSlack} m={{title:entry.title,body:entry.body,kv:entry.kv}}>
           {d&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,fontWeight:600,color:ok?"#16a34a":T.rose,marginBottom:8}}>
             {ok?<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>:Ic.x(10)}
             {ok?"Approved":d.verdict==="rejected"?"Rejected":d.verdict==="withdrawn"?"Withdrawn":"Closed"} by @{d.by} · {d.via==="EDG"?"in EDG":`via ${d.via}`}
@@ -5596,6 +5913,395 @@ const ChatMsgPreview = ({ch,entry,onDecide})=>{
           </div>
         </CollabChatBody>
       </CollabChatBot>
+    </div>
+  );
+};
+
+// ── Collaboration UI on objects (assets, glossary terms, incidents) ───────────
+const CollabAppIcon = ({ch,size=12})=>ch==="slack"
+  ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="2"/><rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="2"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="2"/><rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="2"/></svg>
+  : <svg width={size} height={size} viewBox="0 0 24 24" fill="none"><circle cx="9" cy="9" r="3.5" stroke="currentColor" strokeWidth="2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><circle cx="17" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.8"/><path d="M14.5 20c0-2.8 1.7-5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>;
+const CollabChip = ({ch,children})=>(
+  <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:10.5,fontWeight:600,padding:"1px 7px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,whiteSpace:"nowrap"}}>
+    <CollabAppIcon ch={ch} size={10}/>{children}
+  </span>
+);
+const CollabText = ({text})=>(
+  <span>{String(text||"").split(/(@[a-z]+\.[a-z]+)/gi).map((p,i)=>/^@[a-z]+\.[a-z]+$/i.test(p)?<span key={i} style={{fontWeight:600,color:T.accent}}>{p}</span>:<React.Fragment key={i}>{p}</React.Fragment>)}</span>
+);
+const _collabIn = {width:"100%",padding:"8px 10px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,color:T.text,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+const _collabLbl = {display:"block",fontSize:11.5,fontWeight:600,color:T.textSub,marginBottom:6};
+const CollabDrawerShell = ({title,sub,onClose,footer,children,width=480})=>(
+  <>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",zIndex:700}} onClick={onClose}/>
+    <div className="slideIn" style={{position:"fixed",top:0,right:0,bottom:0,width,background:T.bgSurface,borderLeft:`1px solid ${T.border}`,zIndex:800,display:"flex",flexDirection:"column",boxShadow:"-8px 0 40px rgba(0,0,0,.25)"}}>
+      <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{minWidth:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{title}</div>
+          {sub&&<div style={{fontSize:11,color:T.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sub}</div>}
+        </div>
+        <button onClick={onClose} style={{width:28,height:28,borderRadius:7,background:T.bgHover,border:`1px solid ${T.border}`,color:T.textMuted,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{Ic.x(11)}</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:22,display:"flex",flexDirection:"column",gap:16}}>{children}</div>
+      <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>{footer}</div>
+    </div>
+  </>
+);
+const _collabBtn = (primary,disabled)=>({padding:"8px 16px",borderRadius:8,fontSize:12,fontWeight:700,cursor:disabled?"default":"pointer",opacity:disabled?.6:1,
+  background:primary?T.accent:"transparent",border:primary?"none":`1px solid ${T.border}`,color:primary?"#fff":T.textSub});
+// Atlan model: a person links their own Slack / Teams account before sharing or attaching threads.
+const CollabAccountGate = ({ch,me,children})=>{
+  useCollab();
+  if(collabAcct(ch,me)) return children;
+  const app=COLLAB_APPS[ch];
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+      <div style={{width:30,height:30,borderRadius:8,background:T.bgSurface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,flexShrink:0}}><CollabAppIcon ch={ch} size={15}/></div>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>Your {app.label} account</div>
+        <div style={{fontSize:11,color:T.textMuted}}>Not linked · {app.org}</div>
+      </div>
+      <button onClick={()=>collabAcctSet(ch,me,true)} style={_collabBtn(true)}>Link account</button>
+    </div>
+  );
+};
+
+const CollabShareDrawer = ({objKey,onClose,onToast})=>{
+  const co = useCollab(); const {roleCfg} = useRole(); const me = collabMeOf(roleCfg);
+  const o = collabObj(objKey);
+  const apps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).share!==false);
+  const [ch,setCh] = useState(apps[0]||"");
+  const [dest,setDest] = useState("channel");
+  const app = ch?COLLAB_APPS[ch]:null;
+  const members = (typeof MEMBERS_INIT!=="undefined"?MEMBERS_INIT:[]).filter(m=>app&&!app.unmatched.includes(m.email)&&m.status!=="Inactive");
+  const [to,setTo] = useState("");
+  const target = to || (dest==="channel" ? (app?(collabRoute(ch,o.menu,o.domain).chan||app.channels[0]):"") : (members[0]?.email.split("@")[0]||""));
+  const [note,setNote] = useState("");
+  const card = collabCard(o);
+  const linked = ch && collabAcct(ch,me);
+  const copy = ()=>{ try{ navigator.clipboard.writeText(o.link); }catch(e){} onToast&&onToast("Link copied","success"); };
+  const share = ()=>{ collabShare(ch,objKey,{dest,to:target,note:note.trim()},me); onToast&&onToast(`Shared to ${dest==="person"?"@"+target:target} in ${app.label}`,"success"); onClose(); };
+  return (
+    <CollabDrawerShell title="Share" sub={`${o.typeLabel} · ${o.label}`} onClose={onClose}
+      footer={<><button onClick={copy} style={{..._collabBtn(false),marginRight:"auto"}}>Copy link</button>
+        <button onClick={onClose} style={_collabBtn(false)}>Cancel</button>
+        <button onClick={share} disabled={!ch||!linked||!target} style={_collabBtn(true,!ch||!linked||!target)}>Share</button></>}>
+      {apps.length===0 ? (
+        <div style={{fontSize:12.5,color:T.textMuted,padding:"12px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>Slack and Microsoft Teams not connected · Settings › Channels</div>
+      ) : (<>
+        <div>
+          <label style={_collabLbl}>App</label>
+          <select value={ch} onChange={e=>{setCh(e.target.value);setTo("");}} style={_collabIn}>
+            {apps.map(a=><option key={a} value={a}>{COLLAB_APPS[a].label}</option>)}
+          </select>
+        </div>
+        <CollabAccountGate ch={ch} me={me}>
+          <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:10}}>
+            <div>
+              <label style={_collabLbl}>Send to</label>
+              <select value={dest} onChange={e=>{setDest(e.target.value);setTo("");}} style={_collabIn}>
+                <option value="channel">Channel</option><option value="person">Person</option>
+              </select>
+            </div>
+            <div>
+              <label style={_collabLbl}>{dest==="channel"?"Channel":"Person"}</label>
+              <select value={target} onChange={e=>setTo(e.target.value)} style={_collabIn}>
+                {dest==="channel"
+                  ? app.channels.map(x=><option key={x} value={x}>{x}</option>)
+                  : members.map(m=><option key={m.id} value={m.email.split("@")[0]}>{m.name}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label style={_collabLbl}>Message</label>
+            <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3} placeholder="Add a message (optional)" style={{..._collabIn,resize:"vertical"}}/>
+          </div>
+          <div>
+            <label style={_collabLbl}>Preview</label>
+            <div style={{padding:"10px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <CollabChatBot isSlack={ch==="slack"} at={Date.now()}>
+                <CollabChatBody isSlack={ch==="slack"} m={{title:card.title,body:[note.trim(),card.body].filter(Boolean).join("\n"),kv:card.kv}}>
+                  <span style={{display:"inline-block",fontSize:11.5,fontWeight:600,padding:"4px 11px",borderRadius:5,border:`1px solid ${T.border}`,color:T.text,background:T.bgSurface}}>Open in EDG</span>
+                </CollabChatBody>
+              </CollabChatBot>
+            </div>
+          </div>
+        </CollabAccountGate>
+      </>)}
+    </CollabDrawerShell>
+  );
+};
+
+const AnnouncementDrawer = ({objKey,onClose,onToast})=>{
+  const co = useCollab(); const {roleCfg} = useRole(); const me = collabMeOf(roleCfg);
+  const o = collabObj(objKey);
+  const apps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).announcements!==false);
+  const [type,setType] = useState("Information"); const [title,setTitle] = useState(""); const [body,setBody] = useState("");
+  const [post,setPost] = useState(()=>Object.fromEntries(apps.map(a=>[a,true])));
+  const save = ()=>{ const r=annAdd(objKey,{type,title:title.trim(),body:body.trim()},me,apps.filter(a=>post[a])); onToast&&onToast(r.posted.length?`Announcement posted to ${r.posted.map(p=>p.target).join(", ")}`:"Announcement added","success"); onClose(); };
+  return (
+    <CollabDrawerShell title="Add announcement" sub={`${o.typeLabel} · ${o.label}`} onClose={onClose}
+      footer={<><button onClick={onClose} style={_collabBtn(false)}>Cancel</button><button onClick={save} disabled={!title.trim()} style={_collabBtn(true,!title.trim())}>Add</button></>}>
+      <div>
+        <label style={_collabLbl}>Type</label>
+        <select value={type} onChange={e=>setType(e.target.value)} style={_collabIn}>{ANN_TYPES.map(t=><option key={t}>{t}</option>)}</select>
+      </div>
+      <div>
+        <label style={_collabLbl}>Title</label>
+        <input value={title} onChange={e=>setTitle(e.target.value)} style={_collabIn}/>
+      </div>
+      <div>
+        <label style={_collabLbl}>Description</label>
+        <textarea value={body} onChange={e=>setBody(e.target.value)} rows={4} style={{..._collabIn,resize:"vertical"}}/>
+      </div>
+      {apps.length>0&&<div>
+        <label style={_collabLbl}>Post to</label>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {apps.map(a=>{ const chan=collabRoute(a,o.menu,o.domain).chan; return (
+            <label key={a} style={{display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:chan?T.text:T.textMuted,padding:"8px 12px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:8,cursor:chan?"pointer":"default"}}>
+              <input type="checkbox" disabled={!chan} checked={!!post[a]&&!!chan} onChange={e=>setPost(p=>({...p,[a]:e.target.checked}))}/>
+              <CollabAppIcon ch={a}/> {chan||"No routed channel"} <span style={{color:T.textMuted,fontSize:11}}>· {COLLAB_APPS[a].label}</span>
+            </label>
+          );})}
+        </div>
+      </div>}
+    </CollabDrawerShell>
+  );
+};
+
+const AnnouncementBanner = ({objKey})=>{
+  const conv = useConv(); const {role,roleCfg} = useRole(); const me = collabMeOf(roleCfg);
+  const list = (conv.announcements||[]).filter(a=>a.obj===objKey); if(!list.length) return null;
+  const o = collabObj(objKey); const isAdmin = role==="Admin"||role==="admin";
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+      {list.map(a=>{ const c=ANN_COLOR(a.type); return (
+        <div key={a.id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 12px",borderRadius:8,background:`${c}0f`,border:`1px solid ${c}40`}}>
+          <span style={{fontSize:10,fontWeight:700,padding:"2px 7px",borderRadius:4,background:`${c}1f`,color:c,textTransform:"uppercase",letterSpacing:".04em",flexShrink:0,marginTop:1}}>{a.type}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{a.title}</div>
+            {a.body&&<div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}>{a.body}</div>}
+            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:3,fontSize:11,color:T.textMuted}}>
+              <span>@{a.by} · {_agoAny(a.at)}</span>
+              {(a.posted||[]).map((p,i)=><CollabChip key={i} ch={p.ch}>{p.target}</CollabChip>)}
+            </div>
+          </div>
+          {(a.by===me||isAdmin||o.resp.includes(me))&&<button onClick={()=>annRemove(a.id)} title="Remove announcement" style={{background:"none",border:"none",color:T.textMuted,cursor:"pointer",padding:2,display:"flex"}}>{Ic.x(10)}</button>}
+        </div>
+      );})}
+    </div>
+  );
+};
+
+// Share button + "Add announcement" — sits in an object's header.
+const CollabHeaderActions = ({objKey,onToast,extraItems})=>{
+  const [open,setOpen] = useState(null);
+  return (<>
+    <button onClick={()=>setOpen("share")}
+      style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 14px",borderRadius:8,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:12.5,fontWeight:500,cursor:"pointer",transition:"all .1s"}}
+      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.color=T.accent;}}
+      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="12" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="4" cy="8" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="12" cy="12.5" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5.8 7l4.4-2.5M5.8 9l4.4 2.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+      Share
+    </button>
+    <KebabMenu items={[{label:"Add announcement",onClick:()=>setOpen("ann")},...(extraItems||[])]}/>
+    {open==="share"&&<CollabShareDrawer objKey={objKey} onClose={()=>setOpen(null)} onToast={onToast}/>}
+    {open==="ann"&&<AnnouncementDrawer objKey={objKey} onClose={()=>setOpen(null)} onToast={onToast}/>}
+  </>);
+};
+
+// Conversations tab: EDG threads (optionally posted to Slack / Teams) + attached chat threads.
+const ConversationsPanel = ({objKey,onToast})=>{
+  const conv = useConv(); const co = useCollab(); const {role,roleCfg} = useRole(); const me = collabMeOf(roleCfg);
+  const isAdmin = role==="Admin"||role==="admin";
+  const o = collabObj(objKey);
+  const apps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).conversations!==false);
+  const linkApps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).threads!==false);
+  const [text,setText] = useState("");
+  const [postTo,setPostTo] = useState({});
+  const willPost = (a)=>postTo[a]!==undefined?postTo[a]:true;
+  const [replyFor,setReplyFor] = useState(null); const [replyText,setReplyText] = useState("");
+  const [showResolved,setShowResolved] = useState(false);
+  const [linkOpen,setLinkOpen] = useState(false); const [linkUrl,setLinkUrl] = useState(""); const [linkChan,setLinkChan] = useState("");
+  const threads = conv.threads.filter(t=>t.obj===objKey);
+  const shown = threads.filter(t=>showResolved?t.resolved:!t.resolved);
+  const links = conv.links.filter(l=>l.obj===objKey);
+  const urlApp = collabParseThreadUrl(linkUrl);
+  const start = ()=>{ const r=convStart(objKey,text,me,apps.filter(a=>willPost(a)&&collabRoute(a,o.menu,o.domain).chan)); if(!r) return; setText("");
+    onToast&&onToast(r.posted.length?`Posted to ${r.posted.map(p=>p.target).join(", ")}`:"Conversation started","success"); };
+  const attach = ()=>{ if(!urlApp) return; const chan=linkChan||COLLAB_APPS[urlApp].channels[0];
+    const last=_collab.log.find(e=>e.ch===urlApp&&e.target===chan&&e.kind==="user");
+    convLink(objKey,{ch:urlApp,channel:chan,text:last?last.text:`Thread in ${chan}`,author:last?last.author:"—",by:me,url:linkUrl.trim()});
+    setLinkOpen(false); setLinkUrl(""); setLinkChan(""); onToast&&onToast(`Thread attached to ${o.label}`,"success"); };
+  const avatar = (h)=><div style={{width:28,height:28,borderRadius:7,background:T.bgHover,color:T.textSub,fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{String(h||"?").split(".").map(x=>x[0]||"").join("").toUpperCase().slice(0,2)}</div>;
+  const linkBtn = {background:"none",border:"none",padding:0,fontSize:11.5,fontWeight:600,color:T.textSub,cursor:"pointer"};
+  return (
+    <div style={{maxWidth:860,display:"flex",flexDirection:"column",gap:22}}>
+      {/* Composer */}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,padding:14}}>
+        <textarea value={text} onChange={e=>setText(e.target.value)} rows={3} placeholder="Start a conversation · @name to mention"
+          onKeyDown={e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey))start();}}
+          style={{..._collabIn,resize:"vertical",background:T.bgElevated}}/>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginTop:10,flexWrap:"wrap"}}>
+          {apps.map(a=>{ const chan=collabRoute(a,o.menu,o.domain).chan; return (
+            <label key={a} style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:12,color:chan?T.textSub:T.textMuted,cursor:chan?"pointer":"default"}}>
+              <input type="checkbox" disabled={!chan} checked={!!chan&&willPost(a)} onChange={e=>setPostTo(p=>({...p,[a]:e.target.checked}))}/>
+              <CollabAppIcon ch={a}/> Post to {chan||"no routed channel"}
+            </label>
+          );})}
+          {apps.length===0&&<span style={{fontSize:11.5,color:T.textMuted}}>Slack and Microsoft Teams not connected · Settings › Channels</span>}
+          <button onClick={start} disabled={!text.trim()} style={{..._collabBtn(true,!text.trim()),marginLeft:"auto"}}>Post</button>
+        </div>
+      </div>
+
+      {/* Threads */}
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <span style={{fontSize:13,fontWeight:600,color:T.textSub}}>Conversations</span>
+          <span style={{fontSize:11,color:T.textMuted}}>{threads.filter(t=>!t.resolved).length} open</span>
+          <div style={{marginLeft:"auto",display:"flex",gap:2,background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:7,padding:2}}>
+            {[[false,"Open"],[true,"Resolved"]].map(([v,l])=>(
+              <button key={l} onClick={()=>setShowResolved(v)} style={{padding:"3px 10px",fontSize:11.5,fontWeight:600,borderRadius:5,border:"none",cursor:"pointer",background:showResolved===v?T.bgSurface:"transparent",color:showResolved===v?T.text:T.textMuted}}>{l}</button>
+            ))}
+          </div>
+        </div>
+        {shown.length===0&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 0",textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:9}}>{showResolved?"No resolved conversations":"No open conversations"}</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {shown.map(th=>(
+            <div key={th.id} style={{border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,padding:"12px 14px"}}>
+              <div style={{display:"flex",gap:10}}>
+                {avatar(th.author)}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:3}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{th.author}</span>
+                    <span style={{fontSize:11,color:T.textMuted}}>{_agoAny(th.at)}</span>
+                    {th.posted.map((p,i)=><CollabChip key={i} ch={p.ch}>{p.target}</CollabChip>)}
+                  </div>
+                  <div style={{fontSize:12.5,color:T.text,lineHeight:1.55,wordBreak:"break-word"}}><CollabText text={th.text}/></div>
+                  {th.replies.length>0&&<div style={{marginTop:10,paddingLeft:12,borderLeft:`2px solid ${T.border}`,display:"flex",flexDirection:"column",gap:8}}>
+                    {th.replies.map(r=>(
+                      <div key={r.id}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                          <span style={{fontSize:12,fontWeight:700,color:T.text}}>{r.author}</span>
+                          <span style={{fontSize:10.5,color:T.textMuted}}>{_agoAny(r.at)}</span>
+                          {r.via!=="EDG"&&<CollabChip ch={r.via==="Slack"?"slack":"teams"}>via {r.via}</CollabChip>}
+                        </div>
+                        <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}><CollabText text={r.text}/></div>
+                      </div>
+                    ))}
+                  </div>}
+                  {replyFor===th.id&&<div style={{display:"flex",gap:6,marginTop:10}}>
+                    <input autoFocus value={replyText} onChange={e=>setReplyText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&replyText.trim()){convReply(th.id,replyText,me);setReplyText("");}}} placeholder={th.posted.length?`Reply · also posts to ${th.posted.map(p=>p.target).join(", ")}`:"Reply"}
+                      style={{..._collabIn,padding:"6px 10px",fontSize:12}}/>
+                    <button onClick={()=>{if(replyText.trim()){convReply(th.id,replyText,me);setReplyText("");}}} disabled={!replyText.trim()} style={_collabBtn(true,!replyText.trim())}>Reply</button>
+                  </div>}
+                  <div style={{display:"flex",alignItems:"center",gap:14,marginTop:8}}>
+                    <button onClick={()=>{setReplyFor(replyFor===th.id?null:th.id);setReplyText("");}} style={linkBtn}>Reply</button>
+                    {(th.author===me||isAdmin||o.resp.includes(me))&&<button onClick={()=>convResolve(th.id,!th.resolved)} style={linkBtn}>{th.resolved?"Reopen":"Resolve"}</button>}
+                    {apps.filter(a=>!th.posted.some(p=>p.ch===a)&&collabRoute(a,o.menu,o.domain).chan).map(a=>(
+                      <button key={a} onClick={()=>{const c=convPostExisting(th.id,a); if(c&&onToast) onToast(`Posted to ${c}`,"success");}} style={{...linkBtn,display:"inline-flex",alignItems:"center",gap:4}}>
+                        <CollabAppIcon ch={a} size={11}/> Post to {collabRoute(a,o.menu,o.domain).chan}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Attached Slack / Teams threads */}
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <span style={{fontSize:13,fontWeight:600,color:T.textSub}}>Slack & Teams threads</span>
+          <span style={{fontSize:11,color:T.textMuted}}>{links.length}</span>
+          {linkApps.length>0&&<button onClick={()=>setLinkOpen(v=>!v)} style={{marginLeft:"auto",padding:"5px 12px",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.text,fontSize:12,fontWeight:600,cursor:"pointer"}}>{linkOpen?"Cancel":"+ Attach thread"}</button>}
+        </div>
+        {linkOpen&&<div style={{border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,padding:14,marginBottom:10,display:"flex",flexDirection:"column",gap:10}}>
+          <div>
+            <label style={_collabLbl}>Thread link</label>
+            <input value={linkUrl} onChange={e=>setLinkUrl(e.target.value)} placeholder="https://…slack.com/archives/… or https://teams.microsoft.com/l/message/…" style={_collabIn}/>
+          </div>
+          {urlApp&&!linkApps.includes(urlApp)&&<div style={{fontSize:11.5,color:T.textMuted}}>{COLLAB_APPS[urlApp].label} thread linking is off · Settings › Channels</div>}
+          {urlApp&&linkApps.includes(urlApp)&&<CollabAccountGate ch={urlApp} me={me}>
+            <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+              <div style={{flex:1}}>
+                <label style={_collabLbl}>Channel</label>
+                <select value={linkChan||COLLAB_APPS[urlApp].channels[0]} onChange={e=>setLinkChan(e.target.value)} style={_collabIn}>
+                  {COLLAB_APPS[urlApp].channels.map(x=><option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>
+              <button onClick={attach} style={_collabBtn(true)}>Attach</button>
+            </div>
+          </CollabAccountGate>}
+          {linkUrl.trim()&&!urlApp&&<div style={{fontSize:11.5,color:T.rose}}>Not a Slack or Microsoft Teams message link</div>}
+        </div>}
+        {links.length===0&&!linkOpen&&<div style={{fontSize:12.5,color:T.textMuted,padding:"18px 0",textAlign:"center",border:`1px dashed ${T.border}`,borderRadius:9}}>No attached threads</div>}
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {links.map(l=>(
+            <div key={l.id} style={{display:"flex",gap:12,alignItems:"flex-start",border:`1px solid ${T.border}`,borderRadius:10,background:T.bgSurface,padding:"11px 14px"}}>
+              <div style={{width:28,height:28,borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub,flexShrink:0}}><CollabAppIcon ch={l.ch} size={14}/></div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginBottom:2}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.text}}>{l.channel}</span>
+                  <span style={{fontSize:11,color:T.textMuted}}>· {COLLAB_APPS[l.ch].label}</span>
+                  {l.author&&l.author!=="—"&&<span style={{fontSize:11,color:T.textMuted}}>· {l.author}</span>}
+                </div>
+                <div style={{fontSize:12,color:T.textSub,lineHeight:1.5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{l.text}</div>
+                <div style={{fontSize:11,color:T.textMuted,marginTop:3}}>{l.replies?`${l.replies} replies · `:""}Attached by @{l.by} · {_agoAny(l.at)}</div>
+              </div>
+              <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+                {l.url&&<a href={l.url} target="_blank" rel="noreferrer" style={{fontSize:11.5,fontWeight:600,color:T.textSub,textDecoration:"none"}}>Open in {l.ch==="slack"?"Slack":"Teams"}</a>}
+                {(l.by===me||isAdmin||o.resp.includes(me))&&<button onClick={()=>convUnlink(l.id)} style={linkBtn}>Detach</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Incident detail: the comment thread (shared with the Slack / Teams incident card) + post the card.
+const IncidentConversation = ({inc,onToast})=>{
+  const co = useCollab(); const {roleCfg} = useRole(); const me = collabMeOf(roleCfg);
+  const [v,setV] = useState("");
+  const o = collabObj("incident:"+inc.id);
+  const apps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).incidents!==false);
+  const postedOn = (ch)=>co.log.find(e=>e.ch===ch&&e.inc===inc.id);
+  const send = ()=>{ if(!v.trim()) return; incComment(inc.id,v,me); setV(""); };
+  const comments = inc.comments||[];
+  return (
+    <div style={{background:T.bgElevated,borderTop:`1px solid ${T.border}`,padding:"14px 20px"}} onClick={e=>e.stopPropagation()}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
+        <div style={{fontSize:10,fontWeight:700,color:T.textMuted,letterSpacing:.6,textTransform:"uppercase"}}>Conversation</div>
+        <span style={{fontSize:11,color:T.textMuted}}>{comments.length}</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {apps.map(a=>{ const p=postedOn(a); const chan=collabRoute(a,o.menu,o.domain).chan; return p
+            ? <CollabChip key={a} ch={a}>{p.target}</CollabChip>
+            : chan&&<button key={a} onClick={()=>{ const r=collabIncidentPost(inc,[a]); if(r.length&&onToast) onToast(`Incident posted to ${r[0]}`); }}
+                style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                <CollabAppIcon ch={a} size={11}/> Post to {chan}</button>; })}
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:10}}>
+        {comments.length===0&&<div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>No comments</div>}
+        {comments.map((c,i)=>(
+          <div key={i}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+              <span style={{fontSize:12,fontWeight:700,color:T.text}}>{c.by}</span>
+              <span style={{fontSize:10.5,color:T.textMuted}}>{_agoAny(c.at)}</span>
+              {c.via&&c.via!=="EDG"&&<CollabChip ch={c.via==="Slack"?"slack":"teams"}>via {c.via}</CollabChip>}
+            </div>
+            <div style={{fontSize:12,color:T.textSub,lineHeight:1.5}}><CollabText text={c.text}/></div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={v} onChange={e=>setV(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")send();}} placeholder="Add a comment" style={{..._collabIn,padding:"6px 10px",fontSize:12,background:T.bgSurface}}/>
+        <button onClick={send} disabled={!v.trim()} style={_collabBtn(true,!v.trim())}>Comment</button>
+      </div>
     </div>
   );
 };
@@ -5681,6 +6387,29 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
                   <div style={{position:"absolute",top:2,left:c.dm?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
                 </div>
               </div>
+              <div>
+                <div style={lbl}>Collaboration</div>
+                <div style={{display:"flex",flexDirection:"column",border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+                  {COLLAB_FEATURES.map((f,i)=>{ const on=(c.features||{})[f.k]!==false; return (
+                    <div key={f.k} style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,padding:"9px 12px",background:T.bgElevated,borderTop:i?`1px solid ${T.border}`:"none"}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{f.l}</div>
+                        <div style={{fontSize:11,color:T.textMuted}}>{f.d}</div>
+                      </div>
+                      <div onClick={()=>collabSet(ch,{features:{...(c.features||{}),[f.k]:!on}})} style={{width:34,height:19,borderRadius:10,background:on?T.accent:T.border,cursor:"pointer",position:"relative",flexShrink:0}}>
+                        <div style={{position:"absolute",top:2,left:on?17:2,width:15,height:15,borderRadius:"50%",background:"#fff",transition:"left .2s"}}/>
+                      </div>
+                    </div>
+                  );})}
+                </div>
+              </div>
+              {(c.features||{}).support!==false&&<div>
+                <label style={lbl}>Support channel</label>
+                <select value={c.supportChannel||""} onChange={e=>collabSet(ch,{supportChannel:e.target.value})} style={sel}>
+                  <option value="">None</option>
+                  {app.channels.map(x=><option key={x} value={x}>{x}</option>)}
+                </select>
+              </div>}
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>{collabTest(ch);setTab("activity");onToast("Test message sent","success");}} style={{flex:1,padding:"9px",borderRadius:8,background:"transparent",border:`1.5px solid ${T.accent}`,color:T.accent,fontSize:12,fontWeight:700,cursor:"pointer"}}>Send Test Message</button>
                 <button onClick={()=>{collabSet(ch,_collabInit());onToast(`${app.label} disconnected`,"success");}} style={{padding:"9px 16px",borderRadius:8,background:"transparent",border:`1px solid ${T.border}`,color:T.textSub,fontSize:12,cursor:"pointer"}}>Disconnect</button>
@@ -5723,6 +6452,7 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
                     <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{m.name}</div>
                     <div style={{fontSize:11,color:T.textMuted}}>{m.email}</div>
                   </div>
+                  {ok&&<span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,color:collabAcct(ch,m.email.split("@")[0])?T.text:T.textMuted}}>{collabAcct(ch,m.email.split("@")[0])?"Account linked":"Account not linked"}</span>}
                   <span style={{fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:99,border:`1px solid ${T.border}`,color:ok?"#16a34a":T.textMuted}}>{ok?"Matched":`Not in ${app.orgLabel.toLowerCase()}`}</span>
                 </div>
               );})}
@@ -5736,7 +6466,7 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
                   <button onClick={sendDraft} disabled={!draft.trim()} style={{padding:"8px 14px",borderRadius:8,background:T.accent,border:"none",color:"#fff",fontSize:12,fontWeight:700,cursor:draft.trim()?"pointer":"default",opacity:draft.trim()?1:.6}}>Send</button>
                 </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  {[["/edg search customer","/edg search customer"],["@EDG who owns orders?","@EDG who owns orders?"],["Asset link",collabLink("catalog","orders")],["/edg help","/edg help"]].map(([l,v])=>(
+                  {[["/edg search customer","/edg search customer"],["@EDG who owns orders?","@EDG who owns orders?"],["Asset link",collabLink("catalog","orders")],["/edg share orders","/edg share orders"],["/edg help lineage","/edg help how do I set up lineage"],["/edg ticket","/edg ticket Lineage graph is empty for ORDERS"],["/edg","/edg"]].map(([l,v])=>(
                     <button key={l} onClick={()=>setDraft(v)} style={{fontSize:11,padding:"3px 9px",borderRadius:99,border:`1px solid ${T.border}`,background:T.bgSurface,color:T.textSub,cursor:"pointer"}}>{l}</button>
                   ))}
                 </div>
@@ -5747,7 +6477,7 @@ const CollabChannelDrawer = ({ch,icon,color,bg,border,onClose,onToast})=>{
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6,fontSize:11,color:T.textMuted}}>
                     <span style={{fontWeight:700,color:T.textSub}}>{e.target}</span><span>·</span><span>{e.kind==="user"?"Conversation":e.via}</span>
                   </div>
-                  <ChatMsgPreview ch={ch} entry={e} onDecide={onDecide}/>
+                  <ChatMsgPreview ch={ch} entry={e} onDecide={onDecide} me={cdMe} isAdmin={cdRole==="Admin"||cdRole==="admin"} onToast={onToast}/>
                 </div>
               ))}
             </div>}
@@ -5779,8 +6509,26 @@ const NotifPrefsSettings = ()=>{
     </div>); };
   const cell = {width:56,display:"flex",justifyContent:"center",flexShrink:0};
   const chStatus = (ch)=>co[ch].connected?`Connected · ${co[ch].org}`:"Not connected";
+  const {roleCfg:npRoleCfg} = useRole(); const npMe = collabMeOf(npRoleCfg);
+  const acctApps = ["slack","teams"].filter(ch=>co[ch].connected);
   return (
     <div style={{display:"flex",flexDirection:"column",gap:22}}>
+      {/* Your Slack / Teams accounts — each person links their own (needed to share and attach threads) */}
+      {acctApps.length>0&&<div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:10}}>Your accounts</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {acctApps.map(ch=>{ const on=collabAcct(ch,npMe); return (
+            <div key={ch} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",background:T.bgElevated,border:`1px solid ${T.border}`,borderRadius:9}}>
+              <div style={{width:28,height:28,borderRadius:7,background:T.bgSurface,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.textSub}}><CollabAppIcon ch={ch} size={14}/></div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.text}}>{COLLAB_APPS[ch].label}</div>
+                <div style={{fontSize:11,color:T.textMuted}}>{on?`Linked as @${npMe} · ${co[ch].org}`:`Not linked · ${co[ch].org}`}</div>
+              </div>
+              <button onClick={()=>collabAcctSet(ch,npMe,!on)} style={{padding:"6px 14px",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer",background:on?"transparent":T.accent,border:on?`1px solid ${T.border}`:"none",color:on?T.textSub:"#fff"}}>{on?"Unlink":"Link account"}</button>
+            </div>
+          );})}
+        </div>
+      </div>}
       {/* Alerts — menu groups (collapsed) with a master toggle per delivery column; expand to tune individual events */}
       <div>
         <div style={{fontSize:12,fontWeight:600,color:T.textSub,marginBottom:4}}>Alerts</div>
@@ -6248,11 +6996,10 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const [expandedCat, setExpandedCat] = useState("Getting Started");
-  const [tickets, setTickets] = useState([
-    {id:"TKT-001",subject:"Lineage view not loading for orders table",      status:"In Progress",priority:"High",created:"2d ago",updated:"4h ago",category:"Technical"},
-    {id:"TKT-002",subject:"Data quality rule not triggering on new records", status:"Open",       priority:"Med", created:"3d ago",updated:"1d ago",category:"Quality"},
-    {id:"TKT-003",subject:"Export to CSV broken in compliance report",       status:"Resolved",   priority:"Low", created:"1w ago",updated:"2d ago",category:"Reports"},
-  ]);
+  // Tickets live in the shared collaboration store, so /edg ticket in Slack or Teams lands here too.
+  const conv = useConv(); const co = useCollab(); const {roleCfg:dbRoleCfg} = useRole(); const dbMe = collabMeOf(dbRoleCfg);
+  const tickets = conv.tickets.map(t=>({...t, created:_agoAny(t.created), updated:_agoAny(t.updated)}));
+  const helpApps = ["slack","teams"].filter(ch=>co[ch].connected&&(co[ch].features||{}).support!==false);
   const [showNewTicket,  setShowNewTicket]  = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [newTicket,      setNewTicket]      = useState({subject:"",priority:"Med",category:"Technical"});
@@ -6388,7 +7135,8 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
                 </div>
                 {/* Header + new ticket toggle */}
                 <div style={{padding:"10px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>Your Tickets</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.text}}>Tickets</span>
+                  {helpApps.length>0&&<span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:10.5,color:T.textMuted,marginLeft:8,marginRight:"auto"}}>{helpApps.map(a=><CollabAppIcon key={a} ch={a} size={10}/>)} /edg ticket</span>}
                   <button onClick={()=>setShowNewTicket(v=>!v)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:7,background:showNewTicket?T.bgHover:T.accentDim,border:`1px solid ${showNewTicket?T.border:T.accent+"44"}`,color:showNewTicket?T.textSub:T.accent,fontSize:11.5,fontWeight:600,cursor:"pointer",transition:"all .12s"}}>
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{transform:showNewTicket?"rotate(45deg)":"none",transition:"transform .15s"}}><path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                     {showNewTicket?"Cancel":"New Ticket"}
@@ -6409,7 +7157,7 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
                       </select>
                     </div>
                     <button disabled={!newTicket.subject.trim()} onClick={()=>{
-                      setTickets(t=>[{id:`TKT-00${t.length+1}`,subject:newTicket.subject,status:"Open",priority:newTicket.priority,created:"just now",updated:"just now",category:newTicket.category},...t]);
+                      ticketCreate({subject:newTicket.subject,priority:newTicket.priority,category:newTicket.category},dbMe,"EDG");
                       setNewTicket({subject:"",priority:"Med",category:"Technical"});
                       setShowNewTicket(false);
                     }} style={{marginTop:8,width:"100%",padding:"8px 0",borderRadius:8,background:newTicket.subject.trim()?T.accent:"rgba(238,36,36,.2)",border:"none",color:"#fff",fontSize:12,fontWeight:600,cursor:newTicket.subject.trim()?"pointer":"default",transition:"background .15s"}}>
@@ -6435,7 +7183,10 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{color:T.textMuted,transform:isSelected?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
                         </div>
                         <div style={{fontSize:12.5,color:T.text,lineHeight:1.4,marginBottom:4}}>{ticket.subject}</div>
-                        <div style={{fontSize:11,color:T.textMuted}}>Updated {ticket.updated} · {ticket.priority} priority · {ticket.category}</div>
+                        <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",fontSize:11,color:T.textMuted}}>
+                          <span>Updated {ticket.updated} · {ticket.priority} priority · {ticket.category} · @{ticket.requester}</span>
+                          {ticket.source&&ticket.source!=="EDG"&&<CollabChip ch={ticket.source==="Slack"?"slack":"teams"}>{ticket.source}</CollabChip>}
+                        </div>
                         {isSelected&&(
                           <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
                             <div style={{fontSize:11,fontWeight:600,color:T.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Progress</div>
@@ -6451,7 +7202,7 @@ const DocBot = ({open:extOpen, setOpen:extSetOpen}) => {
                             {ticket.status!=="Resolved"&&(
                               <div style={{display:"flex",gap:8,marginTop:12}}>
                                 <button onClick={e=>{e.stopPropagation();}} style={{flex:1,padding:"6px 0",borderRadius:7,background:T.bgElevated,border:`1px solid ${T.border}`,color:T.textSub,fontSize:11.5,cursor:"pointer"}}>Add Comment</button>
-                                <button onClick={e=>{e.stopPropagation();setTickets(t=>t.map(tk=>tk.id===ticket.id?{...tk,status:"Resolved",updated:"just now"}:tk));setSelectedTicket(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,background:T.green+"18",border:`1px solid ${T.green}30`,color:T.green,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Mark Resolved</button>
+                                <button onClick={e=>{e.stopPropagation();ticketSetStatus(ticket.id,"Resolved",dbMe,"EDG");setSelectedTicket(null);}} style={{flex:1,padding:"6px 0",borderRadius:7,background:T.green+"18",border:`1px solid ${T.green}30`,color:T.green,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Mark Resolved</button>
                               </div>
                             )}
                           </div>
@@ -8196,6 +8947,7 @@ const QualityView = ({onToast=()=>{}}) => {
                                   : <div style={{fontSize:12,color:T.textMuted,fontStyle:"italic"}}>—</div>}
                               </div>
                             </div>
+                            <IncidentConversation inc={inc} onToast={showT}/>
                           </td>
                         </tr>
                       )}
@@ -30668,7 +31420,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
   // Agents, MCP servers and tools, and the gateway they route through, are catalog assets
   // with no schema, profiling or quality of their own.
   const isAI       = isAiType(asset.type);
-  const tabs = isAI
+  const tabs0 = isAI
     ? [
         {key:"overview",label:"Overview"},
         ...(asset.type==="AI Agent"||asset.type==="MCP Server"?[{key:"aitools",label:"Tools"}]:[]),
@@ -30743,6 +31495,8 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {key:"observability",label:"Data Quality"},{key:"contract",label:"Contract"},{key:"usage",label:"Usage"},
         {key:"customprops",label:"Custom Properties"},{key:"activity",label:"Audit Logs"},
       ];
+  // Conversations sits just before Audit Logs on every asset type.
+  const tabs = [...tabs0.filter(t=>t.key!=="activity"), {key:"conversations",label:"Conversations"}, ...tabs0.filter(t=>t.key==="activity")];
   // If the active tab isn't available for this object type, fall back to Overview.
   useEffect(()=>{ if(!tabs.some(t=>t.key===tab)) setTab("overview"); },[asset.name]);
   // Drilling from one asset straight to another (a table to the dbt model that builds it, say)
@@ -30819,9 +31573,11 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
             onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.color=T.textSub;}}>
             {Ic.edit(11)} Edit
           </button>
+          <CollabHeaderActions objKey={"asset:"+asset.name} onToast={onToast}/>
           {isAKG&&<AkgActionsMenu asset={asset} onToast={onToast}/>}
         </div>
       </div>
+      <AnnouncementBanner objKey={"asset:"+asset.name}/>
       {/* tab bar */}
       <div style={{display:"flex",marginBottom:-1}}>
         {tabs.map(t=>(
@@ -30877,6 +31633,7 @@ const AssetDetailFull = ({asset, assetStack=[], onBack, onAsset, onToast, onNav}
         {tab==="lineage"   && <AssetLineageFull asset={data}/>}
         {tab==="kg"        && <KgAssetTab asset={data} onAsset={onAsset}/>}
         {tab==="customprops" && <CustomPropsPanel entity={data.type||"Table"} objectId={data.name} objectName={data.name} owners={owners} stewards={stewards} onToast={onToast}/>}
+        {tab==="conversations" && <ConversationsPanel objKey={"asset:"+data.name} onToast={onToast}/>}
         {tab==="activity"  && <AuditLogTable entries={ASSET_AUDIT_ENTRIES}/>}
       </div>
 
